@@ -137,6 +137,27 @@ cp -r skills/research-lit ~/.claude/skills/
 }
 ```
 
+### 🖥️ GPU 服务器配置（自动跑实验用）
+
+当 GPT-5.4 审稿说"需要补一个消融实验"或"加一个 baseline 对比"时，Claude Code 会自动写实验脚本并部署到你的 GPU 服务器。为此，Claude Code 需要知道你的服务器环境。
+
+在项目的 `CLAUDE.md` 中添加服务器信息：
+
+```markdown
+## 远程服务器
+
+- SSH：`ssh my-gpu-server`（密钥免密登录）
+- GPU：4x A100
+- Conda 环境：`research`（Python 3.10 + PyTorch）
+- 激活：`eval "$(/opt/conda/bin/conda shell.bash hook)" && conda activate research`
+- 代码目录：`/home/user/experiments/`
+- 后台运行用 `screen`：`screen -dmS exp0 bash -c '...'`
+```
+
+Claude Code 读到这些就知道怎么 SSH、激活环境、启动实验。GPT-5.4（审稿人）只决定**做什么实验**——Claude Code 根据你的 `CLAUDE.md` 搞定**怎么跑**。
+
+**没有 GPU 服务器？** Review 和改写功能不受影响，只有需要跑实验的修复会被跳过（标记为"需人工跟进"）。
+
 ## 🎛️ 自定义
 
 Skills 就是普通的 Markdown 文件，fork 后随意改：

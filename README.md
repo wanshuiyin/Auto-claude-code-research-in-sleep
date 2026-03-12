@@ -177,6 +177,27 @@ To run the auto-review loop without clicking permission prompts, add to `.claude
 }
 ```
 
+### 🖥️ GPU Server Setup (For Auto-Experiments)
+
+When GPT-5.4 says "run an ablation study" or "add a baseline comparison", Claude Code automatically writes the experiment script and deploys it to your GPU server. For this to work, Claude Code needs to know your server environment.
+
+Add your server info to your project's `CLAUDE.md`:
+
+```markdown
+## Remote Server
+
+- SSH: `ssh my-gpu-server` (key-based auth, no password)
+- GPU: 4x A100
+- Conda env: `research` (Python 3.10 + PyTorch)
+- Activate: `eval "$(/opt/conda/bin/conda shell.bash hook)" && conda activate research`
+- Code directory: `/home/user/experiments/`
+- Use `screen` for background jobs: `screen -dmS exp0 bash -c '...'`
+```
+
+Claude Code reads this and knows how to SSH in, activate the environment, and launch experiments. GPT-5.4 (the reviewer) only decides **what** experiments to run — Claude Code figures out **how** based on your `CLAUDE.md`.
+
+**No server?** The review and rewriting skills still work without GPU access. Only experiment-related fixes will be skipped (flagged for manual follow-up).
+
 ## 🏗️ How It Works
 
 ```
