@@ -219,9 +219,27 @@ Claude Code 读到这些就知道怎么 SSH、激活环境、启动实验。GPT-
 
 Skills 就是普通的 Markdown 文件，fork 后随意改：
 
-- **`MAX_ROUNDS`** — 增加轮数上限（默认 4）
-- **`POSITIVE_THRESHOLD`** — 调整停止条件的分数阈值
-- **优先级规则** — 调整算力限制、跳过策略
+### 自动 Review 循环（`auto-review-loop`）
+
+| 常量 | 默认值 | 说明 |
+|------|--------|------|
+| `MAX_ROUNDS` | 4 | 最多 review→修复→再 review 轮数 |
+| `POSITIVE_THRESHOLD` | 6/10 | 达到此分数自动停止（可投稿） |
+| `> 4 GPU-hour 跳过` | 4h | 超过此时长的实验标记为"需人工跟进" |
+
+### 找 Idea（`idea-discovery` / `idea-creator`）
+
+| 常量 | 默认值 | 说明 |
+|------|--------|------|
+| `PILOT_MAX_HOURS` | 2h | 单个 pilot 预估超时则跳过 |
+| `PILOT_TIMEOUT_HOURS` | 3h | 硬超时——强制终止，收集部分结果 |
+| `MAX_PILOT_IDEAS` | 3 | 最多并行 pilot 几个 idea |
+| `MAX_TOTAL_GPU_HOURS` | 8h | 所有 pilot 的总 GPU 预算 |
+
+行内覆盖：`/idea-discovery "方向" — pilot budget: 4h per idea, 20h total`
+
+### 通用
+
 - **Prompt 模板** — 定制评审人格和评估标准
 - **`allowed-tools`** — 限制或扩展每个 skill 可用的工具
 

@@ -272,9 +272,27 @@ The key insight: **Claude Code handles execution** (reading files, writing code,
 
 Skills are plain Markdown files. Fork and customize:
 
-- **`MAX_ROUNDS`** — increase for more thorough iteration (default: 4)
-- **`POSITIVE_THRESHOLD`** — adjust the stop condition score
-- **Prioritization rules** — change compute limits, what fixes to skip
+### Auto Review Loop (`auto-review-loop`)
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `MAX_ROUNDS` | 4 | Maximum review→fix→re-review iterations |
+| `POSITIVE_THRESHOLD` | 6/10 | Score at which the loop stops (submission-ready) |
+| `> 4 GPU-hour skip` | 4h | Experiments exceeding this are flagged for manual follow-up |
+
+### Idea Discovery (`idea-discovery` / `idea-creator`)
+
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `PILOT_MAX_HOURS` | 2h | Skip any pilot estimated to take longer per GPU |
+| `PILOT_TIMEOUT_HOURS` | 3h | Hard timeout — kill runaway pilots, collect partial results |
+| `MAX_PILOT_IDEAS` | 3 | Maximum number of ideas to pilot in parallel |
+| `MAX_TOTAL_GPU_HOURS` | 8h | Total GPU budget across all pilots |
+
+Override inline: `/idea-discovery "topic" — pilot budget: 4h per idea, 20h total`
+
+### General
+
 - **Prompt templates** — tailor the review persona and evaluation criteria
 - **`allowed-tools`** — restrict or expand what each skill can do
 
