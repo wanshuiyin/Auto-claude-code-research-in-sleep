@@ -8,7 +8,7 @@
 
 > 🌙 **Let Claude Code do research while you sleep.** Wake up to find your paper scored, weaknesses identified, experiments run, and narrative rewritten — autonomously.
 
-[![Featured in awesome-agent-skills](https://img.shields.io/badge/Featured%20in-awesome--agent--skills-blue?style=flat&logo=github)](https://github.com/VoltAgent/awesome-agent-skills) · [💬 Join Community](#-community)
+[![Featured in awesome-agent-skills](https://img.shields.io/badge/Featured%20in-awesome--agent--skills-blue?style=flat&logo=github)](https://github.com/VoltAgent/awesome-agent-skills) · [![AI Digital Crew - Project of the Day](https://img.shields.io/badge/AI%20Digital%20Crew-Project%20of%20the%20Day%20(2026.03.14)-orange?style=flat)](https://aidigitalcrew.com) · [💬 Join Community](#-community)
 
 Custom [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for autonomous ML research workflows. These skills orchestrate **cross-model collaboration** — Claude Code drives the research while an external LLM (via [Codex MCP](https://github.com/openai/codex)) acts as a critical reviewer. 🔀 **Also supports [alternative model combinations](#-alternative-model-combinations) (e.g., GLM + GPT, GLM + MiniMax) — no Claude API required.**
 
@@ -37,6 +37,7 @@ cp -r Auto-claude-code-research-in-sleep/skills/* ~/.claude/skills/
 
 # 2. Set up Codex MCP (for review skills)
 npm install -g @openai/codex
+codex setup                    # set model to gpt-5.4 when prompted
 claude mcp add codex -s user -- codex mcp-server
 
 # 3. Use in Claude Code
@@ -48,6 +49,8 @@ claude
 ```
 
 > **Tip:** Workflows pause at checkpoints for your approval by default. Add `AUTO_PROCEED=true` to run fully autonomously (great for overnight runs).
+
+> **Important:** Codex MCP uses the model from `~/.codex/config.toml`, not from skill files. Make sure it says `model = "gpt-5.4"` — otherwise it may default to `gpt-4o`. Run `codex setup` or edit the file directly.
 
 See [full setup guide](#%EF%B8%8F-setup) for details and [alternative model combinations](#-alternative-model-combinations) if you don't have Claude/OpenAI API.
 
@@ -481,7 +484,8 @@ Claude Code reads this and knows how to SSH in, activate the environment, and la
 
 </details>
 
-### 📚 Zotero Integration (Optional)
+<details>
+<summary><b>📚 Zotero Integration (Optional)</b></summary>
 
 If you use [Zotero](https://www.zotero.org/) to manage your paper library, `/research-lit` can search your collections, read your annotations/highlights, and export BibTeX — all before searching the web.
 
@@ -509,7 +513,10 @@ claude mcp add zotero -s user -- zotero-mcp \
 
 **Not using Zotero?** No problem — `/research-lit` automatically skips Zotero and uses local PDFs + web search instead.
 
-### 📓 Obsidian Integration (Optional)
+</details>
+
+<details>
+<summary><b>📓 Obsidian Integration (Optional)</b></summary>
 
 If you use [Obsidian](https://obsidian.md/) for research notes, `/research-lit` can search your vault for paper summaries, tagged references, and your own insights.
 
@@ -536,6 +543,8 @@ cp -r obsidian-skills/.claude /path/to/your/vault/
 **Not using Obsidian?** No problem — `/research-lit` automatically skips Obsidian and works as before.
 
 > 💡 **Zotero + Obsidian together**: Many researchers use Zotero for paper storage and Obsidian for notes. Both integrations work simultaneously — `/research-lit` checks Zotero first (raw papers + annotations), then Obsidian (your processed notes), then local PDFs, then web search.
+
+</details>
 
 ### 📱 Feishu/Lark Integration (Optional)
 
@@ -832,20 +841,34 @@ Codex CLI uses your existing `OPENAI_API_KEY` (from `~/.codex/config.toml` or en
         "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air",
         "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
         "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5",
-        "CODEX_API_KEY": "your_minimax_api_key",
-        "CODEX_API_BASE": "https://api.minimax.chat/v1/",
-        "CODEX_MODEL": "MiniMax-M2.5"
+        "MINIMAX_API_KEY": "your_minimax_api_key"
     },
     "mcpServers": {
-        "codex": {
-            "command": "/opt/homebrew/bin/codex",
-            "args": [
-                "mcp-server"
-            ]
+        "minimax-chat": {
+            "command": "/usr/bin/python3",
+            "args": ["/Users/YOUR_USERNAME/.claude/mcp-servers/minimax-chat/server.py"],
+            "env": {
+                "MINIMAX_API_KEY": "your_minimax_api_key",
+                "MINIMAX_BASE_URL": "https://api.minimax.chat/v1",
+                "MINIMAX_MODEL": "MiniMax-M2.5"
+            }
         }
     }
 }
 ```
+
+> **⚠️ Extra step for Alt B:** Codex MCP uses OpenAI's Responses API (`/v1/responses`), which MiniMax does not support ([details](https://github.com/openai/codex/discussions/7782)). So Alt B uses a **custom MiniMax MCP server** instead of Codex. Full guide: [`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md). Quick steps:
+>
+> 1. Copy `mcp-servers/minimax-chat/server.py` → `~/.claude/mcp-servers/minimax-chat/server.py`
+> 2. `pip3 install httpx`
+> 3. After setup, tell Claude Code to rewrite all skills:
+>
+> ```
+> Read skills/auto-review-loop-minimax/SKILL.md as a reference.
+> It replaces mcp__codex__codex with mcp__minimax-chat__minimax_chat.
+> Now rewrite ALL other skills that use mcp__codex__codex / mcp__codex__codex-reply
+> to use mcp__minimax-chat__minimax_chat instead, following the same pattern.
+> ```
 
 </details>
 
@@ -906,10 +929,11 @@ This lets GLM (acting as Claude Code) familiarize itself with the skill files an
 
 - [x] **Feishu/Lark integration** — three modes (off/push/interactive), configurable via `~/.claude/feishu.json`. Push-only needs just a webhook URL; interactive uses [feishu-claude-code](https://github.com/joewongjc/feishu-claude-code). Off by default — zero impact on existing workflows. See [setup guide](#-feishulark-integration-optional)
 - [ ] **W&B integration** — pull training curves and metrics from Weights & Biases as feedback signal. Auto-review-loop can read loss/accuracy plots to diagnose training issues and suggest next experiments
-  - Related projects: [wandb-mcp-server](https://github.com/wandb/mcp-server) (official W&B MCP, if available), or via `wandb api` CLI
+  - Related projects: [wandb-mcp-server](https://github.com/wandb/wandb-mcp-server) (official W&B MCP, 40⭐), or via `wandb api` CLI
 - [x] **Zotero MCP integration** — `/research-lit` searches Zotero collections, reads annotations/highlights, exports BibTeX. Recommended: [zotero-mcp](https://github.com/54yyyu/zotero-mcp) (1.8k⭐). See [setup guide](#-zotero-integration-optional)
 - [x] **Obsidian integration** — `/research-lit` searches Obsidian vault for research notes, tagged references, wikilinks. Recommended: [mcpvault](https://github.com/bitbonsai/mcpvault) (760⭐) + [obsidian-skills](https://github.com/kepano/obsidian-skills) (13.6k⭐). See [setup guide](#-obsidian-integration-optional)
 - [ ] More executor × reviewer combinations (Gemini, DeepSeek, etc.)
+- [ ] **Daemon mode** — auto-restart Claude Code session via `launchd`/`systemd` for true unattended operation. Currently the orchestration layer requires an active CLI session; state files (`REVIEW_STATE.json`, `AUTO_REVIEW.md`) support resuming across sessions, but relaunch is manual ([#11](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/11))
 
 ## 💬 Community
 
