@@ -1,5 +1,7 @@
 # Contributing to Auto-claude-code-research-in-sleep (ARIS)
 
+[English](CONTRIBUTING.md) | [中文版](CONTRIBUTING_CN.md)
+
 Thank you for your interest in contributing to ARIS! This document provides guidelines and instructions for contributing.
 
 ## Ways to Contribute
