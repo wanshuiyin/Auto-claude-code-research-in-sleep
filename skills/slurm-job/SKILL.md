@@ -25,7 +25,7 @@ To avoid excessive load on the SLURM controller (which can get you flagged by cl
 | Command | Min Interval | Notes |
 |---------|:------------:|-------|
 | `squeue -u "$USER"` | **60 seconds** | Listing all user jobs |
-| `squeue -j <ID>` | **30 seconds** | Checking a specific job |
+| `squeue -j <ID>` | **60 seconds** | Checking a specific job |
 | `sacct -j <ID>` | **60 seconds** | After job completes |
 | `tail slurm-logs/*.out` | **10 seconds** | Reading local log files (no SLURM API call) |
 
