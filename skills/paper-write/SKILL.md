@@ -15,6 +15,7 @@ Draft a LaTeX paper based on: **$ARGUMENTS**
 - **TARGET_VENUE = `ICLR`** — Default venue. Supported: `ICLR`, `NeurIPS`, `ICML`. Determines style file and formatting.
 - **ANONYMOUS = true** — If true, use anonymous author block. Set `false` for camera-ready.
 - **MAX_PAGES = 9** — Main body page limit. Counts from first page to end of Conclusion section. References and appendix are NOT counted.
+- **DBLP_BIBTEX = true** — Fetch real BibTeX from DBLP/CrossRef instead of LLM-generated entries. Eliminates hallucinated citations. Zero install required. Set `false` to use legacy behavior (LLM search + `[VERIFY]` markers).
 
 ## Inputs
 
@@ -182,9 +183,34 @@ Process sections in order. For each section:
 2. Build a citation key list
 3. For each citation key:
    - Check existing `.bib` files in the project/narrative docs
-   - If not found, search arXiv/Scholar for correct BibTeX
+   - If not found and **DBLP_BIBTEX = true**, use the verified fetch chain below
+   - If not found and **DBLP_BIBTEX = false**, search arXiv/Scholar for correct BibTeX
    - **NEVER fabricate BibTeX entries** — mark unknown ones with `[VERIFY]` comment
 4. Write `references.bib` containing ONLY cited entries (no bloat)
+
+#### Verified BibTeX Fetch (when DBLP_BIBTEX = true)
+
+Three-step fallback chain — zero install, zero auth, all real BibTeX:
+
+**Step A: DBLP (best quality — full venue, pages, editors)**
+```bash
+# 1. Search by title + first author
+curl -s "https://dblp.org/search/publ/api?q=TITLE+AUTHOR&format=json&h=3"
+# 2. Extract DBLP key from result (e.g., conf/nips/VaswaniSPUJGKP17)
+# 3. Fetch real BibTeX
+curl -s "https://dblp.org/rec/{key}.bib"
+```
+
+**Step B: CrossRef DOI (fallback — works for arXiv preprints)**
+```bash
+# If paper has a DOI or arXiv ID (arXiv DOI = 10.48550/arXiv.{id})
+curl -sLH "Accept: application/x-bibtex" "https://doi.org/{doi}"
+```
+
+**Step C: Mark `[VERIFY]` (last resort)**
+If both DBLP and CrossRef return nothing, mark the entry with `% [VERIFY]` comment. Do NOT fabricate.
+
+**Why this matters:** LLM-generated BibTeX frequently hallucinates venue names, page numbers, or even co-authors. DBLP and CrossRef return publisher-verified metadata. Upstream skills (`/research-lit`, `/novelty-check`) may mention papers from LLM memory — this fetch chain is the gate that prevents hallucinated citations from entering the final `.bib`.
 
 **Automated bib cleaning** — use this Python pattern to extract only cited entries:
 

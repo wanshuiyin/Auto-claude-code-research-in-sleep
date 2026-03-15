@@ -17,6 +17,9 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
 - REVIEW_DOC: `AUTO_REVIEW.md` in project root (cumulative log)
 - REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
+- **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
+
+> 💡 Override: `/auto-review-loop "topic" — human checkpoint: true`
 
 ## State Persistence (Compact Recovery)
 
@@ -95,6 +98,39 @@ Then extract structured fields:
 - **Action items** (ranked list of fixes)
 
 **STOP CONDITION**: If score >= 6 AND verdict contains "ready" or "almost" → stop loop, document final state.
+
+#### Human Checkpoint (if enabled)
+
+**Skip this step entirely if `HUMAN_CHECKPOINT = false`.**
+
+When `HUMAN_CHECKPOINT = true`, present the review results and wait for user input:
+
+```
+📋 Round N/MAX_ROUNDS review complete.
+
+Score: X/10 — [verdict]
+Top weaknesses:
+1. [weakness 1]
+2. [weakness 2]
+3. [weakness 3]
+
+Suggested fixes:
+1. [fix 1]
+2. [fix 2]
+3. [fix 3]
+
+Options:
+- Reply "go" or "continue" → implement all suggested fixes
+- Reply with custom instructions → implement your modifications instead
+- Reply "skip 2" → skip fix #2, implement the rest
+- Reply "stop" → end the loop, document current state
+```
+
+Wait for the user's response. Parse their input:
+- **Approval** ("go", "continue", "ok", "proceed"): proceed to Phase C with all suggested fixes
+- **Custom instructions** (any other text): treat as additional/replacement guidance for Phase C. Merge with reviewer suggestions where appropriate
+- **Skip specific fixes** ("skip 1,3"): remove those fixes from the action list
+- **Stop** ("stop", "enough", "done"): terminate the loop, jump to Termination
 
 #### Feishu Notification (if configured)
 

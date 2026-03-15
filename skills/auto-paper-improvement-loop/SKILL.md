@@ -20,6 +20,9 @@ Unlike `/auto-review-loop` (which iterates on **research** — running experimen
 - **MAX_ROUNDS = 2** — Two rounds of review→fix→recompile. Empirically, Round 1 catches structural issues (4→6/10), Round 2 catches remaining presentation issues (6→7/10). Diminishing returns beyond 2 rounds for writing-only improvements.
 - **REVIEWER_MODEL = `gpt-5.4`** — Model used via Codex MCP for paper review.
 - **REVIEW_LOG = `PAPER_IMPROVEMENT_LOG.md`** — Cumulative log of all rounds, stored in paper directory.
+- **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review and present score + weaknesses to the user. The user can approve fixes, provide custom modification instructions, skip specific fixes, or stop early. When `false` (default), runs fully autonomously.
+
+> 💡 Override: `/auto-paper-improvement-loop "paper/" — human checkpoint: true`
 
 ## Inputs
 
@@ -94,6 +97,26 @@ mcp__codex__codex:
 
 Save the threadId for Round 2.
 
+### Step 2b: Human Checkpoint (if enabled)
+
+**Skip if `HUMAN_CHECKPOINT = false`.**
+
+Present the review results and wait for user input:
+
+```
+📋 Round 1 review complete.
+
+Score: X/10 — [verdict]
+Key weaknesses (by severity):
+1. [CRITICAL] ...
+2. [MAJOR] ...
+3. [MINOR] ...
+
+Reply "go" to implement all fixes, give custom instructions, "skip 2" to skip specific fixes, or "stop" to end.
+```
+
+Parse user response same as `/auto-review-loop`: approve / custom instructions / skip / stop.
+
 ### Step 3: Implement Round 1 Fixes
 
 Parse the review and implement fixes by severity:
@@ -144,6 +167,10 @@ mcp__codex__codex-reply:
     Please re-score and re-assess. Same format:
     Score, Summary, Strengths, Weaknesses, Actionable fixes, Verdict.
 ```
+
+### Step 5b: Human Checkpoint (if enabled)
+
+**Skip if `HUMAN_CHECKPOINT = false`.** Same as Step 2b — present Round 2 review, wait for user input.
 
 ### Step 6: Implement Round 2 Fixes
 

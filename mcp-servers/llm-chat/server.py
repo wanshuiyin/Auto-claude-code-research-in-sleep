@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""MiniMax Chat MCP Server - A robust MCP server that calls MiniMax Chat Completions API"""
+"""Generic LLM Chat MCP Server - Supports any OpenAI-compatible API
+
+Environment Variables:
+    LLM_API_KEY      - API key (required)
+    LLM_BASE_URL     - API base URL (default: https://api.openai.com/v1)
+    LLM_MODEL        - Model name (default: gpt-4o)
+    LLM_SERVER_NAME  - Server name for MCP (default: llm-chat)
+
+Supported Providers (examples):
+    OpenAI:      LLM_BASE_URL=https://api.openai.com/v1 LLM_MODEL=gpt-4o
+    DeepSeek:    LLM_BASE_URL=https://api.deepseek.com/v1 LLM_MODEL=deepseek-chat
+    Kimi:        LLM_BASE_URL=https://api.moonshot.cn/v1 LLM_MODEL=moonshot-v1-32k
+    MiniMax:     LLM_BASE_URL=https://api.minimax.chat/v1 LLM_MODEL=MiniMax-M2.5
+"""
 
 import json
 import os
@@ -10,11 +23,16 @@ import httpx
 sys.stdout = os.fdopen(sys.stdout.fileno(), 'wb', buffering=0)
 sys.stdin = os.fdopen(sys.stdin.fileno(), 'rb', buffering=0)
 
+# Configuration from environment
+API_KEY = os.environ.get("LLM_API_KEY", "")
+BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
+DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
+SERVER_NAME = os.environ.get("LLM_SERVER_NAME", "llm-chat")
+
 # Debug logging
-DEBUG_LOG = "/tmp/minimax-mcp-debug.log"
+DEBUG_LOG = f"/tmp/{SERVER_NAME}-mcp-debug.log"
 
 def debug_log(msg):
-    """Write debug message to log file"""
     try:
         with open(DEBUG_LOG, "a") as f:
             import datetime
@@ -22,15 +40,6 @@ def debug_log(msg):
             f.flush()
     except:
         pass
-
-debug_log("=== MCP Server Starting (v2.1) ===")
-debug_log(f"MINIMAX_API_KEY set: {bool(os.environ.get('MINIMAX_API_KEY'))}")
-debug_log(f"MINIMAX_BASE_URL: {os.environ.get('MINIMAX_BASE_URL', 'not set')}")
-debug_log(f"MINIMAX_MODEL: {os.environ.get('MINIMAX_MODEL', 'not set')}")
-
-MINIMAX_API_KEY = os.environ.get("MINIMAX_API_KEY", "")
-MINIMAX_BASE_URL = os.environ.get("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
-DEFAULT_MODEL = os.environ.get("MINIMAX_MODEL", "MiniMax-M2.5")
 
 def log_error(msg):
     try:
@@ -40,46 +49,36 @@ def log_error(msg):
     except:
         pass
 
-# Global flag for output format
+debug_log(f"=== {SERVER_NAME} MCP Server Starting (v2.0) ===")
+debug_log(f"BASE_URL: {BASE_URL}")
+debug_log(f"MODEL: {DEFAULT_MODEL}")
+debug_log(f"API_KEY set: {bool(API_KEY)}")
+
 _use_ndjson = False
 
 def send_response(response):
-    """Send a JSON-RPC response using binary stdout"""
     global _use_ndjson
     json_str = json.dumps(response, separators=(',', ':'))
     json_bytes = json_str.encode('utf-8')
 
     if _use_ndjson:
-        # NDJSON format: just the JSON followed by newline
         output = json_bytes + b'\n'
     else:
-        # Standard MCP format: Content-Length header + body
         header = f"Content-Length: {len(json_bytes)}\r\n\r\n".encode('utf-8')
         output = header + json_bytes
 
     sys.stdout.write(output)
     sys.stdout.flush()
-    debug_log(f"Sent response ({'NDJSON' if _use_ndjson else 'MCP'}): {json_str[:200]}...")
 
-def send_notification(method, params=None):
-    """Send a JSON-RPC notification"""
-    notification = {
-        "jsonrpc": "2.0",
-        "method": method
-    }
-    if params:
-        notification["params"] = params
-    send_response(notification)
+def call_llm(messages, model=None):
+    """Call LLM Chat Completions API"""
+    if not API_KEY:
+        return None, "LLM_API_KEY environment variable not set"
 
-def call_minimax(messages, model=None):
-    """Call MiniMax Chat Completions API"""
-    if not MINIMAX_API_KEY:
-        return None, "MINIMAX_API_KEY environment variable not set"
-
-    url = f"{MINIMAX_BASE_URL}/chat/completions"
+    url = f"{BASE_URL.rstrip('/')}/chat/completions"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {MINIMAX_API_KEY}"
+        "Authorization": f"Bearer {API_KEY}"
     }
     payload = {
         "model": model or DEFAULT_MODEL,
@@ -87,7 +86,7 @@ def call_minimax(messages, model=None):
         "max_tokens": 4096
     }
 
-    debug_log(f"Calling MiniMax API: {url}")
+    debug_log(f"Calling LLM API: {url}")
 
     try:
         with httpx.Client(timeout=120.0) as client:
@@ -114,7 +113,6 @@ def handle_request(request):
 
     # Handle notifications (no id, no response needed)
     if request_id is None:
-        debug_log(f"Notification received: {method}")
         if method == "notifications/initialized":
             debug_log("Client initialized successfully")
         return None
@@ -129,18 +127,14 @@ def handle_request(request):
                     "tools": {}
                 },
                 "serverInfo": {
-                    "name": "minimax-chat",
+                    "name": SERVER_NAME,
                     "version": "2.0.0"
                 }
             }
         }
 
     elif method == "ping":
-        return {
-            "jsonrpc": "2.0",
-            "id": request_id,
-            "result": {}
-        }
+        return {"jsonrpc": "2.0", "id": request_id, "result": {}}
 
     elif method == "tools/list":
         return {
@@ -148,19 +142,18 @@ def handle_request(request):
             "id": request_id,
             "result": {
                 "tools": [{
-                    "name": "minimax_chat",
-                    "description": "Send a message to MiniMax M2.5 model and get a response. Use this for research reviews, code analysis, and general AI tasks.",
+                    "name": "chat",
+                    "description": f"Send a message to {DEFAULT_MODEL} and get a response. Use this for research reviews, code analysis, and general AI tasks.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
                             "prompt": {
                                 "type": "string",
-                                "description": "The prompt to send to MiniMax"
+                                "description": "The prompt to send"
                             },
                             "model": {
                                 "type": "string",
-                                "description": "Model to use (default: MiniMax-M2.5)",
-                                "default": "MiniMax-M2.5"
+                                "description": f"Model to use (default: {DEFAULT_MODEL})"
                             },
                             "system": {
                                 "type": "string",
@@ -177,7 +170,7 @@ def handle_request(request):
         tool_name = params.get("name", "")
         arguments = params.get("arguments", {})
 
-        if tool_name == "minimax_chat":
+        if tool_name == "chat":
             prompt = arguments.get("prompt", "")
             model = arguments.get("model", DEFAULT_MODEL)
             system = arguments.get("system", "")
@@ -187,8 +180,8 @@ def handle_request(request):
                 messages.append({"role": "system", "content": system})
             messages.append({"role": "user", "content": prompt})
 
-            debug_log(f"Tool call: minimax_chat, prompt length: {len(prompt)}")
-            content, error = call_minimax(messages, model)
+            debug_log(f"Tool call: chat, prompt length: {len(prompt)}")
+            content, error = call_llm(messages, model)
 
             if error:
                 return {
@@ -215,7 +208,6 @@ def handle_request(request):
         }
 
     else:
-        debug_log(f"Unknown method: {method}")
         return {
             "jsonrpc": "2.0",
             "id": request_id,
@@ -223,34 +215,21 @@ def handle_request(request):
         }
 
 def read_message():
-    """Read a single JSON-RPC message from stdin. Returns None on EOF.
+    """Read a single JSON-RPC message from stdin."""
+    global _use_ndjson
 
-    Supports two formats:
-    1. Standard MCP: Content-Length: N\\r\\n\\r\\n{json}
-    2. NDJSON/Line-delimited: {json}\\n
-    """
-    content_length = None
-    first_line = None
-
-    # Read first line to determine format
     line = sys.stdin.readline()
-    if not line:  # EOF
+    if not line:
         return None
 
     line = line.decode('utf-8').rstrip('\r\n')
-    debug_log(f"First line: '{line[:100]}...'")
 
-    # Check if it's a Content-Length header or direct JSON
     if line.lower().startswith("content-length:"):
-        # Standard MCP format
         try:
             content_length = int(line.split(":", 1)[1].strip())
-            debug_log(f"Content-Length: {content_length}")
         except ValueError:
-            log_error(f"Invalid Content-Length: {line}")
             return None
 
-        # Read remaining headers until blank line
         while True:
             hdr = sys.stdin.readline()
             if not hdr:
@@ -258,42 +237,21 @@ def read_message():
             hdr = hdr.decode('utf-8').rstrip('\r\n')
             if hdr == "":
                 break
-            debug_log(f"Header: '{hdr}'")
 
-    elif line.startswith("{") or line.startswith("["):
-        # NDJSON format - the line IS the JSON
-        global _use_ndjson
-        _use_ndjson = True
-        debug_log("Detected NDJSON format (line-delimited JSON)")
+        body = sys.stdin.read(content_length)
         try:
-            request = json.loads(line)
-            debug_log(f"Parsed NDJSON request: {json.dumps(request)[:200]}")
-            return request
-        except json.JSONDecodeError as e:
-            log_error(f"JSON decode error in NDJSON: {e}")
+            return json.loads(body.decode('utf-8'))
+        except:
             return None
 
-    else:
-        log_error(f"Unexpected line format: {line[:100]}")
-        return None
+    elif line.startswith("{") or line.startswith("["):
+        _use_ndjson = True
+        try:
+            return json.loads(line)
+        except:
+            return None
 
-    if content_length is None:
-        log_error("Missing Content-Length header")
-        return None
-
-    # Read the body (for standard MCP format)
-    body = sys.stdin.read(content_length)
-    if len(body) < content_length:
-        log_error(f"Incomplete body: expected {content_length}, got {len(body)}")
-        return None
-
-    try:
-        request = json.loads(body.decode('utf-8'))
-        debug_log(f"Parsed request: {json.dumps(request)[:200]}")
-        return request
-    except json.JSONDecodeError as e:
-        log_error(f"JSON decode error: {e}")
-        return None
+    return None
 
 def main():
     """Main loop - read JSON-RPC messages from stdin"""
@@ -303,29 +261,17 @@ def main():
         try:
             request = read_message()
             if request is None:
-                debug_log("Received EOF, exiting gracefully")
+                debug_log("EOF, exiting")
                 break
-
-            debug_log(f"Processing: {request.get('method', 'unknown')}")
 
             response = handle_request(request)
             if response:
                 send_response(response)
 
         except Exception as e:
-            log_error(f"Exception in main loop: {e}")
-            debug_log(f"Exception: {e}")
-            # Try to send error response
-            try:
-                send_response({
-                    "jsonrpc": "2.0",
-                    "id": None,
-                    "error": {"code": -32603, "message": f"Internal error: {e}"}
-                })
-            except:
-                pass
+            log_error(f"Exception: {e}")
 
-    debug_log("=== MCP Server Exiting ===")
+    debug_log("=== Server Exiting ===")
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,7 @@
 # Auto-claude-code-research-in-sleep (ARIS ⚔️)
 
+![ARIS Logo](docs/aris_logo.svg)
+
 ![Hero](docs/hero_combined.svg)
 
 [English](README.md) | 中文版
@@ -8,9 +10,9 @@
 
 > 🌙 **让 Claude Code 在你睡觉时做科研。** 醒来发现论文已被打分、弱点已被定位、实验已跑完、叙事已重写——全自动。
 
-[![Featured in awesome-agent-skills](https://img.shields.io/badge/Featured%20in-awesome--agent--skills-blue?style=flat&logo=github)](https://github.com/VoltAgent/awesome-agent-skills) · [![AI Digital Crew - Project of the Day](https://img.shields.io/badge/AI%20Digital%20Crew-Project%20of%20the%20Day%20(2026.03.14)-orange?style=flat)](https://aidigitalcrew.com) · [💬 加入交流群](#-交流群)
+[![PaperWeekly 收录](https://img.shields.io/badge/PaperWeekly-收录-red?style=flat)](https://mp.weixin.qq.com/s/tDniVryVGjDkkkWl-5sTkQ) · [![Featured in awesome-agent-skills](https://img.shields.io/badge/Featured%20in-awesome--agent--skills-blue?style=flat&logo=github)](https://github.com/VoltAgent/awesome-agent-skills) · [![AI Digital Crew - Project of the Day](https://img.shields.io/badge/AI%20Digital%20Crew-Project%20of%20the%20Day%20(2026.03.14)-orange?style=flat)](https://aidigitalcrew.com) · [💬 加入交流群](#-交流群) · [![引用](https://img.shields.io/badge/📖_引用-BibTeX-green?style=flat)](#-引用)
 
-基于 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 的自定义 Skills，用于自主 ML 科研工作流。核心机制是**跨模型协作**——Claude Code 负责执行（读文件、写代码、跑实验、收结果），外部 LLM（通过 [Codex MCP](https://github.com/openai/codex)）负责评审（打分、找弱点、建议修复）。两个模型互不评自己的作业，形成真正的反馈循环。🔀 **也支持[替代模型组合](#-替代模型组合)（如 GLM + GPT、GLM + MiniMax）——无需 Claude API。**
+基于 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 的自定义 Skills，用于自主 ML 科研工作流。核心机制是**跨模型协作**——Claude Code 负责执行（读文件、写代码、跑实验、收结果），外部 LLM（通过 [Codex MCP](https://github.com/openai/codex)）负责评审（打分、找弱点、建议修复）。两个模型互不评自己的作业，形成真正的反馈循环。🔀 **也支持[替代模型组合](#-替代模型组合)（GLM、MiniMax、Kimi、LongCat、DeepSeek 等）——无需 Claude 或 OpenAI API。**
 
 > 💭 **为什么不用单模型自我博弈？** 用 Claude Code 的 subagent 或 agent team 同时做执行和审稿在技术上可行，但容易陷入**局部最优**——同一个模型审自己的输出会产生盲区。
 >
@@ -22,6 +24,9 @@
 
 ## 📢 最近更新
 
+- **2026-03-15** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🔀 **自带模型！** [任意 OpenAI 兼容 API](#-替代模型组合) 均可作为审查器，通过 [`llm-chat`](mcp-servers/llm-chat/) MCP 服务器。GLM、MiniMax、Kimi、LongCat、DeepSeek 已全部测试——**完全不需要 Claude 或 OpenAI API**
+- **2026-03-15** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🐾 **[OpenClaw 适配指南](docs/OPENCLAW_ADAPTATION.md)** — 无需 Claude Code slash skills，在 [OpenClaw](https://github.com/All-Hands-AI/OpenHands) 中使用 ARIS 科研工作流
+- **2026-03-15** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 📐 **[`proof-writer`](skills/proof-writer/SKILL.md)** — 社区 skill，严格定理证明撰写。📚 **反幻觉引用** — `/paper-write` 现从 [DBLP](https://dblp.org)/[CrossRef](https://www.crossref.org) 获取真实 BibTeX，替代 LLM 生成——默认开启，零安装
 - **2026-03-14** — 📱 [飞书集成](#-飞书lark-集成可选)：三种模式（关闭/推送/交互），实验完成、review 出分、checkpoint 审批均可手机收通知
 - **2026-03-13** — 🛑 Human-in-the-loop：所有工作流支持 `AUTO_PROCEED` 检查点，全自动或逐步审批
 - **2026-03-12** — 🔗 [Zotero](#-zotero-集成可选) + [Obsidian](#-obsidian-集成可选) + 本地 PDF + arXiv/Scholar：多源文献检索 + 跨模型新颖性验证
@@ -48,9 +53,20 @@ claude
 > /research-pipeline "你的研究方向"            # 全流程：工作流 1 → 2 → 3 端到端
 ```
 
-> **提示：** 工作流默认自动继续（`AUTO_PROCEED=true`）。如果想在每个关键步骤前暂停审核（比如确认 idea 再花 GPU），在命令中覆盖：
+> **提示：** 所有流水线行为均可通过内联参数配置——在命令后追加 `— key: value`：
+>
+> | 参数 | 默认 | 说明 |
+> |------|------|------|
+> | `AUTO_PROCEED` | `true` | 在 idea 选择关卡自动继续。设为 `false` 可在花 GPU 前手动挑选 idea |
+> | `human checkpoint` | `false` | 每轮 review 后暂停，让你查看分数、给出修改意见、跳过特定修复或提前终止 |
+> | `arxiv download` | `false` | 文献调研时下载最相关的 arXiv PDF。为 `false` 时仅获取元数据（标题、摘要、作者） |
+> | `DBLP_BIBTEX` | `true` | 从 [DBLP](https://dblp.org)/[CrossRef](https://www.crossref.org) 获取真实 BibTeX，替代 LLM 生成。杜绝幻觉引用。零安装 |
+>
 > ```
-> /research-pipeline "你的课题" — AUTO_PROCEED: false
+> /research-pipeline "你的课题" — AUTO_PROCEED: false                          # 在 idea 选择关卡暂停
+> /research-pipeline "你的课题" — human checkpoint: true                       # 每轮 review 后暂停，可给修改意见
+> /research-pipeline "你的课题" — arxiv download: true                         # 文献调研时下载最相关的 arXiv PDF
+> /research-pipeline "你的课题" — AUTO_PROCEED: false, human checkpoint: true  # 组合使用
 > ```
 
 > **重要：** Codex MCP 使用的模型取决于 `~/.codex/config.toml`，而非 skill 文件中的设置。请确认其中写的是 `model = "gpt-5.4"`（推荐）。其他可用模型：`gpt-5.3-codex`、`gpt-5.2-codex`、`o3`。运行 `codex setup` 或直接编辑该文件。
@@ -59,7 +75,7 @@ claude
 
 ## ✨ 功能亮点
 
-- 📊 **19 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）
+- 📊 **20 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）
 - 🔍 **文献 & 查新** — 多源论文搜索（**[Zotero](#-zotero-集成可选)** + **[Obsidian](#-obsidian-集成可选)** + **本地 PDF** + arXiv/Scholar）+ 跨模型查新验证
 - 💡 **Idea 发现** — 文献调研 → 头脑风暴 8-12 个 idea → 查新 → GPU pilot 实验 → 排名报告
 - 🔄 **自动 review 循环** — 4 轮自主审稿，一夜从 5/10 提升到 7.5/10，自动跑 20+ 组 GPU 实验
@@ -67,7 +83,7 @@ claude
 - 🤖 **跨模型协作** — Claude Code 执行，GPT-5.4 xhigh 审稿。对抗式而非自我博弈
 - 📝 **Peer Review** — 以审稿人视角审阅他人论文，结构化打分 + meta-review
 - 🖥️ **GPU 部署** — 自动 rsync、screen 会话、多 GPU 并行实验、实时监控
-- 🔀 **灵活模型** — 默认 Claude × GPT-5.4，也支持 [GLM + GPT、GLM + MiniMax](#-替代模型组合)——无需 Claude API
+- 🔀 **灵活模型** — 默认 Claude × GPT-5.4，也支持 [GLM、MiniMax、Kimi、LongCat、DeepSeek 等](#-替代模型组合)——无需 Claude 或 OpenAI API
 - 🛑 **Human-in-the-loop** — 关键决策点可配置检查点。`AUTO_PROCEED=true` 全自动，`false` 逐步审批
 - 📱 **[飞书通知](#-飞书lark-集成可选)** — 三种模式：**关闭（默认，强烈建议大多数用户保持关闭）**、仅推送（webhook，手机收通知）、双向交互（在飞书里审批/回复）。未配置时零影响
 
@@ -106,11 +122,16 @@ claude
 
 社区贡献的领域专用 skills 和外部项目。欢迎 PR——添加 `skills/your-skill/SKILL.md` 即可！
 
+> 💡 **使用方法：** 社区 skill 不会自动接入核心工作流。使用时，让你的执行者（Claude Code / OpenClaw 等）先读一遍该 skill 的 `SKILL.md`，再根据下方描述接入对应的工作流阶段。
+
 | 类型 | 名称 | 领域 | 描述 | Codex MCP？ |
 |------|------|------|------|-----------|
 | Skill | 🏗️ [`dse-loop`](skills/dse-loop/SKILL.md) | 体系结构 / EDA | 自动设计空间探索——迭代运行、分析、调参（gem5、Yosys 等）。适用于任何有可调参数的领域 | 否 |
 | Skill | 🤖 [`idea-discovery-robot`](skills/idea-discovery-robot/SKILL.md) | 机器人 / 具身智能 | 工作流 1 适配版——按 embodiment、benchmark、sim2real 路径和安全约束生成、筛选 idea | 是 |
 | External | 🔬 [Auto-Research-Refine](https://github.com/zjYao36/Auto-Research-Refine) | 通用 | 把模糊 idea 变成可执行研究方案——衔接 `/idea-discovery` 和 `/auto-review-loop`。Claude + GPT-5.4 迭代精炼 | 是 |
+| External | 🛡️ [open-source-hardening-skills](https://github.com/zeyuzhangzyz/open-source-hardening-skills) | DevOps / 开源 | 10 个 skill 流水线，将研究代码加固为生产级开源项目——审计、重构、测试、CI、文档、review。ARIS 研究完成后的下一步 | 是 |
+| Skill | 📐 [`proof-writer`](skills/proof-writer/SKILL.md) | ML 理论 | 严格的定理/引理证明撰写——可行性分类、依赖图谱、诚实的阻塞报告。搭配工作流 3（`/paper-writing`）写理论章节，或工作流 2（`/auto-review-loop`）修补 reviewer 指出的证明漏洞 | 否 |
+| Docs | 🐾 [OpenClaw 适配指南](docs/OPENCLAW_ADAPTATION.md) | 通用 | 在 [OpenClaw](https://github.com/All-Hands-AI/OpenHands) 中使用 ARIS 工作流方法论——skill 到阶段映射、文件化编排，无需 Claude Code CLI | 否 |
 
 > **⭐ 推荐：[Auto-Research-Refine](https://github.com/zjYao36/Auto-Research-Refine)** — 填补了"研究什么"到"怎么研究"之间的空白。接入 ARIS 流水线：
 >
@@ -307,6 +328,7 @@ NARRATIVE_REPORT.md ──► /paper-plan ──► /paper-figure ──► /pap
 | 💡 [`idea-creator`](skills/idea-creator/SKILL.md) | 给定研究方向，自动生成、筛选、排序研究 idea | 是 |
 | 🔬 [`research-review`](skills/research-review/SKILL.md) | 单轮深度评审（外部 LLM，xhigh 推理） | 是 |
 | 🔁 [`auto-review-loop`](skills/auto-review-loop/SKILL.md) | 多轮自动 review→修复→再 review 循环（最多 4 轮） | 是 |
+| 🔁 [`auto-review-loop-llm`](skills/auto-review-loop-llm/SKILL.md) | 同上，但使用任意 OpenAI 兼容 API（DeepSeek、MiniMax、Kimi 等），通过 [`llm-chat`](mcp-servers/llm-chat/) MCP 服务器 | 否（使用 llm-chat MCP） |
 | 📚 [`research-lit`](skills/research-lit/SKILL.md) | 搜索 [Zotero](#-zotero-集成可选) + [Obsidian](#-obsidian-集成可选) + 本地 PDF + [arXiv API](#arxiv-集成) + 网络，分析相关工作、找空白 | 否（可选：Zotero/Obsidian MCP） |
 | 📊 [`analyze-results`](skills/analyze-results/SKILL.md) | 分析实验结果、统计、生成对比表 | 否 |
 | 👀 [`monitor-experiment`](skills/monitor-experiment/SKILL.md) | 监控实验进度、收集结果 | 否 |
@@ -724,25 +746,28 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 没有 Claude / OpenAI API？可以换用其他模型——同样的跨模型架构，不同的提供商。
 
-| 角色 | 默认 | 方案 A：GLM + GPT | 方案 B：GLM + MiniMax |
-|------|------|-------------------|----------------------|
-| 执行者（Claude Code） | Claude Opus/Sonnet | GLM-5（智谱 API） | GLM-5（智谱 API） |
-| 审稿人（Codex MCP） | GPT-5.4 | GPT-5.4（OpenAI API） | MiniMax-M2.5（MiniMax API） |
-| 需要 OpenAI API？ | 是 | 是 | **否** |
+> ⭐ **强烈推荐使用 Claude + GPT-5.4（默认组合）。** 这是经过最充分测试、最稳定的组合。替代方案可用但可能需要调整 prompt。
 
-### 第 1 步：安装 Claude Code 和 Codex CLI
+| | 执行者 | 审稿人 | 需要 Claude API？ | 需要 OpenAI API？ | 配置指南 |
+|---|--------|--------|:---:|:---:|---------|
+| **默认** ⭐ | Claude Opus/Sonnet | GPT-5.4（Codex MCP） | 是 | 是 | [快速开始](#-快速开始) |
+| **方案 A** | GLM-5（Z.ai） | GPT-5.4（Codex MCP） | 否 | 是 | [配置见下](#方案-a-glm--gpt) |
+| **方案 B** | GLM-5（Z.ai） | MiniMax-M2.5 | 否 | 否 | [MINIMAX_MCP_GUIDE](docs/MINIMAX_MCP_GUIDE.md) |
+| **方案 C** | 任意 CC 兼容 | 任意 OpenAI 兼容 | 否 | 否 | [LLM_API_MIX_MATCH_GUIDE](docs/LLM_API_MIX_MATCH_GUIDE.md) |
+
+**方案 C** 已适配的提供商：GLM（Z.ai）、Kimi（Moonshot）、LongCat（美团）作为执行器；DeepSeek、MiniMax 作为审查器。任何 OpenAI 兼容 API 理论上均可通过通用 [`llm-chat`](mcp-servers/llm-chat/) MCP 服务器接入。
+
+### 方案 A: GLM + GPT
+
+只替换执行者（Claude → GLM），保留 GPT-5.4 通过 Codex MCP 审稿。
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 npm install -g @openai/codex
+codex setup   # 提示选模型时选 gpt-5.4
 ```
 
-### 第 2 步：配置 `~/.claude/settings.json`
-
-终端输入：`nano ~/.claude/settings.json`
-
-<details>
-<summary><b>方案 A：GLM（执行者）+ GPT（审稿人）</b> — 只替换 Claude，保留 GPT-5.4 审稿</summary>
+配置 `~/.claude/settings.json`：
 
 ```json
 {
@@ -757,9 +782,7 @@ npm install -g @openai/codex
     "mcpServers": {
         "codex": {
             "command": "/opt/homebrew/bin/codex",
-            "args": [
-                "mcp-server"
-            ]
+            "args": ["mcp-server"]
         }
     }
 }
@@ -767,82 +790,35 @@ npm install -g @openai/codex
 
 Codex CLI 使用你已有的 `OPENAI_API_KEY`（来自 `~/.codex/config.toml` 或环境变量）——审稿端不需要额外配置。
 
-</details>
+### 方案 B: GLM + MiniMax
 
-<details>
-<summary><b>方案 B：GLM（执行者）+ MiniMax（审稿人）</b> — 无需 Claude 或 OpenAI API</summary>
+无需 Claude 或 OpenAI API。使用自定义 MiniMax MCP 服务器替代 Codex（因为 MiniMax 不支持 OpenAI 的 Responses API）。完整指南：[`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md)。
 
-```json
-{
-    "env": {
-        "ANTHROPIC_AUTH_TOKEN": "your_zai_api_key",
-        "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
-        "API_TIMEOUT_MS": "3000000",
-        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.5-air",
-        "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5",
-        "MINIMAX_API_KEY": "your_minimax_api_key"
-    },
-    "mcpServers": {
-        "minimax-chat": {
-            "command": "/usr/bin/python3",
-            "args": ["/Users/YOUR_USERNAME/.claude/mcp-servers/minimax-chat/server.py"],
-            "env": {
-                "MINIMAX_API_KEY": "your_minimax_api_key",
-                "MINIMAX_BASE_URL": "https://api.minimax.chat/v1",
-                "MINIMAX_MODEL": "MiniMax-M2.5"
-            }
-        }
-    }
-}
-```
+### 方案 C: 任意执行者 + 任意审稿人
 
-> **⚠️ 方案 B 额外步骤：** Codex MCP 使用 OpenAI 的 Responses API (`/v1/responses`)，MiniMax 不支持该接口（[详情](https://github.com/openai/codex/discussions/7782)）。因此方案 B 使用**自定义 MiniMax MCP 服务器**替代 Codex。完整指南：[`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md)。快速步骤：
->
-> 1. 复制 `mcp-servers/minimax-chat/server.py` → `~/.claude/mcp-servers/minimax-chat/server.py`
-> 2. `pip3 install httpx`
-> 3. 配置完成后，让 Claude Code 改写所有 skill：
->
-> ```
-> 读一下 skills/auto-review-loop-minimax/SKILL.md 作为参考模板。
-> 它把 mcp__codex__codex 替换成了 mcp__minimax-chat__minimax_chat。
-> 现在请把所有其他使用 mcp__codex__codex / mcp__codex__codex-reply 的 skill
-> 都按照同样的模式改写成使用 mcp__minimax-chat__minimax_chat。
-> ```
+通过通用 `llm-chat` MCP 服务器自由混搭，支持任意 OpenAI 兼容 API 作为审稿人。完整指南：[`docs/LLM_API_MIX_MATCH_GUIDE.md`](docs/LLM_API_MIX_MATCH_GUIDE.md)。
 
-</details>
+示例组合：GLM + DeepSeek、Kimi + MiniMax、Claude + DeepSeek、LongCat + GLM 等。
 
-保存：`Ctrl+O` → `Enter` → `Ctrl+X`
-
-### 第 3 步：安装 Skills 并运行
+### 配置完成后：安装 Skills 并验证
 
 ```bash
 git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 cd Auto-claude-code-research-in-sleep
 cp -r skills/* ~/.claude/skills/
-
-# 启动 Claude Code（现在由 GLM 驱动）
 claude
 ```
 
-### 第 4 步：让 GLM 读一遍项目 ⚠️ 重要
+> **⚠️ 非 Claude 执行者（GLM、Kimi 等）：** 需要让模型先读一遍项目，确保 skill 能正确解析。尤其是当你已经[改写了 skill](#-替代模型组合) 以使用不同的审查器 MCP（如 `mcp__llm-chat__chat` 替代 `mcp__codex__codex`）时——新执行器需要理解变更后的工具调用方式：
+>
+> ```
+> 读一下这个项目，验证所有 skills 是否正常：
+> /idea-creator, /research-review, /auto-review-loop, /novelty-check,
+> /idea-discovery, /research-pipeline, /research-lit, /run-experiment,
+> /analyze-results, /monitor-experiment, /pixel-art
+> ```
 
-> **🔴 不要跳过这一步。** GLM 的 prompt 处理方式与 Claude 不同，必须让 GLM 先读一遍项目，确保 skill 文件能正确解析。
-
-启动 `claude` 后，在对话中输入：
-
-```
-读一下这个项目，验证所有 skills 是否正常：
-/idea-creator, /research-review, /auto-review-loop, /novelty-check,
-/idea-discovery, /research-pipeline, /research-lit, /run-experiment,
-/analyze-results, /monitor-experiment, /pixel-art
-
-逐个确认：(1) 能正常加载 (2) frontmatter 解析正确
-```
-
-这让 GLM（作为 Claude Code 执行者）先熟悉 skill 文件并提前发现兼容性问题——而不是在跑到一半时才报错。
-
-> ⚠️ **注意：** 替代模型的行为可能与 Claude 和 GPT-5.4 有所不同。你可能需要调整 skill 中的 `REVIEWER_MODEL` 并微调 prompt 模板以获得最佳效果。核心的跨模型架构不变。
+> ⚠️ **注意：** 替代模型的行为可能与 Claude 和 GPT-5.4 有所不同。你可能需要微调 prompt 模板以获得最佳效果。核心的跨模型架构不变。
 
 ## 📋 Roadmap
 
@@ -862,17 +838,18 @@ claude
 - [x] **全流程研究管线** — `/research-pipeline` 串联 Workflow 1（idea discovery）→ 实现 → Workflow 2（auto-review-loop），端到端
 - [x] **Peer Review skill** — `/peer-review` 以审稿人视角审阅他人论文，含 GPT-5.4 meta-review
 - [x] **跨模型协作架构** — Claude Code（执行者）× Codex GPT-5.4 xhigh（审稿者），避免单模型自我博弈的局部最优
+- [x] **飞书集成** — 三种模式（关闭/推送/交互），通过 `~/.claude/feishu.json` 配置。推送只需 webhook URL；交互用 [feishu-claude-code](https://github.com/joewongjc/feishu-claude-code)。默认关闭——对已有工作流零影响。见[设置指南](#-飞书lark-集成可选)
+- [x] **Zotero MCP 集成** — `/research-lit` 搜索 Zotero 文献库、读取标注/高亮、导出 BibTeX。推荐：[zotero-mcp](https://github.com/54yyyu/zotero-mcp)（1.8k⭐）。见[设置指南](#-zotero-集成可选)
+- [x] **Obsidian 集成** — `/research-lit` 搜索 Obsidian vault 中的研究笔记、标签引用、wikilinks。推荐：[mcpvault](https://github.com/bitbonsai/mcpvault)（760⭐）+ [obsidian-skills](https://github.com/kepano/obsidian-skills)（13.6k⭐）。见[设置指南](#-obsidian-集成可选)
+- [x] **更多执行者 × 评审者组合** — 任意 OpenAI 兼容 API 均可通过 [`llm-chat`](mcp-servers/llm-chat/) MCP 服务器接入。GLM、MiniMax、Kimi、LongCat、DeepSeek 已全部测试——无需 Claude 或 OpenAI API
 
 </details>
 
 ### 计划中
 
-- [x] **飞书集成** — 三种模式（关闭/推送/交互），通过 `~/.claude/feishu.json` 配置。推送只需 webhook URL；交互用 [feishu-claude-code](https://github.com/joewongjc/feishu-claude-code)。默认关闭——对已有工作流零影响。见[设置指南](#-飞书lark-集成可选)
+- [ ] **GitHub 代码同步** — 支持 `git push` → 服务器 `git pull` 替代 `rsync` over SSH。好处：无需本地直连 SSH、部署有版本记录、一次 push 多台服务器同步
 - [ ] **W&B 集成** — 从 Weights & Biases 拉取训练曲线和指标作为反馈信号。auto-review-loop 可读取 loss/accuracy 图诊断训练问题并建议下一步实验
   - 相关项目：[wandb-mcp-server](https://github.com/wandb/wandb-mcp-server)（W&B 官方 MCP，40⭐）或通过 `wandb api` CLI
-- [x] **Zotero MCP 集成** — `/research-lit` 搜索 Zotero 文献库、读取标注/高亮、导出 BibTeX。推荐：[zotero-mcp](https://github.com/54yyyu/zotero-mcp)（1.8k⭐）。见[设置指南](#-zotero-集成可选)
-- [x] **Obsidian 集成** — `/research-lit` 搜索 Obsidian vault 中的研究笔记、标签引用、wikilinks。推荐：[mcpvault](https://github.com/bitbonsai/mcpvault)（760⭐）+ [obsidian-skills](https://github.com/kepano/obsidian-skills)（13.6k⭐）。见[设置指南](#-obsidian-集成可选)
-- [ ] 更多执行者 × 评审者组合（Gemini、DeepSeek 等）
 - [ ] **常驻模式（Daemon mode）** — 通过 `launchd`/`systemd` 自动重启 Claude Code 会话，实现真正的无人值守运行。当前编排层需要活跃的 CLI 会话；状态文件（`REVIEW_STATE.json`、`AUTO_REVIEW.md`）支持跨会话恢复，但重启需手动操作（[#11](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/11)）
 
 ## 💬 交流群
@@ -882,6 +859,20 @@ claude
 欢迎加入微信群，交流 Claude Code + AI 科研工作流：
 
 <img src="docs/wechat_group.jpg" alt="微信交流群二维码" width="300">
+
+## 📖 引用
+
+如果 ARIS 对你的研究有帮助，请引用：
+
+```bibtex
+@misc{yang2026aris,
+    author       = {Yang, Ruofeng and Li, Yongcan and Li, Shuai},
+    title        = {ARIS: Fully Autonomous Research via Adversarial Multi-Agent Collaboration},
+    year         = {2026},
+    organization = {GitHub},
+    url          = {https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep},
+}
+```
 
 ## ⭐ Star History
 
