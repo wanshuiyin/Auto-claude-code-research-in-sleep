@@ -11,7 +11,7 @@ Check whether a proposed method/idea has already been done in the literature: **
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
+- REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.4`, `gpt-5.3-codex`, `gpt-5.2-codex`)
 
 ## Instructions
 

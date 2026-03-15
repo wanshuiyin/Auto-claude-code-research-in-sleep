@@ -13,7 +13,7 @@ Get a deep external review of a repository's open-source readiness from Codex MC
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (for example `gpt-5.4`, `o3`, `gpt-4o`)
+- REVIEWER_MODEL = `gpt-5.4` — Model used via Codex MCP. Must be an OpenAI model (for example `gpt-5.4`, `gpt-5.3-codex`, `gpt-5.2-codex`)
 - REVIEW_DOC = `OSS_REVIEW.md`
 - READY_THRESHOLD = overall score >= 7/10 with verdict `ready` or `almost`
 

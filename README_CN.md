@@ -53,7 +53,7 @@ claude
 > /research-pipeline "你的课题" — AUTO_PROCEED: false
 > ```
 
-> **重要：** Codex MCP 使用的模型取决于 `~/.codex/config.toml`，而非 skill 文件中的设置。请确认其中写的是 `model = "gpt-5.4"`，否则可能默认使用 `gpt-4o`。运行 `codex setup` 或直接编辑该文件。
+> **重要：** Codex MCP 使用的模型取决于 `~/.codex/config.toml`，而非 skill 文件中的设置。请确认其中写的是 `model = "gpt-5.4"`，或者当前可用的 Codex 模型，如 `gpt-5.3-codex`、`gpt-5.2-codex`；否则 Codex 可能会直接报“找不到模型”。运行 `codex setup` 或直接编辑该文件。
 
 详见[完整安装指南](#%EF%B8%8F-安装)和[替代模型组合](#-替代模型组合)（无需 Claude/OpenAI API）。
 
@@ -694,7 +694,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 | 常量 | 默认值 | 说明 |
 |------|--------|------|
-| `REVIEWER_MODEL` | `gpt-5.4` | Codex MCP 调用的 OpenAI 模型。可选：`gpt-5.4`、`o3`、`gpt-4o` 等 |
+| `REVIEWER_MODEL` | `gpt-5.4` | Codex MCP 调用的 OpenAI 模型。可选：`gpt-5.4`、`gpt-5.3-codex`、`gpt-5.2-codex` 等 |
 
 - **Prompt 模板** — 定制评审人格和评估标准
 - **`allowed-tools`** — 限制或扩展每个 skill 可用的工具
@@ -834,7 +834,7 @@ claude
 <details>
 <summary>展开 6 项更早完成的功能</summary>
 
-- [x] **可配置 REVIEWER_MODEL** — 所有依赖 Codex 的 skill 支持自定义审稿模型（默认 `gpt-5.4`，也支持 `o3`、`gpt-4o` 等）
+- [x] **可配置 REVIEWER_MODEL** — 所有依赖 Codex 的 skill 支持自定义审稿模型（默认 `gpt-5.4`，也支持 `gpt-5.3-codex`、`gpt-5.2-codex` 等）
 
 - [x] **本地论文库扫描** — `/research-lit` 在外部搜索前先扫描本地 `papers/` 和 `literature/` 目录，复用已读论文
 - [x] **Idea Discovery 流水线** — `/idea-discovery` 一键编排 research-lit → idea-creator → novelty-check → research-review，含 GPU pilot 实验
