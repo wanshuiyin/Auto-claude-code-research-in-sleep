@@ -22,6 +22,7 @@ Custom [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for 
 
 ## 📢 What's New
 
+- **2026-03-15** — 🛠️ OSS hardening skill suite (`/oss-hardening`) + maintainer-style review loop, plus `/arxiv` paper download support for saving relevant PDFs locally
 - **2026-03-14** — 📱 [Feishu/Lark integration](#-feishulark-integration-optional): three modes (off/push/interactive), mobile notifications for experiments, reviews, and checkpoints
 - **2026-03-13** — 🛑 Human-in-the-loop: configurable `AUTO_PROCEED` checkpoints across all workflows. Full autopilot or step-by-step approval
 - **2026-03-12** — 🔗 [Zotero](#-zotero-integration-optional) + [Obsidian](#-obsidian-integration-optional) + local PDFs + arXiv/Scholar: multi-source literature search with cross-model novelty verification
@@ -46,6 +47,8 @@ claude
 > /auto-review-loop                          # Workflow 2: review → fix → re-review overnight
 > /paper-writing "NARRATIVE_REPORT.md"       # Workflow 3: narrative → polished PDF
 > /research-pipeline "your research direction"  # Full pipeline: Workflow 1 → 2 → 3 end-to-end
+> /arxiv "representation autoencoders — download"  # Search arXiv and save relevant PDFs locally
+> /oss-hardening "."                           # Audit → refactor/tests/CI/docs → maintainer-style OSS review loop
 ```
 
 > **Tip:** Workflows auto-continue at checkpoints by default (`AUTO_PROCEED=true`). To pause and review before each major step (e.g., before committing GPU time), override in your command:
@@ -55,15 +58,16 @@ claude
 
 > **Important:** Codex MCP uses the model from `~/.codex/config.toml`, not from skill files. Make sure it says `model = "gpt-5.4"` — otherwise it may default to `gpt-4o`. Run `codex setup` or edit the file directly.
 
-See [full setup guide](#%EF%B8%8F-setup) for details and [alternative model combinations](#-alternative-model-combinations) if you don't have Claude/OpenAI API.
+See [full setup guide](#%EF%B8%8F-setup) for details and [alternative model combinations](#-alternative-model-combinations) if you don't have Claude/OpenAI API. See the [OSS hardening guide](docs/OSS_HARDENING_GUIDE.md) for the new `/oss-hardening` pipeline that upgrades a loose repo into a documented, tested, CI-backed open-source project.
 
 ## ✨ Features
 
-- 📊 **18 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`)
-- 🔍 **Literature & novelty** — multi-source paper search (**[Zotero](#-zotero-integration-optional)** + **[Obsidian](#-obsidian-integration-optional)** + **local PDFs** + arXiv/Scholar) + cross-model novelty verification
+- 📊 **28 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`, `/oss-hardening`)
+- 🔍 **Literature & novelty** — multi-source paper search (**[Zotero](#-zotero-integration-optional)** + **[Obsidian](#-obsidian-integration-optional)** + **local PDFs** + arXiv/Scholar), plus `/arxiv` download support for close reading
 - 💡 **Idea discovery** — literature survey → brainstorm 8-12 ideas → novelty check → GPU pilot experiments → ranked report
 - 🔄 **Auto review loop** — 4-round autonomous review, 5/10 → 7.5/10 overnight with 20+ GPU experiments
 - 📝 **Paper writing** — narrative → outline → figures → LaTeX → PDF → auto-review (4/10 → 8.5/10), one command
+- 🛠️ **Open-source hardening** — audit → plan → careful refactor → tests → CI → docs → 4-round maintainer-style review loop
 - 🤖 **Cross-model collaboration** — Claude Code executes, GPT-5.4 xhigh reviews. Adversarial, not self-play
 - 📝 **Peer review** — review others' papers as a conference reviewer, with structured scoring and meta-review
 - 🖥️ **GPU deployment** — auto rsync, screen sessions, multi-GPU parallel experiments, live monitoring
@@ -126,6 +130,7 @@ These skills compose into a full research lifecycle. The three workflows can be 
 - **Already have an idea + initial plan?** Jump straight to Workflow 2 → `/auto-review-loop`
 - **Ready to write the paper?** Workflow 3 → `/paper-writing` (or step by step: `/paper-plan` → `/paper-figure` → `/paper-write` → `/paper-compile` → `/auto-paper-improvement-loop`)
 - **Full pipeline?** Workflow 1 → Workflow 2 → Workflow 3 → `/research-pipeline` — from literature survey all the way to submission
+- **Want to open-source or harden an existing codebase?** Run `/oss-hardening` — audit → plan → refactor → tests → CI → docs → review loop in one pass unless a blocker appears
 
 > ⚠️ **Important:** These tools accelerate research, but they don't replace your own critical thinking. Always review generated ideas with your domain expertise, question the assumptions, and make the final call yourself. The best research comes from human insight + AI execution, not full autopilot.
 
@@ -362,7 +367,8 @@ After Workflow 3 generates the paper, `/auto-paper-improvement-loop` runs 2 roun
 | 💡 [`idea-creator`](skills/idea-creator/SKILL.md) | Generate and rank research ideas given a broad direction (brainstorm + filter + validate) | Yes |
 | 🔬 [`research-review`](skills/research-review/SKILL.md) | Single-round deep review from external LLM (xhigh reasoning) | Yes |
 | 🔁 [`auto-review-loop`](skills/auto-review-loop/SKILL.md) | Autonomous multi-round review→fix→re-review loop (max 4 rounds) | Yes |
-| 📚 [`research-lit`](skills/research-lit/SKILL.md) | Scan [Zotero](#-zotero-integration-optional) + [Obsidian](#-obsidian-integration-optional) + local PDFs + web search, analyze related work, find gaps | No (Optional: Zotero/Obsidian MCP) |
+| 📚 [`research-lit`](skills/research-lit/SKILL.md) | Scan [Zotero](#-zotero-integration-optional) + [Obsidian](#-obsidian-integration-optional) + local PDFs + web search, analyze related work, find gaps, and save key arXiv PDFs locally when needed | No (Optional: Zotero/Obsidian MCP) |
+| 🔭 [`arxiv`](skills/arxiv/SKILL.md) | Search arXiv by keyword or paper ID, download PDFs to local library, summarize abstracts | No |
 | 📊 [`analyze-results`](skills/analyze-results/SKILL.md) | Analyze experiment results, compute statistics, generate insights | No |
 | 👀 [`monitor-experiment`](skills/monitor-experiment/SKILL.md) | Monitor running experiments, check progress, collect results | No |
 | 🔍 [`novelty-check`](skills/novelty-check/SKILL.md) | Verify research idea novelty against recent literature before implementing | Yes |
@@ -377,6 +383,15 @@ After Workflow 3 generates the paper, `/auto-paper-improvement-loop` runs 2 roun
 | 🔄 [`auto-paper-improvement-loop`](skills/auto-paper-improvement-loop/SKILL.md) | 2-round content review + format check loop on generated paper (4/10 → 8.5/10) | Yes |
 | 📝 [`paper-writing`](skills/paper-writing/SKILL.md) | **Workflow 3 pipeline**: paper-plan → paper-figure → paper-write → paper-compile → auto-paper-improvement-loop | Yes |
 | 📱 [`feishu-notify`](skills/feishu-notify/SKILL.md) | [Feishu/Lark](#-feishulark-integration-optional) notifications — push (webhook) or interactive (bidirectional). Off by default | No |
+| 🛡️ [`oss-audit`](skills/oss-audit/SKILL.md) | Audit a repository for correctness, maintainability, tests, security, performance, observability, and docs gaps | No |
+| 🗂️ [`oss-plan`](skills/oss-plan/SKILL.md) | Turn the audit into a GitHub issue/PR-ready checklist with acceptance criteria and commands | No |
+| 🧹 [`oss-refactor`](skills/oss-refactor/SKILL.md) | Apply careful structure, style, and tooling hardening without unnecessary churn | No |
+| ✅ [`oss-tests`](skills/oss-tests/SKILL.md) | Build the smallest effective CI-safe test loop with critical-path, failure, and validation coverage | No |
+| 🏁 [`oss-ci`](skills/oss-ci/SKILL.md) | Add a minimal cache-enabled GitHub Actions workflow for lint + test on push and pull requests | No |
+| 📘 [`oss-docs`](skills/oss-docs/SKILL.md) | Improve README/docs plus add or refine `SECURITY.md`, `CHANGELOG.md`, FAQ, and architecture notes | No |
+| 🧪 [`oss-review`](skills/oss-review/SKILL.md) | Run an external Codex maintainer-style review with scores, release verdict, and minimum-fix guidance | Yes |
+| 🔁 [`oss-review-loop`](skills/oss-review-loop/SKILL.md) | Run a 4-round external open-source review -> fix -> re-review loop until release readiness or max rounds | Yes |
+| 🧭 [`oss-hardening`](skills/oss-hardening/SKILL.md) | Orchestrate audit → plan → refactor → tests → CI → docs → review-loop with explicit stop and rollback points | No |
 
 ---
 

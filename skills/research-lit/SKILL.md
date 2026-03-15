@@ -1,6 +1,6 @@
 ---
 name: research-lit
-description: Search and analyze research papers, find related work, summarize key ideas. Use when user says "find papers", "related work", "literature review", "what does this paper say", or needs to understand academic papers.
+description: Search and analyze research papers, find related work, summarize key ideas, and download highly relevant missing arXiv papers for close reading. Use when user says "find papers", "related work", "literature review", "what does this paper say", or needs to understand academic papers.
 argument-hint: [paper-topic-or-url]
 allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
 ---
@@ -16,6 +16,7 @@ Research topic: $ARGUMENTS
   2. `literature/` in the current project directory
   3. Custom path specified by user in `CLAUDE.md` under `## Paper Library`
 - **MAX_LOCAL_PAPERS = 20** — Maximum number of local PDFs to scan (read first 3 pages each). If more are found, prioritize by filename relevance to the topic.
+- **PAPER_DOWNLOAD_LIMIT = 5** — Maximum number of highly relevant missing arXiv PDFs to download automatically for close reading.
 
 > 💡 Overrides:
 > - `/research-lit "topic" — paper library: ~/my_papers/` — custom local PDF path
@@ -50,7 +51,7 @@ Examples:
 | 1 | **Zotero** (via MCP) | `zotero` | Try calling any `mcp__zotero__*` tool — if unavailable, skip | Collections, tags, annotations, PDF highlights, BibTeX, semantic search |
 | 2 | **Obsidian** (via MCP) | `obsidian` | Try calling any `mcp__obsidian-vault__*` tool — if unavailable, skip | Research notes, paper summaries, tagged references, wikilinks |
 | 3 | **Local PDFs** | `local` | `Glob: papers/**/*.pdf, literature/**/*.pdf` | Raw PDF content (first 3 pages) |
-| 4 | **Web search** | `web` | Always available (WebSearch) | arXiv, Semantic Scholar, Google Scholar |
+| 4 | **Web search** | `web` | Always available (WebSearch) | arXiv, Semantic Scholar, Google Scholar, venue pages |
 
 > **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
 
@@ -116,9 +117,16 @@ Before searching online, check if the user already has relevant papers locally:
 
 ### Step 1: Search (external)
 - Use WebSearch to find recent papers on the topic
-- Check arXiv, Semantic Scholar, Google Scholar
+- Check arXiv, Semantic Scholar, Google Scholar, and venue pages
 - Focus on papers from last 2 years unless studying foundational work
 - **De-duplicate**: Skip papers already found in Zotero, Obsidian, or local library
+- If a highly relevant missing paper has an arXiv ID, download the PDF for close reading and save it to `papers/` or `literature/`
+- Keep automatic downloads bounded to at most `PAPER_DOWNLOAD_LIMIT` papers unless the user asks for a broader sweep
+- Prefer the repository helper when it exists:
+  ```bash
+  python tools/arxiv_fetch.py download ARXIV_ID --dir papers
+  ```
+- If the helper is unavailable, keep the stable PDF link in the report and note that the download should be done later
 
 ### Step 2: Analyze Each Paper
 For each relevant paper (from all sources), extract:
@@ -127,6 +135,7 @@ For each relevant paper (from all sources), extract:
 - **Results**: Key numbers/claims
 - **Relevance**: How does it relate to our work?
 - **Source**: Where we found it (Zotero/Obsidian/local/web) — helps user know what they already have vs what's new
+- **Evidence**: local PDF, downloaded arXiv PDF, or metadata-only summary
 
 ### Step 3: Synthesize
 - Group papers by approach/theme
@@ -146,8 +155,9 @@ Plus a narrative summary of the landscape (3-5 paragraphs).
 
 If Zotero BibTeX was exported, include a `references.bib` snippet for direct use in paper writing.
 
-### Step 5: Save (if requested)
+### Step 5: Save (if requested, or when a paper is clearly central)
 - Save paper PDFs to `literature/` or `papers/`
+- Prefer downloading highly relevant missing arXiv papers that are likely to influence the next step
 - Update related work notes in project memory
 - If Obsidian is available, optionally create a literature review note in the vault
 
@@ -156,5 +166,6 @@ If Zotero BibTeX was exported, include a `references.bib` snippet for direct use
 - Distinguish between peer-reviewed and preprints
 - Be honest about limitations of each paper
 - Note if a paper directly competes with or supports our approach
+- Do not bulk-download marginal papers just because a PDF exists
 - **Never fail because a MCP server is not configured** — always fall back gracefully to the next data source
 - Zotero/Obsidian tools may have different names depending on how the user configured the MCP server (e.g., `mcp__zotero__search` or `mcp__zotero-mcp__search_items`). Try the most common patterns and adapt.
