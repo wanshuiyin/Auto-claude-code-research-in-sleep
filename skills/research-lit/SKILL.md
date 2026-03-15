@@ -16,12 +16,16 @@ Research topic: $ARGUMENTS
   2. `literature/` in the current project directory
   3. Custom path specified by user in `CLAUDE.md` under `## Paper Library`
 - **MAX_LOCAL_PAPERS = 20** — Maximum number of local PDFs to scan (read first 3 pages each). If more are found, prioritize by filename relevance to the topic.
+- **ARXIV_DOWNLOAD = false** — When `true`, download top 3-5 most relevant arXiv PDFs to PAPER_LIBRARY after search. When `false` (default), only fetch metadata (title, abstract, authors) via arXiv API — no files are downloaded.
+- **ARXIV_MAX_DOWNLOAD = 5** — Maximum number of PDFs to download when `ARXIV_DOWNLOAD = true`.
 
 > 💡 Overrides:
 > - `/research-lit "topic" — paper library: ~/my_papers/` — custom local PDF path
 > - `/research-lit "topic" — sources: zotero, local` — only search Zotero + local PDFs
 > - `/research-lit "topic" — sources: zotero` — only search Zotero
 > - `/research-lit "topic" — sources: web` — only search the web (skip all local)
+> - `/research-lit "topic" — arxiv download: true` — download top relevant arXiv PDFs
+> - `/research-lit "topic" — arxiv download: true, max download: 10` — download up to 10 PDFs
 
 ## Data Sources
 
@@ -119,6 +123,35 @@ Before searching online, check if the user already has relevant papers locally:
 - Check arXiv, Semantic Scholar, Google Scholar
 - Focus on papers from last 2 years unless studying foundational work
 - **De-duplicate**: Skip papers already found in Zotero, Obsidian, or local library
+
+**arXiv API search** (always runs, no download by default):
+
+Locate the fetch script and search arXiv directly:
+```bash
+# Try to find arxiv_fetch.py
+SCRIPT=$(find tools/ -name "arxiv_fetch.py" 2>/dev/null | head -1)
+# If not found, check ARIS install
+[ -z "$SCRIPT" ] && SCRIPT=$(find ~/.claude/skills/arxiv/ -name "arxiv_fetch.py" 2>/dev/null | head -1)
+
+# Search arXiv API for structured results (title, abstract, authors, categories)
+python3 "$SCRIPT" search "QUERY" --max 10
+```
+
+If `arxiv_fetch.py` is not found, fall back to WebSearch for arXiv (same as before).
+
+The arXiv API returns structured metadata (title, abstract, full author list, categories, dates) — richer than WebSearch snippets. Merge these results with WebSearch findings and de-duplicate.
+
+**Optional PDF download** (only when `ARXIV_DOWNLOAD = true`):
+
+After all sources are searched and papers are ranked by relevance:
+```bash
+# Download top N most relevant arXiv papers
+python3 "$SCRIPT" download ARXIV_ID --dir papers/
+```
+- Only download papers ranked in the top ARXIV_MAX_DOWNLOAD by relevance
+- Skip papers already in the local library
+- 1-second delay between downloads (rate limiting)
+- Verify each PDF > 10 KB
 
 ### Step 2: Analyze Each Paper
 For each relevant paper (from all sources), extract:

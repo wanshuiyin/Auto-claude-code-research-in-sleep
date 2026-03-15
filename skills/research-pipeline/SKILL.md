@@ -12,8 +12,9 @@ End-to-end autonomous research workflow for: **$ARGUMENTS**
 ## Constants
 
 - **AUTO_PROCEED = true** — When `true`, Gate 1 auto-selects the top-ranked idea (highest pilot signal + novelty confirmed) and continues to implementation. When `false`, always waits for explicit user confirmation before proceeding.
+- **ARXIV_DOWNLOAD = false** — When `true`, `/research-lit` downloads the top relevant arXiv PDFs during literature survey. When `false` (default), only fetches metadata via arXiv API. Passed through to `/idea-discovery` → `/research-lit`.
 
-> 💡 Override via argument, e.g., `/research-pipeline "topic" — AUTO_PROCEED: false`.
+> 💡 Override via argument, e.g., `/research-pipeline "topic" — AUTO_PROCEED: false, arxiv download: true`.
 
 ## Overview
 
