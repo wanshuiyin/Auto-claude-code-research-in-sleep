@@ -266,7 +266,7 @@
     <text x="233" y="178" font-size="8px" fill="#4aaa4a">Loss: 2.341 → 1.872</text>
 
     <!-- GPT-5.4 mini pixel character (code reviewer) between code and deploy -->
-    <g transform="translate(196,155) scale(0.5)">
+    <g transform="translate(355,192) scale(0.5)">
       <!-- Hair (dark) -->
       <rect x="20" y="42" width="7" height="7" fill="#2C2C2C"/>
       <rect x="27" y="42" width="7" height="7" fill="#2C2C2C"/>
@@ -323,8 +323,8 @@
       <rect x="37" y="91" width="7" height="7" fill="#444"/>
       <rect x="44" y="91" width="7" height="7" fill="#444"/>
     </g>
-    <text x="213" y="210" text-anchor="middle" font-size="6px" fill="#74AA63" font-weight="bold">GPT-5.4</text>
-    <text x="213" y="217" text-anchor="middle" font-size="5px" fill="#74AA63">(Code Review)</text>
+    <text x="372" y="247" text-anchor="middle" font-size="6px" fill="#74AA63" font-weight="bold">GPT-5.4</text>
+    <text x="372" y="254" text-anchor="middle" font-size="5px" fill="#74AA63">(Code Review)</text>
 
     <!-- Results panel -->
     <rect x="65" y="196" width="295" height="46" fill="#fff" stroke="#ddd" stroke-width="1" rx="6"/>
