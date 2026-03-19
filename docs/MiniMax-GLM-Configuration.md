@@ -11,7 +11,7 @@
 | 角色 | 方案 A：GLM + GPT | 方案 B：GLM + MiniMax | 方案 C：MiniMax + GLM |
 |------|-------------------|----------------------|----------------------|
 | 执行者（Claude Code） | GLM-5（智谱 API） | GLM-5（智谱 API） | MiniMax-M2.7（MiniMax API） |
-| 审稿人（Skill 工具） | `mcp__codex__codex` | `mcp__codex__codex` | `mcp__llm-chat__chat` |
+| 审稿人（Skill 工具） | `mcp__codex__codex` | `mcp__llm-chat__chat` | `mcp__llm-chat__chat` |
 | 需要 OpenAI API？ | 是 | **否** | **否** |
 
 ## 配置步骤
