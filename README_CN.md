@@ -28,7 +28,7 @@
 
 ## 📢 最近更新
 
-- **2026-03-22** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 📋 **[模板](templates/)** — 每个工作流的输入模板。📄 **7 个会议模板** — 新增 CVPR、ACL、AAAI、ACM MM（现支持 ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM）。🛡️ **反幻觉修复** — 工作流 2 加引用时强制 DBLP → CrossRef → [VERIFY]
+- **2026-03-22** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 📋 **[模板](templates/)** — 每个工作流的输入模板。📄 **7 个会议模板** — 新增 CVPR、ACL、AAAI、ACM MM（现支持 ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM）。🛡️ **反幻觉修复** — 工作流 2 强制 DBLP → CrossRef → [VERIFY]。🔗 **`base repo`** — 克隆 GitHub 项目作为实验基础（`— base repo: https://github.com/org/project`）
 - **2026-03-21** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🏆 **AAAI 2026 接收——纯 Codex CLI 7/10 分！** ARIS-Codex skills 完成，by [@xinbo820-web](https://github.com/xinbo820-web)。详见[社区实操](#-社区实操--用-aris-完成的论文)
 - **2026-03-20** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🏆 **首个社区论文获 8/10 分！** CS 论文全程 ARIS 完成——"empirical findings are stark, well-supported"。恭喜 [@DefanXue](https://github.com/DefanXue) & [@Monglitay](https://github.com/Monglitay)！详见[社区实操](#-社区实操--用-aris-完成的论文)
 - **2026-03-20** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🚀 **[Antigravity 适配指南](docs/ANTIGRAVITY_ADAPTATION_CN.md)** — 在 [Google Antigravity](https://antigravity.google/)（Agent-First IDE）中使用 ARIS skills。原生 `SKILL.md` 支持，双模型（Claude Opus 4.6 Thinking / Gemini 3.1 Pro），MCP 配置，[英文](docs/ANTIGRAVITY_ADAPTATION.md) + 中文指南
@@ -95,6 +95,7 @@ claude
 > | `wandb` | `false` | 自动给实验脚本加 W&B 日志。设 `true` + 在 CLAUDE.md 配 `wandb_project`。`/monitor-experiment` 从 W&B 拉训练曲线 |
 > | `illustration` | `gemini` | 工作流 3 AI 作图：`gemini`（默认，需 `GEMINI_API_KEY`，[获取](https://aistudio.google.com/apikey)）、`mermaid`（免费）、`false`（跳过） |
 > | `venue` | `ICLR` | 目标会议：`ICLR`、`NeurIPS`、`ICML`、`CVPR`、`ACL`、`AAAI`、`ACM`。决定 LaTeX 样式和页数限制 |
+> | `base repo` | `false` | GitHub 仓库 URL，克隆作为实验基础代码（如 `— base repo: https://github.com/org/project`）。没有代码？基于开源项目开发 |
 >
 > ```
 > /research-pipeline "你的课题" — AUTO_PROCEED: false                          # 在 idea 选择关卡暂停
@@ -909,6 +910,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 | `HUMAN_CHECKPOINT` | false | 设为 `true` 时每轮 review 后暂停等待确认 | → `auto-review-loop` |
 | `WANDB` | false | 自动给实验脚本加 W&B 日志 | → `experiment-bridge` → `run-experiment` |
 | `CODE_REVIEW` | true | GPT-5.4 部署前审查实验代码 | → `experiment-bridge` |
+| `BASE_REPO` | false | GitHub 仓库 URL，克隆作为实验基础代码 | → `experiment-bridge` |
 | `ILLUSTRATION` | `gemini` | AI 作图：`gemini`（默认，需 API key）、`mermaid`（免费）、`false`（跳过） | → `paper-writing` |
 
 行内覆盖：`/research-pipeline "方向" — auto proceed: false, wandb: true, illustration: true`
@@ -940,6 +942,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 |------|--------|------|
 | `CODE_REVIEW` | true | GPT-5.4 xhigh 部署前审查代码。在浪费 GPU 前抓逻辑 bug |
 | `AUTO_DEPLOY` | true | 实现 + 审查后自动部署。设 `false` 可手动检查 |
+| `BASE_REPO` | false | GitHub 仓库 URL，克隆作为实验基础代码 |
 | `SANITY_FIRST` | true | 先跑最小实验，提前发现 bug |
 | `MAX_PARALLEL_RUNS` | 4 | 最多并行部署几个实验（受可用 GPU 限制） |
 | `WANDB` | false | 自动加 W&B 日志。需在 CLAUDE.md 配 `wandb_project` |

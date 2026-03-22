@@ -28,7 +28,7 @@ Custom [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for 
 
 ## 📢 What's New
 
-- **2026-03-22** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 📋 **[Templates](templates/)** — input templates for every workflow. 📄 **7 venue templates** — added CVPR, ACL, AAAI, ACM MM (now supports ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM). 🛡️ **Anti-hallucination fix** — Workflow 2 now enforces DBLP → CrossRef → [VERIFY] when adding references
+- **2026-03-22** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 📋 **[Templates](templates/)** — input templates for every workflow. 📄 **7 venue templates** — CVPR, ACL, AAAI, ACM MM added. 🛡️ **Anti-hallucination fix** — Workflow 2 enforces DBLP → CrossRef → [VERIFY]. 🔗 **`base repo`** — clone a GitHub repo as base codebase (`— base repo: https://github.com/org/project`)
 - **2026-03-21** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🏆 **AAAI 2026 accepted — 7/10 with pure Codex CLI!** Built with ARIS-Codex skills by [@xinbo820-web](https://github.com/xinbo820-web). See [Community Showcase](#-community-showcase--papers-built-with-aris)
 - **2026-03-20** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🏆 **First community paper scored 8/10!** CS paper built entirely with ARIS. Congrats to [@DefanXue](https://github.com/DefanXue) & [@Monglitay](https://github.com/Monglitay)! See [Community Showcase](#-community-showcase--papers-built-with-aris)
 - **2026-03-20** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🚀 **[Antigravity adaptation guide](docs/ANTIGRAVITY_ADAPTATION.md)** — use ARIS skills in [Google Antigravity](https://antigravity.google/) (agent-first IDE). Native `SKILL.md` support, dual model, MCP config, EN + [CN](docs/ANTIGRAVITY_ADAPTATION_CN.md). Community contribution by [@PeppaPigw](https://github.com/PeppaPigw)
@@ -96,6 +96,7 @@ claude
 > | `wandb` | `false` | Auto-add W&B logging to experiment scripts. Set `true` + configure `wandb_project` in CLAUDE.md. `/monitor-experiment` pulls training curves from W&B |
 > | `illustration` | `gemini` | AI illustration in Workflow 3: `gemini` (default, needs `GEMINI_API_KEY`), `mermaid` (free), or `false` (skip) |
 > | `venue` | `ICLR` | Target venue: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`. Determines LaTeX style file and page limit |
+> | `base repo` | `false` | GitHub repo URL to clone as base codebase (e.g., `— base repo: https://github.com/org/project`). No code? Build on top of an open-source project |
 >
 > ```
 > /research-pipeline "your topic" — AUTO_PROCEED: false                          # pause at idea selection gate
@@ -1019,6 +1020,7 @@ Skills are plain Markdown files. Fork and customize:
 | `HUMAN_CHECKPOINT` | false | When `true`, pause after each review round for approval | → `auto-review-loop` |
 | `WANDB` | false | Auto-add W&B logging to experiments | → `experiment-bridge` → `run-experiment` |
 | `CODE_REVIEW` | true | GPT-5.4 reviews experiment code before deployment | → `experiment-bridge` |
+| `BASE_REPO` | false | GitHub repo URL to clone as base codebase for experiments | → `experiment-bridge` |
 | `ILLUSTRATION` | `gemini` | AI illustration: `gemini` (default), `mermaid` (free), or `false` (skip) | → `paper-writing` |
 
 Override inline: `/research-pipeline "topic" — auto proceed: false, illustration: mermaid`
@@ -1053,8 +1055,9 @@ Override inline: `/idea-discovery "topic" — pilot budget: 4h per idea, sources
 | `SANITY_FIRST` | true | Run smallest experiment first to catch setup bugs before full deployment |
 | `MAX_PARALLEL_RUNS` | 4 | Maximum experiments to deploy in parallel (limited by available GPUs) |
 | `WANDB` | false | Auto-add W&B logging. Requires `wandb_project` in CLAUDE.md |
+| `BASE_REPO` | false | GitHub repo URL to clone as base codebase for experiments |
 
-Override inline: `/experiment-bridge — code review: false, wandb: true`
+Override inline: `/experiment-bridge — base repo: https://github.com/org/project`
 
 ### Literature Search (`research-lit`)
 

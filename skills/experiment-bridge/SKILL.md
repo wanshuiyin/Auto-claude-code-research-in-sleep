@@ -26,8 +26,9 @@ refine-logs/FINAL_PROPOSAL.md
 - **AUTO_DEPLOY = true** — Automatically deploy experiments after implementation + review. Set `false` to manually inspect code before deploying.
 - **SANITY_FIRST = true** — Run the sanity-stage experiment first (smallest, fastest) before launching the rest. Catches setup bugs early.
 - **MAX_PARALLEL_RUNS = 4** — Maximum number of experiments to deploy in parallel (limited by available GPUs).
+- **BASE_REPO = false** — GitHub repo URL to use as base codebase. When set, clone the repo first and implement experiments on top of it. When `false` (default), write code from scratch or reuse existing project files.
 
-> Override: `/experiment-bridge "EXPERIMENT_PLAN.md" — code review: false, auto deploy: false`
+> Override: `/experiment-bridge "EXPERIMENT_PLAN.md" — base repo: https://github.com/org/project`
 
 ## Inputs
 
@@ -71,9 +72,16 @@ Proceeding to implementation.
 
 ### Phase 2: Implement Experiment Code
 
+**If `BASE_REPO` is set** — clone the repo first:
+```bash
+git clone <BASE_REPO> base_repo/
+# Read the repo's README, understand its structure, find entry points
+# Implement experiments by modifying/extending this codebase
+```
+
 For each milestone (in order), write the experiment scripts:
 
-1. **Check existing code** — scan the project for existing experiment scripts, model code, data loaders. Reuse as much as possible.
+1. **Check existing code** — scan the project (or cloned `base_repo/`) for existing experiment scripts, model code, data loaders. Reuse as much as possible.
 
 2. **Implement missing pieces:**
    - Training scripts with proper argparse (all hyperparameters configurable)
