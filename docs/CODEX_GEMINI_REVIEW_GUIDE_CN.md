@@ -96,6 +96,36 @@ test -f ~/.gemini/.env && echo "Gemini env file found"
 codex -C /path/to/your/project
 ```
 
+## 验证结果摘要
+
+这条路径做了两层验证：
+
+- **全量 overlay 覆盖检查**：`skills/skills-codex-gemini-review/` 覆盖的 `15` 个预定义 reviewer-aware Codex skill 都逐一核对过，确认已经指向 `gemini-review`，不再依赖旧的 reviewer transport。
+- **bridge 运行时验证**：本地 `gemini-review` MCP bridge 实测覆盖了：
+  - `review`
+  - `review_reply`
+  - `review_start`
+  - `review_reply_start`
+  - `review_status`
+  - 基于本地图像的 `imagePaths` 多模态审查
+- **代表性 Codex 侧 smoke test**：我们在一个私有、未公开的研究仓库上实跑了这套 overlay，确认真实的 Codex 执行能够进入 Gemini reviewer 路径，覆盖了研究审稿、idea 生成、论文规划这几类代表性工作流。
+
+已经验证通过的点：
+
+- direct API 审稿可以返回有效 reviewer 文本
+- 异步 review job 可以完成，并可通过 `review_status` 恢复状态
+- 带 thread 状态的 follow-up review 可以继续多轮对话
+- `imagePaths` 本地图像审查可用
+- 已实跑的 Codex skill 路径能够正确加载 Gemini overlay，并发出真实的 `gemini-review` tool call
+
+测试中的实际观察：
+
+- Gemini 免费层对这条 reviewer 路径是可用的，但如果在很短时间内集中压测，仍然可能出现临时 `429`
+- 这类 `429` 更像是短时间 burst limit，而不是集成本身失效
+- 对超长 prompt，宿主侧 MCP tool timeout 仍可能先于同步调用返回，所以长审稿默认仍推荐 `review_start` / `review_reply_start` + `review_status`
+
+这也是为什么 bridge 同时暴露同步和异步工具，而 reviewer-aware skill overlay 默认优先走异步流程。
+
 ## 会覆盖哪些 skill
 
 这个 overlay 会替换预定义的 reviewer-aware Codex skills：

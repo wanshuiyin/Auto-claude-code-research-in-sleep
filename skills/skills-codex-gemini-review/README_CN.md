@@ -83,6 +83,20 @@ bridge 默认直接走 Gemini API。这也是这套 overlay 预期使用的 revi
 
 这样可以绕开 Codex 宿主下，本地 Gemini bridge 同步等待时更容易出现的超时问题。
 
+## 验证结果摘要
+
+这套 overlay 做了两类验证：
+
+- **覆盖检查**：本包里的 `15` 个预定义 reviewer-aware skill override 都核对过，确认目标都是 `gemini-review`
+- **运行时检查**：
+  - 底层 bridge 已完成同步、异步、thread 续聊、本地图像多模态审查等测试
+  - 在一个私有、未公开的研究仓库上，代表性的 Codex 实跑已经确认：真实 skill 执行可以进入 Gemini reviewer 路径，覆盖研究审稿、idea 生成、论文规划这几类工作流
+
+实际使用上的结论：
+
+- Gemini 免费层对这条工作流是可用的，但密集压测时仍可能出现临时 `429`
+- 对长 prompt，优先使用异步 `review_start` / `review_reply_start` + `review_status`
+
 ## 引用与来源
 
 - 上游 ARIS 的 overlay 组织方式：

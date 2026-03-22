@@ -67,6 +67,24 @@ is enough for API mode without exporting the variable in every shell.
 - `jobId` is a bridge-local background task id stored under `~/.codex/state/gemini-review/jobs/` by default, so status can be resumed across MCP server restarts.
 - This is intentionally a narrow, repo-local adapter. We did not directly vendor a generic Gemini MCP server, because the ARIS reviewer-aware skills expect the specific `review` / `review_reply` / `review_start` / `review_reply_start` / `review_status` interface and resumable review-thread semantics.
 
+## Validation
+
+This bridge was validated against the ARIS reviewer workflow in a privacy-safe way:
+
+- direct bridge smoke tests passed for:
+  - `review`
+  - `review_start` -> `review_status`
+  - `review_reply_start` -> `review_status`
+  - local-image multimodal review through `imagePaths`
+- the overlayed reviewer-aware Codex skills were checked to ensure all `15` predefined overrides point at this bridge contract
+- representative Codex-side executions on a private, non-public research repository confirmed that real skill runs can enter the `gemini-review` path from research-review, idea-generation, and paper-planning style workflows
+
+Important nuance from testing:
+
+- Gemini free tier was sufficient for development-style validation, but bursty back-to-back runs could still trigger temporary `429` responses
+- long synchronous reviewer calls can still hit host-side MCP tool timeouts before Gemini responds
+- because of that, the async path is not just an implementation detail; it is the recommended operational path for long reviews
+
 ## When to use sync vs async
 
 - Use `review` / `review_reply` for short prompts that comfortably finish within the host MCP tool timeout.

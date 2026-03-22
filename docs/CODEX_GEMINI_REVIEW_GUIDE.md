@@ -95,6 +95,36 @@ test -f ~/.gemini/.env && echo "Gemini env file found"
 codex -C /path/to/your/project
 ```
 
+## Validation Summary
+
+This path was validated in two layers:
+
+- **Full overlay coverage check**: all `15` predefined reviewer-aware Codex skills overridden by `skills/skills-codex-gemini-review/` were checked to confirm they point at `gemini-review` and no longer depend on the old reviewer transport.
+- **Runtime bridge check**: the local `gemini-review` MCP bridge was exercised with:
+  - `review`
+  - `review_reply`
+  - `review_start`
+  - `review_reply_start`
+  - `review_status`
+  - `imagePaths` multimodal review for local images
+- **Representative Codex-side smoke tests**: we ran the overlay on a private, non-public research repository and confirmed that real Codex executions reached the Gemini reviewer path for representative tasks in research review, idea generation, and paper-planning style workflows.
+
+What passed:
+
+- direct API review returned valid reviewer text
+- async review jobs completed and could be resumed through `review_status`
+- follow-up review rounds worked with persisted thread state
+- local-image review worked through `imagePaths`
+- the runtime-tested Codex skill paths successfully loaded the Gemini overlay and issued real `gemini-review` tool calls
+
+What we observed:
+
+- Gemini free-tier access is practical for this reviewer path, but bursty test loops can still trigger temporary `429` rate-limit responses
+- those `429` responses behaved like short-window burst limits, not a sign that the integration itself was broken
+- long synchronous reviewer calls can still hit host-side MCP tool timeouts, so the async `review_start` / `review_reply_start` + `review_status` flow remains the recommended default for long prompts
+
+This is why the bridge exposes both sync and async tools, while the reviewer-aware skill overlays prefer the async path for long reviews.
+
 ## What gets overridden
 
 The overlay replaces the predefined reviewer-aware Codex skills:

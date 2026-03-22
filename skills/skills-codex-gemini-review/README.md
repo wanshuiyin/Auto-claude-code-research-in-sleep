@@ -83,6 +83,20 @@ For long paper and review prompts, the reviewer path uses:
 
 This avoids the observed Codex-hosted timeout issue when Gemini is invoked synchronously through a local bridge.
 
+## Validation Summary
+
+This overlay was validated in two ways:
+
+- **Coverage check**: all `15` predefined reviewer-aware skill overrides in this package were checked to confirm they target `gemini-review`
+- **Runtime check**:
+  - the underlying bridge completed sync, async, threaded follow-up, and multimodal local-image review tests
+  - representative Codex-side runs on a private, non-public research repository confirmed that real skill executions could reach the Gemini reviewer path for research-review, idea-generation, and paper-planning style tasks
+
+Operational note:
+
+- Gemini free tier was usable for this workflow in practice, but bursty stress tests could still produce temporary `429` responses
+- for long prompts, prefer the async `review_start` / `review_reply_start` + `review_status` path
+
 ## References
 
 - Upstream overlay pattern from ARIS:
