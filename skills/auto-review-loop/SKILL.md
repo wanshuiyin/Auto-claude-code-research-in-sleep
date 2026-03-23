@@ -159,6 +159,7 @@ Prioritization rules:
 If experiments were launched:
 - Monitor remote sessions for completion
 - Collect results from output files and logs
+- **Training quality check** — if W&B is configured, invoke `/training-check` to verify training was healthy (no NaN, no divergence, no plateau). If W&B not available, skip silently. Flag any quality issues in the next review round.
 
 #### Phase E: Document Round
 

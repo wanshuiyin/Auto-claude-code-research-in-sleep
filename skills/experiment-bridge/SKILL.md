@@ -186,8 +186,9 @@ Deploy now? Or review the code first?
 As experiments complete:
 
 1. **Parse output files** (JSON/CSV/logs) for key metrics
-2. **Update `refine-logs/EXPERIMENT_TRACKER.md`** — fill in Status and Notes columns
-3. **Check success criteria** from EXPERIMENT_PLAN.md — did each experiment meet its bar?
+2. **Training quality check** — if W&B data is available (CLAUDE.md has `wandb: true` and `wandb_project`), invoke `/training-check` to detect NaN, loss divergence, plateaus, or overfitting. If W&B is not configured, skip silently.
+3. **Update `refine-logs/EXPERIMENT_TRACKER.md`** — fill in Status and Notes columns
+4. **Check success criteria** from EXPERIMENT_PLAN.md — did each experiment meet its bar?
 4. **Write initial results summary:**
 
 ```markdown
