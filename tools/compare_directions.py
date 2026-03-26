@@ -13,23 +13,65 @@ def parse_idea_report(filepath):
     with open(filepath, 'r') as f:
         content = f.read()
 
-    # Try to extract direction name
-    direction_match = re.search(r'\*\*Direction\*\*:\s*(.+)', content)
-    direction = direction_match.group(1) if direction_match else "Unknown"
+    # Try to extract direction name from first heading
+    # Match patterns like "# MRI运动伪影校正 - K-space域运动校正" or "# Direction Name"
+    direction_match = re.search(r'^#\s*(.+)$', content, re.MULTILINE)
+    if direction_match:
+        direction = direction_match.group(1).strip()
+        # Remove common prefixes to get cleaner direction names
+        direction = re.sub(r'^MRI运动伪影校正\s*[-–]\s*', '', direction)
+    else:
+        direction = "Unknown"
 
-    # Count ideas generated
-    idea_count = len(re.findall(r'###\s+\[?Idea', content))
+    # Count ideas generated - look for "### Generated Ideas" section and count bullet points
+    idea_count = 0
+    generated_ideas_match = re.search(r'###\s+Generated Ideas\s*\n((?:\n|.+\n)*?)(?=###|\Z)', content)
+    if generated_ideas_match:
+        ideas_section = generated_ideas_match.group(1)
+        # Count numbered or bulleted items
+        idea_count = len(re.findall(r'^\s*(?:\d+\.|[-*])\s+\*\*', ideas_section, re.MULTILINE))
 
-    # Check for recommended idea
-    has_recommendation = 'RECOMMENDED' in content or '🏆' in content
+    # If no Generated Ideas section, try alternative patterns
+    if idea_count == 0:
+        idea_count = len(re.findall(r'^\s*(?:\d+\.|[-*])\s*\*\*', content, re.MULTILINE))
 
-    # Try to find score
-    score_match = re.search(r'Reviewer score:\s*(\d+\.?\d*)/10', content)
-    score = float(score_match.group(1)) if score_match else 0
+    # Check for recommendation markers (various formats)
+    has_recommendation = any(marker in content for marker in [
+        'RECOMMENDED', '🏆', '**Recommended**', '## 推荐方向',
+        'Top Pick', 'Selected Direction'
+    ])
 
-    # Try to find pilot result
-    pilot_match = re.search(r'Pilot:\s*(POSITIVE|NEGATIVE|WEAK)', content)
-    pilot = pilot_match.group(1) if pilot_match else "Unknown"
+    # Try to find score (various formats)
+    score_patterns = [
+        r'(?:Reviewer score|Score|评分)[:\s]*(\d+\.?\d*)\s*/\s*10',
+        r'(?:Reviewer score|Score|评分)[:\s]*(\d+\.?\d*)',
+        r'\*\*Score\*\*[:\s]*(\d+\.?\d*)',
+    ]
+    score = 0
+    for pattern in score_patterns:
+        score_match = re.search(pattern, content, re.IGNORECASE)
+        if score_match:
+            score = float(score_match.group(1))
+            break
+
+    # Try to find pilot result (various formats)
+    pilot_patterns = [
+        r'(?:Pilot|PILOT|可行性验证)[:\s]*(POSITIVE|NEGATIVE|WEAK|通过|失败|待定)',
+        r'\*\*Pilot\*\*[:\s]*(POSITIVE|NEGATIVE|WEAK)',
+    ]
+    pilot = "Unknown"
+    for pattern in pilot_patterns:
+        pilot_match = re.search(pattern, content, re.IGNORECASE)
+        if pilot_match:
+            pilot = pilot_match.group(1).upper()
+            # Map Chinese to English
+            pilot_map = {'通过': 'POSITIVE', '失败': 'NEGATIVE', '待定': 'WEAK'}
+            pilot = pilot_map.get(pilot, pilot)
+            break
+
+    # If no explicit pilot marker, check for pilot section
+    if pilot == "Unknown" and re.search(r'(?:###|##)\s*(?:Pilot|可行性验证|Pilot Experiment)', content, re.IGNORECASE):
+        pilot = "PENDING"
 
     return {
         'file': filepath,
