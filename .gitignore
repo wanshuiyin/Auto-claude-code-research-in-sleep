@@ -16,3 +16,6 @@ __pycache__/
 
 # Environment
 .env
+
+# Reviewer switch backups
+*.codex-bak

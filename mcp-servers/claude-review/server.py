@@ -27,8 +27,8 @@ SERVER_NAME = os.environ.get("CLAUDE_REVIEW_SERVER_NAME", "claude-review")
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
 DEFAULT_MODEL = os.environ.get("CLAUDE_REVIEW_MODEL", "")
 DEFAULT_SYSTEM = os.environ.get("CLAUDE_REVIEW_SYSTEM", "")
-DEFAULT_TOOLS = os.environ.get("CLAUDE_REVIEW_TOOLS", "")
-DEFAULT_TIMEOUT_SEC = int(os.environ.get("CLAUDE_REVIEW_TIMEOUT_SEC", "600"))
+DEFAULT_TOOLS = os.environ.get("CLAUDE_REVIEW_TOOLS", None)
+DEFAULT_TIMEOUT_SEC = int(os.environ.get("CLAUDE_REVIEW_TIMEOUT_SEC", "1800"))
 DEBUG_LOG = Path(os.environ.get("CLAUDE_REVIEW_DEBUG_LOG", f"/tmp/{SERVER_NAME}-mcp-debug.log"))
 STATE_DIR = Path(
     os.environ.get(
@@ -184,7 +184,7 @@ def build_command(
     if not bin_path:
         raise FileNotFoundError(f"Claude CLI not found: {CLAUDE_BIN}")
 
-    cmd = [bin_path, "-p", prompt, "--output-format", "json", "--permission-mode", "plan"]
+    cmd = [bin_path, "-p", prompt, "--output-format", "json", "--permission-mode", "default"]
 
     if session_id:
         cmd.extend(["--resume", session_id])
@@ -198,7 +198,8 @@ def build_command(
         cmd.extend(["--system-prompt", selected_system])
 
     selected_tools = DEFAULT_TOOLS if tools is None else tools
-    cmd.extend(["--tools", selected_tools])
+    if selected_tools is not None:
+        cmd.extend(["--tools", selected_tools])
     return cmd
 
 
