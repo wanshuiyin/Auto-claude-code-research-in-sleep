@@ -24,6 +24,7 @@ Research topic: $ARGUMENTS
 > - `/research-lit "topic" — sources: zotero, local` — only search Zotero + local PDFs
 > - `/research-lit "topic" — sources: zotero` — only search Zotero
 > - `/research-lit "topic" — sources: web` — only search the web (skip all local)
+> - `/research-lit "topic" — sources: web, semantic-scholar` — also search Semantic Scholar for published venue papers (IEEE, ACM, etc.)
 > - `/research-lit "topic" — arxiv download: true` — download top relevant arXiv PDFs
 > - `/research-lit "topic" — arxiv download: true, max download: 10` — download up to 10 PDFs
 
@@ -34,17 +35,19 @@ This skill checks multiple sources **in priority order**. All are optional — i
 ### Source Selection
 
 Parse `$ARGUMENTS` for a `— sources:` directive:
-- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `all`.
-- **If not specified**: Default to `all` — search every available source in priority order.
+- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `all`.
+- **If not specified**: Default to `all` — search every available source in priority order (`semantic-scholar` is **excluded** from `all`; it must be explicitly listed).
 
 Examples:
 ```
-/research-lit "diffusion models"                        → all (default)
-/research-lit "diffusion models" — sources: all         → all
-/research-lit "diffusion models" — sources: zotero      → Zotero only
-/research-lit "diffusion models" — sources: zotero, web → Zotero + web
-/research-lit "diffusion models" — sources: local       → local PDFs only
-/research-lit "topic" — sources: obsidian, local, web   → skip Zotero
+/research-lit "diffusion models"                                    → all (default, no S2)
+/research-lit "diffusion models" — sources: all                     → all (default, no S2)
+/research-lit "diffusion models" — sources: zotero                  → Zotero only
+/research-lit "diffusion models" — sources: zotero, web             → Zotero + web
+/research-lit "diffusion models" — sources: local                   → local PDFs only
+/research-lit "topic" — sources: obsidian, local, web               → skip Zotero
+/research-lit "topic" — sources: web, semantic-scholar              → web + S2 API (IEEE/ACM venue papers)
+/research-lit "topic" — sources: all, semantic-scholar              → all + S2 API
 ```
 
 ### Source Table
@@ -55,6 +58,7 @@ Examples:
 | 2 | **Obsidian** (via MCP) | `obsidian` | Try calling any `mcp__obsidian-vault__*` tool — if unavailable, skip | Research notes, paper summaries, tagged references, wikilinks |
 | 3 | **Local PDFs** | `local` | `Glob: papers/**/*.pdf, literature/**/*.pdf` | Raw PDF content (first 3 pages) |
 | 4 | **Web search** | `web` | Always available (WebSearch) | arXiv, Semantic Scholar, Google Scholar |
+| 5 | **Semantic Scholar API** | `semantic-scholar` | `tools/semantic_scholar_fetch.py` exists | Published venue papers (IEEE, ACM, Springer) with structured metadata: citation counts, venue info, TLDR. **Only runs when explicitly requested** via `— sources: semantic-scholar` or `— sources: web, semantic-scholar` |
 
 > **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
 
@@ -140,6 +144,29 @@ python3 "$SCRIPT" search "QUERY" --max 10
 If `arxiv_fetch.py` is not found, fall back to WebSearch for arXiv (same as before).
 
 The arXiv API returns structured metadata (title, abstract, full author list, categories, dates) — richer than WebSearch snippets. Merge these results with WebSearch findings and de-duplicate.
+
+**Semantic Scholar API search** (only when `semantic-scholar` is in sources):
+
+When the user explicitly requests `— sources: semantic-scholar` (or `— sources: web, semantic-scholar`), search for published venue papers beyond arXiv:
+
+```bash
+S2_SCRIPT=$(find tools/ -name "semantic_scholar_fetch.py" 2>/dev/null | head -1)
+[ -z "$S2_SCRIPT" ] && S2_SCRIPT=$(find ~/.claude/skills/semantic-scholar/ -name "semantic_scholar_fetch.py" 2>/dev/null | head -1)
+
+# Search for published CS/Engineering papers with quality filters
+python3 "$S2_SCRIPT" search "QUERY" --max 10 \
+  --fields-of-study "Computer Science,Engineering" \
+  --publication-types "JournalArticle,Conference"
+```
+
+If `semantic_scholar_fetch.py` is not found, skip silently.
+
+**Why use Semantic Scholar?** Many IEEE/ACM journal papers are NOT on arXiv. S2 fills the gap for published venue-only papers with citation counts and venue metadata.
+
+**De-duplication between arXiv and S2**: Match by arXiv ID (S2 returns `externalIds.ArXiv`):
+- If a paper appears in both: check S2's `venue`/`publicationVenue` — if it has been published in a journal/conference (e.g. IEEE TWC, JSAC), use S2's metadata (venue, citationCount, DOI) as the authoritative version, since the published version supersedes the preprint. Keep the arXiv PDF link for download.
+- If the S2 match has no venue (still just a preprint indexed by S2): keep the arXiv version as-is.
+- S2 results without `externalIds.ArXiv` are **venue-only papers** not on arXiv — these are the unique value of this source.
 
 **Optional PDF download** (only when `ARXIV_DOWNLOAD = true`):
 
