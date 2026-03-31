@@ -1,0 +1,38 @@
+{
+  "clean": {
+    "display_name": "clean source domain",
+    "dataset": "CIFAR-100",
+    "corruptions": [],
+    "severity": 0
+  },
+  "T_noise": {
+    "display_name": "noise shift",
+    "dataset": "CIFAR-100-C",
+    "corruptions": [
+      "gaussian_noise",
+      "shot_noise",
+      "impulse_noise"
+    ],
+    "severity": 3
+  },
+  "T_blur": {
+    "display_name": "blur shift",
+    "dataset": "CIFAR-100-C",
+    "corruptions": [
+      "defocus_blur",
+      "glass_blur",
+      "motion_blur"
+    ],
+    "severity": 3
+  },
+  "T_digital": {
+    "display_name": "digital shift",
+    "dataset": "CIFAR-100-C",
+    "corruptions": [
+      "contrast",
+      "pixelate",
+      "jpeg_compression"
+    ],
+    "severity": 3
+  }
+}

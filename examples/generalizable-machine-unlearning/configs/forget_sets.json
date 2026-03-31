@@ -1,0 +1,37 @@
+{
+  "F_random": {
+    "display_name": "random 5-class forget set",
+    "type": "class_set",
+    "selection_rule": "sample 5 classes uniformly from CIFAR-100",
+    "notes": "Primary forget-set type for initial phenomenon runs."
+  },
+  "F_cluster": {
+    "display_name": "semantic superclass cluster",
+    "type": "class_set",
+    "selection_rule": "use the CIFAR-100 large carnivores superclass",
+    "classes": [
+      "bear",
+      "leopard",
+      "lion",
+      "tiger",
+      "wolf"
+    ],
+    "notes": "Concrete semantically coherent 5-class cluster."
+  },
+  "F_entangled": {
+    "display_name": "partial sibling-slice deletion",
+    "type": "partial_slice",
+    "selection_rule": "delete a fixed subset of examples from sibling classes that remain partially retained",
+    "example_classes": [
+      "rabbit",
+      "squirrel"
+    ],
+    "retain_siblings": [
+      "hamster",
+      "mouse",
+      "shrew"
+    ],
+    "slice_fraction": 0.5,
+    "notes": "Used to induce stronger retain-forget entanglement."
+  }
+}

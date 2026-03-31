@@ -1,0 +1,17 @@
+{
+  "retrain_oracle": {
+    "display_name": "ResNet-18 retrain oracle",
+    "kind": "vision",
+    "notes": "Oracle reference retrained without forget data."
+  },
+  "retain_only_ft": {
+    "display_name": "ResNet-18 retain-only FT",
+    "kind": "vision",
+    "notes": "Cheap local baseline using retain-only fine-tuning."
+  },
+  "ascent_local": {
+    "display_name": "ResNet-18 ascent-style local unlearning",
+    "kind": "vision",
+    "notes": "Gradient-ascent forget step followed by retain recovery."
+  }
+}

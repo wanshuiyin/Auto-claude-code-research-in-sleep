@@ -1,0 +1,29 @@
+{
+  "primary_model": {
+    "key": "resnet18",
+    "display_name": "ResNet-18",
+    "family": "resnet",
+    "feature_layer": "avgpool",
+    "num_classes": 100
+  },
+  "primary_dataset": {
+    "key": "cifar100",
+    "display_name": "CIFAR-100",
+    "source_domain": "clean",
+    "target_dataset": "CIFAR-100-C"
+  },
+  "evaluation": {
+    "screening_seeds": 1,
+    "final_table_seeds": 3,
+    "primary_interface_layer": "avgpool"
+  },
+  "metrics": [
+    "retain_acc",
+    "forget_gap",
+    "ood_unlearning_gap",
+    "relearning_budget",
+    "fss",
+    "rfe",
+    "lr"
+  ]
+}

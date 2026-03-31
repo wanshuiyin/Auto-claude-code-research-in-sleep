@@ -1,0 +1,30 @@
+{
+  "run": {
+    "run_id": "R001",
+    "kind": "vision",
+    "entrypoint": "scripts/run_vision_experiment.py",
+    "milestone": "M0",
+    "method": "retrain_oracle",
+    "model": "resnet18",
+    "dataset": "cifar100",
+    "source_domain": "clean",
+    "target_family": "clean",
+    "forget_set": "F_random",
+    "seed_count": 1,
+    "priority": "MUST"
+  },
+  "seed": 0,
+  "method_notes": "Oracle reference retrained without forget data.",
+  "shift": {
+    "display_name": "clean source domain",
+    "dataset": "CIFAR-100",
+    "corruptions": [],
+    "severity": 0
+  },
+  "forget_set": {
+    "display_name": "random 5-class forget set",
+    "type": "class_set",
+    "selection_rule": "sample 5 classes uniformly from CIFAR-100",
+    "notes": "Primary forget-set type for initial phenomenon runs."
+  }
+}
