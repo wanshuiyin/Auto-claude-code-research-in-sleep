@@ -14,7 +14,7 @@
          Let AI do research while you sleep
 ```
 
-![ARIS-Code Screenshot](aris-code-screenshot.png)
+![ARIS-Code Screenshot](docs/screenshot.png)
 
 > **Adversarial · Multi-Agent Research Automation CLI**
 > Executor acts · Reviewer critiques · Iterate to excellence
