@@ -14,14 +14,34 @@
          让 AI 边睡边帮你做研究
 ```
 
-![ARIS-Code Screenshot](aris-code-screenshot.png)
+![ARIS-Code Screenshot](docs/screenshot.png)
 
 > **对抗·多智能体研究自动化 CLI**
 > Executor 执行 · Reviewer 审查 · 迭代精进
 
 [![GitHub Release](https://img.shields.io/github/v/release/wanshuiyin/Auto-claude-code-research-in-sleep?style=flat-square)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS%20Apple%20Silicon-black?style=flat-square&logo=apple)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep)
+[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux-black?style=flat-square&logo=apple)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+
+
+## 📰 最新动态
+
+> **v0.3.0** (2026-04-03) — 多文件记忆索引（选择性召回） | 结构化任务系统（TodoWrite） | `/plan` 研究计划 | 安全加固
+>
+> <details><summary>历史版本</summary>
+>
+> **v0.2.2** (2026-04-03) — `/plan` 步骤规划 | `/tasks` 持久任务
+>
+> **v0.2.1** (2026-04-03) — 持久记忆 | Kimi K2.5 多轮修复 | 中文光标修复
+>
+> **v0.2.0** (2026-04-02) — 开源发布 | Kimi + MiniMax + GLM | 智能路由 | CI/CD
+>
+> **v0.1.0** (2026-04-02) — 首次发布 | 多执行者/审阅者 | 42 个技能
+>
+> </details>
+>
+> [完整更新日志 →](CHANGELOG.md)
+
 
 ---
 
@@ -40,7 +60,7 @@
 ## 🚀 安装（macOS Apple Silicon）
 
 ```bash
-curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/v0.1.0/aris-code-darwin-arm64.tar.gz | tar xz
+curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-arm64.tar.gz | tar xz
 sudo mv aris-code /usr/local/bin/aris
 aris
 ```
@@ -273,3 +293,4 @@ MIT License © 2025 ARIS-Code Contributors
 <div align="center">
   <sub>🌙 让 AI 在你睡觉时帮你做研究 · Built with ❤️ and Rust</sub>
 </div>
+
