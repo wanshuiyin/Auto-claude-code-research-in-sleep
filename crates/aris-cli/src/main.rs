@@ -1,6 +1,7 @@
 mod config;
 mod init;
 mod input;
+mod memories;
 mod openai_executor;
 mod render;
 
@@ -70,6 +71,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Load saved ARIS config and apply to env (env vars always take priority)
     let saved_config = config::ArisConfig::load();
     saved_config.apply_to_env();
+    init_aris_tasks_env();
 
     let args: Vec<String> = env::args().skip(1).collect();
     let action = parse_args(&args)?;
@@ -1726,15 +1728,29 @@ impl LiveCli {
             _ => {
                 if tasks_path.exists() {
                     let content = fs::read_to_string(&tasks_path)?;
-                    if content.trim().is_empty() {
-                        println!("\x1b[2mNo tasks yet. The model will create tasks automatically, or say \"add task: xxx\".\x1b[0m");
+                    if let Ok(todos) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                        if todos.is_empty() {
+                            println!("\x1b[2mNo tasks yet. The model manages tasks automatically via TodoWrite.\x1b[0m");
+                        } else {
+                            println!("\x1b[1mTasks\x1b[0m\n");
+                            for todo in &todos {
+                                let status = todo.get("status").and_then(|s| s.as_str()).unwrap_or("pending");
+                                let content_text = todo.get("content").and_then(|c| c.as_str()).unwrap_or("?");
+                                let icon = match status {
+                                    "completed" => "\x1b[1;32m✓\x1b[0m",
+                                    "in_progress" => "\x1b[1;33m●\x1b[0m",
+                                    _ => "\x1b[2m○\x1b[0m",
+                                };
+                                println!("  {icon} {content_text}");
+                            }
+                            println!();
+                        }
                     } else {
-                        println!("\x1b[1mTasks\x1b[0m ({})\n", tasks_path.display());
+                        // Fallback: show raw content
                         println!("{content}");
                     }
                 } else {
-                    println!("\x1b[2mNo tasks yet. The model will create tasks automatically, or say \"add task: xxx\".\x1b[0m");
-                    println!("\x1b[2mFile: {}\x1b[0m", tasks_path.display());
+                    println!("\x1b[2mNo tasks yet. The model manages tasks automatically via TodoWrite.\x1b[0m");
                 }
             }
         }
@@ -2876,63 +2892,67 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
             .to_string(),
     );
 
-    // ARIS persistent memory
-    let memory_path = aris_memory_path();
-    if memory_path.exists() {
-        if let Ok(content) = fs::read_to_string(&memory_path) {
-            if !content.trim().is_empty() {
-                prompt.push(format!(
-                    "# ARIS Persistent Memory\n\
-                     The following is your persistent memory from previous sessions. \
-                     Use this context to provide continuity across conversations.\n\
-                     Memory file: {}\n\n\
-                     {}\n\n\
-                     To update memory, use the write_file tool to write to {}. \
-                     When the user says \"remember this\" or you learn important context \
-                     (research topic, preferences, experiment results), save it to memory.",
-                    memory_path.display(),
-                    content.trim(),
-                    memory_path.display(),
-                ));
-            }
-        }
-    } else {
-        // Tell the model the memory file path even if it doesn't exist yet
+    // ARIS persistent memory (multi-file index system)
+    memories::migrate_legacy_memory();
+    let mem_entries = memories::load_memory_catalog();
+    let mem_dir = memories::memories_dir();
+    if !mem_entries.is_empty() {
+        let catalog = memories::render_memory_catalog(&mem_entries);
         prompt.push(format!(
             "# ARIS Persistent Memory\n\
-             You have a persistent memory file at {}. \
-             It does not exist yet. When the user says \"remember this\" or you learn \
-             important context (research topic, paper title, preferences, experiment results), \
-             create and write to this file using the write_file tool. \
+             You have {} memories from previous sessions. \
+             Below is the catalog (name + description + path). \
+             Use the read_file tool to load a specific memory when relevant.\n\n\
+             {catalog}\n\n\
+             To save new memories, use write_file to create .md files in {dir} \
+             with YAML frontmatter (---\\nname: ...\\ndescription: ...\\n---).\n\
+             When the user says \"remember this\" or you learn important context, save it.",
+            mem_entries.len(),
+            dir = mem_dir.display(),
+        ));
+    } else {
+        prompt.push(format!(
+            "# ARIS Persistent Memory\n\
+             Memory directory: {dir}\n\
+             No memories yet. When the user says \"remember this\" or you learn important context, \
+             create .md files in {dir} with frontmatter:\n\
+             ---\n\
+             name: Memory Title\n\
+             description: One-line summary for catalog\n\
+             ---\n\
+             (content here)\n\
              This memory persists across sessions.",
-            memory_path.display(),
+            dir = mem_dir.display(),
         ));
     }
 
-    // ARIS persistent tasks
+    // ARIS persistent tasks (uses TodoWrite tool, stored as JSON)
     let tasks_path = aris_tasks_path();
     if tasks_path.exists() {
         if let Ok(content) = fs::read_to_string(&tasks_path) {
-            if !content.trim().is_empty() {
-                prompt.push(format!(
-                    "# ARIS Task List\n\
-                     Current tasks from {}:\n\n{}\n\n\
-                     Update this file when tasks are completed or new ones are added. \
-                     Use the write_file tool to modify {}.",
-                    tasks_path.display(),
-                    content.trim(),
-                    tasks_path.display(),
-                ));
+            if let Ok(todos) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
+                if !todos.is_empty() {
+                    let summary: Vec<String> = todos.iter().map(|t| {
+                        let status = t.get("status").and_then(|s| s.as_str()).unwrap_or("pending");
+                        let text = t.get("content").and_then(|c| c.as_str()).unwrap_or("?");
+                        format!("- [{status}] {text}")
+                    }).collect();
+                    prompt.push(format!(
+                        "# ARIS Task List\n\
+                         Current tasks:\n{}\n\n\
+                         Use the TodoWrite tool to update tasks (status: pending/in_progress/completed).",
+                        summary.join("\n"),
+                    ));
+                }
             }
         }
     } else {
-        prompt.push(format!(
+        prompt.push(
             "# ARIS Task List\n\
-             You can track tasks in {}. \
-             When the user says \"add task\" or you identify action items, \
-             create this file with a markdown checklist (- [ ] / - [x] format).",
-            tasks_path.display(),
-        ));
+             Use the TodoWrite tool to create and manage tasks. \
+             Each task has: content (description), status (pending/in_progress/completed)."
+                .to_string(),
+        );
     }
 
     Ok(prompt)
@@ -2943,16 +2963,16 @@ fn aris_tasks_path() -> PathBuf {
     PathBuf::from(home)
         .join(".config")
         .join("aris")
-        .join("tasks.md")
+        .join("tasks.json")
 }
 
-fn aris_memory_path() -> PathBuf {
-    let home = env::var("HOME").unwrap_or_else(|_| ".".into());
-    PathBuf::from(home)
-        .join(".config")
-        .join("aris")
-        .join("memory.md")
+/// Ensure TodoWrite uses ARIS tasks path.
+fn init_aris_tasks_env() {
+    if env::var("CLAWD_TODO_STORE").is_err() {
+        env::set_var("CLAWD_TODO_STORE", aris_tasks_path().to_string_lossy().as_ref());
+    }
 }
+
 
 fn build_runtime_feature_config(
 ) -> Result<runtime::RuntimeFeatureConfig, Box<dyn std::error::Error>> {

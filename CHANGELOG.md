@@ -1,5 +1,11 @@
 # ARIS-Code Changelog
 
+## v0.3.0 (2026-04-03)
+
+- **Multi-file Memory Index**: Memories now stored as individual files in `~/.config/aris/memories/` with YAML frontmatter. System prompt gets a catalog (name + description), model loads specific memories on demand via read_file. Old `memory.md` auto-migrated.
+- **Rich Task System (TodoWrite)**: Tasks now use the structured TodoWrite tool with JSON storage (`~/.config/aris/tasks.json`). Supports pending/in_progress/completed status. `/tasks` shows formatted task list.
+- **Security hardening**: Symlink rejection in memory directory, prompt injection sanitization for memory fields.
+
 ## v0.2.2 (2026-04-03)
 
 - **`/plan` command**: Create step-by-step research plans before executing. Model presents numbered steps and waits for confirmation.
