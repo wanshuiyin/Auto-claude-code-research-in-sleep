@@ -50,7 +50,7 @@ With **42 bundled research skills**, ARIS covers the full pipeline from idea dis
 ## 🚀 Installation (macOS Apple Silicon)
 
 ```bash
-curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/v0.1.0/aris-code-darwin-arm64.tar.gz | tar xz
+curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-arm64.tar.gz | tar xz
 sudo mv aris-code /usr/local/bin/aris
 aris
 ```
