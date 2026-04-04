@@ -38,8 +38,9 @@ jobs:
 
       - name: Package
         run: |
-          cp target/${{ matrix.target }}/release/aris ${{ matrix.artifact }}
-          tar czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+          cp target/${{ matrix.target }}/release/aris aris
+          chmod +x aris
+          tar czf ${{ matrix.artifact }}.tar.gz aris
           shasum -a 256 ${{ matrix.artifact }}.tar.gz > ${{ matrix.artifact }}.tar.gz.sha256
 
       - name: Upload artifact
