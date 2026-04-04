@@ -63,7 +63,7 @@
 
 ```bash
 curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-arm64.tar.gz | tar xz
-chmod +x aris-code && sudo mv aris-code /usr/local/bin/aris
+chmod +x aris-code-darwin-arm64 && sudo mv aris-code-darwin-arm64 /usr/local/bin/aris
 aris
 ```
 
