@@ -26,7 +26,7 @@
 
 ## 📰 What's New
 
-> **v0.3.2** (2026-04-04) — Fix hooks compatibility with Claude Code settings | Fix install permissions
+> **v0.3.3** (2026-04-04) — Fix all config loading crashes for Claude Code hooks compatibility
 >
 > <details><summary>Previous versions</summary>
 >
