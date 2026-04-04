@@ -1,5 +1,9 @@
 # ARIS-Code Changelog
 
+## v0.3.1 (2026-04-04)
+
+- **Fix**: StructuredOutput tool schema now compatible with OpenAI API (added missing `properties` field). Previously caused `400 Bad Request` when using OpenAI/Kimi as executor.
+
 ## v0.3.0 (2026-04-03)
 
 - **Multi-file Memory Index**: Memories now stored as individual files in `~/.config/aris/memories/` with YAML frontmatter. System prompt gets a catalog (name + description), model loads specific memories on demand via read_file. Old `memory.md` auto-migrated.

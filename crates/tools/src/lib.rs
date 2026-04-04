@@ -365,6 +365,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             description: "Return structured output in the requested format.",
             input_schema: json!({
                 "type": "object",
+                "properties": {},
                 "additionalProperties": true
             }),
             required_permission: PermissionMode::ReadOnly,
