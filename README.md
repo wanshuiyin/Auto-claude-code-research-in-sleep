@@ -63,7 +63,7 @@ With **42 bundled research skills**, ARIS covers the full pipeline from idea dis
 
 ```bash
 curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-arm64.tar.gz | tar xz
-chmod +x aris-code-darwin-arm64 && sudo mv aris-code-darwin-arm64 /usr/local/bin/aris
+sudo mv aris /usr/local/bin/aris
 aris
 ```
 
