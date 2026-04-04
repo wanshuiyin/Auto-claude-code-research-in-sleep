@@ -2977,10 +2977,17 @@ fn init_aris_tasks_env() {
 fn build_runtime_feature_config(
 ) -> Result<runtime::RuntimeFeatureConfig, Box<dyn std::error::Error>> {
     let cwd = env::current_dir()?;
-    Ok(ConfigLoader::default_for(cwd)
-        .load()?
-        .feature_config()
-        .clone())
+    match ConfigLoader::default_for(cwd).load() {
+        Ok(config) => Ok(config.feature_config().clone()),
+        Err(e) => {
+            // Gracefully handle incompatible Claude Code settings (e.g. hooks format)
+            eprintln!(
+                "\x1b[33mwarning\x1b[0m: could not load settings: {e}\n\
+                 \x1b[2mUsing default configuration. This may be caused by incompatible Claude Code settings.\x1b[0m"
+            );
+            Ok(runtime::RuntimeFeatureConfig::default())
+        }
+    }
 }
 
 fn build_runtime(

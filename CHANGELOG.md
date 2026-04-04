@@ -1,5 +1,10 @@
 # ARIS-Code Changelog
 
+## v0.3.2 (2026-04-04)
+
+- **Fix**: Gracefully handle incompatible Claude Code hooks configuration (PreToolUse object format). Now falls back to default config instead of crashing.
+- **Fix**: Install instructions now include `chmod +x` to fix `permission denied` on first run.
+
 ## v0.3.1 (2026-04-04)
 
 - **Fix**: StructuredOutput tool schema now compatible with OpenAI API (added missing `properties` field). Previously caused `400 Bad Request` when using OpenAI/Kimi as executor.

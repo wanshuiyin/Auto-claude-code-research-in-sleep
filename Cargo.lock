@@ -19,7 +19,7 @@ dependencies = [
 
 [[package]]
 name = "api"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "reqwest",
  "runtime",
@@ -30,7 +30,7 @@ dependencies = [
 
 [[package]]
 name = "aris-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "api",
  "commands",
@@ -128,14 +128,14 @@ dependencies = [
 
 [[package]]
 name = "commands"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "runtime",
 ]
 
 [[package]]
 name = "compat-harness"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "commands",
  "runtime",
@@ -1108,7 +1108,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "glob",
  "regex",
@@ -1545,7 +1545,7 @@ dependencies = [
 
 [[package]]
 name = "tools"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "api",
  "reqwest",
