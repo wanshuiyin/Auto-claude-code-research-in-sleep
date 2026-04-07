@@ -1310,6 +1310,8 @@ fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
     // Fallback: bundled skills compiled into the binary
     for (name, content) in BUNDLED_SKILLS {
         if name.eq_ignore_ascii_case(requested) {
+            // Auto-extract bundled helper files (.py/.sh) to working directory
+            extract_bundled_helpers(name);
             let description = parse_skill_description(content);
             return Ok(SkillOutput {
                 skill: input.skill,
@@ -1322,6 +1324,25 @@ fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
     }
 
     Err(format!("unknown skill: {requested}"))
+}
+
+/// Extract bundled helper files (.py/.sh) for a skill to the skill's working directory.
+/// E.g., for skill "research-wiki", extracts "research-wiki/research_wiki.py" to
+/// `<cwd>/research-wiki/research_wiki.py`.
+fn extract_bundled_helpers(skill_name: &str) {
+    let prefix = format!("{skill_name}/");
+    for (key, content) in runtime::BUNDLED_RESOURCES {
+        if let Some(filename) = key.strip_prefix(&prefix) {
+            // Write to <cwd>/<skill_name>/<filename>
+            let target_dir = std::path::PathBuf::from(skill_name);
+            let target_path = target_dir.join(filename);
+            // Only extract if not already present (don't overwrite user edits)
+            if !target_path.exists() {
+                let _ = std::fs::create_dir_all(&target_dir);
+                let _ = std::fs::write(&target_path, content);
+            }
+        }
+    }
 }
 
 fn validate_todos(todos: &[TodoItem]) -> Result<(), String> {
