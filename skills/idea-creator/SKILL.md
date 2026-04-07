@@ -265,6 +265,7 @@ if research-wiki/ exists:
 - "Apply X to Y" is the lowest form of research idea. Push for deeper questions.
 - Include eliminated ideas in the report — they save future time by documenting dead ends.
 - **If the user's direction is too broad (e.g., "NLP", "computer vision", "reinforcement learning"), STOP and ask them to narrow it.** A good direction is 1-2 sentences specifying the problem, domain, and constraint — e.g., "factorized gap in discrete diffusion LMs" or "sample efficiency of offline RL with image observations". Without sufficient specificity, generated ideas will be too vague to run experiments on.
+- **Anti-hallucination**: When citing papers during landscape survey or novelty checks, verify that each paper exists (arXiv API batch check, CrossRef DOI lookup, or Semantic Scholar title search). Never fabricate DOIs or arXiv IDs. Tag unverified references as `[UNVERIFIED]`. See `shared-references/citation-discipline.md`.
 
 ## Composing with Other Skills
 

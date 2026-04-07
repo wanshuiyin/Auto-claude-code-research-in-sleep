@@ -84,3 +84,4 @@ Output a structured report:
 - Check both the method AND the experimental setting for novelty
 - If the method is not novel but the FINDING would be, say so explicitly
 - Always check the most recent 6 months of arXiv — the field moves fast
+- **Anti-hallucination**: Verify that every paper cited in the Closest Prior Work table actually exists. Use arXiv API (batch ID check), CrossRef (DOI lookup), or Semantic Scholar (title search) to confirm. Never fabricate paper titles, arXiv IDs, or DOIs. If a paper cannot be verified, tag it as `[UNVERIFIED]` and note the uncertainty. See `shared-references/citation-discipline.md` for the full protocol.

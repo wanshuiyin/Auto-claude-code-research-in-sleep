@@ -180,8 +180,77 @@ python3 "$SCRIPT" download ARXIV_ID --dir papers/
 - 1-second delay between downloads (rate limiting)
 - Verify each PDF > 10 KB
 
+### Step 1.5: Verify References (anti-hallucination)
+
+**This step is mandatory.** Before analyzing papers, verify that every paper found in Step 1 actually exists. LLM-based search agents can hallucinate plausible-looking paper titles, arXiv IDs, and DOIs. See `shared-references/citation-discipline.md` for the full verification protocol.
+
+**Batch verification** (run as a single script to verify all papers at once):
+
+```python
+import urllib.request, json, time, urllib.parse, sys
+
+def verify_arxiv_batch(ids, batch_size=40):
+    """Verify arXiv IDs exist via arXiv API. Returns {id: bool}."""
+    results = {}
+    for i in range(0, len(ids), batch_size):
+        batch = [x for x in ids[i:i+batch_size] if x]
+        url = f"https://export.arxiv.org/api/query?id_list={','.join(batch)}&max_results={len(batch)}"
+        try:
+            resp = urllib.request.urlopen(url, timeout=30).read().decode()
+            for aid in batch:
+                results[aid] = f"<id>http://arxiv.org/abs/{aid}</id>" in resp
+        except Exception as e:
+            for aid in batch:
+                results[aid] = None  # unknown
+        time.sleep(1)
+    return results
+
+def verify_doi(doi):
+    """Verify DOI exists via CrossRef. Returns True/False."""
+    try:
+        url = f"https://api.crossref.org/works/{urllib.parse.quote(doi, safe='')}"
+        req = urllib.request.Request(url, headers={"User-Agent": "ARIS-ResearchLit/1.0 (mailto:research@example.com)"})
+        urllib.request.urlopen(req, timeout=15)
+        return True
+    except:
+        return False
+
+def verify_title_s2(title):
+    """Search Semantic Scholar to verify paper exists by title. Returns (bool, metadata)."""
+    try:
+        url = f"https://api.semanticscholar.org/graph/v1/paper/search?query={urllib.parse.quote(title[:200])}&limit=3&fields=title,year,venue,externalIds"
+        resp = json.loads(urllib.request.urlopen(url, timeout=15).read())
+        for p in resp.get("data", []):
+            # Fuzzy title match: lowercase, strip punctuation, check overlap
+            t1 = ''.join(c for c in title.lower() if c.isalnum() or c == ' ')
+            t2 = ''.join(c for c in p["title"].lower() if c.isalnum() or c == ' ')
+            words1, words2 = set(t1.split()), set(t2.split())
+            overlap = len(words1 & words2) / max(len(words1), 1)
+            if overlap > 0.6:
+                return True, p
+        return False, None
+    except:
+        return False, None  # S2 rate limit or error — mark as unknown
+```
+
+**Verification rules:**
+
+1. **arXiv papers**: Batch-verify ALL arXiv IDs via arXiv API before proceeding. Remove any ID that returns no match.
+2. **DOI-only papers**: Verify each DOI via CrossRef API. If DOI fails, fall back to Semantic Scholar title search.
+3. **No arXiv ID and no DOI**: Verify via Semantic Scholar title search. If S2 also fails, tag as `[UNVERIFIED]`.
+4. **NEVER silently include unverified papers.** Every paper in the output must be either `✅ Verified` or `⚠️ UNVERIFIED` (with reason).
+5. **NEVER fabricate DOIs.** If you don't have a real DOI from a search result or API response, leave the DOI field empty. Do not guess or reconstruct DOIs from memory.
+6. **High hallucination rate trigger**: If >20% of papers fail verification, warn the user: "⚠️ High hallucination rate detected ({N}% failed). Re-running search with more specific queries."
+
+**Output of this step**: A verified paper list with verification status:
+```
+✅ 2307.03172 — Lost in the Middle (arXiv confirmed)
+✅ 10.1016/j.eswa.2025.128404 — AgentAI (CrossRef confirmed)
+⚠️ UNVERIFIED — "Some Paper Title" (arXiv ID not found, S2 no match) → REMOVED
+```
+
 ### Step 2: Analyze Each Paper
-For each relevant paper (from all sources), extract:
+For each **verified** paper (from all sources), extract:
 - **Problem**: What gap does it address?
 - **Method**: Core technical contribution (1-2 sentences)
 - **Results**: Key numbers/claims
@@ -240,3 +309,4 @@ else:
 - Note if a paper directly competes with or supports our approach
 - **Never fail because a MCP server is not configured** — always fall back gracefully to the next data source
 - Zotero/Obsidian tools may have different names depending on how the user configured the MCP server (e.g., `mcp__zotero__search` or `mcp__zotero-mcp__search_items`). Try the most common patterns and adapt.
+- **Anti-hallucination**: Step 1.5 is mandatory. Never skip verification. Never fabricate DOIs, arXiv IDs, or paper metadata. When uncertain, leave the field empty and tag as `[UNVERIFIED]`. See `shared-references/citation-discipline.md` for the full protocol.
