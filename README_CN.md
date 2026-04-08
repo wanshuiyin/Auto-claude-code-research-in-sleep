@@ -88,14 +88,16 @@ aris
     Google Gemini
     Zhipu GLM
     MiniMax
-请输入 API Key: sk-...
+    Custom OpenAI-compatible
+输入 API Key / Base URL 后，从 /models 返回列表中选择模型
 
 [2/3] 选择 Reviewer 提供商（对抗审查 LLM）
   > OpenAI GPT
     Google Gemini
     Zhipu GLM
     MiniMax
-请输入 API Key: sk-...
+    Custom OpenAI-compatible
+输入 API Key / Base URL 后，从 /models 返回列表中选择模型
 
 [3/3] 选择语言偏好
   > 中文 (CN)
@@ -117,8 +119,9 @@ aris
 | 🔵 Google Gemini | ✅ | ✅ | gemini-2.5-pro, gemini-2.5-flash |
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
+| ⚪ Custom OpenAI-compatible | ✅ | ✅ | 通过 `/models` 动态获取 |
 
-> **设计说明**：Anthropic Claude 仅作 Executor，其他四家可同时作 Executor 和 Reviewer。推荐经典搭配：**Claude Executor + GPT/GLM Reviewer**，构成真正的对抗多智能体。
+> **设计说明**：Anthropic Claude 仅作 Executor，其他提供商均可同时作 Executor 和 Reviewer。对于 `custom`，ARIS 会在 `/setup`、`/model`、`/reviewer` 中实时请求你的 `/models` 接口，因此用户不需要手输自定义模型名。
 
 ---
 
@@ -249,19 +252,18 @@ aris
 **config.json 示例**：
 ```json
 {
-  "executor": {
-    "provider": "anthropic",
-    "model": "claude-sonnet-4-5",
-    "api_key": "sk-ant-..."
-  },
-  "reviewer": {
-    "provider": "openai",
-    "model": "gpt-5.4",
-    "api_key": "sk-..."
-  },
-  "language": "CN"
+  "executor_provider": "custom",
+  "executor_api_key": "sk-custom-...",
+  "executor_base_url": "https://your-provider.example/v1",
+  "executor_model": "从-models-选择的模型",
+  "reviewer_provider": "openai",
+  "reviewer_api_key": "sk-openai-...",
+  "reviewer_model": "gpt-5.4",
+  "language": "cn"
 }
 ```
+
+如果 Reviewer 也使用 `custom`，再补充 `reviewer_base_url` 和选择后的 `reviewer_model`。
 
 ---
 
@@ -299,4 +301,3 @@ MIT License © 2025 ARIS-Code Contributors
 <div align="center">
   <sub>🌙 让 AI 在你睡觉时帮你做研究 · Built with ❤️ and Rust</sub>
 </div>
-
