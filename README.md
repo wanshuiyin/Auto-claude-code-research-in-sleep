@@ -88,14 +88,16 @@ The first time you run `aris`, an interactive setup wizard launches automaticall
     Google Gemini
     Zhipu GLM
     MiniMax
-Enter API Key: sk-...
+    Custom OpenAI-compatible
+Enter API Key / Base URL, then choose a model from /models
 
 [2/3] Choose Reviewer provider (adversarial LLM)
   > OpenAI GPT
     Google Gemini
     Zhipu GLM
     MiniMax
-Enter API Key: sk-...
+    Custom OpenAI-compatible
+Enter API Key / Base URL, then choose a model from /models
 
 [3/3] Choose language preference
     中文 (CN)
@@ -117,8 +119,9 @@ After setup you drop straight into the REPL. Run `/setup` at any time to reconfi
 | 🔵 Google Gemini | ✅ | ✅ | gemini-2.5-pro, gemini-2.5-flash |
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
+| ⚪ Custom OpenAI-compatible | ✅ | ✅ | fetched dynamically from `/models` |
 
-> **Design note**: Anthropic Claude is Executor-only; all other providers can serve as both Executor and Reviewer. The classic pairing is **Claude Executor + GPT/GLM Reviewer** for true adversarial multi-agent research.
+> **Design note**: Anthropic Claude is Executor-only; all other providers can serve as both Executor and Reviewer. For the `custom` provider, ARIS fetches the model list from your endpoint's `/models` API during `/setup`, `/model`, and `/reviewer`, so users never type custom model ids manually.
 
 ---
 
@@ -256,19 +259,18 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
 **Example config.json**:
 ```json
 {
-  "executor": {
-    "provider": "anthropic",
-    "model": "claude-sonnet-4-5",
-    "api_key": "sk-ant-..."
-  },
-  "reviewer": {
-    "provider": "openai",
-    "model": "gpt-5.4",
-    "api_key": "sk-..."
-  },
-  "language": "EN"
+  "executor_provider": "custom",
+  "executor_api_key": "sk-custom-...",
+  "executor_base_url": "https://your-provider.example/v1",
+  "executor_model": "model-picked-from-models",
+  "reviewer_provider": "openai",
+  "reviewer_api_key": "sk-openai-...",
+  "reviewer_model": "gpt-5.4",
+  "language": "en"
 }
 ```
+
+If the reviewer also uses `custom`, add `reviewer_base_url` and the selected `reviewer_model`.
 
 ---
 
@@ -306,4 +308,3 @@ MIT License © 2025 ARIS-Code Contributors
 <div align="center">
   <sub>🌙 Let AI do research while you sleep · Built with ❤️ and Rust</sub>
 </div>
-

@@ -1,5 +1,11 @@
 # ARIS-Code Changelog
 
+## Unreleased
+
+- **Custom OpenAI-compatible provider**: Added a single `custom` provider for both Executor and Reviewer.
+- **Dynamic model discovery**: Custom setup, `/model`, and `/reviewer` now fetch model ids from `/models` instead of asking users to type them manually.
+- **Custom reviewer routing**: `LlmReview` now respects `ARIS_REVIEWER_PROVIDER=custom` and sends requests directly to the configured endpoint.
+
 ## v0.3.5 (2026-04-08)
 
 - **New**: **Research Wiki** — persistent research knowledge base with papers, ideas, experiments, claims, and typed relationship graph. Python helper with auto-fallback to direct LLM execution.

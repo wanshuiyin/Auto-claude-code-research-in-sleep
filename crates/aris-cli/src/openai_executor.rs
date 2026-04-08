@@ -13,16 +13,18 @@ use runtime::{
 use serde_json::{json, Value};
 use tools::ToolSpec;
 
+use crate::openai_compat::{chat_completions_url, is_openai_compat_provider};
 use crate::{filter_tool_specs, format_tool_call_start, AllowedToolSet};
 
 const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
 
 /// Resolve executor configuration from environment variables.
 ///
-/// Returns `(api_key, base_url, model)` or `None` if `EXECUTOR_PROVIDER` is not set to `openai`.
+/// Returns `(api_key, base_url, model)` or `None` if `EXECUTOR_PROVIDER` is not set to
+/// an OpenAI-compatible provider.
 pub fn resolve_openai_executor_config() -> Option<OpenAIExecutorConfig> {
     let provider = std::env::var("EXECUTOR_PROVIDER").ok()?;
-    if provider != "openai" {
+    if !is_openai_compat_provider(&provider) {
         return None;
     }
 
@@ -31,8 +33,8 @@ pub fn resolve_openai_executor_config() -> Option<OpenAIExecutorConfig> {
         .ok()
         .filter(|s| !s.is_empty())?;
 
-    let base_url = std::env::var("EXECUTOR_BASE_URL")
-        .unwrap_or_else(|_| DEFAULT_OPENAI_BASE_URL.to_string());
+    let base_url =
+        std::env::var("EXECUTOR_BASE_URL").unwrap_or_else(|_| DEFAULT_OPENAI_BASE_URL.to_string());
 
     Some(OpenAIExecutorConfig { api_key, base_url })
 }
@@ -115,10 +117,7 @@ impl ApiClient for OpenAIRuntimeClient {
             body["tool_choice"] = json!("auto");
         }
 
-        let url = format!(
-            "{}/chat/completions",
-            self.base_url.trim_end_matches('/')
-        );
+        let url = chat_completions_url(&self.base_url);
 
         self.runtime.block_on(async {
             let mut response = self
@@ -133,10 +132,7 @@ impl ApiClient for OpenAIRuntimeClient {
 
             if !response.status().is_success() {
                 let status = response.status();
-                let body = response
-                    .text()
-                    .await
-                    .unwrap_or_else(|_| String::new());
+                let body = response.text().await.unwrap_or_else(|_| String::new());
                 return Err(RuntimeError::new(format!(
                     "OpenAI API error {status}: {body}"
                 )));
@@ -188,11 +184,7 @@ impl ApiClient for OpenAIRuntimeClient {
                     };
 
                     if data == "[DONE]" {
-                        flush_pending_tools(
-                            &mut pending_tools,
-                            out,
-                            &mut events,
-                        )?;
+                        flush_pending_tools(&mut pending_tools, out, &mut events)?;
                         if let Some(rendered) = markdown_stream.flush(&renderer) {
                             write!(out, "{rendered}")
                                 .and_then(|()| out.flush())
@@ -210,8 +202,10 @@ impl ApiClient for OpenAIRuntimeClient {
 
                     // Extract usage if present (some providers send it)
                     if let Some(usage) = parsed.get("usage") {
-                        let input_tokens =
-                            usage.get("prompt_tokens").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        let input_tokens = usage
+                            .get("prompt_tokens")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32;
                         let output_tokens = usage
                             .get("completion_tokens")
                             .and_then(|v| v.as_u64())
@@ -235,7 +229,9 @@ impl ApiClient for OpenAIRuntimeClient {
 
                         // Kimi: capture reasoning_content from delta
                         if is_kimi {
-                            if let Some(rc) = delta.get("reasoning_content").and_then(|r| r.as_str()) {
+                            if let Some(rc) =
+                                delta.get("reasoning_content").and_then(|r| r.as_str())
+                            {
                                 current_reasoning.push_str(rc);
                             }
                         }
@@ -257,12 +253,16 @@ impl ApiClient for OpenAIRuntimeClient {
                             delta.get("tool_calls").and_then(|tc| tc.as_array())
                         {
                             for tc in tool_calls {
-                                let idx = tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0)
-                                    as usize;
+                                let idx =
+                                    tc.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
 
                                 // Ensure vector is long enough
                                 while pending_tools.len() <= idx {
-                                    pending_tools.push((String::new(), String::new(), String::new()));
+                                    pending_tools.push((
+                                        String::new(),
+                                        String::new(),
+                                        String::new(),
+                                    ));
                                 }
 
                                 if let Some(id) = tc.get("id").and_then(|i| i.as_str()) {
@@ -282,14 +282,9 @@ impl ApiClient for OpenAIRuntimeClient {
                         }
 
                         // Check finish_reason
-                        if let Some(reason) = choice.get("finish_reason").and_then(|r| r.as_str())
-                        {
+                        if let Some(reason) = choice.get("finish_reason").and_then(|r| r.as_str()) {
                             if reason == "tool_calls" || reason == "stop" {
-                                flush_pending_tools(
-                                    &mut pending_tools,
-                                    out,
-                                    &mut events,
-                                )?;
+                                flush_pending_tools(&mut pending_tools, out, &mut events)?;
                             }
                         }
                     }
@@ -321,7 +316,8 @@ impl ApiClient for OpenAIRuntimeClient {
 
             // Kimi: save reasoning_content for this turn so we can replay it
             if is_kimi && !current_reasoning.is_empty() {
-                self.kimi_reasoning_cache.insert(current_msg_index, current_reasoning);
+                self.kimi_reasoning_cache
+                    .insert(current_msg_index, current_reasoning);
             }
 
             Ok(events)
