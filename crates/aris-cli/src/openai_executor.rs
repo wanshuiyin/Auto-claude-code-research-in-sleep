@@ -270,7 +270,9 @@ impl ApiClient for OpenAIRuntimeClient {
                                 }
                                 if let Some(func) = tc.get("function") {
                                     if let Some(name) = func.get("name").and_then(|n| n.as_str()) {
-                                        pending_tools[idx].1 = name.to_string();
+                                        if !name.is_empty() {
+                                            pending_tools[idx].1 = name.to_string();
+                                        }
                                     }
                                     if let Some(args) =
                                         func.get("arguments").and_then(|a| a.as_str())

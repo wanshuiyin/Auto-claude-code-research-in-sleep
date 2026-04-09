@@ -1,5 +1,10 @@
 # ARIS-Code Changelog
 
+## v0.3.7 (2026-04-09)
+
+- **Fix**: `/setup` provider switch now clears stale env vars. Switching from OpenAI to Anthropic no longer sends Claude model names to the OpenAI endpoint (404 error).
+- **Fix**: OpenAI-compatible streaming tool calls no longer lose their name when a later delta sends an empty string. Fixes "assistant stream produced no content" for some providers.
+
 ## v0.3.6 (2026-04-08)
 
 - **Fix**: Tab completion crash when skill descriptions contain CJK characters (Chinese/Japanese/Korean). The `clip()` function was slicing bytes instead of chars, causing a panic on multi-byte UTF-8 boundaries. Fixes #124.

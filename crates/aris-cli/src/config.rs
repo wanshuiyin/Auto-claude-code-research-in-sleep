@@ -77,12 +77,20 @@ impl ArisConfig {
     }
 
     fn apply_to_env_inner(&self, force: bool) {
-        // Executor provider
-        if force || std::env::var("EXECUTOR_PROVIDER").is_err() {
-            if let Some(provider) = &self.executor_provider {
-                if provider == "openai" {
-                    std::env::set_var("EXECUTOR_PROVIDER", provider);
-                }
+        // Executor provider — clean up stale env vars from previous provider on switch
+        if force {
+            // Clear ALL executor-related env vars first to prevent cross-contamination
+            std::env::remove_var("EXECUTOR_PROVIDER");
+            std::env::remove_var("EXECUTOR_API_KEY");
+            std::env::remove_var("EXECUTOR_BASE_URL");
+            std::env::remove_var("ANTHROPIC_API_KEY");
+            std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
+            std::env::remove_var("ANTHROPIC_BASE_URL");
+        }
+
+        if let Some(provider) = &self.executor_provider {
+            if provider == "openai" {
+                std::env::set_var("EXECUTOR_PROVIDER", provider);
             }
         }
 
