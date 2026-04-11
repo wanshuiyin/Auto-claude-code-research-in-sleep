@@ -1,5 +1,11 @@
 # ARIS-Code Changelog
 
+## v0.3.9 (2026-04-11)
+
+- **New**: **Proxy / custom base URL support** — `/setup` now asks for proxy base URL for ALL providers (Executor + Reviewer). Supports API proxy services (CCSwitch, CCVibe, etc.) and local models (LM Studio, Ollama). Leave blank for default — zero behavior change for existing users.
+- **New**: Anthropic proxy mode — entering a custom URL for Anthropic automatically switches to Bearer token auth (compatible with Chinese API proxy services).
+- **New**: `reviewer_base_url` field — LlmReview tool now respects custom reviewer proxy URL via `ARIS_REVIEWER_BASE_URL`.
+
 ## v0.3.8 (2026-04-09)
 
 - **Fix**: `/setup` and `/model` now rebuild system prompt with new model identity. Previously the model would still identify as the old model (e.g., "I am Claude" after switching to GPT).

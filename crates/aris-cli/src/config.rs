@@ -29,6 +29,8 @@ pub struct ArisConfig {
     #[serde(default)]
     pub reviewer_api_key: Option<String>,
     #[serde(default)]
+    pub reviewer_base_url: Option<String>,
+    #[serde(default)]
     pub reviewer_model: Option<String>,
     /// "cn" or "en"
     #[serde(default)]
@@ -166,6 +168,13 @@ impl ArisConfig {
             }
         }
 
+        // Reviewer base URL
+        if force || std::env::var("ARIS_REVIEWER_BASE_URL").is_err() {
+            if let Some(url) = &self.reviewer_base_url {
+                std::env::set_var("ARIS_REVIEWER_BASE_URL", url);
+            }
+        }
+
         // Reviewer model
         if force || std::env::var("ARIS_REVIEWER_MODEL").is_err() {
             if let Some(model) = &self.reviewer_model {
@@ -259,6 +268,20 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         config.executor_api_key = Some(new_key);
     }
 
+    // Ask for proxy/custom base URL (all providers)
+    let current_url_hint = config.executor_base_url.as_deref().unwrap_or("default");
+    let custom_url = prompt_with_default(
+        &format!("  Proxy base URL [{current_url_hint}] (Enter for default)"),
+        "",
+    )?;
+    if !custom_url.is_empty() {
+        config.executor_base_url = Some(custom_url.clone());
+        // Anthropic + custom URL → switch to anthropic-compat (Bearer token mode)
+        if exec_info.0 == "anthropic" {
+            config.executor_provider = Some("anthropic-compat".into());
+        }
+    }
+
     // Auto-set best model for the chosen provider
     config.executor_model = Some(exec_info.4.to_string());
     println!("  \x1b[2mModel: {}\x1b[0m", exec_info.4);
@@ -315,12 +338,25 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             std::env::set_var(key_env, existing);
         }
 
+        // Ask for proxy/custom base URL for reviewer
+        let current_reviewer_url = config.reviewer_base_url.as_deref().unwrap_or("default");
+        let custom_reviewer_url = prompt_with_default(
+            &format!("  Proxy base URL [{current_reviewer_url}] (Enter for default)"),
+            "",
+        )?;
+        if !custom_reviewer_url.is_empty() {
+            config.reviewer_base_url = Some(custom_reviewer_url);
+        } else if config.reviewer_base_url.is_none() {
+            config.reviewer_base_url = None;
+        }
+
         // Auto-set best model for the chosen reviewer provider
         config.reviewer_model = Some(default_model.to_string());
         println!("  \x1b[2mModel: {default_model}\x1b[0m");
     } else {
         config.reviewer_provider = None;
         config.reviewer_api_key = None;
+        config.reviewer_base_url = None;
     }
 
     // ── Step 5: Language ──

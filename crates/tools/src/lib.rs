@@ -3166,9 +3166,11 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         .or(env_reviewer_model.as_deref())
         .unwrap_or("gpt-5.4");
 
-    // Route by model name: gemini models → Gemini API, everything else → OpenAI API
+    // Check for user-configured reviewer proxy base URL
+    let custom_base_url = std::env::var("ARIS_REVIEWER_BASE_URL").ok().filter(|s| !s.is_empty());
+
     // Route by model name to the correct API endpoint and key
-    let (key_env, base_url) = if model.contains("gemini") {
+    let (key_env, default_base_url) = if model.contains("gemini") {
         ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
     } else if model.contains("glm") || model.contains("GLM") {
         ("GLM_API_KEY", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
@@ -3181,12 +3183,26 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         ("OPENAI_API_KEY", "https://api.openai.com/v1/chat/completions")
     };
 
+    // Use custom base URL if provided, appending /chat/completions if needed
+    let base_url = if let Some(ref custom) = custom_base_url {
+        let trimmed = custom.trim_end_matches('/');
+        if trimmed.ends_with("/chat/completions") {
+            trimmed.to_string()
+        } else if trimmed.ends_with("/v1") {
+            format!("{trimmed}/chat/completions")
+        } else {
+            format!("{trimmed}/v1/chat/completions")
+        }
+    } else {
+        default_base_url.to_string()
+    };
+
     let key = std::env::var(key_env)
         .ok()
         .filter(|k| !k.is_empty())
         .ok_or_else(|| format!("LlmReview: {key_env} not set (needed for model '{model}')"))?;
 
-    call_openai_compat_reviewer(&key, base_url, model, &input.prompt)
+    call_openai_compat_reviewer(&key, &base_url, model, &input.prompt)
 }
 
 fn call_anthropic_compat_reviewer(

@@ -26,6 +26,8 @@
 
 ## 📰 最新动态
 
+> **v0.3.9** (2026-04-11) — 代理/自定义 base URL 支持 | 本地模型支持 (LM Studio / Ollama) | 模型切换修复 | Bug fixes
+>
 > **v0.3.5** (2026-04-08) — Research Wiki 持久知识库 | 自进化 Meta-Optimize | Session 原子写入 | Bash 安全校验 | Windows 支持 (experimental)
 >
 > <details><summary>历史版本</summary>

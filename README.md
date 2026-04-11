@@ -26,6 +26,8 @@
 
 ## 📰 What's New
 
+> **v0.3.9** (2026-04-11) — Proxy / custom base URL support | Local model support (LM Studio / Ollama) | System prompt rebuild on model switch | Bug fixes
+>
 > **v0.3.5** (2026-04-08) — Research Wiki persistent knowledge base | Meta-Optimize self-evolution | Atomic session writes | Bash safety validation | Windows support (experimental)
 >
 > <details><summary>Previous versions</summary>
