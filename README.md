@@ -155,7 +155,7 @@ Kimi coding preset example:
 
 ```bash
 ANTHROPIC_AUTH_TOKEN=your-token \
-ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic \
+ANTHROPIC_BASE_URL=https://api.kimi.com/coding/ \
 aris --model kimi-k2.5
 ```
 

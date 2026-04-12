@@ -306,7 +306,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             "anthropic-compat",
             "ANTHROPIC_AUTH_TOKEN",
             "Kimi API key",
-            Some("https://api.moonshot.cn/anthropic"),
+            Some("https://api.kimi.com/coding/"),
             "kimi-k2.5",
         ),
         _ => (
@@ -378,7 +378,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             Some("glm") => "4",
             Some("minimax") => "5",
             Some("anthropic-compat") => match config.reviewer_base_url.as_deref() {
-                Some(url) if url.contains("moonshot") => "6",
+                Some(url) if url.contains("moonshot") || url.contains("api.kimi.com") => "6",
                 _ => "7",
             },
             None => "1",
@@ -448,7 +448,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             "3" => "https://generativelanguage.googleapis.com/v1beta/openai",
             "4" => "https://open.bigmodel.cn/api/paas/v4",
             "5" => "https://api.minimax.chat/v1",
-            "6" => "https://api.moonshot.cn/anthropic",
+            "6" => "https://api.kimi.com/coding/",
             _ => "",
         };
         let custom_reviewer_url = prompt_with_default(

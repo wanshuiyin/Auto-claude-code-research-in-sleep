@@ -1227,7 +1227,7 @@ impl LiveCli {
                 "GLM"
             } else if base.contains("minimax") {
                 "MiniMax"
-            } else if base.contains("moonshot") {
+            } else if base.contains("moonshot") || base.contains("api.kimi.com") {
                 "Moonshot"
             } else if base.contains("dashscope") || base.contains("qwen") {
                 "Qwen"
@@ -1238,7 +1238,7 @@ impl LiveCli {
             }
         } else {
             let base = std::env::var("ANTHROPIC_BASE_URL").unwrap_or_default();
-            if base.contains("moonshot") {
+            if base.contains("moonshot") || base.contains("api.kimi.com") {
                 "Kimi"
             } else if base.is_empty() {
                 "Anthropic"
@@ -4129,7 +4129,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(
         out,
-        "  Kimi coding: ANTHROPIC_AUTH_TOKEN=xxx ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic aris --model kimi-k2.5"
+        "  Kimi coding: ANTHROPIC_AUTH_TOKEN=xxx ANTHROPIC_BASE_URL=https://api.kimi.com/coding/ aris --model kimi-k2.5"
     )?;
     writeln!(out)?;
     writeln!(out, "Interactive slash commands:")?;
