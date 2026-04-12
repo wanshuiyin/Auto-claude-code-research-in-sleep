@@ -1292,7 +1292,11 @@ fn execute_todo_write(input: TodoWriteInput) -> Result<TodoWriteOutput, String> 
 }
 
 fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
-    let requested = input.skill.trim().trim_start_matches('/').trim_start_matches('$');
+    let requested = input
+        .skill
+        .trim()
+        .trim_start_matches('/')
+        .trim_start_matches('$');
 
     // Try filesystem search roots first (user overrides take priority)
     if let Ok(skill_path) = resolve_skill_path(requested) {
@@ -1372,10 +1376,19 @@ fn skill_search_roots() -> Vec<std::path::PathBuf> {
 
     // 1. ~/.config/aris/skills/ (ARIS user-level, highest priority)
     let home = runtime::home_dir();
-    roots.push(std::path::PathBuf::from(&home).join(".config").join("aris").join("skills"));
+    roots.push(
+        std::path::PathBuf::from(&home)
+            .join(".config")
+            .join("aris")
+            .join("skills"),
+    );
 
     // 2. ~/.claude/skills/ (Claude Code compat, user-level)
-    roots.push(std::path::PathBuf::from(&home).join(".claude").join("skills"));
+    roots.push(
+        std::path::PathBuf::from(&home)
+            .join(".claude")
+            .join("skills"),
+    );
 
     // 3. Project-level .claude/skills/
     if let Ok(cwd) = std::env::current_dir() {
@@ -1390,7 +1403,8 @@ fn skill_search_roots() -> Vec<std::path::PathBuf> {
     // 4. ARIS bundled share/skills/ (next to binary)
     if let Ok(exe) = std::env::current_exe() {
         if let Some(bin_dir) = exe.parent() {
-            let share_skills = bin_dir.parent()
+            let share_skills = bin_dir
+                .parent()
                 .map(|p| p.join("share").join("aris").join("skills"))
                 .unwrap_or_else(|| bin_dir.join("share").join("aris").join("skills"));
             roots.push(share_skills);
@@ -1490,7 +1504,11 @@ pub fn discover_skills() -> Vec<SkillMeta> {
             continue;
         }
         seen.insert(name.to_string());
-        let meta = parse_skill_frontmatter(name, content, std::path::PathBuf::from(format!("<bundled:{name}>")));
+        let meta = parse_skill_frontmatter(
+            name,
+            content,
+            std::path::PathBuf::from(format!("<bundled:{name}>")),
+        );
         skills.push(meta);
     }
 
@@ -1501,11 +1519,7 @@ pub fn discover_skills() -> Vec<SkillMeta> {
 /// Parse YAML frontmatter from a SKILL.md file.
 /// Expects `---` delimited YAML block at the top with fields like
 /// name, description, argument-hint, allowed-tools.
-fn parse_skill_frontmatter(
-    dir_name: &str,
-    content: &str,
-    path: std::path::PathBuf,
-) -> SkillMeta {
+fn parse_skill_frontmatter(dir_name: &str, content: &str, path: std::path::PathBuf) -> SkillMeta {
     let mut name = dir_name.to_string();
     let mut description = None;
     let mut argument_hint = None;
@@ -1575,7 +1589,10 @@ pub fn render_skill_discovery_section() -> Option<String> {
         let desc = skill.description.as_deref().unwrap_or("No description");
         // Truncate description to 200 chars (char-safe for CJK)
         let desc_short: String = desc.chars().take(200).collect();
-        let hint = skill.argument_hint.as_deref().map_or(String::new(), |h| format!(" {h}"));
+        let hint = skill
+            .argument_hint
+            .as_deref()
+            .map_or(String::new(), |h| format!(" {h}"));
         lines.push(format!("- `/{}{hint}` — {}", skill.name, desc_short));
     }
 
@@ -1986,7 +2003,12 @@ impl ApiClient for AnthropicRuntimeClient {
                         events.push(AssistantEvent::MessageStop);
                     }
                     ApiStreamEvent::Error(e) => {
-                        let msg = e.error.get("message").and_then(|v| v.as_str()).unwrap_or("stream error").to_string();
+                        let msg = e
+                            .error
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("stream error")
+                            .to_string();
                         return Err(RuntimeError::new(msg));
                     }
                 }
@@ -3154,45 +3176,95 @@ struct LlmReviewInput {
     model: Option<String>,
 }
 
+fn normalize_openai_compat_chat_completions_url(base_url: &str) -> String {
+    let trimmed = base_url.trim_end_matches('/');
+    if trimmed.ends_with("/chat/completions") {
+        trimmed.to_string()
+    } else if trimmed.ends_with("/v1") {
+        format!("{trimmed}/chat/completions")
+    } else {
+        format!("{trimmed}/v1/chat/completions")
+    }
+}
+
+fn normalize_anthropic_messages_url(base_url: &str) -> String {
+    let trimmed = base_url.trim_end_matches('/');
+    if trimmed.ends_with("/v1/messages") {
+        trimmed.to_string()
+    } else if trimmed.ends_with("/v1") {
+        format!("{trimmed}/messages")
+    } else {
+        format!("{trimmed}/v1/messages")
+    }
+}
+
 fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
     // Resolve which model to use
-    let env_reviewer_model = std::env::var("ARIS_REVIEWER_MODEL").ok().filter(|s| !s.is_empty());
+    let env_reviewer_model = std::env::var("ARIS_REVIEWER_MODEL")
+        .ok()
+        .filter(|s| !s.is_empty());
     let model = input
         .model
         .as_deref()
         .or(env_reviewer_model.as_deref())
         .unwrap_or("gpt-5.4");
 
+    let reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER")
+        .ok()
+        .filter(|s| !s.is_empty());
+
     // Check for user-configured reviewer proxy base URL
-    let custom_base_url = std::env::var("ARIS_REVIEWER_BASE_URL").ok().filter(|s| !s.is_empty());
+    let custom_base_url = std::env::var("ARIS_REVIEWER_BASE_URL")
+        .ok()
+        .filter(|s| !s.is_empty());
+
+    if reviewer_provider.as_deref() == Some("anthropic-compat") {
+        let base_url = custom_base_url
+            .as_deref()
+            .map(normalize_anthropic_messages_url)
+            .unwrap_or_else(|| "https://api.anthropic.com/v1/messages".to_string());
+        let key = std::env::var("ARIS_REVIEWER_AUTH_TOKEN")
+            .ok()
+            .filter(|k| !k.is_empty())
+            .ok_or_else(|| {
+                format!("LlmReview: ARIS_REVIEWER_AUTH_TOKEN not set (needed for model '{model}')")
+            })?;
+        return call_anthropic_compat_reviewer(&key, &base_url, model, &input.prompt);
+    }
 
     // Route by model name to the correct API endpoint and key
     let (key_env, default_base_url) = if model.contains("gemini") {
-        ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
+        (
+            "GEMINI_API_KEY",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
     } else if model.contains("glm") || model.contains("GLM") {
-        ("GLM_API_KEY", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
+        (
+            "GLM_API_KEY",
+            "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+        )
     } else if model.starts_with("MiniMax") || model.starts_with("minimax") {
-        ("MINIMAX_API_KEY", "https://api.minimax.chat/v1/chat/completions")
+        (
+            "MINIMAX_API_KEY",
+            "https://api.minimax.chat/v1/chat/completions",
+        )
     } else if model.contains("kimi") || model.contains("moonshot") {
-        ("KIMI_API_KEY", "https://api.moonshot.cn/v1/chat/completions")
+        (
+            "KIMI_API_KEY",
+            "https://api.moonshot.cn/v1/chat/completions",
+        )
     } else {
         // Default: OpenAI (also covers gpt, o3, o4, deepseek via OPENAI_API_KEY)
-        ("OPENAI_API_KEY", "https://api.openai.com/v1/chat/completions")
+        (
+            "OPENAI_API_KEY",
+            "https://api.openai.com/v1/chat/completions",
+        )
     };
 
-    // Use custom base URL if provided, appending /chat/completions if needed
-    let base_url = if let Some(ref custom) = custom_base_url {
-        let trimmed = custom.trim_end_matches('/');
-        if trimmed.ends_with("/chat/completions") {
-            trimmed.to_string()
-        } else if trimmed.ends_with("/v1") {
-            format!("{trimmed}/chat/completions")
-        } else {
-            format!("{trimmed}/v1/chat/completions")
-        }
-    } else {
-        default_base_url.to_string()
-    };
+    let base_url = custom_base_url
+        .as_deref()
+        .map(normalize_openai_compat_chat_completions_url)
+        .unwrap_or_else(|| default_base_url.to_string());
 
     let key = std::env::var(key_env)
         .ok()
@@ -3267,6 +3339,35 @@ fn call_openai_compat_reviewer(
         .and_then(|c| c.as_str())
         .map(ToOwned::to_owned)
         .ok_or_else(|| format!("LlmReview: unexpected response format: {json}"))
+}
+
+#[cfg(test)]
+mod llm_review_tests {
+    use super::{normalize_anthropic_messages_url, normalize_openai_compat_chat_completions_url};
+
+    #[test]
+    fn normalizes_openai_compat_root_url() {
+        assert_eq!(
+            normalize_openai_compat_chat_completions_url("https://proxy.example"),
+            "https://proxy.example/v1/chat/completions"
+        );
+    }
+
+    #[test]
+    fn normalizes_anthropic_root_url() {
+        assert_eq!(
+            normalize_anthropic_messages_url("https://proxy.example"),
+            "https://proxy.example/v1/messages"
+        );
+    }
+
+    #[test]
+    fn keeps_anthropic_messages_url_if_complete() {
+        assert_eq!(
+            normalize_anthropic_messages_url("https://proxy.example/v1/messages"),
+            "https://proxy.example/v1/messages"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -3614,7 +3715,12 @@ mod tests {
         // Point HOME to temp dir so ~/.claude/skills/ resolves there
         let _guard = env_lock();
         let original_home = std::env::var("HOME").ok();
-        let claude_skills = tmp.parent().unwrap().join("claude-home").join(".claude").join("skills");
+        let claude_skills = tmp
+            .parent()
+            .unwrap()
+            .join("claude-home")
+            .join(".claude")
+            .join("skills");
         fs::create_dir_all(&claude_skills).expect("create claude skills dir");
         // Copy the skill into the claude skills dir
         let target_skill = claude_skills.join("test-skill");

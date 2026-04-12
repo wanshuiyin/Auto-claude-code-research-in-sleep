@@ -71,7 +71,21 @@ sudo mv aris /usr/local/bin/aris
 aris
 ```
 
+> 发布产物是只包含单个 `aris` 二进制的 `tar.gz`，不是 `.pkg` 安装器。
 > 目前仅支持 macOS Apple Silicon（M1/M2/M3/M4）。其他平台支持正在规划中。
+
+### 本地编译打包
+
+```bash
+git checkout aris-code
+cargo build --release --target aarch64-apple-darwin
+cp target/aarch64-apple-darwin/release/aris ./aris
+chmod +x ./aris
+tar czf aris-code-darwin-arm64.tar.gz aris
+shasum -a 256 aris-code-darwin-arm64.tar.gz > aris-code-darwin-arm64.tar.gz.sha256
+```
+
+内置 skills 会在编译期直接嵌入二进制，所以打包时只需要 `aris` 一个文件。
 
 ---
 
@@ -84,17 +98,23 @@ aris
 
 [1/3] 选择 Executor 提供商（主力执行 LLM）
   > Anthropic Claude
+    Anthropic-compatible Proxy
+    OpenAI-compatible Generic
     OpenAI GPT
     Google Gemini
     Zhipu GLM
     MiniMax
+    Kimi（Anthropic-compatible）
 请输入 API Key: sk-...
 
 [2/3] 选择 Reviewer 提供商（对抗审查 LLM）
   > OpenAI GPT
+    OpenAI-compatible Generic
     Google Gemini
     Zhipu GLM
     MiniMax
+    Kimi（Anthropic-compatible）
+    Anthropic-compatible Proxy
 请输入 API Key: sk-...
 
 [3/3] 选择语言偏好
@@ -113,12 +133,50 @@ aris
 | 提供商 | 作为 Executor | 作为 Reviewer | 主要模型 |
 |--------|:------------:|:------------:|---------|
 | 🟣 Anthropic Claude | ✅ | — | claude-opus, claude-sonnet, claude-haiku |
+| 🟪 Anthropic-compatible | ✅ | ✅ | claude-opus, claude-sonnet, claude-haiku |
 | 🟢 OpenAI | ✅ | ✅ | gpt-5.4, gpt-5.4-mini, gpt-5.4-nano |
 | 🔵 Google Gemini | ✅ | ✅ | gemini-2.5-pro, gemini-2.5-flash |
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
 
-> **设计说明**：Anthropic Claude 仅作 Executor，其他四家可同时作 Executor 和 Reviewer。推荐经典搭配：**Claude Executor + GPT/GLM Reviewer**，构成真正的对抗多智能体。
+> **设计说明**：ARIS 现在优先按协议兼容性接入模型：任何 **Anthropic-compatible** 的 `/v1/messages` 端点，和任何 **OpenAI-compatible** 的 `/v1/chat/completions` 端点，都可以直接配合任意模型 ID 使用。
+
+### Anthropic-compatible 配置示例
+
+Executor 示例：
+
+```bash
+ANTHROPIC_AUTH_TOKEN=your-token \
+ANTHROPIC_BASE_URL=https://proxy.example \
+aris --model claude-opus-4-6
+```
+
+Kimi Coding 预设示例：
+
+```bash
+ANTHROPIC_AUTH_TOKEN=your-token \
+ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic \
+aris --model kimi-k2.5
+```
+
+Reviewer 示例：
+
+```bash
+ARIS_REVIEWER_PROVIDER=anthropic-compat \
+ARIS_REVIEWER_AUTH_TOKEN=your-token \
+ARIS_REVIEWER_BASE_URL=https://proxy.example \
+ARIS_REVIEWER_MODEL=claude-sonnet-4-6 \
+aris
+```
+
+通用 OpenAI-compatible 示例：
+
+```bash
+EXECUTOR_PROVIDER=openai \
+EXECUTOR_API_KEY=your-token \
+EXECUTOR_BASE_URL=https://endpoint.example/v1 \
+aris --model your-custom-model
+```
 
 ---
 
@@ -299,4 +357,3 @@ MIT License © 2025 ARIS-Code Contributors
 <div align="center">
   <sub>🌙 让 AI 在你睡觉时帮你做研究 · Built with ❤️ and Rust</sub>
 </div>
-

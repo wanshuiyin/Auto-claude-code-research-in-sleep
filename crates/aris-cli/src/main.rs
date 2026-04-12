@@ -996,7 +996,10 @@ fn run_repl(
     permission_mode: PermissionMode,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode)?;
-    let mut editor = input::LineEditor::new("\x1b[38;5;74m❯\x1b[0m ", slash_command_completion_candidates());
+    let mut editor = input::LineEditor::new(
+        "\x1b[38;5;74m❯\x1b[0m ",
+        slash_command_completion_candidates(),
+    );
     println!("{}", cli.startup_banner());
 
     loop {
@@ -1018,7 +1021,9 @@ fn run_repl(
                 }
                 editor.push_history(input);
                 // Visual separator before assistant response
-                let term_w = crossterm::terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
+                let term_w = crossterm::terminal::size()
+                    .map(|(w, _)| w as usize)
+                    .unwrap_or(80);
                 let sep = "─".repeat(term_w.min(80));
                 println!("\x1b[38;5;240m{sep}\x1b[0m");
                 cli.run_turn(&trimmed)?;
@@ -1081,7 +1086,11 @@ impl LiveCli {
             .ok()
             .filter(|s| !s.is_empty())
             .unwrap_or_else(|| {
-                if std::env::var("GEMINI_API_KEY").is_ok() {
+                if std::env::var("ARIS_REVIEWER_PROVIDER").ok().as_deref()
+                    == Some("anthropic-compat")
+                {
+                    "claude-opus-4-6".to_string()
+                } else if std::env::var("GEMINI_API_KEY").is_ok() {
                     "gemini-2.5-pro".to_string()
                 } else {
                     "gpt-5.4".to_string()
@@ -1228,19 +1237,34 @@ impl LiveCli {
                 "OpenAI"
             }
         } else {
-            "Anthropic"
+            let base = std::env::var("ANTHROPIC_BASE_URL").unwrap_or_default();
+            if base.contains("moonshot") {
+                "Kimi"
+            } else if base.is_empty() {
+                "Anthropic"
+            } else {
+                "Anthropic-compatible"
+            }
         };
 
         let info_lines = [
-            format!("\x1b[2mExecutor\x1b[0m     {executor_label} · {}", self.model),
+            format!(
+                "\x1b[2mExecutor\x1b[0m     {executor_label} · {}",
+                self.model
+            ),
             format!("\x1b[2mReviewer\x1b[0m     {}", self.reviewer_model),
-            format!("\x1b[2mPermissions\x1b[0m  {}", self.permission_mode.as_str()),
+            format!(
+                "\x1b[2mPermissions\x1b[0m  {}",
+                self.permission_mode.as_str()
+            ),
             format!("\x1b[2mDirectory\x1b[0m    {cwd}"),
             format!("\x1b[2mSession\x1b[0m      {}", self.session.id),
         ];
 
         // Box drawing
-        let term_w = crossterm::terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
+        let term_w = crossterm::terminal::size()
+            .map(|(w, _)| w as usize)
+            .unwrap_or(80);
         let box_w = term_w.min(76);
         let hr = "─".repeat(box_w.saturating_sub(2));
         let dim = "\x1b[38;5;240m";
@@ -1248,7 +1272,10 @@ impl LiveCli {
 
         let mut banner = String::new();
         // Top border with title
-        banner.push_str(&format!("{dim}╭─ {reset}ARIS-Code v{VERSION}{dim} {hr}{reset}\n", hr = "─".repeat(box_w.saturating_sub(18 + VERSION.len()))));
+        banner.push_str(&format!(
+            "{dim}╭─ {reset}ARIS-Code v{VERSION}{dim} {hr}{reset}\n",
+            hr = "─".repeat(box_w.saturating_sub(18 + VERSION.len()))
+        ));
         // Sprite lines
         for line in &sprite_lines {
             banner.push_str(&format!("{dim}│{reset} {line}\n"));
@@ -1536,9 +1563,15 @@ impl LiveCli {
                 } else {
                     // Anthropic mode
                     vec![
-                        ("claude-opus-4-6", "Opus 4.6 · Most capable for complex work"),
+                        (
+                            "claude-opus-4-6",
+                            "Opus 4.6 · Most capable for complex work",
+                        ),
                         ("claude-sonnet-4-6", "Sonnet 4.6 · Best for everyday tasks"),
-                        ("claude-haiku-4-5-20251001", "Haiku 4.5 · Fastest for quick answers"),
+                        (
+                            "claude-haiku-4-5-20251001",
+                            "Haiku 4.5 · Fastest for quick answers",
+                        ),
                     ]
                     .into_iter()
                     .map(|(name, desc)| input::SelectItem {
@@ -1549,7 +1582,11 @@ impl LiveCli {
                     .collect()
                 };
 
-                match input::select_menu("Select executor model", "Switch the model used for the main conversation.", &items)? {
+                match input::select_menu(
+                    "Select executor model",
+                    "Switch the model used for the main conversation. Use `/model <name>` for any custom model id.",
+                    &items,
+                )? {
                     Some(idx) => items[idx].label.clone(),
                     None => return Ok(false),
                 }
@@ -1597,8 +1634,24 @@ impl LiveCli {
             None => {
                 let has_gemini = std::env::var("GEMINI_API_KEY").is_ok();
                 let has_openai = std::env::var("OPENAI_API_KEY").is_ok();
+                let has_anthropic_compat = std::env::var("ARIS_REVIEWER_PROVIDER").ok().as_deref()
+                    == Some("anthropic-compat")
+                    && std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_ok();
 
                 let mut items: Vec<input::SelectItem> = Vec::new();
+                if has_anthropic_compat {
+                    for (name, desc) in [
+                        ("claude-opus-4-6", "Anthropic-compatible · Most capable"),
+                        ("claude-sonnet-4-6", "Anthropic-compatible · Balanced"),
+                        ("claude-haiku-4-5-20251001", "Anthropic-compatible · Fast"),
+                    ] {
+                        items.push(input::SelectItem {
+                            label: name.to_string(),
+                            description: desc.to_string(),
+                            is_current: self.reviewer_model == name,
+                        });
+                    }
+                }
                 if has_gemini {
                     for (name, desc) in [
                         ("gemini-2.5-pro", "Google · Most capable, deep reasoning"),
@@ -1629,7 +1682,10 @@ impl LiveCli {
                 // MiniMax models
                 if std::env::var("MINIMAX_API_KEY").is_ok() {
                     for (name, desc) in [
-                        ("MiniMax-M2.7", "MiniMax · Latest, recursive self-improvement"),
+                        (
+                            "MiniMax-M2.7",
+                            "MiniMax · Latest, recursive self-improvement",
+                        ),
                         ("MiniMax-M2.7-highspeed", "MiniMax · Fast inference"),
                         ("MiniMax-M2.5", "MiniMax · Code generation"),
                     ] {
@@ -1642,9 +1698,7 @@ impl LiveCli {
                 }
                 // Kimi models
                 if std::env::var("KIMI_API_KEY").is_ok() {
-                    for (name, desc) in [
-                        ("kimi-k2.5", "Kimi · K2.5 reasoning"),
-                    ] {
+                    for (name, desc) in [("kimi-k2.5", "Kimi · K2.5 reasoning")] {
                         items.push(input::SelectItem {
                             label: name.to_string(),
                             description: desc.to_string(),
@@ -1668,11 +1722,15 @@ impl LiveCli {
                 }
 
                 if items.is_empty() {
-                    println!("No reviewer API key found. Set GEMINI_API_KEY or OPENAI_API_KEY.");
+                    println!("No reviewer API key found. Set reviewer env vars or re-run /setup.");
                     return Ok(false);
                 }
 
-                match input::select_menu("Select reviewer model", "Switch the model used by LlmReview for external reviews.", &items)? {
+                match input::select_menu(
+                    "Select reviewer model",
+                    "Switch the model used by LlmReview for external reviews. Use `/reviewer <name>` for any custom model id.",
+                    &items,
+                )? {
                     Some(idx) => items[idx].label.clone(),
                     None => return Ok(false),
                 }
@@ -1746,8 +1804,12 @@ impl LiveCli {
                         } else {
                             println!("\x1b[1mTasks\x1b[0m\n");
                             for todo in &todos {
-                                let status = todo.get("status").and_then(|s| s.as_str()).unwrap_or("pending");
-                                let content_text = todo.get("content").and_then(|c| c.as_str()).unwrap_or("?");
+                                let status = todo
+                                    .get("status")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("pending");
+                                let content_text =
+                                    todo.get("content").and_then(|c| c.as_str()).unwrap_or("?");
                                 let icon = match status {
                                     "completed" => "\x1b[1;32m✓\x1b[0m",
                                     "in_progress" => "\x1b[1;33m●\x1b[0m",
@@ -1852,7 +1914,10 @@ impl LiveCli {
             None => {
                 let items: Vec<input::SelectItem> = vec![
                     ("read-only", "Safe · Read files only, no writes or commands"),
-                    ("workspace-write", "Normal · Read + write files in workspace"),
+                    (
+                        "workspace-write",
+                        "Normal · Read + write files in workspace",
+                    ),
                     ("danger-full-access", "Full · All tools, no restrictions"),
                 ]
                 .into_iter()
@@ -2056,20 +2121,18 @@ impl LiveCli {
                     println!("Usage: /meta-optimize apply <proposal-number>");
                     return Ok(());
                 };
-                let id: usize = id_str.parse().map_err(|_| {
-                    format!("Invalid proposal number: {id_str}")
-                })?;
+                let id: usize = id_str
+                    .parse()
+                    .map_err(|_| format!("Invalid proposal number: {id_str}"))?;
                 match meta_optimize::apply_proposal(id) {
                     Ok(msg) => println!("{msg}"),
                     Err(e) => eprintln!("\x1b[1;31mError\x1b[0m: {e}"),
                 }
             }
-            Some("status") | None => {
-                match meta_optimize::status_report() {
-                    Ok(report) => println!("{report}"),
-                    Err(e) => eprintln!("\x1b[1;31mError\x1b[0m: {e}"),
-                }
-            }
+            Some("status") | None => match meta_optimize::status_report() {
+                Ok(report) => println!("{report}"),
+                Err(e) => eprintln!("\x1b[1;31mError\x1b[0m: {e}"),
+            },
             Some(other) => {
                 // Anything else (e.g., a skill name or "all") → run as skill invocation
                 let args = if let Some(t) = target {
@@ -2949,7 +3012,8 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
     prompt.push(
         "IMPORTANT: When a skill instructs you to use `mcp__codex__codex` or `mcp__codex__codex-reply` \
          for external LLM review, use the `LlmReview` tool instead. The LlmReview tool calls \
-         Gemini or OpenAI directly (via GEMINI_API_KEY or OPENAI_API_KEY) without needing MCP. \
+         the configured reviewer provider directly (OpenAI-compatible or Anthropic-compatible) \
+         without needing MCP. \
          Pass the full review prompt as the `prompt` parameter to LlmReview."
             .to_string(),
     );
@@ -2994,11 +3058,17 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
         if let Ok(content) = fs::read_to_string(&tasks_path) {
             if let Ok(todos) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
                 if !todos.is_empty() {
-                    let summary: Vec<String> = todos.iter().map(|t| {
-                        let status = t.get("status").and_then(|s| s.as_str()).unwrap_or("pending");
-                        let text = t.get("content").and_then(|c| c.as_str()).unwrap_or("?");
-                        format!("- [{status}] {text}")
-                    }).collect();
+                    let summary: Vec<String> = todos
+                        .iter()
+                        .map(|t| {
+                            let status = t
+                                .get("status")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("pending");
+                            let text = t.get("content").and_then(|c| c.as_str()).unwrap_or("?");
+                            format!("- [{status}] {text}")
+                        })
+                        .collect();
                     prompt.push(format!(
                         "# ARIS Task List\n\
                          Current tasks:\n{}\n\n\
@@ -3031,10 +3101,12 @@ fn aris_tasks_path() -> PathBuf {
 /// Ensure TodoWrite uses ARIS tasks path.
 fn init_aris_tasks_env() {
     if env::var("CLAWD_TODO_STORE").is_err() {
-        env::set_var("CLAWD_TODO_STORE", aris_tasks_path().to_string_lossy().as_ref());
+        env::set_var(
+            "CLAWD_TODO_STORE",
+            aris_tasks_path().to_string_lossy().as_ref(),
+        );
     }
 }
-
 
 fn build_runtime_feature_config(
 ) -> Result<runtime::RuntimeFeatureConfig, Box<dyn std::error::Error>> {
@@ -3095,8 +3167,7 @@ fn build_runtime(
 fn build_event_sink(
     _feature_config: &runtime::RuntimeFeatureConfig,
 ) -> Box<dyn runtime::EventSink> {
-    let level_str = std::env::var("ARIS_META_LOGGING")
-        .unwrap_or_default();
+    let level_str = std::env::var("ARIS_META_LOGGING").unwrap_or_default();
     let level = runtime::MetaLoggingLevel::parse(&level_str);
     if level == runtime::MetaLoggingLevel::Off {
         return Box::new(runtime::NoopEventSink);
@@ -3333,7 +3404,12 @@ impl ApiClient for AnthropicRuntimeClient {
                         events.push(AssistantEvent::MessageStop);
                     }
                     ApiStreamEvent::Error(e) => {
-                        let msg = e.error.get("message").and_then(|v| v.as_str()).unwrap_or("stream error").to_string();
+                        let msg = e
+                            .error
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("stream error")
+                            .to_string();
                         return Err(RuntimeError::new(msg));
                     }
                 }
@@ -3513,9 +3589,7 @@ pub(crate) fn format_tool_call_start(name: &str, input: &str) -> String {
         _ => summarize_tool_payload(input),
     };
 
-    format!(
-        "\x1b[38;5;74m●\x1b[0m \x1b[1m{name}\x1b[0m\x1b[38;5;245m({detail})\x1b[0m"
-    )
+    format!("\x1b[38;5;74m●\x1b[0m \x1b[1m{name}\x1b[0m\x1b[38;5;245m({detail})\x1b[0m")
 }
 
 fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
@@ -4001,7 +4075,10 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         "      Inspect or maintain a saved session without entering the REPL"
     )?;
     writeln!(out, "  aris setup                                          Initialize ARIS (install skills, configure MCP)")?;
-    writeln!(out, "  aris doctor                                         Health check")?;
+    writeln!(
+        out,
+        "  aris doctor                                         Health check"
+    )?;
     writeln!(out, "  aris dump-manifests")?;
     writeln!(out, "  aris bootstrap-plan")?;
     writeln!(out, "  aris system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
@@ -4033,17 +4110,14 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(out)?;
     writeln!(out, "Executor providers:")?;
+    writeln!(out, "  Default:   Anthropic Claude (ANTHROPIC_API_KEY)")?;
     writeln!(
         out,
-        "  Default:   Anthropic Claude (ANTHROPIC_API_KEY)"
+        "  Anthropic-compatible: ANTHROPIC_AUTH_TOKEN=xxx ANTHROPIC_BASE_URL=https://proxy.example aris --model claude-opus-4-6"
     )?;
     writeln!(
         out,
-        "  OpenAI:    EXECUTOR_PROVIDER=openai EXECUTOR_API_KEY=xxx aris --model gpt-4o"
-    )?;
-    writeln!(
-        out,
-        "  DeepSeek:  EXECUTOR_PROVIDER=openai EXECUTOR_BASE_URL=https://api.deepseek.com EXECUTOR_API_KEY=xxx aris --model deepseek-chat"
+        "  OpenAI/OpenAI-compatible: EXECUTOR_PROVIDER=openai EXECUTOR_BASE_URL=https://endpoint.example/v1 EXECUTOR_API_KEY=xxx aris --model your-model-id"
     )?;
     writeln!(
         out,
@@ -4052,6 +4126,10 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(
         out,
         "  Gemini:    EXECUTOR_PROVIDER=openai EXECUTOR_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai EXECUTOR_API_KEY=xxx aris --model gemini-2.5-pro"
+    )?;
+    writeln!(
+        out,
+        "  Kimi coding: ANTHROPIC_AUTH_TOKEN=xxx ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic aris --model kimi-k2.5"
     )?;
     writeln!(out)?;
     writeln!(out, "Interactive slash commands:")?;
@@ -4068,6 +4146,10 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     writeln!(out, "Resume-safe commands: {resume_commands}")?;
     writeln!(out, "Examples:")?;
     writeln!(out, "  aris --model claude-opus \"summarize this repo\"")?;
+    writeln!(
+        out,
+        "  aris --model your-custom-model \"run against a third-party endpoint\""
+    )?;
     writeln!(
         out,
         "  aris --output-format json prompt \"explain src/main.rs\""
@@ -4099,13 +4181,20 @@ fn check_auth_status() -> &'static str {
         return "OK (bearer token)";
     }
     let home = runtime::home_dir();
-    let creds_path = PathBuf::from(&home).join(".claude").join("credentials.json");
+    let creds_path = PathBuf::from(&home)
+        .join(".claude")
+        .join("credentials.json");
     if creds_path.exists() {
         return "OK (OAuth saved)";
     }
     // Check macOS Keychain for Claude Code's OAuth token
     if let Ok(output) = Command::new("security")
-        .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        .args([
+            "find-generic-password",
+            "-s",
+            "Claude Code-credentials",
+            "-w",
+        ])
         .output()
     {
         if output.status.success() {
@@ -4218,10 +4307,12 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     let mut all_ok = true;
 
     // Check 0: Executor provider
-    let executor_provider = std::env::var("EXECUTOR_PROVIDER").unwrap_or_else(|_| "anthropic".into());
+    let executor_provider =
+        std::env::var("EXECUTOR_PROVIDER").unwrap_or_else(|_| "anthropic".into());
     print!("  Executor:     ");
     if executor_provider == "openai" {
-        let base = std::env::var("EXECUTOR_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".into());
+        let base = std::env::var("EXECUTOR_BASE_URL")
+            .unwrap_or_else(|_| "https://api.openai.com/v1".into());
         let has_key = std::env::var("EXECUTOR_API_KEY")
             .or_else(|_| std::env::var("OPENAI_API_KEY"))
             .is_ok();
@@ -4231,6 +4322,10 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
             println!("OpenAI-compat (NO API KEY!)");
             all_ok = false;
         }
+    } else if std::env::var("ANTHROPIC_AUTH_TOKEN").is_ok() {
+        let base = std::env::var("ANTHROPIC_BASE_URL")
+            .unwrap_or_else(|_| "https://api.anthropic.com".into());
+        println!("Anthropic-compatible ({base})");
     } else {
         println!("Anthropic (default)");
     }
@@ -4238,7 +4333,9 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     // Check 1: API auth
     let auth_status = check_auth_status();
     println!("  API auth:     {auth_status}");
-    if auth_status == "NOT FOUND" && executor_provider != "openai" { all_ok = false; }
+    if auth_status == "NOT FOUND" && executor_provider != "openai" {
+        all_ok = false;
+    }
 
     // Check 2: Skills directory + discovered skills
     let skills_dir = dirs_claude_skills();
@@ -4261,19 +4358,37 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check 2b: Reviewer API (LlmReview)
     print!("  Reviewer API: ");
-    if std::env::var("GEMINI_API_KEY").is_ok() {
+    let reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER").ok();
+    if reviewer_provider.as_deref() == Some("anthropic-compat") {
+        let base = std::env::var("ARIS_REVIEWER_BASE_URL")
+            .unwrap_or_else(|_| "https://api.anthropic.com".into());
+        if std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_ok() {
+            println!("OK (Anthropic-compatible via {base})");
+        } else {
+            println!("NOT FOUND (set ARIS_REVIEWER_AUTH_TOKEN for Anthropic-compatible reviewer)");
+            all_ok = false;
+        }
+    } else if std::env::var("GEMINI_API_KEY").is_ok() {
         println!("OK (Gemini)");
     } else if std::env::var("OPENAI_API_KEY").is_ok() {
         println!("OK (OpenAI)");
+    } else if std::env::var("GLM_API_KEY").is_ok() {
+        println!("OK (GLM)");
+    } else if std::env::var("MINIMAX_API_KEY").is_ok() {
+        println!("OK (MiniMax)");
+    } else if std::env::var("KIMI_API_KEY").is_ok() {
+        println!("OK (Kimi)");
     } else {
-        println!("NOT FOUND (set GEMINI_API_KEY or OPENAI_API_KEY for LlmReview)");
+        println!("NOT FOUND (set reviewer API env vars for LlmReview)");
     }
 
     // Check 3: Codex CLI
     print!("  Codex CLI:    ");
     match which_codex() {
         Some(path) => println!("OK ({})", path.display()),
-        None => { println!("NOT FOUND (optional)"); }
+        None => {
+            println!("NOT FOUND (optional)");
+        }
     }
 
     // Check 4: Codex MCP in config
@@ -4283,7 +4398,8 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     if config_path.exists() {
         if let Ok(content) = fs::read_to_string(&config_path) {
             if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
-                if config.get("mcpServers")
+                if config
+                    .get("mcpServers")
                     .and_then(|s| s.as_object())
                     .map_or(false, |s| s.contains_key("codex"))
                 {
@@ -4313,7 +4429,10 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
 /// ARIS-specific skills directory (highest priority).
 fn dirs_aris_skills() -> PathBuf {
     let home = runtime::home_dir();
-    PathBuf::from(home).join(".config").join("aris").join("skills")
+    PathBuf::from(home)
+        .join(".config")
+        .join("aris")
+        .join("skills")
 }
 
 /// Claude Code user skills directory.
@@ -4351,7 +4470,11 @@ fn which_codex() -> Option<PathBuf> {
     let output = Command::new("which").arg("codex").output().ok()?;
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if path.is_empty() { None } else { Some(PathBuf::from(path)) }
+        if path.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(path))
+        }
     } else {
         None
     }

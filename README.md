@@ -71,7 +71,21 @@ sudo mv aris /usr/local/bin/aris
 aris
 ```
 
+> The release artifact is a `tar.gz` containing a single `aris` binary, not a `.pkg` installer.
 > Currently supports **macOS Apple Silicon (M1/M2/M3/M4)** only. Support for other platforms is on the roadmap.
+
+### Build And Package Locally
+
+```bash
+git checkout aris-code
+cargo build --release --target aarch64-apple-darwin
+cp target/aarch64-apple-darwin/release/aris ./aris
+chmod +x ./aris
+tar czf aris-code-darwin-arm64.tar.gz aris
+shasum -a 256 aris-code-darwin-arm64.tar.gz > aris-code-darwin-arm64.tar.gz.sha256
+```
+
+The bundled skills are embedded at compile time, so the tarball only needs the `aris` binary.
 
 ---
 
@@ -84,17 +98,23 @@ The first time you run `aris`, an interactive setup wizard launches automaticall
 
 [1/3] Choose Executor provider (primary LLM)
   > Anthropic Claude
+    Anthropic-compatible Proxy
+    OpenAI-compatible Generic
     OpenAI GPT
     Google Gemini
     Zhipu GLM
     MiniMax
+    Kimi (Anthropic-compatible)
 Enter API Key: sk-...
 
 [2/3] Choose Reviewer provider (adversarial LLM)
   > OpenAI GPT
+    OpenAI-compatible Generic
     Google Gemini
     Zhipu GLM
     MiniMax
+    Kimi (Anthropic-compatible)
+    Anthropic-compatible Proxy
 Enter API Key: sk-...
 
 [3/3] Choose language preference
@@ -113,12 +133,50 @@ After setup you drop straight into the REPL. Run `/setup` at any time to reconfi
 | Provider | As Executor | As Reviewer | Key Models |
 |----------|:-----------:|:-----------:|-----------|
 | 🟣 Anthropic Claude | ✅ | — | claude-opus, claude-sonnet, claude-haiku |
+| 🟪 Anthropic-compatible | ✅ | ✅ | claude-opus, claude-sonnet, claude-haiku |
 | 🟢 OpenAI | ✅ | ✅ | gpt-5.4, gpt-5.4-mini, gpt-5.4-nano |
 | 🔵 Google Gemini | ✅ | ✅ | gemini-2.5-pro, gemini-2.5-flash |
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
 
-> **Design note**: Anthropic Claude is Executor-only; all other providers can serve as both Executor and Reviewer. The classic pairing is **Claude Executor + GPT/GLM Reviewer** for true adversarial multi-agent research.
+> **Design note**: ARIS now treats protocol compatibility as the primary interface: any **Anthropic-compatible** `/v1/messages` endpoint and any **OpenAI-compatible** `/v1/chat/completions` endpoint can be used with arbitrary model IDs.
+
+### Anthropic-compatible Configuration
+
+Executor example:
+
+```bash
+ANTHROPIC_AUTH_TOKEN=your-token \
+ANTHROPIC_BASE_URL=https://proxy.example \
+aris --model claude-opus-4-6
+```
+
+Kimi coding preset example:
+
+```bash
+ANTHROPIC_AUTH_TOKEN=your-token \
+ANTHROPIC_BASE_URL=https://api.moonshot.cn/anthropic \
+aris --model kimi-k2.5
+```
+
+Reviewer example:
+
+```bash
+ARIS_REVIEWER_PROVIDER=anthropic-compat \
+ARIS_REVIEWER_AUTH_TOKEN=your-token \
+ARIS_REVIEWER_BASE_URL=https://proxy.example \
+ARIS_REVIEWER_MODEL=claude-sonnet-4-6 \
+aris
+```
+
+Generic OpenAI-compatible example:
+
+```bash
+EXECUTOR_PROVIDER=openai \
+EXECUTOR_API_KEY=your-token \
+EXECUTOR_BASE_URL=https://endpoint.example/v1 \
+aris --model your-custom-model
+```
 
 ---
 
@@ -306,4 +364,3 @@ MIT License © 2025 ARIS-Code Contributors
 <div align="center">
   <sub>🌙 Let AI do research while you sleep · Built with ❤️ and Rust</sub>
 </div>
-
