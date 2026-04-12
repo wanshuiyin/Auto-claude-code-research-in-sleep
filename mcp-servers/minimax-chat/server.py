@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """MiniMax Chat MCP Server - A robust MCP server that calls MiniMax Chat Completions API"""
 
+import datetime
 import json
 import os
 import sys
@@ -18,10 +19,9 @@ def debug_log(msg):
     """Write debug message to log file"""
     try:
         with open(DEBUG_LOG, "a") as f:
-            import datetime
             f.write(f"{datetime.datetime.now()}: {msg}\n")
             f.flush()
-    except:
+    except Exception:
         pass
 
 debug_log("=== MCP Server Starting (v2.1) ===")
@@ -48,9 +48,8 @@ def clamp_temperature(temp):
 def log_error(msg):
     try:
         with open(DEBUG_LOG, "a") as f:
-            import datetime
             f.write(f"{datetime.datetime.now()}: ERROR: {msg}\n")
-    except:
+    except Exception:
         pass
 
 # Global flag for output format
@@ -112,7 +111,10 @@ def call_minimax(messages, model=None, temperature=0.7):
                 debug_log(f"API error: {error_msg}")
                 return None, error_msg
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
+            try:
+                content = data["choices"][0]["message"]["content"]
+            except (KeyError, IndexError) as e:
+                return None, f"Unexpected API response structure: {e}"
             debug_log(f"API success, response length: {len(content)}")
             return content, None
     except Exception as e:
@@ -344,7 +346,7 @@ def main():
                     "id": None,
                     "error": {"code": -32603, "message": f"Internal error: {e}"}
                 })
-            except:
+            except Exception:
                 pass
 
     debug_log("=== MCP Server Exiting ===")

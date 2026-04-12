@@ -16,3 +16,6 @@ __pycache__/
 
 # Environment
 .env
+
+# Local utility scripts
+update_mcp.js
