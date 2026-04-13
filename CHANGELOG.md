@@ -1,5 +1,10 @@
 # ARIS-Code Changelog
 
+## v0.3.11 (2026-04-13)
+
+- **New**: **Reviewer Anthropic-compatible mode** — LlmReview now supports Anthropic-compatible endpoints as reviewer (e.g., Claude via proxy). Set `ARIS_REVIEWER_PROVIDER=anthropic-compat` or select "Anthropic Proxy" in `/setup`.
+- **New**: `/setup` adds option 6 "Anthropic Proxy" for reviewer, enabling Claude-as-reviewer via proxy services.
+
 ## v0.3.10 (2026-04-11)
 
 - **Fix**: **Windows compatibility overhaul** — all path resolution now uses `USERPROFILE` fallback (previously only checked `HOME` which doesn't exist on Windows, causing crashes). Bash tool uses `cmd /C` on Windows. `fs::rename` handles existing target files.

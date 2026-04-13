@@ -171,8 +171,17 @@ impl ArisConfig {
                             std::env::set_var("KIMI_API_KEY", key);
                         }
                     }
+                    "anthropic-compat" => {
+                        if force || std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_err() {
+                            std::env::set_var("ARIS_REVIEWER_AUTH_TOKEN", key);
+                        }
+                    }
                     _ => {}
                 }
+            }
+            // Set reviewer provider env var
+            if force || std::env::var("ARIS_REVIEWER_PROVIDER").is_err() {
+                std::env::set_var("ARIS_REVIEWER_PROVIDER", reviewer_provider);
             }
         }
 
@@ -296,22 +305,24 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
 
     // ── Step 4: Reviewer ──
     println!("\n\x1b[1m[2/3] Reviewer (for LlmReview tool)\x1b[0m");
-    println!("  1. OpenAI    (gpt-5.4)");
-    println!("  2. Gemini    (gemini-2.5-pro)");
-    println!("  3. GLM       (GLM-5)");
-    println!("  4. MiniMax   (MiniMax-M2.7)");
-    println!("  5. Kimi      (kimi-k2.5)");
-    println!("  6. Skip (no reviewer)");
+    println!("  1. OpenAI          (gpt-5.4)");
+    println!("  2. Gemini          (gemini-2.5-pro)");
+    println!("  3. GLM             (GLM-5)");
+    println!("  4. MiniMax         (MiniMax-M2.7)");
+    println!("  5. Kimi            (kimi-k2.5)");
+    println!("  6. Anthropic Proxy (claude via proxy)");
+    println!("  7. Skip (no reviewer)");
     let reviewer_choice = prompt_with_default(
-        "  Choose [1-6]",
+        "  Choose [1-7]",
         match config.reviewer_provider.as_deref() {
             Some("openai") => "1",
             Some("gemini") => "2",
             Some("glm") => "3",
             Some("minimax") => "4",
             Some("kimi") => "5",
+            Some("anthropic-compat") => "6",
             None => "1",
-            _ => "6",
+            _ => "7",
         },
     )?;
 
@@ -322,6 +333,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         "3" => Some(("glm", "GLM_API_KEY", "GLM API key", "GLM-5")),
         "4" => Some(("minimax", "MINIMAX_API_KEY", "MiniMax API key", "MiniMax-M2.7")),
         "5" => Some(("kimi", "KIMI_API_KEY", "Kimi API key", "kimi-k2.5")),
+        "6" => Some(("anthropic-compat", "ARIS_REVIEWER_AUTH_TOKEN", "Reviewer auth token", "claude-sonnet-4-6")),
         _ => None,
     };
 

@@ -3163,8 +3163,21 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         .or(env_reviewer_model.as_deref())
         .unwrap_or("gpt-5.4");
 
-    // Check for user-configured reviewer proxy base URL
+    // Check for user-configured reviewer provider and base URL
+    let reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER").ok().filter(|s| !s.is_empty());
     let custom_base_url = std::env::var("ARIS_REVIEWER_BASE_URL").ok().filter(|s| !s.is_empty());
+
+    // Anthropic-compatible reviewer mode (e.g., Claude via proxy, Kimi coding endpoint)
+    if reviewer_provider.as_deref() == Some("anthropic-compat") {
+        let key = std::env::var("ARIS_REVIEWER_AUTH_TOKEN")
+            .or_else(|_| std::env::var("ANTHROPIC_AUTH_TOKEN"))
+            .ok()
+            .filter(|k| !k.is_empty())
+            .ok_or_else(|| "LlmReview: ARIS_REVIEWER_AUTH_TOKEN not set (needed for anthropic-compat reviewer)".to_string())?;
+        let base = custom_base_url.unwrap_or_else(|| "https://api.anthropic.com".to_string());
+        let endpoint = format!("{}/v1/messages", base.trim_end_matches('/'));
+        return call_anthropic_compat_reviewer(&key, &endpoint, model, &input.prompt);
+    }
 
     // Route by model name to the correct API endpoint and key
     let (key_env, default_base_url) = if model.contains("gemini") {
