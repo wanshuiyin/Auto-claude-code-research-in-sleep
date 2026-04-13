@@ -265,30 +265,66 @@ This prevents bib bloat (e.g., 948 lines → 215 lines in testing).
 4. Double-check year and venue for every entry
 5. Remove duplicate entries (same paper with different keys)
 
-### Step 5: De-AI Polish and Clarity Pass
+### Step 5: Scientific Writing Quality Pass (5 audit passes)
 
-After drafting all sections, scan for common AI writing patterns and fix them:
+After drafting all sections, run five sequential audit passes. Based on Sainani's "Writing in the Sciences" methodology: every word must earn its place.
 
-First apply the sentence-level clarity rules from `../shared-references/writing-principles.md`:
+**Pass 1: Clutter Extraction** — Strip sentences to cleanest components.
 
-- keep subject and verb close together,
-- put familiar context first and new information later,
-- place the most important information near the end of the sentence,
-- let each paragraph do one job,
-- use verbs for actions instead of nominalized nouns.
+| Cluttered phrase | Replace with |
+|------------------|--------------|
+| Due to the fact that | Because |
+| In order to | To |
+| A number of | Several |
+| It is worth noting that | (delete — just state the point) |
+| It is important to note that | (delete) |
+| At the present time | Now |
+| On the basis of | Based on |
+| In light of the fact that | Because |
+| Have an effect on | Affect |
+| Give rise to | Cause |
 
-Then fix the common content patterns below:
+Also remove redundancies: "completely eliminate" → "eliminate", "future plans" → "plans", "unexpected surprise" → "surprise".
 
-- Significance inflation ("groundbreaking", "revolutionary" → use measured language)
-- Formulaic transitions ("In this section, we..." → remove or vary)
-- Generic conclusions ("This work opens exciting new avenues" → be specific)
+Remove AI-isms: delve, pivotal, landscape, tapestry, underscore, noteworthy, intriguingly.
 
-**Language patterns to fix (watch words):**
-- Replace: delve, pivotal, landscape, tapestry, underscore, noteworthy, intriguingly
-- Remove filler: "It is worth noting that", "Importantly,", "Notably,"
-- Avoid rule-of-three lists ("X, Y, and Z" appearing repeatedly)
+**Pass 2: Active Voice and Verb Vitality** — Identify who did what.
+
+- Spot passive: "to-be" verb + past participle ("was observed", "were analyzed")
+- Convert: find the actor, reconstruct as Subject–Verb–Object
+- Resurrect smothered verbs (nominalizations):
+  - "We made an investigation" → "We investigated"
+  - "Failure of the system occurs" → "The system fails"
+  - "Provides a description of" → "Describes"
+
+Passive voice IS acceptable for: established facts, methods where agent is irrelevant, or when required by venue style.
+
+**Pass 3: Sentence Architecture** — Structure and flow.
+
+- Flag sentences > 40 words for splitting
+- Ensure subject and verb are close together (no long parenthetical insertions between them)
+- Put familiar context first, new information later
+- Place the most important point near the end of the sentence
+- Let each paragraph do one job
 - Don't start consecutive sentences with "This" or "We"
-- Replace vague nouns with concrete ones when ambiguity is possible ("this result", "this ablation", "this theorem")
+- Check paragraph transitions — each paragraph's first sentence should connect to the previous
+
+**Pass 4: Keyword Consistency** — The Banana Rule.
+
+**Do not call a "banana" an "elongated yellow fruit" to avoid repetition.** If the Methods say "obese group," the Results must not switch to "heavier group." Synonym variation for technical terms forces the reader to wonder whether a new category has been introduced.
+
+- Extract all key terms from Method section (group names, variable names, technique names, abbreviations)
+- Verify exact same terms appear in Results, Discussion, Tables, Figure captions
+- Flag every synonym substitution for a defined term
+- Acronym austerity: flag non-standard acronyms created only for convenience; verify every acronym is defined at first use
+
+**Pass 5: Numerical and Citation Integrity**
+
+- Does sample size (N) in Abstract match Table 1?
+- Do percentages in Results match raw numbers in Tables?
+- Are significant figures consistent and appropriate?
+- Do Figure graphics match Table values?
+- Flag statistics cited only through secondary sources (reviews, textbooks) — recommend verifying primary source
 
 ### Step 6: Cross-Review with REVIEWER_MODEL
 
