@@ -20,7 +20,7 @@
 > Executor 执行 · Reviewer 审查 · 迭代精进
 
 [![GitHub Release](https://img.shields.io/github/v/release/wanshuiyin/Auto-claude-code-research-in-sleep?style=flat-square)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux-black?style=flat-square&logo=apple)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep)
+[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux%20|%20Windows-black?style=flat-square)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
 
@@ -63,15 +63,30 @@
 
 ---
 
-## 🚀 安装（macOS Apple Silicon）
+## 🚀 安装
 
+**macOS (Apple Silicon)**
 ```bash
 curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-arm64.tar.gz | tar xz
 sudo mv aris /usr/local/bin/aris
-aris
 ```
 
-> 目前仅支持 macOS Apple Silicon（M1/M2/M3/M4）。其他平台支持正在规划中。
+**macOS (Intel)**
+```bash
+curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-x64.tar.gz | tar xz
+sudo mv aris /usr/local/bin/aris
+```
+
+**Linux (x64)**
+```bash
+curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-linux-x64.tar.gz | tar xz
+sudo mv aris /usr/local/bin/aris
+```
+
+**Windows (x64)**
+下载 [`aris-code-windows-x64.zip`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-windows-x64.zip)，解压后在 PowerShell 或 Windows Terminal 中运行 `aris.exe`。
+
+> 运行 `aris` 启动，首次运行会自动触发交互式配置向导。
 
 ---
 

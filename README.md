@@ -20,7 +20,7 @@
 > Executor acts · Reviewer critiques · Iterate to excellence
 
 [![GitHub Release](https://img.shields.io/github/v/release/wanshuiyin/Auto-claude-code-research-in-sleep?style=flat-square)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux-black?style=flat-square&logo=apple)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep)
+[![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux%20|%20Windows-black?style=flat-square)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 
 
@@ -63,15 +63,30 @@ With **42 bundled research skills**, ARIS covers the full pipeline from idea dis
 
 ---
 
-## 🚀 Installation (macOS Apple Silicon)
+## 🚀 Installation
 
+**macOS (Apple Silicon)**
 ```bash
 curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-arm64.tar.gz | tar xz
 sudo mv aris /usr/local/bin/aris
-aris
 ```
 
-> Currently supports **macOS Apple Silicon (M1/M2/M3/M4)** only. Support for other platforms is on the roadmap.
+**macOS (Intel)**
+```bash
+curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-darwin-x64.tar.gz | tar xz
+sudo mv aris /usr/local/bin/aris
+```
+
+**Linux (x64)**
+```bash
+curl -fsSL https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-linux-x64.tar.gz | tar xz
+sudo mv aris /usr/local/bin/aris
+```
+
+**Windows (x64)**
+Download [`aris-code-windows-x64.zip`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest/download/aris-code-windows-x64.zip), extract, and run `aris.exe` in PowerShell or Windows Terminal.
+
+> Run `aris` to start. First launch triggers the interactive setup wizard.
 
 ---
 
