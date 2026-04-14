@@ -27,6 +27,30 @@ Organize results by:
 - If sweeping a parameter: identify trends (monotonic, U-shaped, plateau)
 - Flag outliers or suspicious results
 
+### Step 3.5: Recommend Visualizations
+
+Based on the data structure discovered in Steps 1–3, recommend figure types using the decision tree from `shared-references/FIGURE_STYLE_GUIDE.md` §1:
+
+| Analysis Result | Recommended Figure | Rationale |
+|----------------|-------------------|-----------|
+| Single metric across methods | Bar chart or lollipop | Direct comparison |
+| Metric across methods + multiple datasets | Grouped bar or multi-panel | Shows interaction |
+| Training curves (metric vs steps) | Line plot (+ shaded band if multiple seeds) | Shows trend + uncertainty |
+| Hyperparameter sweep (1 param) | Line plot with param on x-axis | Shows sensitivity |
+| Hyperparameter sweep (2 params) | Heatmap | Shows interaction surface |
+| Distribution of metrics across seeds | Violin or box plot | Shows spread + shape |
+| Pairwise method comparison | Scatter with diagonal | Shows per-item winner |
+| Correlation between metrics | Correlation matrix heatmap | Shows metric relationships |
+| Ablation results (component on/off) | Stacked bar or grouped bar | Shows contribution |
+
+**Output**: For each recommended figure, provide:
+1. Figure type and suggested filename
+2. Data columns / keys to use
+3. Suggested caption draft
+4. Whether it belongs in main paper or supplementary
+
+This output can be passed directly to `/paper-figure` for generation.
+
 ### Step 4: Generate Insights
 For each finding, structure as:
 1. **Observation**: what the data shows (with numbers)
@@ -43,4 +67,5 @@ If findings are significant:
 Always include:
 1. Raw data table
 2. Key findings (numbered, concise)
-3. Suggested next experiments (if any)
+3. **Recommended visualizations** (figure type, data mapping, caption draft) — ready for `/paper-figure`
+4. Suggested next experiments (if any)
