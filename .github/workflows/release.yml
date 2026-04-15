@@ -19,7 +19,9 @@ jobs:
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact: aris-code-darwin-x64
-          - os: ubuntu-latest
+          # Build Linux releases on Ubuntu 22.04 so the resulting GNU binary
+          # stays compatible with Ubuntu 22.04 users (glibc 2.35).
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             artifact: aris-code-linux-x64
           - os: windows-latest
@@ -67,7 +69,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Download all artifacts
