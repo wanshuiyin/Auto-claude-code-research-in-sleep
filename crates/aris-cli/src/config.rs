@@ -151,6 +151,11 @@ impl ArisConfig {
                     if force || std::env::var("ANTHROPIC_API_KEY").is_err() {
                         std::env::set_var("ANTHROPIC_API_KEY", key);
                     }
+                    if let Some(url) = &self.executor_base_url {
+                        if force || std::env::var("ANTHROPIC_BASE_URL").is_err() {
+                            std::env::set_var("ANTHROPIC_BASE_URL", url);
+                        }
+                    }
                 }
                 "anthropic-compat" => {
                     // MiniMax etc: Anthropic-compatible endpoint with bearer token

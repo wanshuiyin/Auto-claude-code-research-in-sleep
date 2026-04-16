@@ -311,13 +311,14 @@ impl AnthropicClient {
         request: &MessageRequest,
     ) -> Result<reqwest::Response, ApiError> {
         let is_oauth = self.auth.bearer_token().is_some() && self.auth.api_key().is_none();
+        let is_custom_base = self.base_url != DEFAULT_BASE_URL;
         let request_url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let mut request_builder = self
             .http
             .post(&request_url)
             .header("anthropic-version", ANTHROPIC_VERSION)
             .header("content-type", "application/json");
-        if is_oauth {
+        if is_oauth && !is_custom_base {
             let model = &request.model;
             let is_haiku = model.contains("haiku");
             let mut betas = vec!["oauth-2025-04-20"];
