@@ -108,6 +108,7 @@ pub struct AnthropicClient {
     max_retries: u32,
     initial_backoff: Duration,
     max_backoff: Duration,
+    send_betas: bool,
 }
 
 impl AnthropicClient {
@@ -120,6 +121,7 @@ impl AnthropicClient {
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff: DEFAULT_INITIAL_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
+            send_betas: true,
         }
     }
 
@@ -132,11 +134,14 @@ impl AnthropicClient {
             max_retries: DEFAULT_MAX_RETRIES,
             initial_backoff: DEFAULT_INITIAL_BACKOFF,
             max_backoff: DEFAULT_MAX_BACKOFF,
+            send_betas: true,
         }
     }
 
     pub fn from_env() -> Result<Self, ApiError> {
-        Ok(Self::from_auth(AuthSource::from_env_or_saved()?).with_base_url(read_base_url()))
+        Ok(Self::from_auth(AuthSource::from_env_or_saved()?)
+            .with_base_url(read_base_url())
+            .with_send_betas(read_send_betas()))
     }
 
     #[must_use]
@@ -173,6 +178,12 @@ impl AnthropicClient {
     #[must_use]
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into();
+        self
+    }
+
+    #[must_use]
+    pub fn with_send_betas(mut self, send_betas: bool) -> Self {
+        self.send_betas = send_betas;
         self
     }
 
@@ -311,14 +322,13 @@ impl AnthropicClient {
         request: &MessageRequest,
     ) -> Result<reqwest::Response, ApiError> {
         let is_oauth = self.auth.bearer_token().is_some() && self.auth.api_key().is_none();
-        let is_custom_base = self.base_url != DEFAULT_BASE_URL;
         let request_url = format!("{}/v1/messages", self.base_url.trim_end_matches('/'));
         let mut request_builder = self
             .http
             .post(&request_url)
             .header("anthropic-version", ANTHROPIC_VERSION)
             .header("content-type", "application/json");
-        if is_oauth && !is_custom_base {
+        if is_oauth && self.send_betas {
             let model = &request.model;
             let is_haiku = model.contains("haiku");
             let mut betas = vec!["oauth-2025-04-20"];
@@ -575,6 +585,16 @@ fn read_auth_token() -> Option<String> {
 #[must_use]
 pub fn read_base_url() -> String {
     std::env::var("ANTHROPIC_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
+}
+
+/// Returns `false` when `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` is set to a truthy value,
+/// indicating that Anthropic-specific beta headers should not be sent. This is needed for
+/// third-party API providers (e.g. AWS Bedrock proxies) that reject unknown beta flags.
+#[must_use]
+pub fn read_send_betas() -> bool {
+    !std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
 }
 
 fn request_id_from_headers(headers: &reqwest::header::HeaderMap) -> Option<String> {

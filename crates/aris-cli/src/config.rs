@@ -117,6 +117,10 @@ impl ArisConfig {
             std::env::remove_var("ANTHROPIC_API_KEY");
             std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
             std::env::remove_var("ANTHROPIC_BASE_URL");
+            // `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` is executor-scoped (it
+            // controls whether the Anthropic client attaches beta headers),
+            // so it belongs in the executor clear block, not the reviewer one.
+            std::env::remove_var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS");
         }
         if force_rev {
             // Clear reviewer-related env vars — only when user explicitly
@@ -155,6 +159,10 @@ impl ArisConfig {
                         if force || std::env::var("ANTHROPIC_BASE_URL").is_err() {
                             std::env::set_var("ANTHROPIC_BASE_URL", url);
                         }
+                        // Third-party providers may reject Anthropic-specific beta flags
+                        if force || std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").is_err() {
+                            std::env::set_var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "1");
+                        }
                     }
                 }
                 "anthropic-compat" => {
@@ -165,6 +173,10 @@ impl ArisConfig {
                     if let Some(url) = &self.executor_base_url {
                         if force || std::env::var("ANTHROPIC_BASE_URL").is_err() {
                             std::env::set_var("ANTHROPIC_BASE_URL", url);
+                        }
+                        // Third-party providers may reject Anthropic-specific beta flags
+                        if force || std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").is_err() {
+                            std::env::set_var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "1");
                         }
                     }
                 }

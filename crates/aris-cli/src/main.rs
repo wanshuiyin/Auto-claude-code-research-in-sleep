@@ -3453,7 +3453,8 @@ impl AnthropicRuntimeClient {
         Ok(Self {
             runtime: tokio::runtime::Runtime::new()?,
             client: AnthropicClient::from_auth(resolve_cli_auth_source()?)
-                .with_base_url(api::read_base_url()),
+                .with_base_url(api::read_base_url())
+                .with_send_betas(api::read_send_betas()),
             model,
             enable_tools,
             emit_output,
