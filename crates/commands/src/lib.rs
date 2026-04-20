@@ -65,7 +65,7 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
     },
     SlashCommandSpec {
         name: "reviewer",
-        summary: "Select reviewer model (Gemini/OpenAI for LlmReview)",
+        summary: "Select reviewer model (OpenAI/Gemini/GLM/MiniMax/Kimi/Anthropic for LlmReview)",
         argument_hint: Some("[model]"),
         resume_supported: false,
     },

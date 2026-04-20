@@ -4559,12 +4559,28 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
 
     // Check 2b: Reviewer API (LlmReview)
     print!("  Reviewer API: ");
-    if std::env::var("GEMINI_API_KEY").is_ok() {
-        println!("OK (Gemini)");
-    } else if std::env::var("OPENAI_API_KEY").is_ok() {
-        println!("OK (OpenAI)");
+    let reviewer_keys: &[(&str, &str)] = &[
+        ("OPENAI_API_KEY", "OpenAI"),
+        ("GEMINI_API_KEY", "Gemini"),
+        ("GLM_API_KEY", "GLM"),
+        ("MINIMAX_API_KEY", "MiniMax"),
+        ("KIMI_API_KEY", "Kimi"),
+        ("ARIS_REVIEWER_AUTH_TOKEN", "Anthropic-compat"),
+        // run_llm_review also accepts ANTHROPIC_AUTH_TOKEN as a fallback for
+        // anthropic-compat reviewer (see tools/src/lib.rs).
+        ("ANTHROPIC_AUTH_TOKEN", "Anthropic-compat"),
+    ];
+    let found: Vec<&str> = reviewer_keys
+        .iter()
+        .filter(|(var, _)| std::env::var(var).ok().is_some_and(|v| !v.is_empty()))
+        .map(|(_, label)| *label)
+        .collect();
+    if found.is_empty() {
+        println!(
+            "NOT FOUND (set one of: OPENAI_API_KEY / GEMINI_API_KEY / GLM_API_KEY / MINIMAX_API_KEY / KIMI_API_KEY / ARIS_REVIEWER_AUTH_TOKEN / ANTHROPIC_AUTH_TOKEN)"
+        );
     } else {
-        println!("NOT FOUND (set GEMINI_API_KEY or OPENAI_API_KEY for LlmReview)");
+        println!("OK ({})", found.join(", "));
     }
 
     // Check 3: Codex CLI

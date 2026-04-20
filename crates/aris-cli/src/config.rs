@@ -299,6 +299,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     println!("  6. Kimi        (kimi-k2.5)");
 
     let default_executor = match config.executor_provider.as_deref() {
+        Some("anthropic") | Some("anthropic-compat") => "1",
         Some("openai") => match config.executor_base_url.as_deref() {
             Some(u) if u.contains("googleapis") => "3",
             Some(u) if u.contains("bigmodel") => "4",
@@ -308,10 +309,15 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         },
         _ => "1",
     };
-    let exec_choice = prompt_with_default("  Choose [1-6]", default_executor)?;
+    let exec_choice_raw = prompt_with_default("  Choose [1-6]", default_executor)?;
+    let exec_choice = exec_choice_raw.trim();
+    // Detect real menu change, not just provider-string change. OpenAI / Gemini /
+    // GLM / MiniMax / Kimi all serialize to provider="openai" so we must compare
+    // the menu choice to catch switches like "OpenAI → Kimi" properly.
+    let switched_executor = exec_choice != default_executor;
 
     // (provider, key_env, key_label, base_url, default_model)
-    let exec_info: (&str, &str, &str, Option<&str>, &str) = match exec_choice.trim() {
+    let exec_info: (&str, &str, &str, Option<&str>, &str) = match exec_choice {
         "2" => ("openai", "EXECUTOR_API_KEY", "OpenAI API key", Some("https://api.openai.com/v1"), "gpt-5.4"),
         "3" => ("openai", "EXECUTOR_API_KEY", "Gemini API key", Some("https://generativelanguage.googleapis.com/v1beta/openai"), "gemini-2.5-pro"),
         "4" => ("openai", "EXECUTOR_API_KEY", "GLM API key", Some("https://open.bigmodel.cn/api/paas/v4"), "GLM-5"),
@@ -320,11 +326,34 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         _ => ("anthropic", "ANTHROPIC_API_KEY", "Anthropic API key", None, "claude-opus-4-6"),
     };
 
-    config.executor_provider = Some(exec_info.0.into());
-    if let Some(url) = exec_info.3 {
-        config.executor_base_url = Some(url.into());
+    // Preserve an explicit `anthropic-compat` choice across re-runs of `/setup`.
+    // Menu option 1 covers both `anthropic` (x-api-key) and `anthropic-compat`
+    // (Bearer) — if the user had Bearer mode set previously (e.g. for a proxy
+    // that requires it) and stays on option 1, we must NOT silently downgrade
+    // them to `anthropic`. Switching menu options obviously resets this.
+    let prev_provider = config.executor_provider.as_deref();
+    let target_provider = if !switched_executor
+        && exec_info.0 == "anthropic"
+        && prev_provider == Some("anthropic-compat")
+    {
+        "anthropic-compat"
     } else {
-        config.executor_base_url = None;
+        exec_info.0
+    };
+    config.executor_provider = Some(target_provider.into());
+
+    // Only overwrite base_url + clear stale key when user actually switched
+    // to a different menu option. If they stayed on the same option, preserve
+    // any custom base_url they typed previously (e.g. OpenRouter, newcli.com
+    // proxy). Previously we always overwrote the URL to the provider's built-in
+    // default, which silently wiped custom URLs between setup runs.
+    if switched_executor {
+        if let Some(url) = exec_info.3 {
+            config.executor_base_url = Some(url.into());
+        } else {
+            config.executor_base_url = None;
+        }
+        config.executor_api_key = None;
     }
 
     // Ask for API key
@@ -342,19 +371,27 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         config.executor_api_key = Some(new_key);
     }
 
-    // Ask for proxy/custom base URL (all providers)
-    let current_url_hint = config.executor_base_url.as_deref().unwrap_or("default");
+    // Show known-working proxy URLs before the prompt (provider-aware).
+    print_executor_url_hints(exec_choice);
+
+    // Ask for proxy/custom base URL (all providers). The prompt text says
+    // "Enter to keep" — pressing Enter preserves the current value, it does
+    // NOT reset to the provider's official default. To switch back to the
+    // official endpoint, type the URL explicitly.
+    let current_url_hint = config.executor_base_url.as_deref().unwrap_or("(none — uses official default)");
     let custom_url = prompt_with_default(
-        &format!("  Proxy base URL [{current_url_hint}] (Enter for default)"),
+        &format!("  Proxy base URL [{current_url_hint}] (Enter to keep)"),
         "",
     )?;
     if !custom_url.is_empty() {
         config.executor_base_url = Some(custom_url.clone());
-        // Anthropic + custom URL → switch to anthropic-compat (Bearer token mode)
-        if exec_info.0 == "anthropic" {
-            config.executor_provider = Some("anthropic-compat".into());
-        }
     }
+    // NOTE (v0.4.4): Removed the auto-switch from "anthropic" to
+    // "anthropic-compat" when a custom URL was entered. Anthropic-format
+    // proxies like code.newcli.com/claude and api-inference.modelscope.cn
+    // accept `x-api-key` (which the `anthropic` provider path sends), not
+    // `Authorization: Bearer` (which `anthropic-compat` forces) — the old
+    // auto-switch made issues #158 and #162 unreachable via the UI.
 
     // Auto-set best model for the chosen provider
     config.executor_model = Some(exec_info.4.to_string());
@@ -369,22 +406,22 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     println!("  5. Kimi            (kimi-k2.5)");
     println!("  6. Anthropic Proxy (claude via proxy)");
     println!("  7. Skip (no reviewer)");
-    let reviewer_choice = prompt_with_default(
-        "  Choose [1-7]",
-        match config.reviewer_provider.as_deref() {
-            Some("openai") => "1",
-            Some("gemini") => "2",
-            Some("glm") => "3",
-            Some("minimax") => "4",
-            Some("kimi") => "5",
-            Some("anthropic-compat") => "6",
-            None => "1",
-            _ => "7",
-        },
-    )?;
+    let default_reviewer = match config.reviewer_provider.as_deref() {
+        Some("openai") => "1",
+        Some("gemini") => "2",
+        Some("glm") => "3",
+        Some("minimax") => "4",
+        Some("kimi") => "5",
+        Some("anthropic-compat") => "6",
+        None => "1",
+        _ => "7",
+    };
+    let reviewer_choice_raw = prompt_with_default("  Choose [1-7]", default_reviewer)?;
+    let reviewer_choice = reviewer_choice_raw.trim();
+    let switched_reviewer = reviewer_choice != default_reviewer;
 
     // (provider_name, key_env_var, key_label, default_model)
-    let reviewer_info: Option<(&str, &str, &str, &str)> = match reviewer_choice.trim() {
+    let reviewer_info: Option<(&str, &str, &str, &str)> = match reviewer_choice {
         "1" => Some(("openai", "OPENAI_API_KEY", "OpenAI API key", "gpt-5.4")),
         "2" => Some(("gemini", "GEMINI_API_KEY", "Gemini API key", "gemini-2.5-pro")),
         "3" => Some(("glm", "GLM_API_KEY", "GLM API key", "GLM-5")),
@@ -396,6 +433,15 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
 
     if let Some((provider, key_env, key_label, default_model)) = reviewer_info {
         config.reviewer_provider = Some(provider.into());
+        // Clear stale reviewer state when switching menu option. Without this,
+        // e.g. Kimi → OpenAI leaves the moonshot URL saved as reviewer_base_url
+        // and the old Kimi key as reviewer_api_key — both get shown as
+        // "current" values for the new OpenAI provider, producing confused
+        // configs (seen in issue #158 testing).
+        if switched_reviewer {
+            config.reviewer_api_key = None;
+            config.reviewer_base_url = None;
+        }
 
         // Ask for API key
         let current_masked = std::env::var(key_env)
@@ -415,16 +461,17 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             std::env::set_var(key_env, existing);
         }
 
+        // Show known-working proxy URLs before the prompt (provider-aware).
+        print_reviewer_url_hints(reviewer_choice);
+
         // Ask for proxy/custom base URL for reviewer
-        let current_reviewer_url = config.reviewer_base_url.as_deref().unwrap_or("default");
+        let current_reviewer_url = config.reviewer_base_url.as_deref().unwrap_or("(none — uses official default)");
         let custom_reviewer_url = prompt_with_default(
-            &format!("  Proxy base URL [{current_reviewer_url}] (Enter for default)"),
+            &format!("  Proxy base URL [{current_reviewer_url}] (Enter to keep)"),
             "",
         )?;
         if !custom_reviewer_url.is_empty() {
             config.reviewer_base_url = Some(custom_reviewer_url);
-        } else if config.reviewer_base_url.is_none() {
-            config.reviewer_base_url = None;
         }
 
         // Auto-set best model for the chosen reviewer provider
@@ -459,6 +506,53 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     println!("\n\x1b[1;32m✓ Setup complete!\x1b[0m Run `aris` to start.\n");
 
     Ok(config)
+}
+
+/// Print a provider-specific list of known-working third-party proxy URLs
+/// before the executor URL prompt. Keeps the input-URL flow unchanged —
+/// this is pure UX (helps users know what to type for OpenRouter, ModelScope,
+/// etc.) and costs nothing if the user doesn't care.
+///
+/// Examples are restricted to URLs we've actually validated or seen reported
+/// working in issues (#158, #162, etc.). Avoid listing proxies that need
+/// transport-specific headers we don't implement yet (e.g. DashScope Coding
+/// Plan under Anthropic — issue #159 — requires a specific header).
+fn print_executor_url_hints(exec_choice: &str) {
+    match exec_choice {
+        "1" => {
+            // Anthropic: official api.anthropic.com or an Anthropic-format proxy.
+            println!("  \x1b[2mProxy examples (leave blank for official api.anthropic.com):\x1b[0m");
+            println!("    \x1b[2m• https://code.newcli.com/claude        (Claude-Code-compatible proxy)\x1b[0m");
+            println!("    \x1b[2m• https://api-inference.modelscope.cn   (ModelScope Anthropic endpoint)\x1b[0m");
+        }
+        "2" => {
+            // OpenAI (vanilla) or OpenAI-format proxy.
+            println!("  \x1b[2mProxy examples (leave blank for official api.openai.com):\x1b[0m");
+            println!("    \x1b[2m• https://openrouter.ai/api/v1                        (OpenRouter)\x1b[0m");
+            println!("    \x1b[2m• https://api.deepseek.com/v1                         (DeepSeek)\x1b[0m");
+            println!("    \x1b[2m• https://dashscope.aliyuncs.com/compatible-mode/v1   (阿里云百练 OpenAI-compat)\x1b[0m");
+        }
+        _ => {
+            // Options 3-6 are provider-specific (Gemini/GLM/MiniMax/Kimi) with
+            // their own defaults already populated. No hints needed.
+        }
+    }
+}
+
+/// Print provider-specific proxy URL hints for the reviewer menu. v0.4.4
+/// only covers OpenAI-format reviewer proxies; anthropic-compat reviewer
+/// still sends Bearer-only (separate fix planned), so `code.newcli.com`-
+/// style proxies that require x-api-key aren't listed under option 6.
+fn print_reviewer_url_hints(reviewer_choice: &str) {
+    match reviewer_choice {
+        "1" => {
+            println!("  \x1b[2mProxy examples (leave blank for official api.openai.com):\x1b[0m");
+            println!("    \x1b[2m• https://openrouter.ai/api/v1                        (OpenRouter)\x1b[0m");
+            println!("    \x1b[2m• https://api.deepseek.com/v1                         (DeepSeek)\x1b[0m");
+            println!("    \x1b[2m• https://dashscope.aliyuncs.com/compatible-mode/v1   (阿里云百练 OpenAI-compat)\x1b[0m");
+        }
+        _ => {}
+    }
 }
 
 fn prompt_with_default(prompt: &str, default: &str) -> io::Result<String> {

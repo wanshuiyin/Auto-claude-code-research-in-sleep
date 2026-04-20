@@ -230,7 +230,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "LlmReview",
-            description: "Send content to an external LLM reviewer (OpenAI/Gemini/GLM/MiniMax) for independent critical review. Routes by model name automatically.",
+            description: "Send content to an external LLM reviewer for independent critical review. Supports OpenAI, Gemini, GLM, MiniMax, Kimi, and Anthropic-compatible endpoints. Routes by model name. Prefer omitting `model` and letting ARIS use the user's configured reviewer.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -240,7 +240,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
                     },
                     "model": {
                         "type": "string",
-                        "description": "Optional model override (e.g. gemini-2.5-pro, gpt-4o). Defaults to configured reviewer model."
+                        "description": "Optional model override. Prefer omitting this — ARIS will use the user's configured reviewer (ARIS_REVIEWER_MODEL). Only specify a model if you have a specific reason and know the corresponding API key is set. Examples: gpt-5.4, gemini-2.5-pro, GLM-5, MiniMax-M2.7, kimi-k2.5, claude-sonnet-4-6. If the specified model's API key is missing, ARIS falls back to the configured reviewer."
                     }
                 },
                 "required": ["prompt"],
@@ -3167,44 +3167,104 @@ struct LlmReviewInput {
     model: Option<String>,
 }
 
+/// Route a model name to its OpenAI-compatible reviewer endpoint and API key
+/// env var. Returns (key_env, default_base_url, provider_tag).
+/// The provider_tag lets us compare against `ARIS_REVIEWER_PROVIDER` to detect
+/// mismatches (e.g. executor requested `gpt-5.4` but user configured `kimi`).
+fn route_openai_compat_model(model: &str) -> (&'static str, &'static str, &'static str) {
+    if model.contains("gemini") {
+        ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", "gemini")
+    } else if model.contains("glm") || model.contains("GLM") {
+        ("GLM_API_KEY", "https://open.bigmodel.cn/api/paas/v4/chat/completions", "glm")
+    } else if model.starts_with("MiniMax") || model.starts_with("minimax") {
+        ("MINIMAX_API_KEY", "https://api.minimax.chat/v1/chat/completions", "minimax")
+    } else if model.contains("kimi") || model.contains("moonshot") {
+        ("KIMI_API_KEY", "https://api.moonshot.cn/v1/chat/completions", "kimi")
+    } else {
+        // Default: OpenAI (also covers gpt, o3, o4, deepseek via OPENAI_API_KEY)
+        ("OPENAI_API_KEY", "https://api.openai.com/v1/chat/completions", "openai")
+    }
+}
+
+/// True iff the given env var is set to a non-empty value.
+fn env_non_empty(name: &str) -> bool {
+    std::env::var(name).ok().filter(|k| !k.is_empty()).is_some()
+}
+
+/// Decide which model LlmReview should use for an OpenAI-compatible call.
+///
+/// The executor tool-call may specify a `model` override. Earlier versions of
+/// ARIS always honored that override, which caused two failure modes when the
+/// executor guessed wrong:
+///
+/// 1. The override routed to an API key env var that wasn't set (e.g. executor
+///    specified `model="gpt-4o"` but the user configured Kimi as reviewer and
+///    only `KIMI_API_KEY` is present).
+/// 2. The override routed to a different provider than the user configured,
+///    and — if that provider's key happened to be set for an unrelated reason —
+///    the request silently hit the wrong reviewer.
+///
+/// v0.4.4 falls back to `configured_model` whenever the override is unusable
+/// (key missing) or routes to a different provider than `configured_model`.
+/// Provider consistency is derived from `configured_model` itself — we do NOT
+/// read `ARIS_REVIEWER_PROVIDER` because `/reviewer <model>` updates the model
+/// env var but leaves the provider env var stale, which would block legitimate
+/// overrides (e.g. `/reviewer gpt-5.4` after `/setup Gemini`).
+fn resolve_reviewer_model<'a>(
+    input_model: Option<&'a str>,
+    configured_model: &'a str,
+) -> &'a str {
+    let Some(requested) = input_model.filter(|s| !s.is_empty()) else {
+        return configured_model;
+    };
+
+    if requested == configured_model {
+        return requested;
+    }
+
+    let (requested_key_env, _, requested_provider) = route_openai_compat_model(requested);
+    let (_, _, configured_provider) = route_openai_compat_model(configured_model);
+
+    // Both must match: key available AND provider consistent with configured.
+    if !env_non_empty(requested_key_env) || requested_provider != configured_provider {
+        return configured_model;
+    }
+
+    requested
+}
+
 fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
-    // Resolve which model to use
     let env_reviewer_model = std::env::var("ARIS_REVIEWER_MODEL").ok().filter(|s| !s.is_empty());
-    let model = input
-        .model
-        .as_deref()
-        .or(env_reviewer_model.as_deref())
-        .unwrap_or("gpt-5.4");
+    let configured_model = env_reviewer_model.as_deref().unwrap_or("gpt-5.4");
 
     // Check for user-configured reviewer provider and base URL
     let reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER").ok().filter(|s| !s.is_empty());
     let custom_base_url = std::env::var("ARIS_REVIEWER_BASE_URL").ok().filter(|s| !s.is_empty());
 
-    // Anthropic-compatible reviewer mode (e.g., Claude via proxy, Kimi coding endpoint)
+    // Anthropic-compatible reviewer mode (e.g., Claude via proxy, Kimi coding endpoint).
+    // This path uses ARIS_REVIEWER_AUTH_TOKEN (Bearer) and ignores the openai-compat
+    // key routing. We still honor an explicit input.model override here because
+    // the target endpoint decides which Anthropic-format model name it accepts.
     if reviewer_provider.as_deref() == Some("anthropic-compat") {
         let key = std::env::var("ARIS_REVIEWER_AUTH_TOKEN")
             .or_else(|_| std::env::var("ANTHROPIC_AUTH_TOKEN"))
             .ok()
             .filter(|k| !k.is_empty())
             .ok_or_else(|| "LlmReview: ARIS_REVIEWER_AUTH_TOKEN not set (needed for anthropic-compat reviewer)".to_string())?;
+        let model = input
+            .model
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(configured_model);
         let base = custom_base_url.unwrap_or_else(|| "https://api.anthropic.com".to_string());
         let endpoint = format!("{}/v1/messages", base.trim_end_matches('/'));
         return call_anthropic_compat_reviewer(&key, &endpoint, model, &input.prompt);
     }
 
-    // Route by model name to the correct API endpoint and key
-    let (key_env, default_base_url) = if model.contains("gemini") {
-        ("GEMINI_API_KEY", "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions")
-    } else if model.contains("glm") || model.contains("GLM") {
-        ("GLM_API_KEY", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
-    } else if model.starts_with("MiniMax") || model.starts_with("minimax") {
-        ("MINIMAX_API_KEY", "https://api.minimax.chat/v1/chat/completions")
-    } else if model.contains("kimi") || model.contains("moonshot") {
-        ("KIMI_API_KEY", "https://api.moonshot.cn/v1/chat/completions")
-    } else {
-        // Default: OpenAI (also covers gpt, o3, o4, deepseek via OPENAI_API_KEY)
-        ("OPENAI_API_KEY", "https://api.openai.com/v1/chat/completions")
-    };
+    // OpenAI-compat path: resolve model with fallback, then route to its endpoint.
+    let _ = reviewer_provider; // kept for future use; resolution derives provider from model
+    let model = resolve_reviewer_model(input.model.as_deref(), configured_model);
+    let (key_env, default_base_url, _) = route_openai_compat_model(model);
 
     // Use custom base URL if provided, appending /chat/completions if needed
     let base_url = if let Some(ref custom) = custom_base_url {
@@ -3416,7 +3476,8 @@ mod tests {
     use super::{
         agent_permission_policy, allowed_tools_for_subagent, execute_agent_with_spawn,
         execute_tool, final_assistant_text, mvp_tool_specs, persist_agent_terminal_state,
-        AgentInput, AgentJob, SubagentToolExecutor,
+        resolve_reviewer_model, route_openai_compat_model, AgentInput, AgentJob,
+        SubagentToolExecutor,
     };
     use runtime::{ApiRequest, AssistantEvent, ConversationRuntime, RuntimeError, Session};
     use serde_json::json;
@@ -4776,5 +4837,140 @@ printf 'pwsh:%s' "$1"
             )
             .into_bytes()
         }
+    }
+
+    // ─── LlmReview routing + fallback tests ──────────────────────────────
+    //
+    // These tests serialize around ENV_LOCK_REVIEWER because resolve_reviewer_model
+    // reads real env vars (to check whether the requested model's key is set).
+
+    fn env_lock_reviewer() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
+    const REVIEWER_KEY_ENVS: &[&str] = &[
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "GLM_API_KEY",
+        "MINIMAX_API_KEY",
+        "KIMI_API_KEY",
+    ];
+
+    struct ReviewerEnvSnapshot {
+        vars: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl ReviewerEnvSnapshot {
+        fn capture_and_clear() -> Self {
+            let vars = REVIEWER_KEY_ENVS
+                .iter()
+                .map(|n| (*n, std::env::var(n).ok()))
+                .collect();
+            for n in REVIEWER_KEY_ENVS {
+                std::env::remove_var(n);
+            }
+            Self { vars }
+        }
+    }
+
+    impl Drop for ReviewerEnvSnapshot {
+        fn drop(&mut self) {
+            for (name, prior) in &self.vars {
+                match prior {
+                    Some(v) => std::env::set_var(name, v),
+                    None => std::env::remove_var(name),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn route_openai_compat_model_picks_provider_from_name() {
+        assert_eq!(route_openai_compat_model("gpt-5.4").0, "OPENAI_API_KEY");
+        assert_eq!(route_openai_compat_model("gemini-2.5-pro").0, "GEMINI_API_KEY");
+        assert_eq!(route_openai_compat_model("GLM-5").0, "GLM_API_KEY");
+        assert_eq!(route_openai_compat_model("MiniMax-M2.7").0, "MINIMAX_API_KEY");
+        assert_eq!(route_openai_compat_model("kimi-k2.5").0, "KIMI_API_KEY");
+        assert_eq!(route_openai_compat_model("moonshot-v1").0, "KIMI_API_KEY");
+        // Unknown model → OpenAI fallback (matches OpenRouter / DeepSeek convention).
+        assert_eq!(route_openai_compat_model("deepseek-chat").0, "OPENAI_API_KEY");
+    }
+
+    #[test]
+    fn resolve_reviewer_model_returns_configured_when_input_absent() {
+        let _g = env_lock_reviewer().lock().unwrap();
+        let _snap = ReviewerEnvSnapshot::capture_and_clear();
+
+        let model = resolve_reviewer_model(None, "kimi-k2.5");
+        assert_eq!(model, "kimi-k2.5");
+    }
+
+    #[test]
+    fn resolve_reviewer_model_returns_configured_when_input_empty_string() {
+        let _g = env_lock_reviewer().lock().unwrap();
+        let _snap = ReviewerEnvSnapshot::capture_and_clear();
+
+        let model = resolve_reviewer_model(Some(""), "kimi-k2.5");
+        assert_eq!(model, "kimi-k2.5");
+    }
+
+    #[test]
+    fn resolve_reviewer_model_falls_back_when_requested_key_missing() {
+        let _g = env_lock_reviewer().lock().unwrap();
+        let _snap = ReviewerEnvSnapshot::capture_and_clear();
+        std::env::set_var("KIMI_API_KEY", "sk-kimi");
+        // Executor requested gpt-4o but only KIMI_API_KEY is set — fall back.
+        let model = resolve_reviewer_model(Some("gpt-4o"), "kimi-k2.5");
+        assert_eq!(model, "kimi-k2.5");
+    }
+
+    #[test]
+    fn resolve_reviewer_model_falls_back_on_provider_mismatch() {
+        let _g = env_lock_reviewer().lock().unwrap();
+        let _snap = ReviewerEnvSnapshot::capture_and_clear();
+        // Both keys set, but configured reviewer is MiniMax — executor asking
+        // for gpt-4o must NOT silently route to the stray OPENAI_API_KEY.
+        std::env::set_var("MINIMAX_API_KEY", "mx-token");
+        std::env::set_var("OPENAI_API_KEY", "sk-openai");
+        let model = resolve_reviewer_model(Some("gpt-4o"), "MiniMax-M2.7");
+        assert_eq!(
+            model, "MiniMax-M2.7",
+            "configured reviewer should win over coincidentally-present OpenAI key"
+        );
+    }
+
+    #[test]
+    fn resolve_reviewer_model_honors_matching_override() {
+        let _g = env_lock_reviewer().lock().unwrap();
+        let _snap = ReviewerEnvSnapshot::capture_and_clear();
+        // Configured reviewer is OpenAI (gpt-5.4); executor asks for gpt-5.4-mini.
+        std::env::set_var("OPENAI_API_KEY", "sk-openai");
+        let model = resolve_reviewer_model(Some("gpt-5.4-mini"), "gpt-5.4");
+        assert_eq!(
+            model, "gpt-5.4-mini",
+            "same-provider override should be honored when the key is set"
+        );
+    }
+
+    #[test]
+    fn resolve_reviewer_model_after_slash_reviewer_switch() {
+        // Regression test: `/setup` Gemini → `/reviewer gpt-5.4` updates
+        // ARIS_REVIEWER_MODEL but leaves ARIS_REVIEWER_PROVIDER stale as "gemini".
+        // Executor now asks for gpt-5.4-mini — this MUST be honored since the
+        // user's real intent (per ARIS_REVIEWER_MODEL) is OpenAI.
+        let _g = env_lock_reviewer().lock().unwrap();
+        let _snap = ReviewerEnvSnapshot::capture_and_clear();
+        std::env::set_var("OPENAI_API_KEY", "sk-openai");
+        // Stale provider env var from earlier /setup — deliberately wrong.
+        std::env::set_var("ARIS_REVIEWER_PROVIDER", "gemini");
+
+        let model = resolve_reviewer_model(Some("gpt-5.4-mini"), "gpt-5.4");
+        assert_eq!(
+            model, "gpt-5.4-mini",
+            "provider consistency must come from configured_model, not stale ARIS_REVIEWER_PROVIDER"
+        );
+
+        std::env::remove_var("ARIS_REVIEWER_PROVIDER");
     }
 }
