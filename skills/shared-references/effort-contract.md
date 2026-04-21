@@ -19,22 +19,53 @@ Default: `balanced` (current behavior, zero change for existing users).
 | Reviewer independence | **on** | Cross-model protocol is non-negotiable |
 | Experiment integrity | **on** | Fraud prevention is non-negotiable |
 | Sanity check | **on** | Safety is non-negotiable |
+| **Mandatory audit emission** | **always** | At `assurance: submission`, every mandatory audit emits a verdict (PASS/WARN/FAIL/NOT_APPLICABLE/BLOCKED/ERROR). Silent skip is forbidden. See `assurance-contract.md`. |
 | AUTO_PROCEED | **user decides** | Orthogonal to effort |
 | difficulty | **user decides** | Orthogonal to effort |
+| `assurance` | **derived from `effort`** (see Assurance Axis below) | Audit strictness is a separate axis from depth |
 
 ## Four Levels
 
 ### `lite` (~0.4x tokens)
 For budget-constrained users or quick explorations. Minimum viable depth.
+Implies `assurance: draft` (see below).
 
 ### `balanced` (1x tokens) — DEFAULT
-Current ARIS behavior. What existing users get today. No change.
+Current ARIS behavior. What existing users get today. No breakage.
+Implies `assurance: draft`.
 
 ### `max` (~2.5x tokens)
 Go deeper than defaults. More papers, more ideas, more rounds, more detail.
+Implies `assurance: submission` — mandatory audits are load-bearing.
 
 ### `beast` (~5-8x tokens)
 No budget limit. Every knob to maximum. For top-venue submission sprints.
+Implies `assurance: submission` — mandatory audits are load-bearing and the
+final report is tagged `submission-ready` only when the verifier agrees.
+
+## Assurance Axis (separate concern from `effort`)
+
+Audit strictness lives on a second axis, `assurance`. Full contract:
+**`shared-references/assurance-contract.md`**.
+
+```
+— assurance: draft | submission
+```
+
+Default mapping (if `assurance` not given explicitly):
+
+| `effort` | implied `assurance` | Behavior |
+|----------|---------------------|----------|
+| `lite` | `draft` | Audits run only if content detector matches; silent skip allowed |
+| `balanced` | `draft` | Same as lite — current behavior, zero breakage |
+| `max` | `submission` | Every mandatory audit emits a verdict; verifier blocks Final Report on FAIL/BLOCKED/ERROR/STALE |
+| `beast` | `submission` | Same as max + final report tagged `submission-ready` |
+
+User can override independently:
+- `— effort: balanced, assurance: submission` → normal depth, strict audits
+- `— effort: beast, assurance: draft` → maximum depth, no audit gate (legal but discouraged for real submissions)
+
+**Why split the axes?** Historically `effort: beast` did not enforce audits — phases like `/proof-checker`, `/paper-claim-audit`, `/citation-audit` were gated by content detectors that allowed silent skip. A user reported `effort: beast` produced a "draft-quality" paper with all three submission gates skipped. The split makes audit strictness independently verifiable and stops conflating "do more work" with "be more rigorous."
 
 ## Per-Skill Profiles
 
@@ -130,6 +161,15 @@ explicit concrete knob (e.g., review_rounds: 2)
 ```
 
 Example: `— effort: beast, review_rounds: 3` → everything beast except review capped at 3.
+
+For the `assurance` axis, precedence is independent:
+```
+explicit `assurance: ...` directive
+  > effort-implied default (lite/balanced → draft, max/beast → submission)
+    > skill default (draft)
+```
+
+Example: `— effort: balanced, assurance: submission` → normal depth knobs but submission-gate audit enforcement.
 
 ## Token Cost Estimation
 
