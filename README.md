@@ -1162,6 +1162,7 @@ export OPENAI_API_KEY="your-key"
 |-------|-------------|:---:|
 | 📄 [`arxiv`](skills/arxiv/SKILL.md) | Search, download, and summarize arXiv papers. Standalone or `/research-lit` supplement | No |
 | 🔎 [`semantic-scholar`](skills/semantic-scholar/SKILL.md) | Search published venue papers (IEEE, ACM, Springer) via Semantic Scholar API. Citation counts, venue metadata, TLDR | No |
+| 🗂️ [`arxivsub-skill`](skills/arxivsub-skill/SKILL.md) | Search arXiv and major AI/CV conferences (CVPR, ICCV, ICLR, ICML, NeurIPS, AAAI, MICCAI) via arXivSub API. Bundled Python scripts (`search.py`, `fetch.py`). Requires `ARXIVSUB_SKILL_KEY` | Yes (`ARXIVSUB_SKILL_KEY`) |
 | 📚 [`deepxiv`](skills/deepxiv/SKILL.md) | Progressive paper retrieval via DeepXiv CLI: search, brief, section map, section reads, trending, web search | Yes (`pip install deepxiv-sdk`) |
 | 🔎 [`exa-search`](skills/exa-search/SKILL.md) | AI-powered broad web search via Exa: blogs, docs, news, companies, research papers with content extraction (highlights, text, summaries) | Yes (`pip install exa-py`) |
 | 📝 [`alphaxiv`](skills/alphaxiv/SKILL.md) | Quick single-paper lookup via [AlphaXiv](https://alphaxiv.org) LLM-optimized summaries. Three-tier fallback: overview → full markdown → LaTeX source | No |
