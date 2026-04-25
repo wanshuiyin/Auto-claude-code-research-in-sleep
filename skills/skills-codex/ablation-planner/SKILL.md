@@ -1,6 +1,6 @@
 ---
 name: ablation-planner
-description: "Use when main results pass result-to-claim (`claim_supported = yes` or `partial`) and ablation studies are needed for paper submission. A secondary Codex agent designs ablations from a reviewer's perspective; the local executor reviews feasibility and implements."
+description: "Design reviewer-facing ablation studies after the main claims are already supported. Use only once main results are in place and ablations are the next gap. Do not use for first-pass experiment planning or claims assessment; use `experiment-plan` or `result-to-claim` then."
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent
 ---
 
@@ -9,6 +9,12 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent
 Systematically design ablation studies that answer the questions reviewers will ask. The reviewer agent leads the design; the local executor reviews feasibility and implements.
 
 ## Context: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill after the main method has results and the next task is to design ablations for submission quality.
+- Use `experiment-plan` for first-pass evaluation planning before experiments are run.
+- Use `result-to-claim` first when it is still unclear whether the main claims are supported at all.
 
 ## Constants
 

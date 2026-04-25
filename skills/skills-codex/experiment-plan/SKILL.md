@@ -1,11 +1,18 @@
 ---
 name: "experiment-plan"
-description: "Turn a refined research proposal or method idea into a detailed, claim-driven experiment roadmap. Use after `research-refine`, or when the user asks for a detailed experiment plan, ablation matrix, evaluation protocol, run order, compute budget, or paper-ready validation that supports the core problem, novelty, simplicity, and any LLM / VLM / Diffusion / RL-based contribution."
+description: "Turn a stable method or proposal into a claim-driven experiment roadmap. Use when the user wants evaluation design, ablation matrices, run order, or validation planning. Do not use for method refinement itself or for full refine-plus-plan pipelines; use `research-refine` or `research-refine-pipeline` then."
 ---
 
 # Experiment Plan: Claim-Driven, Paper-Oriented Validation
 
 Refine and concretize: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill when the method is already stable enough and the missing piece is the evaluation plan.
+- Use `research-refine` when the method itself is still fuzzy.
+- Use `research-refine-pipeline` only when the user explicitly wants both refinement and experiment planning in one run.
+- Use `ablation-planner` later for reviewer-oriented ablation design after main claims are already supported.
 
 ## Overview
 
@@ -246,4 +253,3 @@ Tracker file: refine-logs/EXPERIMENT_TRACKER.md
 /run-experiment    -> execute the runs
 /auto-review-loop  -> react to results and iterate on the paper
 ```
-

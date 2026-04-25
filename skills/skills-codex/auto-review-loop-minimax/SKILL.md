@@ -1,6 +1,6 @@
 ---
 name: "auto-review-loop-minimax"
-description: "Autonomous multi-round research review loop using MiniMax API. Use when you want to use MiniMax instead of Codex MCP for external review. Trigger with \"auto review loop minimax\" or \"minimax review\"."
+description: "Provider-specific research review loop for MiniMax. Use only when the user explicitly requests MiniMax-backed review. Do not use as the default auto-review skill; use `auto-review-loop` otherwise."
 ---
 
 # Auto Review Loop (MiniMax Version): Autonomous Research Improvement
@@ -8,6 +8,12 @@ description: "Autonomous multi-round research review loop using MiniMax API. Use
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
 ## Context: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill only when the user explicitly asks for MiniMax as the review backend.
+- Default auto-review requests should route to `auto-review-loop`.
+- Do not route generic review-loop requests here just because MiniMax is configured.
 
 ## Constants
 

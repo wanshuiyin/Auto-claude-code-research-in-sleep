@@ -1,11 +1,17 @@
 ---
 name: "run-experiment"
-description: "Deploy and run ML experiments on local or remote GPU servers. Use when user says \"run experiment\", \"deploy to server\", \"\u8dd1\u5b9e\u9a8c\", or needs to launch training jobs."
+description: "Launch or deploy experiments on local or remote compute. Use when the task is to start jobs, submit runs, or push an experiment plan onto hardware. Do not use for checking progress or diagnosing live training quality; use `monitor-experiment` or `training-check` then."
 ---
 
 # Run Experiment
 
 Deploy and run ML experiment: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill for execution: launch jobs, deploy code, and start experiments.
+- Use `monitor-experiment` after launch for progress, status, and output collection.
+- Use `training-check` for live quality diagnosis once training is running.
 
 ## Workflow
 

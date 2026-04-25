@@ -1,22 +1,96 @@
 # `skills-codex`
 
-Codex-native mirror of the base ARIS skill set.
+Codex-native mirror of the ARIS research skill pack.
+
+## Overview
+
+This package currently contains `39` skills adapted for OpenAI Codex-style agents, plus a small set of shared reference files used by writing workflows.
+
+It is meant to be copied into `~/.codex/skills/` so the mirrored skills are available locally without depending on the original `skills/` tree.
+
+## Included Skills
+
+The current skill set is:
+
+- `ablation-planner`
+- `analyze-results`
+- `arxiv`
+- `auto-paper-improvement-loop`
+- `auto-review-loop`
+- `auto-review-loop-llm`
+- `auto-review-loop-minimax`
+- `comm-lit-review`
+- `dse-loop`
+- `experiment-bridge`
+- `experiment-plan`
+- `feishu-notify`
+- `formula-derivation`
+- `grant-proposal`
+- `idea-creator`
+- `idea-discovery`
+- `idea-discovery-robot`
+- `mermaid-diagram`
+- `monitor-experiment`
+- `novelty-check`
+- `paper-compile`
+- `paper-figure`
+- `paper-illustration`
+- `paper-plan`
+- `paper-poster`
+- `paper-slides`
+- `paper-write`
+- `paper-writing`
+- `pixel-art`
+- `proof-writer`
+- `rebuttal`
+- `research-lit`
+- `research-pipeline`
+- `research-refine`
+- `research-refine-pipeline`
+- `research-review`
+- `result-to-claim`
+- `run-experiment`
+- `training-check`
+
+## Layout
+
+```text
+skills-codex/
+  <skill-name>/
+    SKILL.md
+    ...
+  comm-lit-review/
+    references/
+  paper-write/
+    templates/
+  shared-references/
+    ...
+```
+
+Notes:
+
+- `shared-references/` is not a skill by itself; it supports `paper-plan` and `paper-write`.
+- `comm-lit-review` includes extra reference files.
+- `paper-write` includes venue templates used during drafting.
 
 ## Scope
 
-This package keeps the main `skills/` workflows available for OpenAI Codex CLI.
+This package mirrors portable skill content for Codex. It intentionally focuses on:
 
-Recent core workflow follow-up skills mirrored here include:
+- task boundaries and workflows
+- Codex-compatible instructions
+- lightweight bundled references or templates required by the skills
 
-- `training-check`
-- `result-to-claim`
-- `ablation-planner`
+It does not try to ship the full runtime environment. In particular, this package does not include:
 
-These skills cover the experiment follow-up chain:
+- Python dependency installation
+- LaTeX, Poppler, GPU, SSH, or conda setup
+- MCP server configuration
+- API keys or environment variables
 
-1. monitor training quality early
-2. judge what claims the results actually support
-3. design reviewer-facing ablations before paper writing
+The following upstream-only areas are also intentionally not mirrored here:
+
+- `.system/*`
 
 ## Install
 

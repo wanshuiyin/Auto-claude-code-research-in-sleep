@@ -1,6 +1,6 @@
 ---
 name: grant-proposal
-description: "Draft a structured grant proposal from research ideas and literature. Supports KAKENHI (Japan), NSF (US), NSFC (China, including 面上/青年/优青/杰青/海外优青/重点), ERC (EU), DFG (Germany), SNSF (Switzerland), ARC (Australia), NWO (Netherlands), and generic formats. Use when user says \"write grant\", \"grant proposal\", \"申請書\", \"write KAKENHI\", \"科研費\", \"基金申请\", \"写基金\", \"NSF proposal\", or wants to turn research ideas into a funding application."
+description: "Draft a structured grant proposal from research ideas and literature for agencies such as NSF, KAKENHI, NSFC, ERC, and related formats. Use when the user explicitly wants a funding application. Do not use for ordinary paper writing, method refinement, or generic idea generation."
 ---
 
 # Grant Proposal: From Research Ideas to Fundable Application
@@ -8,6 +8,13 @@ description: "Draft a structured grant proposal from research ideas and literatu
 Draft a grant proposal based on: **$ARGUMENTS**
 
 ## Overview
+
+## Routing Boundaries
+
+- Use this skill when the target deliverable is a grant or funding proposal.
+- Use `paper-write` or `paper-writing` for paper drafting instead of proposal writing.
+- Use `research-refine` when the main task is to sharpen the method rather than package it for funding.
+- Use `idea-discovery` or `idea-creator` when the user still needs to generate candidate ideas before proposal drafting.
 
 This skill turns validated research ideas into a structured, reviewer-ready grant proposal. It chains sub-skills into a grant-specific pipeline:
 

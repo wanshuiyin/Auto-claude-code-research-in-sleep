@@ -1,11 +1,17 @@
 ---
 name: "research-pipeline"
-description: "Full research pipeline: Workflow 1 (idea discovery) \u2192 implementation \u2192 Workflow 2 (auto review loop). Goes from a broad research direction all the way to a submission-ready paper. Use when user says \\\"\u5168\u6d41\u7a0b\\\", \\\"full pipeline\\\", \\\"\u4ece\u627eidea\u5230\u6295\u7a3f\\\", \\\"end-to-end research\\\", or wants the complete autonomous research lifecycle."
+description: "Full autonomous research pipeline from idea discovery through implementation, experiments, and iterative review. Use only for explicit end-to-end requests such as \"full pipeline\" or \"from idea to submission\". Do not use for narrower tasks like literature review, method refinement, or paper writing."
 ---
 
 # Full Research Pipeline: Idea → Experiments → Submission
 
 End-to-end autonomous research workflow for: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill only for explicit end-to-end research lifecycle requests.
+- Use `idea-discovery`, `research-refine`, `experiment-plan`, or `paper-writing` for narrower stages.
+- Do not route ordinary literature, planning, writing, or review requests here just because they are research-related.
 
 ## Constants
 
@@ -177,4 +183,3 @@ After the auto-review loop completes, write a final status report:
 | 4. Auto Review | 1-4 hours (depends on experiments) | Yes ✅ |
 
 **Sweet spot**: Run Stage 1-2 in the evening, launch Stage 3-4 before bed, wake up to a reviewed paper.
-

@@ -1,11 +1,17 @@
 ---
 name: experiment-bridge
-description: "Workflow 1.5: Bridge between idea discovery and auto review. Reads EXPERIMENT_PLAN.md, implements experiment code, deploys to GPU, collects initial results. Use when user says \"实现实验\", \"implement experiments\", \"bridge\", \"从计划到跑实验\", \"deploy the plan\", or has an experiment plan ready to execute."
+description: "Bridge from experiment plan to implemented code, launched runs, and initial results. Use when the user wants to go from a finished plan to actual implementation and deployment. Do not use for simply launching an already prepared experiment; use `run-experiment` then."
 ---
 
 # Workflow 1.5: Experiment Bridge
 
 Implement and deploy experiments from plan: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill when the work includes turning an experiment plan into code changes plus deployment and first results.
+- Use `run-experiment` when the experiment code already exists and the task is only to launch or deploy runs.
+- Use `experiment-plan` before this skill if the evaluation design is still not settled.
 
 ## Overview
 

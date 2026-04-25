@@ -1,11 +1,17 @@
 ---
 name: "analyze-results"
-description: "Analyze ML experiment results, compute statistics, generate comparison tables and insights. Use when user says \"analyze results\", \"compare\", or needs to interpret experimental data."
+description: "Analyze experiment outputs, compute statistics, and build comparison tables or insights. Use for descriptive result interpretation and comparisons. Do not use when the main task is to decide what claims are defensible; use `result-to-claim` then."
 ---
 
 # Analyze Experiment Results
 
 Analyze: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill for descriptive analysis, summary tables, metric comparisons, and statistical interpretation.
+- Use `result-to-claim` when the real question is what the completed results justify saying in a paper.
+- Use `paper-figure` when the output needed is publication-quality plots and tables rather than analysis alone.
 
 ## Workflow
 
@@ -42,4 +48,3 @@ Always include:
 1. Raw data table
 2. Key findings (numbered, concise)
 3. Suggested next experiments (if any)
-

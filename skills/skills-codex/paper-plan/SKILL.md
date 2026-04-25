@@ -1,11 +1,18 @@
 ---
 name: "paper-plan"
-description: "Generate a structured paper outline from review conclusions and experiment results. Use when user says \\\"\u5199\u5927\u7eb2\\\", \\\"paper outline\\\", \\\"plan the paper\\\", \\\"\u8bba\u6587\u89c4\u5212\\\", or wants to create a paper plan before writing."
+description: "Generate a structured paper outline from results, claims, and review conclusions. Use for outlining or planning a paper before drafting. Do not use for actual LaTeX writing or compilation; use `paper-write` or `paper-compile` then."
 ---
 
 # Paper Plan: From Review Conclusions to Paper Outline
 
 Generate a structured, section-by-section paper outline from: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill for outline creation, section planning, and claims-to-paper structuring.
+- Use `paper-write` when the user wants actual draft text or LaTeX sections.
+- Use `paper-writing` only when the user explicitly wants the full paper pipeline.
+- Use `result-to-claim` first when the main question is what the finished experiments support, not how to outline the paper.
 
 ## Constants
 

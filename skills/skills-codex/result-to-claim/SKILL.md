@@ -1,6 +1,6 @@
 ---
 name: result-to-claim
-description: "Use when experiments complete to judge what claims the results support, what they do not, and what evidence is still missing. A secondary Codex agent evaluates results against intended claims and routes to the next action (pivot, supplement, or confirm). Use after experiments finish - before writing the paper or running ablations."
+description: "Judge what completed experiment results actually support, what remains unsupported, and what evidence is missing. Use after main experiments finish and before locking paper claims. Do not use for generic result summarization or ablation design; use `analyze-results` or `ablation-planner` then."
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent
 ---
 
@@ -9,6 +9,13 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent
 Experiments produce numbers; this gate decides what those numbers *mean*. Collect results from available sources, get an objective judgment, then route based on the verdict.
 
 ## Context: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill after main experiments complete and the task is to decide what claims are defensible.
+- Use `analyze-results` for descriptive result analysis, tables, and comparisons without a claims gate.
+- Use `ablation-planner` after this gate when the main claims are supported and the next need is reviewer-facing ablation design.
+- Use `research-review` for broader critique that is not centered on claims support.
 
 ## Constants
 

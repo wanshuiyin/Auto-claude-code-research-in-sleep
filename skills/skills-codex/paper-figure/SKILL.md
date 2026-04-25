@@ -1,11 +1,17 @@
 ---
 name: "paper-figure"
-description: "Generate publication-quality figures and tables from experiment results. Use when user says \\\"\u753b\u56fe\\\", \\\"\u4f5c\u56fe\\\", \\\"generate figures\\\", \\\"paper figures\\\", or needs plots for a paper."
+description: "Generate publication-quality plots and result tables from experiment data. Use for curves, bars, scatters, heatmaps, and numeric result visualization. Do not use for conceptual system diagrams or architecture illustrations; use `paper-illustration` or `mermaid-diagram` then."
 ---
 
 # Paper Figure: Publication-Quality Plots from Experiment Data
 
 Generate all figures and tables for a paper based on: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill for data-driven visualizations and tables derived from experiment outputs.
+- Use `paper-illustration` for conceptual method diagrams, architecture figures, and non-data illustrations.
+- Use `mermaid-diagram` only when the deliverable must remain editable as Mermaid source.
 
 ## Scope: What This Skill Can and Cannot Do
 
@@ -276,4 +282,3 @@ figures/
 ## Acknowledgements
 
 Design pattern (type × style matrix) inspired by [baoyu-skills](https://github.com/jimliu/baoyu-skills). Publication style defaults and figure rules from [pedrohcgs/claude-code-my-workflow](https://github.com/pedrohcgs/claude-code-my-workflow). Visualization decision tree from [Imbad0202/academic-research-skills](https://github.com/Imbad0202/academic-research-skills).
-

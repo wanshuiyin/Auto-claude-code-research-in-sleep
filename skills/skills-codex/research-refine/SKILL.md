@@ -1,11 +1,17 @@
 ---
 name: "research-refine"
-description: "Turn a vague research direction into a problem-anchored, elegant, frontier-aware, implementation-oriented method plan via iterative GPT-5.4 review. Use when the user says \"refine my approach\", \"\u5e2e\u6211\u7ec6\u5316\u65b9\u6848\", \"decompose this problem\", \"\u6253\u78e8idea\", \"refine research plan\", \"\u7ec6\u5316\u7814\u7a76\u65b9\u6848\", or wants a concrete research method that stays simple, focused, and top-venue ready instead of a vague or overbuilt idea."
+description: "Refine a visible research problem into a focused, implementation-oriented method plan. Use when the problem is already known but the technical route needs sharpening. Do not use when the user explicitly wants both method refinement and experiment planning in one run; use `research-refine-pipeline` then."
 ---
 
 # Research Refine: Problem-Anchored, Elegant, Frontier-Aware Plan Refinement
 
 Refine and concretize: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill when the problem is visible and the main need is to sharpen the method.
+- Use `research-refine-pipeline` instead when the user clearly wants both the refined method and a detailed experiment plan.
+- Use `idea-discovery` or `idea-creator` instead when the user does not yet have a concrete problem and needs ideas first.
 
 ## Overview
 

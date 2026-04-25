@@ -1,11 +1,17 @@
 ---
 name: "research-lit"
-description: "Search and analyze research papers, find related work, summarize key ideas. Use when user says \"find papers\", \"related work\", \"literature review\", \"what does this paper say\", or needs to understand academic papers."
+description: "Generic literature review and paper-understanding skill for non-specialized or mixed domains. Use for finding papers, summarizing a paper, or collecting related work when no tighter domain skill applies. Do not use for communications, networking, wireless, or satellite/NTN topics; use `comm-lit-review` there."
 ---
 
 # Research Literature Review
 
 Research topic: $ARGUMENTS
+
+## Routing Boundaries
+
+- Default literature-review skill when the request is broad, mixed-domain, or not tied to a specialized field skill.
+- Use `comm-lit-review` instead for communications, networking, wireless, MAC/PHY, cellular, or satellite/NTN topics.
+- Use `novelty-check` instead when the main goal is to judge whether an idea is novel rather than to survey the literature broadly.
 
 ## Constants
 
@@ -236,4 +242,3 @@ If Zotero BibTeX was exported, include a `references.bib` snippet for direct use
 - Note if a paper directly competes with or supports our approach
 - **Never fail because a MCP server is not configured** — always fall back gracefully to the next data source
 - Zotero/Obsidian tools may have different names depending on how the user configured the MCP server (e.g., `mcp__zotero__search` or `mcp__zotero-mcp__search_items`). Try the most common patterns and adapt.
-

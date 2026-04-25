@@ -1,12 +1,18 @@
 ---
 name: training-check
-description: "Periodically check WandB metrics during training to catch problems early (NaN, loss divergence, idle GPUs). Avoids wasting GPU hours on broken runs. Use when training is running and you want automated health checks."
+description: "Check live training quality using WandB or similar metrics to catch NaNs, divergence, stalled learning, or idle GPUs. Use only when training is already running and quality monitoring is needed. Do not use for generic run-status checks or log collection; use `monitor-experiment` then."
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent
 ---
 
 # Training Check
 
 Periodically read WandB metrics during training to catch problems early. Do not wait until training finishes to discover it was a waste of GPU time.
+
+## Routing Boundaries
+
+- Use this skill only after a training job is already running and metric-based health checks are needed.
+- Use `monitor-experiment` for process health, session status, output collection, or \"is it done\" questions.
+- This skill checks training quality, not paper-level result interpretation.
 
 ## Context: $ARGUMENTS
 

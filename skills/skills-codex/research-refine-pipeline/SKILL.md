@@ -1,11 +1,17 @@
 ---
 name: "research-refine-pipeline"
-description: "Run an end-to-end workflow that chains `research-refine` and `experiment-plan`. Use when the user wants a one-shot pipeline from vague research direction to focused final proposal plus detailed experiment roadmap, or asks to \"\u4e32\u8d77\u6765\", build a pipeline, do it end-to-end, or generate both the method and experiment plan together."
+description: "End-to-end refinement plus experiment planning: run `research-refine` and `experiment-plan` together. Use only when the user explicitly wants both outputs in one shot. Do not use for method refinement alone; use `research-refine` then."
 ---
 
 # Research Refine Pipeline: End-to-End Method and Experiment Planning
 
 Refine and concretize: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill only when the user explicitly wants both a refined method and an experiment roadmap in one pass.
+- Use `research-refine` for method sharpening alone.
+- Use `experiment-plan` alone when the method is already stable and only the validation plan is missing.
 
 ## Overview
 
@@ -183,4 +189,3 @@ Best next step:
 /experiment-plan   -> experiment planning only
 /run-experiment    -> execution
 ```
-

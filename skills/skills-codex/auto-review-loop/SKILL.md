@@ -1,6 +1,6 @@
 ---
 name: "auto-review-loop"
-description: "Autonomous multi-round research review loop. Repeatedly reviews using a secondary Codex agent, implements fixes, and re-reviews until positive assessment or max rounds reached. Use when user says \"auto review loop\", \"review until it passes\", or wants autonomous iterative improvement."
+description: "Default autonomous research review loop using Codex/OpenAI review. Use for explicit requests to iteratively review and improve research until it passes. Do not use when the user explicitly asks for another review provider; use the provider-specific variant then."
 ---
 
 # Auto Review Loop: Autonomous Research Improvement
@@ -8,6 +8,12 @@ description: "Autonomous multi-round research review loop. Repeatedly reviews us
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
 ## Context: $ARGUMENTS
+
+## Routing Boundaries
+
+- Default auto-review skill when the user wants iterative research review without naming a provider.
+- Use `auto-review-loop-llm` only when the user explicitly asks for the generic OpenAI-compatible `llm-chat` backend.
+- Use `auto-review-loop-minimax` only when the user explicitly asks for MiniMax.
 
 ## Constants
 

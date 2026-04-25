@@ -1,6 +1,6 @@
 ---
 name: "auto-paper-improvement-loop"
-description: "Autonomously improve a generated paper via GPT-5.4 xhigh review \u2192 implement fixes \u2192 recompile, for 2 rounds. Use when user says \\\"\u6539\u8bba\u6587\\\", \\\"improve paper\\\", \\\"\u8bba\u6587\u6da6\u8272\u5faa\u73af\\\", \\\"auto improve\\\", or wants to iteratively polish a generated paper."
+description: "Autonomously review, revise, and recompile an already drafted paper for writing-quality improvement. Use only after a paper draft exists and the user wants iterative polish. Do not use for research review or initial paper drafting; use `research-review`, `paper-write`, or `paper-writing` then."
 ---
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
@@ -8,6 +8,13 @@ description: "Autonomously improve a generated paper via GPT-5.4 xhigh review \u
 Autonomously improve the paper at: **$ARGUMENTS**
 
 ## Context
+
+## Routing Boundaries
+
+- Use this skill only after a paper draft already exists and the goal is iterative writing-quality improvement.
+- Use `paper-write` for initial drafting and section writing.
+- Use `paper-writing` for the full end-to-end paper workflow.
+- Use `auto-review-loop` or `research-review` for research-quality critique rather than paper-polish loops.
 
 This skill is designed to run **after** Workflow 3 (`/paper-plan` → `/paper-figure` → `/paper-write` → `/paper-compile`). It takes a compiled paper and iteratively improves it through external LLM review.
 
@@ -318,4 +325,3 @@ Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
 | Round 3 | 5→8.5/10 (format) | Removed hero fig, appendix, compressed conclusion, fixed overfull hbox |
 
 **+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final: 8 pages main body, 0 overfull hbox, ICLR-compliant.
-

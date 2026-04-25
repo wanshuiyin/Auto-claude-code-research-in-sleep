@@ -1,6 +1,6 @@
 ---
 name: comm-lit-review
-description: Communications-domain literature review and related-work search with database-aware source control. Use when the task is about communications, wireless, networking, satellite/NTN, Wi-Fi, cellular, transport protocols, congestion control, routing, scheduling, MAC/PHY, rate adaptation, channel estimation, beamforming, or communication-system research and the user wants papers, prior art, a survey, related work, or a landscape summary. Prioritize IEEE Xplore and ScienceDirect, prefer formal publications over preprints, and separate foundational work from recent progress.
+description: "Communications-domain literature review for networking, wireless, cellular, and satellite/NTN research. Use when the topic is in communications systems and the user wants papers, prior art, surveys, or related work. Do not use for generic ML or non-communications literature search; use `research-lit` there."
 ---
 
 # Comm Lit Review
@@ -8,6 +8,12 @@ description: Communications-domain literature review and related-work search wit
 ## Overview
 
 Run communications-focused paper search with tighter source policy than a generic literature review. Default to formal publications, prioritize `IEEE Xplore` and `ScienceDirect`, then `ACM Digital Library`, and output a review that is structured for research use rather than casual browsing.
+
+## Routing Boundaries
+
+- Use this skill when the topic is clearly within communications, networking, wireless, cellular, or satellite/NTN systems.
+- Use `research-lit` instead for generic paper search, mixed-domain topics, or non-communications literature review.
+- Use `novelty-check` instead when the user already has a concrete idea and mainly wants a novelty verdict.
 
 Read [references/source-policy.md](references/source-policy.md) before searching. Use [references/domain-taxonomy.md](references/domain-taxonomy.md) to classify the topic, [references/venue-tiering.md](references/venue-tiering.md) to rank venues, and [references/output-template.md](references/output-template.md) to format the final answer.
 

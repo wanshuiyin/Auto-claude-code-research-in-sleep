@@ -1,11 +1,17 @@
 ---
 name: "rebuttal"
-description: "Workflow 4: Submission rebuttal pipeline. Parses external reviews, enforces coverage and grounding, drafts a safe text-only rebuttal under venue limits, and manages follow-up rounds."
+description: "Submission rebuttal pipeline for reviewer responses under venue constraints. Use when the user needs to draft or manage a rebuttal to external reviews. Do not use for generic research critique or ordinary paper revision; use `research-review` or `paper-write` then."
 ---
 
 # Workflow 4: Rebuttal
 
 Prepare and maintain a grounded, venue-compliant rebuttal for: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill when the user is responding to external reviews and needs a venue-constrained rebuttal.
+- Use `research-review` when the task is to critique the work itself rather than write the response to reviewers.
+- Use `paper-write` when the task is ordinary revision of paper content rather than rebuttal drafting.
 
 ## Scope
 

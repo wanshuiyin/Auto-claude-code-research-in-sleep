@@ -1,11 +1,17 @@
 ---
 name: "paper-write"
-description: "Draft LaTeX paper section by section from an outline. Use when user says \\\"\u5199\u8bba\u6587\\\", \\\"write paper\\\", \\\"draft LaTeX\\\", \\\"\u5f00\u59cb\u5199\\\", or wants to generate LaTeX content from a paper plan."
+description: "Draft or revise LaTeX paper content section by section from an outline, plan, or existing draft. This is the default skill for requests like \"write paper\" or \"写论文\". Do not use when the user explicitly wants the full paper pipeline from planning through compile/polish; use `paper-writing` then."
 ---
 
 # Paper Write: Section-by-Section LaTeX Generation
 
 Draft a LaTeX paper based on: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Default paper-writing skill for drafting sections, revising prose, or turning an outline into LaTeX.
+- Use `paper-writing` instead only when the user explicitly asks for the full end-to-end paper pipeline.
+- Use `paper-compile` instead when the task is to build or debug the PDF rather than to write content.
 
 ## Constants
 

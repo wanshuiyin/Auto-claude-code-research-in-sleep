@@ -1,11 +1,17 @@
 ---
 name: "research-review"
-description: "Get a deep critical review of research from GPT using a secondary Codex agent. Use when user says \"review my research\", \"help me review\", \"get external review\", or wants critical feedback on research ideas, papers, or experimental results."
+description: "Get a deep critical review of research ideas, papers, or results. Use for one review pass or a manually driven critique request. Do not use when the user explicitly wants an autonomous multi-round review-improve loop; use `auto-review-loop` then."
 ---
 
 # Research Review via a secondary Codex agent (xhigh reasoning)
 
 Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
+
+## Routing Boundaries
+
+- Use this skill for critique, diagnosis, and reviewer-style feedback on research artifacts.
+- Use `auto-review-loop` when the user explicitly wants repeated review-fix-re-review automation.
+- Use `result-to-claim` when the main question is what finished experimental results support rather than broad critical feedback.
 
 ## Constants
 
@@ -99,4 +105,3 @@ Update project memory/notes with key review conclusions.
 
 ### For mock review:
 "Please write a mock NeurIPS review with: Summary, Strengths, Weaknesses, Questions for Authors, Score, Confidence, and What Would Move Toward Accept."
-

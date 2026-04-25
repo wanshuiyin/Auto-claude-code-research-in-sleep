@@ -1,11 +1,17 @@
 ---
 name: paper-illustration
-description: "Generate publication-quality AI illustrations for academic papers using Gemini image generation. Creates architecture diagrams, method illustrations with Codex-supervised iterative refinement loop. Use when user says \"生成图表\", \"画架构图\", \"AI绘图\", \"paper illustration\", \"generate diagram\", or needs visual figures for papers."
+description: "Generate conceptual paper illustrations such as architecture diagrams, method overviews, and visual system figures. Use when the user wants a polished non-data illustration. Do not use for numeric result plots/tables or when the output must be Mermaid source; use `paper-figure` or `mermaid-diagram` then."
 ---
 
 # Paper Illustration: Multi-Stage Codex-Supervised Figure Generation
 
 Generate publication-quality illustrations using a **multi-stage workflow** with **Codex as the STRICT supervisor/reviewer**.
+
+## Routing Boundaries
+
+- Use this skill for conceptual or explanatory figures that are not direct plots of experiment data.
+- Use `paper-figure` for result charts and tables.
+- Use `mermaid-diagram` when the required output format is Mermaid code rather than a polished rendered illustration.
 
 ## Core Design Philosophy
 

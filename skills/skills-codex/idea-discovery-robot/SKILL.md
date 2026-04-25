@@ -1,11 +1,17 @@
 ---
 name: "idea-discovery-robot"
-description: "Workflow 1 adaptation for robotics and embodied AI. Orchestrates robotics-aware literature survey, idea generation, novelty check, and critical review to go from a broad robotics direction to benchmark-grounded, simulation-first ideas. Use when user says \\\"robotics idea discovery\\\", \\\"\u673a\u5668\u4eba\u627eidea\\\", \\\"embodied AI idea\\\", \\\"\u673a\u5668\u4eba\u65b9\u5411\u63a2\u7d22\\\", \\\"sim2real \u9009\u9898\\\", or wants ideas for manipulation, locomotion, navigation, drones, humanoids, or general robot learning."
+description: "Robotics-specific idea-discovery pipeline for embodied AI, manipulation, locomotion, navigation, drones, humanoids, and sim2real topics. Use only when the domain is clearly robotics or embodied AI and the user wants end-to-end idea discovery. Do not use for generic idea generation outside robotics; use `idea-discovery` or `idea-creator` then."
 ---
 
 # Robotics Idea Discovery Pipeline
 
 Orchestrate a robotics-specific idea discovery workflow for: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill only for robotics or embodied-AI idea discovery requests.
+- Use `idea-discovery` for non-robotics end-to-end idea discovery.
+- Use `idea-creator` for robotics brainstorming when the user wants ideas only rather than the full robotics-aware pipeline.
 
 ## Overview
 

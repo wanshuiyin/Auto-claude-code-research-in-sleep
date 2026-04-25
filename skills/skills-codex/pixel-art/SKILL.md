@@ -1,11 +1,17 @@
 ---
 name: "pixel-art"
-description: "Generate pixel art SVG illustrations for READMEs, docs, or slides. Use when user says \"\u753b\u50cf\u7d20\u56fe\", \"pixel art\", \"make an SVG illustration\", \"README hero image\", or wants a cute visual."
+description: "Generate pixel-art SVG illustrations for READMEs, docs, or slides. Use only when the user explicitly wants a pixel-art style visual. Do not use for paper figures, polished illustrations, or Mermaid diagrams."
 ---
 
 # Pixel Art SVG Generator
 
 Create a pixel art SVG illustration: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill only when the requested output style is explicitly pixel art.
+- Use `paper-illustration` for polished conceptual figures and `paper-figure` for result plots.
+- Use `mermaid-diagram` when the output must be editable Mermaid source rather than SVG pixel art.
 
 ## Design Principles
 
@@ -133,4 +139,3 @@ Row 7 (legs):         2+2 pixels — with gap in middle
 - **Character overlap with bubbles**: keep character x-zone and bubble x-zone separated by ≥10px
 - **viewBox too large**: match viewBox to actual content, add ~10px padding
 - **Tail stroke artifact**: always add a small `<rect>` at the bubble-tail junction to cover the stroke line
-

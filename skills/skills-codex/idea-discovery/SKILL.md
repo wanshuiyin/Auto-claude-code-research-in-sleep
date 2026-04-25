@@ -1,11 +1,17 @@
 ---
 name: "idea-discovery"
-description: "Workflow 1: Full idea discovery pipeline. Orchestrates research-lit \u2192 idea-creator \u2192 novelty-check \u2192 research-review to go from a broad research direction to validated, pilot-tested ideas. Use when user says \\\"\u627eidea\u5168\u6d41\u7a0b\\\", \\\"idea discovery pipeline\\\", \\\"\u4ece\u96f6\u5f00\u59cb\u627e\u65b9\u5411\\\", or wants the complete idea exploration workflow."
+description: "Full idea-discovery pipeline from broad direction to validated ideas. Use only when the user explicitly wants an end-to-end idea exploration workflow. Do not use for plain brainstorming, single-paper search, or method refinement."
 ---
 
 # Workflow 1: Idea Discovery Pipeline
 
 Orchestrate a complete idea discovery workflow for: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill only for explicit pipeline requests covering literature survey, idea generation, novelty checking, and review together.
+- Use `idea-creator` for brainstorming alone.
+- Use `research-lit` or `comm-lit-review` for literature search alone, and `research-refine` for refining an already visible direction.
 
 ## Overview
 

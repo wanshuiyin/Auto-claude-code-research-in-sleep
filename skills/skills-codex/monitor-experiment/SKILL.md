@@ -1,11 +1,17 @@
 ---
 name: "monitor-experiment"
-description: "Monitor running experiments, check progress, collect results. Use when user says \"check results\", \"is it done\", \"monitor\", or wants experiment output."
+description: "Monitor experiment execution status, progress, logs, and produced outputs. Use for questions like \"is it done\" or \"what has finished\". Do not use for training-quality diagnosis from metrics dashboards; use `training-check` then."
 ---
 
 # Monitor Experiment Results
 
 Monitor: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill for run status, progress, logs, completion state, and collecting outputs.
+- Use `training-check` instead when the user wants to detect divergence, NaNs, unstable loss, or other quality issues during training.
+- This skill is about process state; it is not the default metrics-analysis skill.
 
 ## Workflow
 
@@ -58,4 +64,3 @@ After results are collected, check `~/.codex/feishu.json`:
 - Compare against the correct baseline (same config)
 - Note if experiments are still running (check progress bars, iteration counts)
 - If results look wrong, check training logs for errors before concluding
-

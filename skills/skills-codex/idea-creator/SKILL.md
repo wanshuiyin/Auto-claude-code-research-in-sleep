@@ -1,11 +1,17 @@
 ---
 name: "idea-creator"
-description: "Generate and rank research ideas given a broad direction. Use when user says \"\u627eidea\", \"brainstorm ideas\", \"generate research ideas\", \"what can we work on\", or wants to explore a research area for publishable directions."
+description: "Generate and rank concrete research ideas from a broad direction. Use for brainstorming or narrowing candidate ideas when the main task is idea generation itself. Do not use when the user explicitly wants the full idea-discovery pipeline or already has a concrete problem to refine."
 ---
 
 # Research Idea Creator
 
 Generate publishable research ideas for: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill for ideation and candidate generation when the main task is to produce and rank ideas.
+- Use `idea-discovery` instead when the user explicitly wants the full discovery pipeline with literature, novelty, and review stages chained together.
+- Use `research-refine` instead when the user already has a visible problem or approach and wants to sharpen it rather than brainstorm new directions.
 
 ## Overview
 
@@ -239,4 +245,3 @@ implement                     → write code
 /run-experiment               → deploy to GPU
 /auto-review-loop             → iterate until submission-ready
 ```
-

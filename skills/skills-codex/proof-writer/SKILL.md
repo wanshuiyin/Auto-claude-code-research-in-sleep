@@ -1,6 +1,6 @@
 ---
 name: "proof-writer"
-description: "Writes rigorous mathematical proofs for ML/AI theory. Use when asked to prove a theorem, lemma, proposition, or corollary, fill in missing proof steps, formalize a proof sketch, \u8865\u5168\u8bc1\u660e, \u5199\u8bc1\u660e, \u8bc1\u660e\u67d0\u4e2a\u547d\u9898, or determine whether a claimed proof can actually be completed under the stated assumptions."
+description: "Write rigorous proofs for fixed theorem, lemma, proposition, or corollary statements. Use when the claim is already specified and the task is to prove it honestly. Do not use for exploratory derivation building; use `formula-derivation` then."
 ---
 
 # Proof Write: Rigorous Theorem / Lemma Drafting
@@ -8,6 +8,12 @@ description: "Writes rigorous mathematical proofs for ML/AI theory. Use when ask
 Write a mathematically honest proof package, not a polished fake proof.
 
 ## Constants
+
+## Routing Boundaries
+
+- Use this skill when the statement to prove is already fixed and the goal is a rigorous proof or blockage report.
+- Use `formula-derivation` when the work is still at the stage of constructing the derivation or choosing the right formal object.
+- Do not use this skill for generic math discussion without a concrete proof target.
 
 - DEFAULT_PROOF_DOC = `PROOF_PACKAGE.md` in project root
 - STATUS = `PROVABLE AS STATED | PROVABLE AFTER WEAKENING / EXTRA ASSUMPTION | NOT CURRENTLY JUSTIFIED`
@@ -219,4 +225,3 @@ After writing the target proof file, respond briefly with:
 - If the statement is false as written, say so explicitly and give a counterexample or repaired statement.
 - If uncertainty remains, mark it explicitly in `Open Risks`; do not hide it inside polished prose.
 - Correctness matters more than brevity.
-

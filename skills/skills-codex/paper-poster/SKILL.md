@@ -1,6 +1,6 @@
 ---
 name: paper-poster
-description: "Generate a conference poster (article + tcbposter LaTeX → A0/A1 PDF + editable PPTX + SVG) from a compiled paper. Use when user says \"做海报\", \"制作海报\", \"conference poster\", \"make poster\", \"生成poster\", \"poster session\", or wants to create a poster for a conference presentation."
+description: "Generate a conference poster from a compiled paper, including poster-specific export formats. Use when the user explicitly wants a poster for presentation. Do not use for slides, paper drafting, or general figures; use `paper-slides`, `paper-write`, or `paper-illustration` then."
 argument-hint: [paper-directory-or-venue]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
 ---
@@ -10,6 +10,13 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex,
 Generate a conference poster from: **$ARGUMENTS**
 
 ## Context
+
+## Routing Boundaries
+
+- Use this skill only when the deliverable is a conference poster derived from an existing paper or paper draft.
+- Use `paper-slides` for talk decks instead of posters.
+- Use `paper-writing` or `paper-write` for paper creation rather than poster generation.
+- Use `paper-illustration` for standalone conceptual figures rather than a full poster artifact.
 
 This skill runs **after** Workflow 3 (`/paper-writing`). It takes a compiled paper and generates a print-ready poster for conference poster sessions. The poster extracts key content from the paper — it does **not** dump the full paper text onto a poster.
 

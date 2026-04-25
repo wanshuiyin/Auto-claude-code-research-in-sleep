@@ -1,6 +1,6 @@
 ---
 name: paper-slides
-description: "Generate conference presentation slides (beamer LaTeX → PDF + editable PPTX) from a compiled paper, with speaker notes and full talk script. Use when user says \"做PPT\", \"做幻灯片\", \"make slides\", \"conference talk\", \"presentation slides\", \"生成slides\", \"写演讲稿\", or wants beamer slides for a conference talk."
+description: "Generate conference presentation slides from a compiled paper, with speaker notes and talk script support. Use when the user explicitly wants a talk deck. Do not use for posters, paper drafting, or standalone figures; use `paper-poster`, `paper-write`, or `paper-illustration` then."
 argument-hint: [paper-directory-or-talk-length]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
 ---
@@ -10,6 +10,13 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex,
 Generate conference presentation slides from: **$ARGUMENTS**
 
 ## Context
+
+## Routing Boundaries
+
+- Use this skill only when the deliverable is a slide deck for a talk, spotlight, or presentation.
+- Use `paper-poster` for poster-session artifacts instead of slides.
+- Use `paper-writing` or `paper-write` for paper creation rather than presentation generation.
+- Use `paper-illustration` for standalone figures rather than a full talk deck.
 
 This skill runs **after** Workflow 3 (`/paper-writing`). It takes a compiled paper and generates a presentation slide deck for conference oral talks, spotlight presentations, or poster lightning talks.
 

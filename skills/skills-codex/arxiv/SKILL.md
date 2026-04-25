@@ -1,11 +1,17 @@
 ---
 name: "arxiv"
-description: "Search, download, and summarize academic papers from arXiv. Use when user says \"search arxiv\", \"download paper\", \"fetch arxiv\", \"arxiv search\", \"get paper pdf\", or wants to find and save papers from arXiv to the local paper library."
+description: "Search, download, and summarize papers specifically from arXiv. Use when the user explicitly wants arXiv-only search or PDF download from arXiv. Do not use for general literature review or venue-prioritized related-work search; use `research-lit` or `comm-lit-review` then."
 ---
 
 # arXiv Paper Search & Download
 
 Search topic or arXiv paper ID: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill when the user explicitly wants arXiv as the source or wants PDFs fetched from arXiv.
+- Use `research-lit` for general paper search and understanding across sources.
+- Use `comm-lit-review` for communications-domain related work where venue/source policy matters more than arXiv download.
 
 ## Constants
 
@@ -199,4 +205,3 @@ Suggest follow-up skills:
 - Handle both arXiv ID formats: new (`2301.07041`) and old (`cs/0601001`)
 - PAPER_DIR is created automatically if it does not exist
 - If the arXiv API is unreachable, report the error clearly and suggest using `/research-lit` with `- sources: web` as a fallback
-

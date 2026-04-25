@@ -1,6 +1,6 @@
 ---
 name: "auto-review-loop-llm"
-description: "Autonomous research review loop using any OpenAI-compatible LLM API. Configure via llm-chat MCP server or environment variables. Trigger with \"auto review loop llm\" or \"llm review\"."
+description: "Provider-specific research review loop for OpenAI-compatible external APIs via `llm-chat`. Use only when the user explicitly requests the generic LLM or `llm-chat` backend. Do not use as the default auto-review skill; use `auto-review-loop` otherwise."
 ---
 
 # Auto Review Loop (Generic LLM): Autonomous Research Improvement
@@ -8,6 +8,12 @@ description: "Autonomous research review loop using any OpenAI-compatible LLM AP
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
 ## Context: $ARGUMENTS
+
+## Routing Boundaries
+
+- Use this skill only when the user explicitly requests the `llm-chat` or generic OpenAI-compatible API backend.
+- Default auto-review requests should route to `auto-review-loop`.
+- Do not use this skill merely because another provider could work; explicit provider intent is required.
 
 ## Constants
 
@@ -238,10 +244,10 @@ mcp__llm-chat__chat:
     Be brutally honest. If the work is ready, say so clearly.
 ```
 
-
 ## Output Protocols
 
-> Follow these shared protocols for all output files:
-> - **[Output Versioning Protocol](../../shared-references/output-versioning.md)** — write timestamped file first, then copy to fixed name
-> - **[Output Manifest Protocol](../../shared-references/output-manifest.md)** — log every output to MANIFEST.md
-> - **[Output Language Protocol](../../shared-references/output-language.md)** — respect the project's language setting
+Follow these shared protocols for all output files:
+- **[Output Versioning Protocol](../../shared-references/output-versioning.md)** — write timestamped file first, then copy to fixed name
+- **[Output Manifest Protocol](../../shared-references/output-manifest.md)** — log every output to MANIFEST.md
+- **[Output Language Protocol](../../shared-references/output-language.md)** — respect the project's language setting
+

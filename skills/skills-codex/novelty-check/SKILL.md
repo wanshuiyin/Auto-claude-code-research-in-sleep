@@ -1,11 +1,17 @@
 ---
 name: "novelty-check"
-description: "Verify research idea novelty against recent literature. Use when user says \"\u67e5\u65b0\", \"novelty check\", \"\u6709\u6ca1\u6709\u4eba\u505a\u8fc7\", \"check novelty\", or wants to verify a research idea is novel before implementing."
+description: "Check whether a concrete research idea or method claim is already covered by prior work. Use for explicit novelty verification. Do not use for broad literature surveys or generic paper understanding; use `research-lit` or `comm-lit-review` then."
 ---
 
 # Novelty Check Skill
 
 Check whether a proposed method/idea has already been done in the literature: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill when the input is a concrete idea, method, or claim and the main question is novelty.
+- Use `research-lit` or `comm-lit-review` for broader related-work surveys without an explicit novelty verdict target.
+- Use `idea-creator` when the user still needs candidate ideas rather than validation of an existing one.
 
 ## Constants
 
@@ -82,4 +88,3 @@ Output a structured report:
 - Check both the method AND the experimental setting for novelty
 - If the method is not novel but the FINDING would be, say so explicitly
 - Always check the most recent 6 months of arXiv — the field moves fast
-

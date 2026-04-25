@@ -1,11 +1,17 @@
 ---
 name: "paper-compile"
-description: "Compile LaTeX paper to PDF, fix errors, and verify output. Use when user says \\\"\u7f16\u8bd1\u8bba\u6587\\\", \\\"compile paper\\\", \\\"build PDF\\\", \\\"\u751f\u6210PDF\\\", or wants to compile LaTeX into a submission-ready PDF."
+description: "Compile LaTeX paper sources to PDF, fix build errors, and verify output. Use for build/debug/PDF-generation requests. Do not use for drafting content or full writing pipelines; use `paper-write` or `paper-writing` then."
 ---
 
 # Paper Compile: LaTeX to Submission-Ready PDF
 
 Compile the LaTeX paper and fix any issues: **$ARGUMENTS**
+
+## Routing Boundaries
+
+- Use this skill for LaTeX build failures, PDF generation, and submission-readiness checks.
+- Use `paper-write` when the missing work is prose or section drafting rather than compilation.
+- Use `paper-writing` only for explicit end-to-end paper-generation requests spanning multiple stages.
 
 ## Constants
 
@@ -250,4 +256,3 @@ For conference submission, additional checks:
 | ICML 2025 | `icml2025.sty` | `natbib` (`\citep`/`\citet`) | 8 pages (to Conclusion end) | No | OpenReview |
 | IEEE Journal | `IEEEtran.cls` [journal] | `cite` (`\cite{}`, numeric) | ~12-14 pages (Transactions) / ~4-5 (Letters) | **Yes** | IEEE Author Portal / ScholarOne |
 | IEEE Conference | `IEEEtran.cls` [conference] | `cite` (`\cite{}`, numeric) | 5-8 pages (varies by conf) | **Yes** | EDAS / IEEE Author Portal |
-

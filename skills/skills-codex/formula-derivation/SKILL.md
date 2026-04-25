@@ -1,11 +1,17 @@
 ---
 name: "formula-derivation"
-description: "Structure and derive research formulas when the user wants to 推导公式, derive a theory line, build equations from a problem statement, clarify assumptions, separate formal derivation from remarks, or turn messy theory notes into a paper-ready derivation skeleton. Use for research-style formula development, not for fully rigorous theorem proving once the claim is already fixed."
+description: "Structure and derive research formulas when the task is to build the derivation itself from a problem statement or rough notes. Use for research-style derivation development. Do not use for theorem-proof writing once the exact claim is fixed; use `proof-writer` then."
 ---
 
 # Formula Derivation
 
 Use this skill when the task is not merely to prove a finished theorem, but to **build the derivation itself**:
+
+## Routing Boundaries
+
+- Use this skill when the main need is to construct the derivation line, assumptions, and intermediate objects.
+- Use `proof-writer` when the claim is already fixed and the user wants a rigorous proof package.
+- Do not use this skill as a generic math-explanation fallback when no derivation artifact is needed.
 
 - define the right object,
 - decide what should be assumed,

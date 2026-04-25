@@ -1,6 +1,6 @@
 ---
 name: "feishu-notify"
-description: "Send notifications to Feishu/Lark. Internal utility used by other skills, or manually via /feishu-notify. Supports push-only (webhook) and interactive (bidirectional) modes. Use when user says \\\"\u53d1\u98de\u4e66\\\", \\\"notify feishu\\\", or other skills need to send status updates."
+description: "Send notifications to Feishu/Lark. This is primarily an internal utility for other skills, with optional manual use when the user explicitly asks to notify Feishu/Lark. Do not use as a general communication or workflow skill."
 ---
 
 # Feishu/Lark Notification
@@ -8,6 +8,12 @@ description: "Send notifications to Feishu/Lark. Internal utility used by other 
 Send a notification: **$ARGUMENTS**
 
 ## Overview
+
+## Routing Boundaries
+
+- Use this skill only for Feishu/Lark notifications, either when the user explicitly asks for them or when another skill needs a status push.
+- Do not use this skill for general messaging, planning, or experiment orchestration.
+- If no Feishu configuration exists, this skill should remain a no-op rather than becoming a fallback path.
 
 This skill provides Feishu/Lark integration for ARIS. It is designed as an **internal utility** — other skills call it at key events (experiment done, review scored, checkpoint waiting). It can also be invoked manually.
 
@@ -152,4 +158,3 @@ Skills send these events at these moments:
 - **Interactive timeout = auto-proceed.** Don't hang forever waiting for a reply.
 - **Respect `AUTO_PROCEED`**: In interactive mode, if the user doesn't reply within timeout, use the same auto-proceed logic as the calling skill.
 - **No secrets in notifications.** Never include API keys, tokens, or passwords in Feishu messages.
-

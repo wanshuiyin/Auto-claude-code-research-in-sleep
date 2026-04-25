@@ -1,11 +1,17 @@
 ---
 name: "mermaid-diagram"
-description: "Generate Mermaid diagrams from user requirements. Save .mmd and .md files to figures/ with syntax verification. Supports flowcharts, sequence diagrams, class diagrams, ER diagrams, Gantt charts, and many more diagram types."
+description: "Generate Mermaid source diagrams when the output must stay editable as Mermaid text. Use for flowcharts, sequence diagrams, class diagrams, ER diagrams, and similar text-based diagrams. Do not use for polished paper illustrations or result plots; use `paper-illustration` or `paper-figure` then."
 ---
 
 # Mermaid Diagram Generator
 
 Generate high-quality Mermaid diagram code based on user requirements, with file output and verification.
+
+## Routing Boundaries
+
+- Use this skill when the deliverable must be Mermaid syntax that stays editable in text form.
+- Use `paper-illustration` for polished conceptual figures intended for papers or slides.
+- Use `paper-figure` for plots and tables derived from experimental results.
 
 ## Constants
 
