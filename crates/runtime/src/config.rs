@@ -496,9 +496,9 @@ fn parse_optional_hooks_config(root: &JsonValue) -> Result<RuntimeHookConfig, Co
     };
     let hooks = expect_object(hooks_value, "merged settings.hooks")?;
     Ok(RuntimeHookConfig {
-        pre_tool_use: optional_string_array(hooks, "PreToolUse", "merged settings.hooks")?
+        pre_tool_use: optional_hook_commands(hooks, "PreToolUse", "merged settings.hooks")?
             .unwrap_or_default(),
-        post_tool_use: optional_string_array(hooks, "PostToolUse", "merged settings.hooks")?
+        post_tool_use: optional_hook_commands(hooks, "PostToolUse", "merged settings.hooks")?
             .unwrap_or_default(),
     })
 }
@@ -761,6 +761,67 @@ fn optional_string_array(
         }
         None => Ok(None),
     }
+}
+
+fn optional_hook_commands(
+    object: &BTreeMap<String, JsonValue>,
+    key: &str,
+    context: &str,
+) -> Result<Option<Vec<String>>, ConfigError> {
+    let Some(value) = object.get(key) else {
+        return Ok(None);
+    };
+    let Some(array) = value.as_array() else {
+        return Err(ConfigError::Parse(format!(
+            "{context}: field {key} must be an array"
+        )));
+    };
+
+    let mut commands = Vec::new();
+    for item in array {
+        if let Some(command) = item.as_str() {
+            commands.push(command.to_string());
+            continue;
+        }
+
+        let item_object = item.as_object().ok_or_else(|| {
+            ConfigError::Parse(format!(
+                "{context}: field {key} must contain strings or Claude Code hook objects"
+            ))
+        })?;
+        let Some(nested_hooks) = item_object.get("hooks") else {
+            return Err(ConfigError::Parse(format!(
+                "{context}: field {key} hook object missing hooks array"
+            )));
+        };
+        let Some(nested_array) = nested_hooks.as_array() else {
+            return Err(ConfigError::Parse(format!(
+                "{context}: field {key} hook object hooks must be an array"
+            )));
+        };
+        for nested in nested_array {
+            let nested_object = nested.as_object().ok_or_else(|| {
+                ConfigError::Parse(format!(
+                    "{context}: field {key} hook entries must be objects"
+                ))
+            })?;
+            let hook_type = nested_object
+                .get("type")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("command");
+            if hook_type != "command" {
+                continue;
+            }
+            let Some(command) = nested_object.get("command").and_then(JsonValue::as_str) else {
+                return Err(ConfigError::Parse(format!(
+                    "{context}: field {key} command hook missing command string"
+                )));
+            };
+            commands.push(command.to_string());
+        }
+    }
+
+    Ok(Some(commands))
 }
 
 fn optional_string_map(
@@ -1071,6 +1132,57 @@ mod tests {
         assert!(error
             .to_string()
             .contains("mcpServers.broken: missing string field url"));
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn loads_object_style_claude_code_hooks_as_commands() {
+        let root = temp_dir();
+        let cwd = root.join("project");
+        let home = root.join("home").join(".claude");
+        fs::create_dir_all(cwd.join(".claude")).expect("project config dir");
+        fs::create_dir_all(&home).expect("home config dir");
+
+        fs::write(
+            cwd.join(".claude").join("settings.json"),
+            r#"{
+              "hooks": {
+                "PreToolUse": [
+                  {
+                    "matcher": "Bash",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "echo pre",
+                        "timeout": 5,
+                        "async": true
+                      }
+                    ]
+                  }
+                ],
+                "PostToolUse": [
+                  {
+                    "matcher": "",
+                    "hooks": [
+                      {
+                        "type": "command",
+                        "command": "echo post"
+                      }
+                    ]
+                  }
+                ]
+              }
+            }"#,
+        )
+        .expect("write object-style hooks settings");
+
+        let loaded = ConfigLoader::new(&cwd, &home)
+            .load()
+            .expect("object-style hooks should load");
+
+        assert_eq!(loaded.hooks().pre_tool_use(), &["echo pre".to_string()]);
+        assert_eq!(loaded.hooks().post_tool_use(), &["echo post".to_string()]);
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }

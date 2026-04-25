@@ -807,6 +807,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
     use std::io::ErrorKind;
+    #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -836,6 +837,18 @@ mod tests {
         std::env::temp_dir().join(format!("runtime-mcp-stdio-{nanos}"))
     }
 
+    fn make_executable(script_path: &Path) {
+        #[cfg(not(unix))]
+        let _ = script_path;
+
+        #[cfg(unix)]
+        {
+            let mut permissions = fs::metadata(script_path).expect("metadata").permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(script_path, permissions).expect("chmod");
+        }
+    }
+
     fn write_echo_script() -> PathBuf {
         let root = temp_dir();
         fs::create_dir_all(&root).expect("temp dir");
@@ -845,9 +858,7 @@ mod tests {
             "#!/bin/sh\nprintf 'READY:%s\\n' \"$MCP_TEST_TOKEN\"\nIFS= read -r line\nprintf 'ECHO:%s\\n' \"$line\"\n",
         )
         .expect("write script");
-        let mut permissions = fs::metadata(&script_path).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&script_path, permissions).expect("chmod");
+        make_executable(&script_path);
         script_path
     }
 
@@ -887,9 +898,7 @@ mod tests {
         ]
         .join("\n");
         fs::write(&script_path, script).expect("write script");
-        let mut permissions = fs::metadata(&script_path).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&script_path, permissions).expect("chmod");
+        make_executable(&script_path);
         script_path
     }
 
@@ -1013,9 +1022,7 @@ mod tests {
         ]
         .join("\n");
         fs::write(&script_path, script).expect("write script");
-        let mut permissions = fs::metadata(&script_path).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&script_path, permissions).expect("chmod");
+        make_executable(&script_path);
         script_path
     }
 
@@ -1117,9 +1124,7 @@ mod tests {
         ]
         .join("\n");
         fs::write(&script_path, script).expect("write script");
-        let mut permissions = fs::metadata(&script_path).expect("metadata").permissions();
-        permissions.set_mode(0o755);
-        fs::set_permissions(&script_path, permissions).expect("chmod");
+        make_executable(&script_path);
         script_path
     }
 
