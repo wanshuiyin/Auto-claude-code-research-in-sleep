@@ -39,7 +39,7 @@ This skill checks multiple sources **in priority order**. All are optional — i
 ### Source Selection
 
 Parse `$ARGUMENTS` for a `— sources:` directive:
-- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `all`.
+- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`, `all`.
 - **If not specified**: Default to `all` — search every available source in priority order (`semantic-scholar`, `deepxiv`, and `exa` are **excluded** from `all`; they must be explicitly listed).
 
 Examples:
@@ -56,6 +56,11 @@ Examples:
 /research-lit "topic" — sources: all, semantic-scholar              → all + S2 API
 /research-lit "topic" — sources: exa                               → Exa only (broad web + content extraction)
 /research-lit "topic" — sources: all, exa                          → default sources + Exa web search
+/research-lit "topic" — sources: gemini                            → Gemini only (AI-powered broad discovery)
+/research-lit "topic" — sources: all, gemini                       → default sources + Gemini discovery
+/research-lit "topic" — sources: gemini, semantic-scholar           → Gemini + S2 (broad discovery + venue metadata)
+/research-lit "topic" — sources: openalex                          → OpenAlex only (open citation graph + institutions)
+/research-lit "topic" — sources: semantic-scholar, openalex         → S2 + OpenAlex (complementary metadata)
 ```
 
 ### Source Table
@@ -69,6 +74,8 @@ Examples:
 | 5 | **Semantic Scholar API** | `semantic-scholar` | `tools/semantic_scholar_fetch.py` exists | Published venue papers (IEEE, ACM, Springer) with structured metadata: citation counts, venue info, TLDR. **Only runs when explicitly requested** via `— sources: semantic-scholar` or `— sources: web, semantic-scholar` |
 | 6 | **DeepXiv CLI** | `deepxiv` | `tools/deepxiv_fetch.py` and installed `deepxiv` CLI | Progressive paper retrieval: search, brief, head, section, trending, web search. **Only runs when explicitly requested** via `— sources: deepxiv` or `— sources: all, deepxiv` |
 | 7 | **Exa Search** | `exa` | `tools/exa_search.py` and installed `exa-py` SDK | AI-powered broad web search with content extraction (highlights, text, summaries). Covers blogs, docs, news, companies, and research papers beyond arXiv/S2. **Only runs when explicitly requested** via `— sources: exa` or `— sources: all, exa` |
+| 8 | **Gemini** (MCP / CLI) | `gemini` | `mcp__gemini-cli__ask-gemini` tool available, or `gemini` CLI installed | AI-powered broad literature discovery — decomposes topics into sub-problems, aliases, and variants for wider retrieval. Prefers MCP, falls back to CLI. **Only runs when explicitly requested** via `— sources: gemini` or `— sources: all, gemini` |
+| 9 | **OpenAlex** | `openalex` | `tools/openalex_fetch.py` exists | Open citation graph with institutional affiliations, funding data, and comprehensive metadata across 250M+ works. Fully open API. **Only runs when explicitly requested** via `— sources: openalex` or `— sources: all, openalex` |
 
 > **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
 
@@ -225,6 +232,78 @@ If `tools/exa_search.py` or the `exa-py` SDK is unavailable, skip this source gr
 - Match by URL first, then normalized title
 - If Exa returns an arXiv paper already found by arXiv/S2, prefer the structured metadata from those sources
 - Exa results from non-academic domains (blogs, docs, news) are unique value not covered by other sources
+
+**Gemini search** (only when `gemini` is in sources):
+
+When the user explicitly requests `— sources: gemini` (or includes `gemini` in a combined source list), use Gemini for AI-powered broad literature discovery.
+
+**Priority 1 — Gemini MCP** (preferred): Call `mcp__gemini-cli__ask-gemini` with the search prompt:
+
+```
+mcp__gemini-cli__ask-gemini({
+  prompt: 'You are a research literature scout. Search comprehensively for papers on: "QUERY"
+
+IMPORTANT CONSTRAINTS:
+1. Search from MULTIPLE angles — decompose the topic into sub-problems, aliases, neighboring tasks, and common benchmark/settings variants.
+2. Prefer papers that are genuinely relevant, not merely keyword-adjacent.
+3. Include top venues, journals, surveys, recent preprints, and papers with code when available.
+4. Focus on papers from 2022 onward unless older foundational work is necessary.
+
+For EACH paper found, provide ALL of the following:
+- Title: [exact title]
+- Authors: [full author list]
+- Year: [publication year]
+- Venue: [exact conference/journal name + year, or "arXiv preprint"]
+- arXiv ID: [format 2401.12345, or "N/A"]
+- DOI: [if available, or "N/A"]
+- Code URL: [GitHub/GitLab link if available, or "No code"]
+- Summary: [one-sentence core contribution]
+
+Find at least 15 papers.',
+  model: 'gemini-2.5-pro'
+})
+```
+
+**Priority 2 — Gemini CLI fallback** (if MCP unavailable): Use `gemini -p "...same prompt..." 2>/dev/null` via Bash (timeout: 120s).
+
+If both MCP and CLI are unavailable, skip this source gracefully and continue with the remaining requested sources.
+
+**Why use Gemini?** Gemini provides AI-driven discovery that goes beyond keyword matching — it decomposes topics, explores naming variants, and surfaces papers that traditional API-based searches (arXiv, S2) may miss. It fills a different retrieval niche from structured database queries.
+
+**De-duplication against arXiv, S2, DeepXiv, and Exa**:
+- Match by arXiv ID first, DOI second, normalized title third
+- If Gemini returns a paper already found by S2, prefer S2's citation count and venue metadata
+- If Gemini returns a paper already found by arXiv, prefer arXiv's structured metadata
+- Gemini's unique value is discovering papers that other keyword-based indexes did not surface
+- **Do not use Gemini-reported citation counts** — they may be inaccurate. Use S2 for authoritative citation data.
+
+**OpenAlex search** (only when `openalex` is in sources):
+
+When the user explicitly requests `— sources: openalex` (or includes `openalex` in a combined source list), use OpenAlex API for comprehensive academic metadata:
+
+```bash
+OA_SCRIPT=$(find tools/ -name "openalex_fetch.py" 2>/dev/null | head -1)
+
+# Search for papers with comprehensive metadata
+python3 "$OA_SCRIPT" search "QUERY" --max 10 \
+  --year "2022-" \
+  --type article \
+  --sort relevance
+```
+
+If `openalex_fetch.py` is not found or `requests` module is missing, skip this source gracefully and continue with the remaining requested sources.
+
+**Why use OpenAlex?** Fully open citation graph (no API key required), institutional affiliations, funding data (NSF, NIH), comprehensive topic/keyword metadata, and coverage across all disciplines (not just CS).
+
+**De-duplication against arXiv, S2, DeepXiv, Exa, and Gemini**:
+- Match by DOI first (OpenAlex has DOI for most works), then arXiv ID, then normalized title
+- If OpenAlex and S2 both have the same paper:
+  - Prefer S2 for citation counts (more up-to-date)
+  - Prefer S2 for venue metadata (more accurate for CS/AI papers)
+  - Use OpenAlex for institutional affiliations and funding data (unique value)
+  - Merge both into a richer record
+- If OpenAlex and arXiv overlap, prefer arXiv's PDF link and metadata, but keep OpenAlex's citation/institution data
+- OpenAlex's unique value: institutional affiliations, funding sources, comprehensive topic classification, and cross-discipline coverage
 
 **Optional PDF download** (only when `ARXIV_DOWNLOAD = true`):
 
