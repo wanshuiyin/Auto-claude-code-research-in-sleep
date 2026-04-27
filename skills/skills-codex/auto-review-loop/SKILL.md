@@ -16,10 +16,33 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 - **OUTPUT_DIR = `review-stage/`** — All review-stage outputs go here. Create the directory if it doesn't exist.
 - REVIEWER_MODEL = `gpt-5.4` — Model used via a secondary Codex agent. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
+- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent at xhigh reasoning. Override with `--reviewer: oracle-pro` only when the user explicitly requests Oracle; if Oracle is unavailable, warn and fall back to Codex xhigh.
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
 - **COMPACT = false** — When `true`, (1) read `EXPERIMENT_LOG.md` and `findings.md` instead of parsing full logs on session recovery, (2) append key findings to `findings.md` after each round.
+- **REVIEWER_DIFFICULTY = medium** — Controls adversarial depth: `medium` uses normal Codex xhigh review through `spawn_agent` / `send_input`; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification by an independent reviewer.
 
-> 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true`
+> 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true, difficulty: hard`
+
+## Claude-Aligned Reviewer Memory and Debate
+
+For `difficulty: hard` and `difficulty: nightmare`, maintain `review-stage/REVIEWER_MEMORY.md`.
+
+- Before each reviewer call, prepend the full `REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)`.
+- Tell the reviewer to check whether prior suspicions were genuinely addressed or merely sidestepped.
+- Require a `Memory update` section in the reviewer response.
+- After Phase B, copy the `Memory update` into `REVIEWER_MEMORY.md` before writing `REVIEW_STATE.json`.
+- In `nightmare`, launch an additional fresh adversarial reviewer with direct repository/file-reading instructions. It should read `NARRATIVE_REPORT.md` or `review-stage/AUTO_REVIEW.md` for the author's claims, then verify those claims against code, logs, result files, and paper drafts instead of trusting executor summaries.
+
+## Instructions
+
+In hard and nightmare modes, the reviewer must actively look for omissions, unsupported claims, cherry-picked evidence, metric mistakes, and weaknesses the executor may have downplayed.
+
+For `difficulty: hard` and `nightmare`, use the **Debate Protocol** after a critical review:
+
+1. Codex writes a concise rebuttal with evidence, not spin.
+2. Send the rebuttal to the same reviewer via `send_input`.
+3. The reviewer rules which objections are resolved, unresolved, or newly discovered.
+4. Only mark a concern resolved when the reviewer accepts the rebuttal.
 
 ## State Persistence (Compact Recovery)
 
@@ -65,6 +88,10 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 #### Phase A: Review
 
+**Route by REVIEWER_DIFFICULTY:**
+
+##### Medium (default) — Codex Review
+
 Send comprehensive context to the external reviewer:
 
 ```
@@ -88,6 +115,14 @@ spawn_agent:
 
 If this is round 2+, use `send_input` with the saved agent id to maintain continuity.
 
+##### Hard — Codex Review + Reviewer Memory
+
+Use the same `spawn_agent` / `send_input` route as medium, but prepend the full `review-stage/REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)` and require a `Memory update` section in the reviewer response.
+
+##### Nightmare — Independent Repository Review
+
+Use everything in hard mode, then ask an additional fresh adversarial reviewer to verify claims against repository files, logs, result files, and paper drafts instead of trusting executor summaries. Preserve the fresh review as a separate raw response and trace.
+
 #### Phase B: Parse Assessment
 
 **CRITICAL: Save the FULL raw response** from the external reviewer verbatim (store in a variable for Phase E). Do NOT discard or summarize — the raw text is the primary record.
@@ -98,6 +133,67 @@ Then extract structured fields:
 - **Action items** (ranked list of fixes)
 
 **STOP CONDITION**: If score >= 6 AND verdict contains "ready" or "almost" → stop loop, document final state.
+
+#### Phase B.5: Reviewer Memory Update (hard + nightmare only)
+
+Skip entirely if `REVIEWER_DIFFICULTY = medium`.
+
+After parsing the assessment, update `review-stage/REVIEWER_MEMORY.md`:
+
+## Your Reviewer Memory (persistent across rounds)
+
+Pass this file back to the reviewer in the next round so it can track its own suspicions.
+
+```markdown
+# Reviewer Memory
+
+## Round 1 — Score: X/10
+- **Suspicion**: [what the reviewer flagged]
+- **Unresolved**: [concerns not yet addressed]
+- **Patterns**: [recurring issues the reviewer noticed]
+
+## Round 2 — Score: X/10
+- **Previous suspicions addressed?**: [yes/no for each, with reviewer judgment]
+- **New suspicions**: [...]
+- **Unresolved**: [carried forward + new]
+```
+
+Rules:
+- Append each round; never delete prior rounds.
+- If the reviewer response includes a `Memory update` section, copy it verbatim.
+- This file is passed back to the reviewer in the next round's Phase A.
+
+#### Phase B.6: Debate Protocol (hard + nightmare only)
+
+Skip entirely if `REVIEWER_DIFFICULTY = medium`.
+
+After parsing the review, Codex writes a structured rebuttal for up to three high-impact weaknesses:
+
+```markdown
+### Rebuttal to Weakness #1: [title]
+- **Accept / Partially Accept / Reject**
+- **Argument**: [why this criticism is valid, invalid, already addressed, or out of scope]
+- **Evidence**: [specific code, result file, log, prior-round fix, or paper section]
+```
+
+Send the rebuttal to the same reviewer via `send_input`:
+
+```text
+send_input:
+  target: [saved reviewer id]
+  message: |
+    Please rule on the author's rebuttal below.
+    For each contested weakness, decide: accepted / partially accepted / rejected.
+    If rejected, state the minimum evidence or change required.
+
+    [paste rebuttal + evidence]
+```
+
+Record a `### Debate Transcript (hard + nightmare only)` section in `review-stage/AUTO_REVIEW.md`. Only mark a weakness resolved if the reviewer accepts the rebuttal.
+
+### Debate Transcript (hard + nightmare only)
+
+In the round log, preserve the rebuttal, reviewer ruling, accepted objections, rejected objections, and any required follow-up evidence.
 
 #### Human Checkpoint (if enabled)
 
@@ -202,6 +298,12 @@ This is the authoritative record. Do NOT truncate or paraphrase.]
 ```
 
 Increment round counter → back to Phase A.
+
+#### Review Tracing
+
+## Review Tracing
+
+After every `spawn_agent`, `send_input`, `oracle-pro`, or nightmare adversarial verification call, save a trace following `../shared-references/review-tracing.md`. Include prompt summary, reviewer route, saved agent id, raw response path, score/verdict, accepted fixes, rejected rebuttals, and the `Reviewer Memory` update if present.
 
 ### Termination
 

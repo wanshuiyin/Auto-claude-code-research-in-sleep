@@ -14,13 +14,14 @@ DeepXiv is the progressive-reading literature source:
 | Skill | Best for |
 |------|----------|
 | `/arxiv` | Direct preprint search and PDF download |
-| `/deepxiv` | Layered reading: search → brief → head → section |
+| `/semantic-scholar` | Published venue metadata, citation counts, DOI links |
+| `/deepxiv` | Layered reading: search → brief → head → section, plus trending and web search |
 
 Use DeepXiv when you want to inspect papers incrementally instead of loading the full text immediately.
 
 ## Constants
 
-- **FETCH_SCRIPT** — `tools/deepxiv_fetch.py` relative to the current project. If unavailable, fall back to the raw `deepxiv` CLI.
+- **FETCH_SCRIPT** — `$ARIS_REPO/tools/deepxiv_fetch.py` from the ARIS repo recorded by the Codex install manifest. If unavailable, fall back to the raw `deepxiv` CLI.
 - **MAX_RESULTS = 10** — Default number of search results.
 
 > Overrides (append to arguments):
@@ -60,10 +61,17 @@ Parse `$ARGUMENTS` for:
 
 If the input looks like an arXiv ID and no explicit mode is provided, default to `brief`.
 
-### Step 2: Prefer the Adapter
+### Step 2: Locate the Adapter
+
+Locate the adapter. Prefer the Codex managed install manifest when present, then fall back to the same project/global copy-install lookup style as the Claude skill:
 
 ```bash
-python3 tools/deepxiv_fetch.py --help
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/deepxiv_fetch.py" ] && SCRIPT="$ARIS_REPO/tools/deepxiv_fetch.py"
+[ -z "$SCRIPT" ] && [ -f tools/deepxiv_fetch.py ] && SCRIPT="tools/deepxiv_fetch.py"
+[ -z "$SCRIPT" ] && [ -f ~/.codex/skills/deepxiv/deepxiv_fetch.py ] && SCRIPT="$HOME/.codex/skills/deepxiv/deepxiv_fetch.py"
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" --help
 ```
 
 If the adapter is unavailable, fall back to raw `deepxiv` commands.
@@ -71,13 +79,13 @@ If the adapter is unavailable, fall back to raw `deepxiv` commands.
 ### Step 3: Execute the Minimal Command
 
 ```bash
-python3 tools/deepxiv_fetch.py search "QUERY" --max MAX_RESULTS
-python3 tools/deepxiv_fetch.py paper-brief ARXIV_ID
-python3 tools/deepxiv_fetch.py paper-head ARXIV_ID
-python3 tools/deepxiv_fetch.py paper-section ARXIV_ID "SECTION_NAME"
-python3 tools/deepxiv_fetch.py trending --days 7 --max MAX_RESULTS
-python3 tools/deepxiv_fetch.py wsearch "QUERY"
-python3 tools/deepxiv_fetch.py sc "SEMANTIC_SCHOLAR_ID"
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" search "QUERY" --max MAX_RESULTS
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" paper-brief ARXIV_ID
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" paper-head ARXIV_ID
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" paper-section ARXIV_ID "SECTION_NAME"
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" trending --days 7 --max MAX_RESULTS
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" wsearch "QUERY"
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" sc "SEMANTIC_SCHOLAR_ID"
 ```
 
 Fallbacks:
@@ -107,8 +115,15 @@ Use the progression:
 
 Only read the full paper when the user explicitly needs it.
 
+### Step 6: Update Research Wiki (if active)
+
+If the project has an active research wiki and the user is building a literature set, add DeepXiv findings as source-backed entries with arXiv/Semantic Scholar IDs, retrieved sections, and the recommended next depth step.
+
+Follow [`shared-references/integration-contract.md`](../shared-references/integration-contract.md). If the wiki path or schema is unclear, ask before writing.
+
 ## Key Rules
 
 - Prefer the adapter script over raw `deepxiv` commands when available.
 - If DeepXiv is missing, give the install command and suggest `/arxiv` or `/research-lit "topic" - sources: web`.
 - Use DeepXiv as an additive source, not a replacement for existing ARIS literature tooling.
+- If the result overlaps with a published venue paper from Semantic Scholar, keep the richer venue metadata in the final summary.

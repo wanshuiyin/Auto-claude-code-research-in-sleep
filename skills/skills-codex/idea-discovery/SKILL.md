@@ -35,6 +35,46 @@ Each phase builds on the previous one's output. The final deliverables are a val
 
 ## Pipeline
 
+### Phase 0: Load Research Brief (if available)
+
+Before starting any other phase, check for a detailed research brief in the project:
+
+1. Look for `RESEARCH_BRIEF.md` in the project root or a path passed in `$ARGUMENTS`.
+2. If found, read it and extract:
+   - problem statement and context
+   - constraints: compute, data, timeline, venue
+   - what the user already tried and what did not work
+   - domain knowledge and non-goals
+   - existing results, if any
+3. Use this as the primary context for all subsequent phases; it replaces the one-line prompt when more specific.
+4. If both `RESEARCH_BRIEF.md` and one-line `$ARGUMENTS` exist, merge them: the brief has priority for details, and the argument sets the direction.
+
+If no brief exists, proceed normally with `$ARGUMENTS` as the research direction.
+
+Recommended template:
+
+```markdown
+# Research Brief
+
+## Problem Statement
+[What problem are we trying to solve?]
+
+## Context
+[Relevant field, current approach, why this matters]
+
+## Constraints
+- Compute:
+- Data:
+- Timeline:
+- Target venue:
+
+## What We Already Tried
+- [attempt] -> [outcome]
+
+## Non-Goals
+- [what not to pursue]
+```
+
 ### Phase 0.5: Reference Paper Summary (when REF_PAPER is set)
 
 **Skip entirely if `REF_PAPER` is `false`.**
@@ -44,7 +84,26 @@ Summarize the reference paper before searching the literature:
 1. **If arXiv URL** — invoke `/arxiv "ARXIV_ID" — download` to fetch the PDF, then read the first 5 pages.
 2. **If local PDF path** — read the PDF directly, focusing on the title, abstract, introduction, and method overview.
 3. **If other URL** — fetch the content and extract the method, results, and limitations.
-4. **Generate `idea-stage/REF_PAPER_SUMMARY.md`** with: what the paper did, key results, limitations/open questions, and plausible improvement directions.
+4. **Generate `idea-stage/REF_PAPER_SUMMARY.md`** using this template:
+
+```markdown
+# Reference Paper Summary
+
+## What They Did
+[2-3 sentences: core method and contribution]
+
+## Key Results
+[Main quantitative findings]
+
+## Limitations & Open Questions
+[Acknowledged weaknesses, missing experiments, future work]
+
+## Potential Improvement Directions
+[Concrete ways to extend, challenge, or improve the paper]
+
+## Codebase
+[If `base repo` is set: link to the repo and identify relevant entry points]
+```
 
 Use `idea-stage/REF_PAPER_SUMMARY.md` as additional context in both Phase 1 and Phase 2.
 

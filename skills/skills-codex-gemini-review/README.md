@@ -94,17 +94,16 @@ Optional fallback only:
 
 - **Gemini CLI**: install `gemini` and complete login/auth if you explicitly want `GEMINI_REVIEW_BACKEND=cli`
 
-1. Install the base Codex-native skills first:
+1. Install the base Codex-native mirror first:
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -a skills/skills-codex/* ~/.codex/skills/
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project
 ```
 
-2. Install the Gemini-review overrides second:
+2. Re-run with the Gemini overlay enabled:
 
 ```bash
-cp -a skills/skills-codex-gemini-review/* ~/.codex/skills/
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --reconcile --with-gemini-review-overlay
 ```
 
 3. Register the local reviewer bridge:

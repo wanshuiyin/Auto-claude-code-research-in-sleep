@@ -16,12 +16,14 @@ Research topic: $ARGUMENTS
 - **MAX_LOCAL_PAPERS = 20** — Maximum number of local PDFs to scan (read first 3 pages each). If more are found, prioritize by filename relevance to the topic.
 - **ARXIV_DOWNLOAD = false** — When `true`, download top 3-5 most relevant arXiv PDFs to PAPER_LIBRARY after search. When `false` (default), only fetch metadata (title, abstract, authors) via arXiv API — no files are downloaded.
 - **ARXIV_MAX_DOWNLOAD = 5** — Maximum number of PDFs to download when `ARXIV_DOWNLOAD = true`.
+- **REVIEWER_BACKEND = `codex`** — Default reviewer route for optional literature synthesis cross-checks. Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and continue with Codex xhigh or local synthesis.
 
 > 💡 Overrides:
 > - `/research-lit "topic" — paper library: ~/my_papers/` — custom local PDF path
 > - `/research-lit "topic" — sources: zotero, local` — only search Zotero + local PDFs
 > - `/research-lit "topic" — sources: zotero` — only search Zotero
 > - `/research-lit "topic" — sources: web` — only search the web (skip all local)
+> - `/research-lit "topic" — sources: web, semantic-scholar` — also search Semantic Scholar for published venue papers
 > - `/research-lit "topic" — sources: deepxiv` — only search via DeepXiv progressive retrieval
 > - `/research-lit "topic" — sources: all, deepxiv` — use default sources plus DeepXiv
 > - `/research-lit "topic" — arxiv download: true` — download top relevant arXiv PDFs
@@ -29,13 +31,13 @@ Research topic: $ARGUMENTS
 
 ## Data Sources
 
-This skill checks multiple sources **in priority order**. All are optional — if a source is not configured or not requested, skip it silently.
+This skill checks multiple sources **in priority order**.
 
 ### Source Selection
 
 Parse `$ARGUMENTS` for a `— sources:` directive:
-- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `deepxiv`, `exa`, `all`.
-- **If not specified**: Default to `all` — search every available source in priority order (`deepxiv` and `exa` are excluded from `all`; they must be explicitly listed).
+- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `all`.
+- **If not specified**: Default to `all` — search every available source in priority order (`semantic-scholar`, `deepxiv`, and `exa` are excluded from `all`; they must be explicitly listed).
 
 Examples:
 ```
@@ -45,8 +47,10 @@ Examples:
 /research-lit "diffusion models" — sources: zotero, web → Zotero + web
 /research-lit "diffusion models" — sources: local       → local PDFs only
 /research-lit "topic" — sources: obsidian, local, web   → skip Zotero
+/research-lit "topic" — sources: web, semantic-scholar  → web + Semantic Scholar API
 /research-lit "topic" — sources: deepxiv                → DeepXiv only
 /research-lit "topic" — sources: all, deepxiv           → default sources + DeepXiv
+/research-lit "topic" — sources: all, semantic-scholar  → default sources + Semantic Scholar API
 /research-lit "topic" — sources: exa                    → Exa only (broad web + content extraction)
 /research-lit "topic" — sources: all, exa               → default sources + Exa web search
 ```
@@ -59,16 +63,17 @@ Examples:
 | 2 | **Obsidian** (via MCP) | `obsidian` | Try calling any `mcp__obsidian-vault__*` tool — if unavailable, skip | Research notes, paper summaries, tagged references, wikilinks |
 | 3 | **Local PDFs** | `local` | `Glob: papers/**/*.pdf, literature/**/*.pdf` | Raw PDF content (first 3 pages) |
 | 4 | **Web search** | `web` | Always available (WebSearch) | arXiv, Semantic Scholar, Google Scholar |
-| 5 | **DeepXiv CLI** | `deepxiv` | `tools/deepxiv_fetch.py` and installed `deepxiv` CLI | Progressive paper retrieval: search, brief, head, section, trending, web search. **Only runs when explicitly requested** |
-| 6 | **Exa Search** | `exa` | `tools/exa_search.py` and installed `exa-py` SDK | AI-powered broad web search with content extraction (highlights, text, summaries). Covers blogs, docs, news, companies, and research papers beyond arXiv/S2. **Only runs when explicitly requested** |
+| 5 | **Semantic Scholar API** | `semantic-scholar` | ARIS `tools/semantic_scholar_fetch.py` helper | Published venue papers (IEEE, ACM, Springer) with structured metadata: citation counts, venue info, TLDR. **Only runs when explicitly requested** |
+| 6 | **DeepXiv CLI** | `deepxiv` | ARIS `tools/deepxiv_fetch.py` helper or installed `deepxiv` CLI | Progressive paper retrieval: search, brief, head, section, trending, web search. **Only runs when explicitly requested** |
+| 7 | **Exa Search** | `exa` | ARIS `tools/exa_search.py` helper or installed `exa-py` SDK | AI-powered broad web search with content extraction (highlights, text, summaries). Covers blogs, docs, news, companies, and research papers beyond arXiv/S2. **Only runs when explicitly requested** |
 
-> **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
+> If the user explicitly requests Zotero or Obsidian and that source is not configured, stop and tell the user how to enable it. Only sources that were not requested may be skipped silently.
 
 ## Workflow
 
 ### Step 0a: Search Zotero Library (if available)
 
-**Skip this step entirely if Zotero MCP is not configured.**
+**If the user explicitly requested Zotero and the Zotero MCP is not configured, stop and ask the user to configure it. Otherwise skip this step entirely.**
 
 Try calling a Zotero MCP tool (e.g., search). If it succeeds:
 
@@ -86,7 +91,7 @@ Try calling a Zotero MCP tool (e.g., search). If it succeeds:
 
 ### Step 0b: Search Obsidian Vault (if available)
 
-**Skip this step entirely if Obsidian MCP is not configured.**
+**If the user explicitly requested Obsidian and the Obsidian MCP is not configured, stop and ask the user to configure it. Otherwise skip this step entirely.**
 
 Try calling an Obsidian MCP tool (e.g., search). If it succeeds:
 
@@ -134,31 +139,69 @@ Before searching online, check if the user already has relevant papers locally:
 
 Locate the fetch script and search arXiv directly:
 ```bash
-# Try to find arxiv_fetch.py
-SCRIPT=$(find tools/ -name "arxiv_fetch.py" 2>/dev/null | head -1)
-# If not found, check ARIS install
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/arxiv_fetch.py" ] && SCRIPT="$ARIS_REPO/tools/arxiv_fetch.py"
+[ -z "$SCRIPT" ] && SCRIPT=$(find tools/ -name "arxiv_fetch.py" 2>/dev/null | head -1)
 [ -z "$SCRIPT" ] && SCRIPT=$(find ~/.codex/skills/arxiv/ -name "arxiv_fetch.py" 2>/dev/null | head -1)
 
 # Search arXiv API for structured results (title, abstract, authors, categories)
-python3 "$SCRIPT" search "QUERY" --max 10
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" search "QUERY" --max 10
 ```
 
 If `arxiv_fetch.py` is not found, fall back to WebSearch for arXiv (same as before).
 
 The arXiv API returns structured metadata (title, abstract, full author list, categories, dates) — richer than WebSearch snippets. Merge these results with WebSearch findings and de-duplicate.
 
+**Semantic Scholar API search** (only when `semantic-scholar` is in sources):
+
+When the user explicitly requests `— sources: semantic-scholar` or `— sources: web, semantic-scholar`, search for published venue papers beyond arXiv:
+
+```bash
+S2_SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/semantic_scholar_fetch.py" ] && S2_SCRIPT="$ARIS_REPO/tools/semantic_scholar_fetch.py"
+[ -z "$S2_SCRIPT" ] && S2_SCRIPT=$(find tools/ -name "semantic_scholar_fetch.py" 2>/dev/null | head -1)
+[ -z "$S2_SCRIPT" ] && S2_SCRIPT=$(find ~/.codex/skills/semantic-scholar/ -name "semantic_scholar_fetch.py" 2>/dev/null | head -1)
+
+if [ -n "$S2_SCRIPT" ]; then
+    python3 "$S2_SCRIPT" search "QUERY" --max 10 --fields title,authors,year,venue,citationCount,externalIds,tldr,url
+else
+    echo "Semantic Scholar unavailable: no semantic_scholar_fetch.py helper; skipping this optional source." >&2
+fi
+```
+
+Why use Semantic Scholar? Many IEEE/ACM journal papers are not on arXiv. S2 fills the gap for published venue-only papers with citation counts and venue metadata.
+
+De-duplication between arXiv and S2:
+- Match by arXiv ID first (`externalIds.ArXiv`), then normalized title.
+- If a paper appears in both and S2 has venue / DOI / citation metadata, use S2 as authoritative metadata while keeping the arXiv PDF link.
+- S2 results without `externalIds.ArXiv` are venue-only papers and should be preserved as unique value.
+
 **DeepXiv search** (only when `deepxiv` is in sources):
 
 When the user explicitly requests `— sources: deepxiv` (or includes `deepxiv` in a combined source list), use the DeepXiv adapter for progressive retrieval:
 
 ```bash
-python3 tools/deepxiv_fetch.py search "QUERY" --max 10
-python3 tools/deepxiv_fetch.py paper-brief ARXIV_ID
-python3 tools/deepxiv_fetch.py paper-head ARXIV_ID
-python3 tools/deepxiv_fetch.py paper-section ARXIV_ID "Experiments"
+DEEPXIV_SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/deepxiv_fetch.py" ] && DEEPXIV_SCRIPT="$ARIS_REPO/tools/deepxiv_fetch.py"
+[ -z "$DEEPXIV_SCRIPT" ] && DEEPXIV_SCRIPT=$(find tools/ -name "deepxiv_fetch.py" 2>/dev/null | head -1)
+[ -z "$DEEPXIV_SCRIPT" ] && DEEPXIV_SCRIPT=$(find ~/.codex/skills/deepxiv/ -name "deepxiv_fetch.py" 2>/dev/null | head -1)
+if [ -n "$DEEPXIV_SCRIPT" ]; then
+    python3 "$DEEPXIV_SCRIPT" search "QUERY" --max 10
+    python3 "$DEEPXIV_SCRIPT" paper-brief ARXIV_ID
+    python3 "$DEEPXIV_SCRIPT" paper-head ARXIV_ID
+    python3 "$DEEPXIV_SCRIPT" paper-section ARXIV_ID "Experiments"
+elif command -v deepxiv >/dev/null 2>&1; then
+    deepxiv search "QUERY" --limit 10 --format json
+    deepxiv paper ARXIV_ID --brief --format json
+    deepxiv paper ARXIV_ID --head --format json
+    deepxiv paper ARXIV_ID --section "Experiments" --format json
+else
+    echo "DeepXiv unavailable: no deepxiv_fetch.py adapter and no deepxiv CLI; skipping this optional source." >&2
+fi
 ```
 
-If `tools/deepxiv_fetch.py` or the `deepxiv` CLI is unavailable, skip this source gracefully and continue with the remaining requested sources.
+If `deepxiv_fetch.py` or the `deepxiv` CLI is unavailable, skip this source gracefully and continue with the remaining requested sources.
 
 **De-duplication against other sources**:
 - Match by arXiv ID first
@@ -170,16 +213,20 @@ If `tools/deepxiv_fetch.py` or the `deepxiv` CLI is unavailable, skip this sourc
 When the user explicitly requests `— sources: exa` (or includes `exa` in a combined source list), use the Exa tool for broad AI-powered web search with content extraction:
 
 ```bash
-EXA_SCRIPT=$(find tools/ -name "exa_search.py" 2>/dev/null | head -1)
+EXA_SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/exa_search.py" ] && EXA_SCRIPT="$ARIS_REPO/tools/exa_search.py"
+[ -z "$EXA_SCRIPT" ] && EXA_SCRIPT=$(find tools/ -name "exa_search.py" 2>/dev/null | head -1)
+[ -z "$EXA_SCRIPT" ] && EXA_SCRIPT=$(find ~/.codex/skills/exa-search/ -name "exa_search.py" 2>/dev/null | head -1)
 
 # Search for research papers with highlights
-python3 "$EXA_SCRIPT" search "QUERY" --max 10 --category "research paper" --content highlights
+[ -n "$EXA_SCRIPT" ] && python3 "$EXA_SCRIPT" search "QUERY" --max 10 --category "research paper" --content highlights
 
 # Search for broader web content (blogs, docs, news)
-python3 "$EXA_SCRIPT" search "QUERY" --max 10 --content highlights
+[ -n "$EXA_SCRIPT" ] && python3 "$EXA_SCRIPT" search "QUERY" --max 10 --content highlights
+[ -n "$EXA_SCRIPT" ] || echo "Exa unavailable: no exa_search.py helper; skipping this optional source." >&2
 ```
 
-If `tools/exa_search.py` or the `exa-py` SDK is unavailable, skip this source gracefully and continue with the remaining requested sources.
+If `exa_search.py` or the `exa-py` SDK is unavailable, skip this source gracefully and continue with the remaining requested sources.
 
 **De-duplication against other sources**:
 - Match by URL first, then normalized title
@@ -191,7 +238,7 @@ If `tools/exa_search.py` or the `exa-py` SDK is unavailable, skip this source gr
 After all sources are searched and papers are ranked by relevance:
 ```bash
 # Download top N most relevant arXiv papers
-python3 "$SCRIPT" download ARXIV_ID --dir papers/
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" download ARXIV_ID --dir papers/
 ```
 - Only download papers ranked in the top ARXIV_MAX_DOWNLOAD by relevance
 - Skip papers already in the local library
@@ -229,11 +276,24 @@ If Zotero BibTeX was exported, include a `references.bib` snippet for direct use
 - Update related work notes in project memory
 - If Obsidian is available, optionally create a literature review note in the vault
 
+### Step 6: Update Research Wiki
+
+If the project has an active research wiki, update it after producing the literature review:
+
+1. Add or update the topic page with the final paper table, grouped themes, and open gaps.
+2. Link each paper to its canonical source and local PDF path if available.
+3. Record which sources were used: Zotero, Obsidian, local PDFs, arXiv, Semantic Scholar, DeepXiv, Exa, or broader web.
+4. Mark unresolved search gaps and papers requiring follow-up reading.
+5. Follow the wiki integration contract in [`shared-references/integration-contract.md`](../shared-references/integration-contract.md).
+6. When the wiki helper is available, rebuild `query_pack.md` after updating literature entries so `/idea-creator` can reuse the latest gaps and failed directions.
+
+If the wiki path or format is unclear, ask before writing. Do not invent a wiki location.
+
 ## Key Rules
 - Always include paper citations (authors, year, venue)
 - Distinguish between peer-reviewed and preprints
 - Be honest about limitations of each paper
 - Note if a paper directly competes with or supports our approach
-- **Never fail because a MCP server is not configured** — always fall back gracefully to the next data source
+- If a user-requested Zotero or Obsidian source is unavailable, stop and report the missing configuration instead of silently degrading.
+- Only unrequested optional sources may be skipped automatically.
 - Zotero/Obsidian tools may have different names depending on how the user configured the MCP server (e.g., `mcp__zotero__search` or `mcp__zotero-mcp__search_items`). Try the most common patterns and adapt.
-

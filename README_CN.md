@@ -151,6 +151,17 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 cp -r Auto-claude-code-research-in-sleep/skills/* ~/.claude/skills/
 
+# 可选：Codex mirror 项目级受管安装
+bash Auto-claude-code-research-in-sleep/tools/install_aris_codex.sh ~/your-codex-project
+
+# Codex 受管项目更新
+cd Auto-claude-code-research-in-sleep && git pull
+bash Auto-claude-code-research-in-sleep/tools/install_aris_codex.sh ~/your-codex-project --reconcile
+
+# 仅用于 Codex copy install（不要用于 install_aris_codex.sh 管理的项目）
+bash Auto-claude-code-research-in-sleep/tools/smart_update_codex.sh --local ~/.codex/skills
+bash Auto-claude-code-research-in-sleep/tools/smart_update_codex.sh --local ~/.codex/skills --apply
+
 # 2. 配置 Codex MCP（review 类 skill 需要）
 npm install -g @openai/codex
 codex setup                    # 提示选模型时选 gpt-5.4
@@ -246,6 +257,8 @@ claude
 > **想让 Codex 执行、Claude Code 审稿？** 见 [`docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md`](docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md)。这条路径会先安装基础 `skills/skills-codex/*`，再叠加 `skills/skills-codex-claude-review/*`，并通过本地 `claude-review` MCP bridge 转发 review-heavy skill 的审稿请求。
 
 > **想让 Codex 执行、Gemini 在本地做审稿？** 见 [`docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md`](docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md) 和[英文版](docs/CODEX_GEMINI_REVIEW_GUIDE.md)。这条路径会先安装基础 `skills/skills-codex/*`，再叠加 `skills/skills-codex-gemini-review/*`，并通过本地 `gemini-review` MCP bridge 转发 reviewer-aware 预定义 skills 的审稿请求，默认 direct Gemini API。
+
+> **想走 Codex mirror 安装链？** 项目级受管安装用 `tools/install_aris_codex.sh`，copy 安装更新用 `tools/smart_update_codex.sh`。Claude 脚本仍然是 Claude 主线入口。
 
 详见[完整安装指南](#%EF%B8%8F-安装)和[替代模型组合](#-替代模型组合)（无需 Claude/OpenAI API）。
 
@@ -851,6 +864,8 @@ export OPENAI_API_KEY="your-key"         # API 模式（快）
 ### 安装 Skills
 
 > 💡 **推荐：项目级扁平 symlink 安装**（2026-04-20 起）。每个 ARIS skill 独立 symlink 到 `.claude/skills/<skill-name>`，让 Claude Code 的 slash command 自动补全能直接发现。manifest 在 `.aris/installed-skills.txt` 跟踪 ARIS 装了什么——uninstall 和 reconcile 只动 manifest 里的条目，绝不碰你自己的 skill。
+>
+> 🤖 **Codex mirror 路线：** Claude 主线继续使用 `install_aris.sh` / `smart_update.sh`。Codex 原生项目安装请用 `install_aris_codex.sh`，Codex copy 安装更新请用 `smart_update_codex.sh`。
 
 ```bash
 # 1. 克隆 ARIS 一次到稳定位置

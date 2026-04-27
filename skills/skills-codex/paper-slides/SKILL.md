@@ -2,7 +2,7 @@
 name: paper-slides
 description: "Generate conference presentation slides (beamer LaTeX → PDF + editable PPTX) from a compiled paper, with speaker notes and full talk script. Use when user says \"做PPT\", \"做幻灯片\", \"make slides\", \"conference talk\", \"presentation slides\", \"生成slides\", \"写演讲稿\", or wants beamer slides for a conference talk."
 argument-hint: [paper-directory-or-talk-length]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent
 ---
 
 # Paper Slides: From Paper to Conference Talk
@@ -318,10 +318,11 @@ If page count differs significantly from outline (>2 slides off), investigate.
 
 Send the slide outline + selected LaTeX frames to GPT-5.4 xhigh:
 
-```
-mcp__codex__codex:
-  config: {"model_reasoning_effort": "xhigh"}
-  prompt: |
+```text
+spawn_agent:
+  model: gpt-5.4
+  reasoning_effort: xhigh
+  message: |
     Review this [TALK_TYPE] presentation ([TALK_MINUTES] min) for [VENUE].
 
     Evaluate using these criteria (score 1-5 each):
@@ -348,7 +349,7 @@ mcp__codex__codex:
 
 Apply fixes. Recompile if LaTeX was changed.
 
-> ⚠️ If `mcp__codex__codex` is not available (no OpenAI API key), skip external review and proceed to Phase 6. Note the skip in `SLIDES_STATE.json`.
+> If reviewer delegation is unavailable in the current Codex host, stop and ask the user to enable Codex agent support before continuing Phase 6.
 
 Save review to `slides/SLIDES_REVIEW.md`.
 
@@ -551,7 +552,7 @@ Next steps:
 - **Do NOT hallucinate citations.** Reference only papers cited in the paper.
 - **Opening hook matters**: Never start with "In this paper, we..." — start with the problem or a provocative question.
 - **Font size minimums**: Title ≥28pt, body ≥20pt, footnotes ≥14pt.
-- **Feishu notifications are optional.** If `~/.claude/feishu.json` exists, send notifications. If absent, skip.
+- **Feishu notifications are optional.** If `~/.codex/feishu.json` exists, send notifications. If absent, skip.
 
 ## Parameter Pass-Through
 

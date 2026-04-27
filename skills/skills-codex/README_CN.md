@@ -1,81 +1,97 @@
-# skills-codex 说明
+# `skills-codex` 说明
 
-## 1. 这个包是什么
+这是主线 `skills/` 的 Codex 原生镜像 / 适配层，不是独立主线产品。
 
-这是一个面向 **Codex** 的技能包目录，当前版本已经与主线 `skills/` 对齐：
+## 当前范围
 
-- 保留主线科研技能的同名同步集
-- 同步包含 `training-check`、`ablation-planner`、`result-to-claim`、`rebuttal`
-- 同步包含 `mermaid-diagram`
-- 附带 `shared-references/`，但它**不计入 skill 数量**
+- 基座覆盖：主线 `skills/` 的 `67` 个 skill 全量同步
+- 支持目录：`shared-references/`
+- reviewer-heavy skill 的默认 reviewer 契约：
+  - 首轮：`spawn_agent`
+  - 续接：`send_input`
+  - 推理强度：`xhigh`
+- 可选 overlay：
+  - `skills-codex-claude-review`
+  - `skills-codex-gemini-review`
 
-数量对比：
+## 推荐安装方式
 
-- 主线 `skills/` 当前技能数：`39`
-- 本包技能数：`39`
-- 另附支持目录：`shared-references/`
+Codex 路线默认推荐项目级安装：
 
-本包路径结构是：
+```bash
+git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git ~/aris_repo
+cd ~/your-project
 
-```text
-skills/skills-codex/
-  <skill-name>/
-    SKILL.md
-    ...
-  shared-references/
-    ...
+bash ~/aris_repo/tools/install_aris_codex.sh .
 ```
 
-## 2. 和主线相比做了哪些变动
+安装后会形成扁平布局：
 
-### 2.1 范围控制
+```text
+.agents/skills/<skill-name> -> ~/aris_repo/skills/skills-codex/<skill-name>
+.aris/installed-skills-codex.txt
+AGENTS.md   # 自动写入 Codex 管理块
+```
 
-本包只保留：
+上游更新后收敛：
 
-- 主线 `skills/` 中已有的同名技能
-- 少量确实需要的资源目录
+```bash
+cd ~/aris_repo && git pull
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --reconcile
+```
 
-因此，本包 **不包含**：
+只卸载受管的 Codex skill：
 
-- `doc`
-- `pdf`
-- `.system/*`
+```bash
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --uninstall
+```
 
-### 2.2 Codex 适配原则
+## Overlay 安装
 
-- 保留原技能的任务边界和工作流
-- 旧的控制型写法改成 `spawn_agent` / `send_input`
-- 外部能力接入说明可以保留，但不迁移对应服务配置
-- 尽量做最小修改，不把技能重写成另一套风格
+先装基座，再选装 overlay：
 
-### 2.3 哪些不是单文件
+```bash
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --reconcile --with-claude-review-overlay
+```
 
-当前不是单文件的有：
+```bash
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --reconcile --with-gemini-review-overlay
+```
 
-- `paper-write`
-- `comm-lit-review`
-- `shared-references`
+overlay 只替换 reviewer 路由，不替换基座 mirror，也不改变 executor 语义。
 
-原因：
+## Copy 安装与更新
 
-- `paper-write` 依赖 `templates/`
-- `comm-lit-review` 依赖 `references/`
-- `paper-plan` / `paper-write` 会引用 `shared-references/`
-
-## 3. 如何安装
+如果你明确想用 copy 安装，而不是受管 symlink：
 
 ```bash
 mkdir -p ~/.codex/skills
-cp -a skills/skills-codex/* ~/.codex/skills/
+cp -a ~/aris_repo/skills/skills-codex/. ~/.codex/skills/
 ```
 
-## 4. 安装时需要知道的边界
+更新 copy 安装请使用：
 
-本包只处理**技能文件**，不处理：
+```bash
+bash ~/aris_repo/tools/smart_update_codex.sh
+bash ~/aris_repo/tools/smart_update_codex.sh --apply
+```
 
-- Python 依赖
-- LaTeX / Poppler / GPU / SSH / conda 环境
-- MCP 配置
-- API Key / 环境变量
+项目级 copy 安装则使用：
 
-也就是说，本包解决的是 **技能文件迁移**，不是 **运行环境迁移**。
+```bash
+bash ~/aris_repo/tools/smart_update_codex.sh --project ~/your-project
+bash ~/aris_repo/tools/smart_update_codex.sh --project ~/your-project --apply
+```
+
+`smart_update_codex.sh` 会拒绝更新由 `install_aris_codex.sh` 管理的 symlink 安装，并提示改用 `install_aris_codex.sh --reconcile`。
+
+## 不允许降级的 Skill
+
+以下 4 个 skill 不允许静默降级：
+
+- `comm-lit-review`
+- `research-lit`
+- `paper-poster`
+- `pixel-art`
+
+如果缺少所需能力，必须明确提示用户去配置，不允许自动改成简化路径继续跑。

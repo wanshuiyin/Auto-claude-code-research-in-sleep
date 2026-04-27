@@ -1,92 +1,218 @@
 ---
 name: comm-lit-review
-description: Communications-domain literature review and related-work search with database-aware source control. Use when the task is about communications, wireless, networking, satellite/NTN, Wi-Fi, cellular, transport protocols, congestion control, routing, scheduling, MAC/PHY, rate adaptation, channel estimation, beamforming, or communication-system research and the user wants papers, prior art, a survey, related work, or a landscape summary. Prioritize IEEE Xplore and ScienceDirect, prefer formal publications over preprints, and separate foundational work from recent progress.
+description: Communications-domain literature review with Claude-style knowledge-base-first retrieval. Use when the task is about communications, wireless, networking, satellite/NTN, Wi-Fi, cellular, transport protocols, congestion control, routing, scheduling, MAC/PHY, rate adaptation, channel estimation, beamforming, or communication-system research and the user wants papers, related work, a survey, or a landscape summary. Search Zotero, Obsidian, and local paper folders first when available, then search IEEE Xplore, ScienceDirect, ACM Digital Library, and broader web in that order.
+allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
 ---
 
-# Comm Lit Review
+# Comm Lit Review Claude Single
 
-## Overview
+Research topic: $ARGUMENTS
 
-Run communications-focused paper search with tighter source policy than a generic literature review. Default to formal publications, prioritize `IEEE Xplore` and `ScienceDirect`, then `ACM Digital Library`, and output a review that is structured for research use rather than casual browsing.
+## Purpose
 
-Read [references/source-policy.md](references/source-policy.md) before searching. Use [references/domain-taxonomy.md](references/domain-taxonomy.md) to classify the topic, [references/venue-tiering.md](references/venue-tiering.md) to rank venues, and [references/output-template.md](references/output-template.md) to format the final answer.
+Use this skill for communications-domain literature review when the topic is about:
+
+- wireless communications
+- cellular systems, `4G/5G/6G`, `NR`, `NTN`
+- satellite, `LEO`, `GEO`, integrated space-air-ground systems
+- Wi-Fi, WLAN, mesh, ad hoc, sidelink, V2X
+- routing, scheduling, resource allocation, beamforming
+- rate adaptation, link adaptation, `ACM`, `HARQ`, `CSI` feedback
+- transport protocols and congestion control in communication networks
+- cross-layer optimization for communication systems
+
+If the center of gravity is generic ML architecture research, pure control theory without communications literature, or software/API documentation rather than papers, fall back to a general literature skill.
+
+## Constants
+
+- **PAPER_LIBRARY**: Check local PDFs in this order:
+  1. `papers/` in the current project
+  2. `literature/` in the current project
+  3. Custom path specified by the user in `AGENTS.md` under `## Paper Library`
+- **MAX_LOCAL_PAPERS = 20**: Maximum number of local PDFs to scan. If there are more, prioritize by filename and first-page relevance.
+
+## Source Selection
+
+Parse `$ARGUMENTS` for a `— sources:` directive.
+
+- If `— sources:` is specified, only search the listed sources.
+- If not specified, default to:
+  - `zotero`
+  - `obsidian`
+  - `local`
+  - `ieee`
+  - `sciencedirect`
+  - `acm`
+  - `web`
+
+Valid source values:
+
+- `zotero`
+- `obsidian`
+- `local`
+- `ieee`
+- `sciencedirect`
+- `acm`
+- `web`
+- `all`
+
+If `all` is specified, interpret it as the full default source set.
+
+## Retrieval Order
+
+This is a knowledge-base-first skill. Search in this order unless the user overrides it:
+
+1. `Zotero`
+2. `Obsidian`
+3. local `papers/` and `literature/`
+4. `IEEE Xplore`
+5. `ScienceDirect`
+6. `ACM Digital Library`
+7. broader web
+
+Graceful degradation rules:
+
+- If an unrequested source is unavailable, do not fail.
+- Skip it silently and continue to the next source.
+- If the user explicitly requested a source and it is unavailable, stop and tell the user what must be configured. Do not silently downgrade an explicitly requested source policy.
+
+## External Search Policy
+
+For external search:
+
+- prefer `IEEE Xplore` first
+- then `ScienceDirect`
+- then `ACM`
+- then broader web only when needed
+
+Publication policy:
+
+- prefer peer-reviewed journals and major conferences
+- label workshop papers as `workshop`
+- label arXiv-only or author-hosted versions as `preprint`
+- if both preprint and formal version exist, cite the formal version first
+
+Time-window policy:
+
+- if the user does not specify a year range, include both a short foundational set and a recent set
+- recommended split:
+  - `foundational`: before 2022
+  - `recent`: 2022 to present
+
+## Venue Priority
+
+Within each database tier, search venue tiers in this order.
+
+### Tier A
+
+Journals:
+
+- `IEEE Journal on Selected Areas in Communications (JSAC)`
+- `IEEE/ACM Transactions on Networking (ToN)`
+- `IEEE Transactions on Wireless Communications (TWC)`
+- `IEEE Transactions on Communications (TCOM)`
+
+Conferences:
+
+- `ACM SIGCOMM`
+- `USENIX NSDI`
+- `ACM MobiCom`
+- `ACM CoNEXT`
+- `IEEE INFOCOM`
+
+### Tier B
+
+Journals:
+
+- `IEEE Transactions on Vehicular Technology (TVT)`
+- `IEEE Wireless Communications Letters (WCL)`
+- `IEEE Communications Letters`
+- `Computer Networks`
+- `Computer Communications`
+- `Ad Hoc Networks`
+- `Physical Communication`
+
+Conferences:
+
+- `IEEE ICC`
+- `IEEE GLOBECOM`
+- `IEEE WCNC`
+- `IEEE PIMRC`
+- `ACM MobiHoc`
+
+### Tier C
+
+- other relevant IEEE journals and transactions
+- other relevant Elsevier journals
+- other clearly relevant ACM conferences and workshops
+- topic-specific satellite, optical, vehicular, IoT, aerial, or edge communications venues
+
+Usage rules:
+
+- start from Tier A
+- widen to Tier B if needed
+- widen to Tier C if still sparse
+- only then broaden to full web search
+- by default this is a soft priority, not a hard whitelist
+- if the user says `only top venues`, `top journals only`, or `top conferences only`, treat Tier A as a hard filter
 
 ## Workflow
 
-### 1. Classify the request
+### Step 0a: Search Zotero Library
 
-Decide whether the request is primarily about:
+Skip this step if Zotero MCP is not configured or `zotero` is not enabled.
 
-- Wireless PHY/MAC
-- Networking / transport / congestion control
-- Satellite / NTN / integrated space-air-ground systems
-- Cross-layer optimization / scheduling / resource allocation
-- Sensing / MEC / edge intelligence within communications systems
+If available:
 
-If the request is not clearly in communications systems research, fall back to a more general literature skill.
+1. search by topic
+2. capture title, authors, year, venue
+3. pull user annotations, tags, or collections when present
+4. treat these as high-priority evidence because they reflect the user's existing library
 
-### 2. Lock the search policy
+### Step 0b: Search Obsidian Vault
 
-Apply these defaults unless the user overrides them:
+Skip this step if Obsidian MCP is not configured or `obsidian` is not enabled.
 
-- Databases first: `IEEE Xplore`, `ScienceDirect`, then `ACM Digital Library`, then broader web
-- Publication bias: formal publications first, preprints second
-- Time window: cover both foundational and recent work
-  - Default split: foundational before 2022, recent from 2022 onward
-- Output goal: research note, related-work summary, or comparison table rather than a raw search dump
+If available:
 
-If the user explicitly narrows scope, obey the narrower scope:
+1. search topic-related notes
+2. collect summaries, wikilinks, tags, and paper references
+3. treat these notes as the user's processed understanding of the topic
 
-- only journals
-- only IEEE / only ScienceDirect
-- only top venues
-- only LEO / only Wi-Fi / only transport
-- exclude arXiv
-- only papers after a certain year
+### Step 0c: Scan Local Paper Library
 
-### 3. Search primary sources first
+Run this step if `local` is enabled.
 
-Use a layered search strategy. For communications topics, do not build the review from random blog posts or derivative summaries.
+1. locate PDFs from `papers/**/*.pdf` and `literature/**/*.pdf`
+2. de-duplicate against Zotero hits when possible
+3. read the first pages of relevant PDFs
+4. extract title, authors, year, problem, method, and relevance
+5. use local hits to guide and de-duplicate later external search
 
-#### Database ladder
+### Step 1: Search External Primary Sources
 
-Search in this order by default:
+Use a layered search strategy. For communications topics, avoid random blog posts or tertiary summaries.
+
+Database ladder:
 
 1. `ieeexplore.ieee.org`
 2. `sciencedirect.com`
 3. `dl.acm.org`
 4. broader web using primary publisher pages, official conference sites, DOI pages, and author-hosted copies of already-identified formal papers
 
-Only move to the next database tier when one of these is true:
+Move to the next database tier only when:
 
-- the higher-priority tiers are too sparse for the topic
-- the topic is known to publish heavily outside the higher tier
+- the higher-priority tier is too sparse
+- the topic clearly publishes elsewhere
 - the user explicitly asks for broader coverage
 
-#### Venue ladder
+Within each database tier:
 
-Within each database tier, search venue tiers in this order:
+1. start from Tier A venues
+2. widen to Tier B if needed
+3. widen to Tier C if still sparse
 
-1. top communications and networking journals / top conferences
-2. mainstream strong journals / flagship broader conferences
-3. all remaining relevant formal venues
-
-Follow the concrete tier lists in [references/venue-tiering.md](references/venue-tiering.md).
-
-By default this venue tiering is a soft priority, not a hard whitelist.
-
-- Default behavior: start from Tier A, then widen if needed
-- If the user says `only top venues`, `top journals only`, `top conferences only`, or equivalent, switch to hard constraint mode and do not auto-expand beyond Tier A unless the user later relaxes the constraint
-
-Use preprints only when:
-
-- the user explicitly asks for them
-- the area is very recent and formal versions are missing
-- a paper is clearly influential but only publicly accessible as a preprint
-
-When a preprint is used, label it clearly as `preprint`.
-
-### 4. Extract paper-level facts
+### Step 2: Extract Paper-Level Facts
 
 For each relevant paper, capture:
 
@@ -101,45 +227,73 @@ For each relevant paper, capture:
 - Limitation
 - Relevance to the user's topic
 - Source URL
+- Source origin: `zotero`, `obsidian`, `local`, `ieee`, `sciencedirect`, `acm`, or `web`
 
-Favor numbers, assumptions, and actual problem statements over generic summaries.
+Favor concrete numbers, assumptions, and problem definitions over generic paraphrases.
 
-### 5. Synthesize as a communications review
+Do not collapse transport-layer rate control and PHY/MAC rate adaptation into one bucket without saying so explicitly.
 
-Group papers by technical axis, not by search order. Common groupings:
+## Synthesis Rules
 
-- PHY/MAC adaptation
-- Transport / congestion control
-- NTN / satellite resource management
-- Cross-layer or learning-based control
-- Measurement / empirical studies
+Group papers by technical axis rather than by search order. Common groupings:
 
-Explicitly separate:
+- `PHY/MAC` adaptation
+- transport and congestion control
+- `NTN` and satellite resource management
+- cross-layer or learning-based control
+- measurement and empirical studies
 
-- foundational vs recent papers
+When useful, explicitly separate:
+
+- foundational vs recent work
 - formal publications vs preprints
-- top-tier vs lower-tier venues when that distinction matters
-- single-link vs multi-user / network-wide formulations
-- simulation-only vs measurement / deployment-backed work
+- top-tier vs lower-tier venues
+- single-link vs multi-user formulations
+- simulation-only vs deployment-backed work
+- user-owned sources vs newly surfaced external papers
 
-### 6. Produce a research-useful output
+If evidence is weak, say so instead of smoothing it over.
 
-Follow the templates in [references/output-template.md](references/output-template.md).
+## Output
 
-The default output should include:
+Use a literature table with these columns:
 
-- a compact literature table
-- a short narrative on where the field stands
-- disagreements or unresolved assumptions
-- likely research gaps
+| Paper | Venue | Year | Layer | Scenario | Method | Key Result | Limitation | Relevance | Source |
+|---|---|---:|---|---|---|---|---|---|---|
 
-## Rules
+`Source` should indicate where the paper came from first:
 
-- Prefer primary sources over summaries or tertiary commentary.
-- Prefer IEEE and ScienceDirect first, ACM second, and only then broader web search unless the user asks otherwise.
+- `zotero`
+- `obsidian`
+- `local`
+- `ieee`
+- `sciencedirect`
+- `acm`
+- `web`
+
+After the table, summarize in this order:
+
+1. what the field is mostly trying to solve
+2. how papers cluster into `2-4` approaches
+3. what the user already had vs what was newly surfaced
+4. where the evidence is strong vs weak
+5. what research gap remains
+
+End with `Practical Takeaway`:
+
+- dominant current approach
+- likely saturated direction
+- promising open direction
+
+## Key Rules
+
+- Do not silently downgrade explicitly requested sources, account-backed databases, or primary-database constraints. Report the missing configuration instead.
+
+- Never fail because Zotero or Obsidian MCP is missing.
+- Prefer user-owned sources first when available, but do not let them replace external validation.
+- Prefer primary formal sources over summaries or tertiary commentary.
+- Prefer `IEEE` and `ScienceDirect` first, `ACM` second, and only then broader web search unless the user asks otherwise.
 - Search venue tiers from top to broad within each database tier.
 - Treat venue tiers as soft ranking by default and hard constraint only when the user explicitly asks for top-only search.
 - Do not pretend a preprint is peer reviewed.
-- Do not collapse transport-layer rate control and PHY/MAC rate adaptation into one bucket without saying so explicitly.
 - If the topic spans multiple layers, say that the literature itself is split across layers.
-- If evidence is weak, say so instead of smoothing it over.

@@ -10,6 +10,7 @@ Get a multi-round critical review of research work from an external LLM with max
 ## Constants
 
 - REVIEWER_MODEL = `gpt-5.4` — Model used via a secondary Codex agent. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`)
+- **REVIEWER_BACKEND = `codex`** — Default: Codex xhigh reviewer. Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and fall back to Codex xhigh.
 
 ## Context: $ARGUMENTS
 
@@ -45,6 +46,19 @@ spawn_agent:
 ### Step 3: Iterative Dialogue (Rounds 2-N)
 Use `send_input` with the returned agent id to continue the conversation:
 
+```text
+send_input:
+  target: [saved reviewer id from Step 2]
+  message: |
+    Please continue the review using the revised materials below.
+
+    Revised files:
+    - /absolute/path/to/file1
+    - /absolute/path/to/file2
+
+    Focus on unresolved weaknesses and whether the revision actually fixed them.
+```
+
 For each round:
 1. **Respond** to criticisms with evidence/counterarguments
 2. **Ask targeted follow-ups** on the most actionable points
@@ -73,6 +87,10 @@ Save the full interaction and conclusions to a review document in the project ro
 
 Update project memory/notes with key review conclusions.
 
+### Step 6: Review Tracing
+
+Save a trace for every `spawn_agent`, `send_input`, or `oracle-pro` review call following `../shared-references/review-tracing.md`. Record the reviewer route, saved agent id, prompt summary, raw response path, decisions, and action items. This preserves the Claude mainline Review Tracing semantics while using Codex-native reviewer calls.
+
 ## Key Rules
 
 - ALWAYS use `reasoning_effort: xhigh` for reviews
@@ -99,4 +117,3 @@ Update project memory/notes with key review conclusions.
 
 ### For mock review:
 "Please write a mock NeurIPS review with: Summary, Strengths, Weaknesses, Questions for Authors, Score, Confidence, and What Would Move Toward Accept."
-

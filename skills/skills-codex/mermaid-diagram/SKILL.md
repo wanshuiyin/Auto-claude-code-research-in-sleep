@@ -16,6 +16,8 @@ Generate high-quality Mermaid diagram code based on user requirements, with file
 
 ### Step 0: Pre-flight Check
 
+# Create output directory
+
 ```bash
 mkdir -p figures
 ```
@@ -33,6 +35,10 @@ Parse the input: **$ARGUMENTS**
 ### Step 2: Read Documentation
 
 Select the appropriate diagram type. Use built-in Mermaid knowledge first; if external documentation is needed and your environment provides it, fetch the up-to-date syntax reference.
+
+### Configuration & Themes
+
+Choose theme, colors, and layout before writing code. For academic diagrams, prefer clean white backgrounds, restrained colors, and readable labels over decorative styling.
 
 | Type | Use Cases |
 | ---- | --------- |
@@ -64,19 +70,25 @@ Select the appropriate diagram type. Use built-in Mermaid knowledge first; if ex
 
 Generate the Mermaid code and save **two** files:
 
-#### File 1: `figures/<diagram-name>.mmd`
+#### File 1: `figures/<diagram-name>.mmd` — Raw Mermaid source
 
 The `.mmd` file contains only raw Mermaid code, no markdown fences.
 
-#### File 2: `figures/<diagram-name>.md`
+#### File 2: `figures/<diagram-name>.md` — Markdown with embedded Mermaid
 
 The `.md` file wraps the same Mermaid code in a mermaid code block for preview rendering, plus a short title and description.
+
+# Diagram Title
+
+Use a concise title in the `.md` wrapper that matches the generated diagram name.
 
 **Naming convention**: use a descriptive kebab-case name derived from the request, such as `auth-flow`, `system-architecture`, or `database-er`.
 
 ### Step 4: Verify Mermaid Syntax (MANDATORY)
 
 Codex MUST verify the generated Mermaid code by running the Mermaid CLI (`mmdc`).
+
+# Check if mermaid-cli is available
 
 ```bash
 if command -v mmdc >/dev/null 2>&1; then
@@ -110,7 +122,9 @@ After successful rendering, Codex MUST read the generated PNG and perform a stri
 - `figures/<diagram-name>.md`
 - `figures/<diagram-name>.png`
 
-### STRICT VERIFICATION CHECKLIST
+### ═══════════════════════════════════════════════════════════════
+### STRICT VERIFICATION CHECKLIST (ALL must pass for score ≥ 9)
+### ═══════════════════════════════════════════════════════════════
 
 #### A. File Correctness
 - [ ] `.mmd` contains valid Mermaid syntax
@@ -118,10 +132,16 @@ After successful rendering, Codex MUST read the generated PNG and perform a stri
 - [ ] `.mmd` and `.md` contain identical Mermaid code
 - [ ] Diagram renders without errors
 
-#### B. Arrow Correctness Verification
+ASCII alias for automated checks: score >= 9.
+
+#### B. Arrow Correctness Verification (CRITICAL - any failure = score ≤ 6)
+ASCII alias for automated checks: CRITICAL - any failure = score <= 6.
+
 - [ ] Every arrow points to the correct target
 
-#### C. Block Content Verification
+#### C. Block Content Verification (any failure = score ≤ 7)
+ASCII alias for automated checks: any failure = score <= 7.
+
 - [ ] Every block label is correct
 - [ ] Every block contains the intended content
 
@@ -137,10 +157,18 @@ After successful rendering, Codex MUST read the generated PNG and perform a stri
 - [ ] Spacing is balanced
 - [ ] Data flow is understandable within 5 seconds
 
-### Issues Found
+### ═══════════════════════════════════════════════════════════════
+### Issues Found (BE SPECIFIC)
 1. [issue] -> [fix]
 
 ### Score: X/10
+
+### Score Breakdown Guide:
+- 10: correct, readable, publication-ready
+- 9: minor polish only
+- 8: usable but one visual/layout weakness remains
+- 7: one content or block-label weakness remains
+- 6 or below: arrow direction, missing component, syntax, or semantic error
 
 ### Verdict
 - [ ] ACCEPT
@@ -234,7 +262,7 @@ When the diagram is intended for academic papers, apply these style standards:
 - **Arrows**: Dark gray (`#333333` / `#1F2937`)
 - **Background**: White (`#FFFFFF`)
 
-### What to Avoid
+### What to AVOID
 
 - Rainbow color schemes
 - Thin hairline arrows
@@ -266,7 +294,7 @@ Math rendering with `$$...$$` is supported in:
 3. Mix text and math by placing `$$` only around the math portion
 4. Use `\text{}` for non-math text inside `$$`
 
-### Common Math Patterns
+### Common Math Patterns for ML/Science Diagrams
 
 | Concept | KaTeX Syntax |
 | ------- | ------------ |

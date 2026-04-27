@@ -1,6 +1,8 @@
 ---
-name: "auto-paper-improvement-loop"
-description: "Autonomously improve a generated paper via GPT-5.4 xhigh review \u2192 implement fixes \u2192 recompile, for 2 rounds. Use when user says \\\"\u6539\u8bba\u6587\\\", \\\"improve paper\\\", \\\"\u8bba\u6587\u6da6\u8272\u5faa\u73af\\\", \\\"auto improve\\\", or wants to iteratively polish a generated paper."
+name: auto-paper-improvement-loop
+description: "Autonomously improve a generated paper via GPT-5.4 xhigh review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
+argument-hint: [paper-directory]
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent
 ---
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
@@ -16,7 +18,8 @@ Unlike `/auto-review-loop` (which iterates on **research** — running experimen
 ## Constants
 
 - **MAX_ROUNDS = 2** — Two rounds of review→fix→recompile. Empirically, Round 1 catches structural issues (4→6/10), Round 2 catches remaining presentation issues (6→7/10). Diminishing returns beyond 2 rounds for writing-only improvements.
-- **REVIEWER_MODEL = `gpt-5.4`** — Model used via a secondary Codex agent for paper review.
+- **REVIEWER_MODEL = `gpt-5.4`** — Model used via Codex MCP for paper review.
+- **REVIEWER_BIAS_GUARD = true** — When `true`, every review round uses a fresh `spawn_agent` reviewer with no prior review context. Do not use stale self-reported context for review rounds. Set to `false` only for deliberate debugging of the legacy behavior. **Empirical evidence (April 2026):** running the same paper with `codex-reply` + "since last round we did X" prompts inflated scores from real 3/10 → fake 8/10 across 5 rounds; switching to fresh threads recovered the true 3/10 assessment.
 - **REVIEW_LOG = `PAPER_IMPROVEMENT_LOG.md`** — Cumulative log of all rounds, stored in paper directory.
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review and present score + weaknesses to the user. The user can approve fixes, provide custom modification instructions, skip specific fixes, or stop early. When `false` (default), runs fully autonomously.
 
@@ -29,7 +32,7 @@ Unlike `/auto-review-loop` (which iterates on **research** — running experimen
 
 ## State Persistence (Compact Recovery)
 
-If the context window fills up mid-loop, Codex auto-compacts. To recover, this skill writes `PAPER_IMPROVEMENT_STATE.json` after each round:
+If the context window fills up mid-loop, Claude Code auto-compacts. To recover, this skill writes `PAPER_IMPROVEMENT_STATE.json` after each round:
 
 ```json
 {
@@ -44,6 +47,20 @@ If the context window fills up mid-loop, Codex auto-compacts. To recover, this s
 **On startup**: if `PAPER_IMPROVEMENT_STATE.json` exists with `"status": "in_progress"` AND `timestamp` is within 24 hours, read it + `PAPER_IMPROVEMENT_LOG.md` to recover context, then resume from the next round. Otherwise (file absent, `"status": "completed"`, or older than 24 hours), start fresh.
 
 **After each round**: overwrite the state file. **On completion**: set `"status": "completed"`.
+
+## Reviewer Independence Protocol
+
+The reviewer must be context-naive on every round. Prior-round summaries, fix lists, and executor explanations are not evidence; they are a source of confirmation bias. If the reviewer is told what changed, scores tend to drift upward even when the manuscript itself has not materially improved.
+
+Rules:
+- Every round starts with a fresh `spawn_agent` reviewer call, not a stale continuation prompt.
+- Never pass a prior agent_id into the next review prompt.
+- Never include "since last round", "we fixed", "after applying", or any fix summary in the reviewer prompt.
+- The only acceptable evidence of improvement is the current `.tex` source and compiled PDF.
+- If a fix cannot be observed in the files, the reviewer should not be told it happened.
+- If recovery metadata is needed, store the returned agent_id for crash recovery only; do not use it to preserve review context.
+
+Set `REVIEWER_BIAS_GUARD = false` only if you explicitly want the legacy, context-carrying behavior for debugging.
 
 ## Workflow
 
@@ -67,17 +84,21 @@ done > /tmp/paper_full_text.txt
 
 ### Step 2: Round 1 Review
 
-Send the full paper text to GPT-5.4 xhigh:
+Send the full paper text AND compiled PDF to GPT-5.4 xhigh:
 
-```
+```text
 spawn_agent:
   model: gpt-5.4
   reasoning_effort: xhigh
   message: |
     You are reviewing a [VENUE] paper. Please provide a detailed, structured review.
 
-    ## Full Paper Text:
-    [paste concatenated sections]
+    ## Paper Files:
+    - LaTeX source: [list all section .tex files]
+    - Compiled PDF: paper/main.pdf
+    - Figures: [list figure files]
+
+    Read BOTH the LaTeX source (for content/logic) AND the compiled PDF (for visual presentation).
 
     ## Review Instructions
     Please act as a senior ML reviewer ([VENUE] level). Provide:
@@ -87,13 +108,19 @@ spawn_agent:
     4. **Weaknesses** (bullet list, ranked: CRITICAL > MAJOR > MINOR)
     5. **For each CRITICAL/MAJOR weakness**: A specific, actionable fix
     6. **Missing References** (if any)
-    7. **Verdict**: Ready for submission? Yes / Almost / No
+    7. **Visual Review** (from the PDF):
+       - Figure quality: readable? labels legible? colors distinguishable in grayscale?
+       - Figure-caption alignment: does each caption match its figure?
+       - Layout: orphaned headers, awkward page breaks, figures far from references?
+       - Table formatting: aligned columns, consistent decimals, bold for best results?
+       - Visual consistency: same color scheme across all figures?
+    8. **Verdict**: Ready for submission? Yes / Almost / No
 
     Focus on: theoretical rigor, claims vs evidence alignment, writing clarity,
-    self-containedness, notation consistency.
+    self-containedness, notation consistency, AND visual presentation quality.
 ```
 
-Save the agent id for Round 2.
+Save the agent_id for Round 2.
 
 ### Step 2b: Human Checkpoint (if enabled)
 
@@ -135,6 +162,10 @@ Parse the review and implement fixes by severity:
 | Notation confusion | Rename conflicting symbols globally, add Notation paragraph |
 | Missing references | Add to `references.bib`, cite in appropriate locations |
 | Theory-practice gap | Explicitly frame theory as idealized; add synthetic validation subsection |
+| Proof gap (theory papers) | Run `/proof-checker` if PROOF_AUDIT.md doesn't exist yet; fix FATAL/CRITICAL issues |
+| Writing clutter / passive voice | Apply sciwrite 5-pass audit: clutter extraction → active voice → sentence architecture → keyword consistency → numerical integrity. See `paper-write` Step 5 |
+| Number mismatch (paper vs results) | Run `/paper-claim-audit` if PAPER_CLAIM_AUDIT.md doesn't exist; fix any `number_mismatch` or `aggregation_mismatch` claims |
+| Keyword inconsistency | The "Banana Rule": if Methods says "obese group", Results must not say "heavier group". Extract key terms, verify consistency across all sections |
 
 ### Step 4: Recompile Round 1
 
@@ -145,26 +176,106 @@ cp main.pdf main_round1.pdf
 
 Verify: 0 undefined references, 0 undefined citations.
 
+### Step 4.5: Restatement Regression Test
+
+After every recompilation, rerun a theorem-statement consistency check so fix rounds cannot reintroduce appendix drift. **Run this after Step 4 and again after Step 7 before the final format check.**
+
+**Scope**
+- Compare only theorem/lemma/proposition/corollary statements, not proof bodies.
+- Classify files by `main.tex` input order: files before `\appendix` are main body; files after `\appendix` are appendix.
+
+**Normalized comparison logic**
+- Strip comments, `\label{...}`, `\ref{...}`, `\eqref{...}`, `\cite...{...}`, and whitespace-only differences.
+- Collapse formatting-only macros such as `\emph{}`, `\textbf{}`, `\textit{}`, `\mathrm{}`, `\mathbf{}`, `\mathcal{}`, and `\operatorname{}` to their contents.
+- Preserve quantifiers, case splits, assumptions, and the literal names of defined objects.
+- Compare by theorem label when available; otherwise compare by theorem type and order.
+- Flag any change in hypotheses, case splits, quantifier order, or terminology (`stationary` vs `terminal`) as regression drift.
+
+```bash
+python3 - <<'PY'
+import re
+def normalize(s):
+    s = re.sub(r'%.*', '', s)
+    s = re.sub(r'\\label\{[^}]*\}', '', s)
+    s = re.sub(r'\\(?:ref|eqref|cref|Cref|cite[a-zA-Z]*)\{[^}]*\}', '', s)
+    s = re.sub(r'\\(?:emph|textbf|textit|mathrm|mathbf|mathsf|mathcal|operatorname)\{([^{}]*)\}', r'\1', s)
+    s = re.sub(r'\\begin\{[^}]+\}|\\end\{[^}]+\}', '', s)
+    s = re.sub(r'\s+', ' ', s)
+    return s.strip().lower()
+# Compare normalized theorem blocks from the current main-body files
+# against their appendix restatements. Any mismatch blocks completion.
+PY
+```
+
+**Empirical motivation:** in our April 2026 NeurIPS run, `thm:dsm-oracle` had a 3-case split (w=0/1/>1) in main but no case split in appendix; `nu_T` was named "stationary" in main and "terminal" in appendix. These drifted multiple times across fix rounds because no automated check caught regression.
+
 ### Step 5: Round 2 Review
 
-Use `send_input` with the saved agent id:
+If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `spawn_agent` reviewer for Round 2. Do not ask the reviewer to reward the Round 1 fix summary for prompting. Save the returned agent_id only for recovery bookkeeping.
 
-```
-send_input:
-  id: [saved from Round 1]
+```text
+spawn_agent:
   model: gpt-5.4
   reasoning_effort: xhigh
   message: |
-    [Round 2 update]
+    You are reviewing a [VENUE] paper. This is a fresh, zero-context review.
+    Ignore any prior review rounds, prior fix lists, or executor explanations.
+    Judge the paper only from the current LaTeX source and compiled PDF.
 
-    Since your last review, we have implemented:
-    1. [Fix 1]: [description]
-    2. [Fix 2]: [description]
-    ...
+    ## Paper Files:
+    - LaTeX source: [list all section .tex files]
+    - Compiled PDF: paper/main.pdf
+    - Figures: [list figure files]
 
-    Please re-score and re-assess. Same format:
-    Score, Summary, Strengths, Weaknesses, Actionable fixes, Verdict.
+    Read BOTH the LaTeX source (for content/logic) AND the compiled PDF (for visual presentation).
+
+    ## Review Instructions
+    Please act as a senior ML reviewer ([VENUE] level). Provide:
+    1. **Overall Score** (1-10, where 6 = weak accept, 7 = accept)
+    2. **Summary** (2-3 sentences)
+    3. **Strengths** (bullet list, ranked)
+    4. **Weaknesses** (bullet list, ranked: CRITICAL > MAJOR > MINOR)
+    5. **For each CRITICAL/MAJOR weakness**: A specific, actionable fix
+    6. **Missing References** (if any)
+    7. **Visual Review** (from the PDF):
+       - Figure quality: readable? labels legible? colors distinguishable in grayscale?
+       - Figure-caption alignment: does each caption match its figure?
+       - Layout: orphaned headers, awkward page breaks, figures far from references?
+       - Table formatting: aligned columns, consistent decimals, bold for best results?
+       - Visual consistency: same color scheme across all figures?
+    8. **Verdict**: Ready for submission? Yes / Almost / No
+
+    Focus on: theoretical rigor, claims vs evidence alignment, writing clarity,
+    self-containedness, notation consistency, and visual presentation quality.
 ```
+
+If `REVIEWER_BIAS_GUARD = false` (legacy debugging only), use `send_input` with the saved reviewer id; this is **not** the recommended path.
+
+### Step 5.5: Kill Argument Exercise (theory papers only)
+
+Run this only if the paper is theory-heavy (≥5 `\begin{theorem}|\begin{lemma}|\begin{proposition}|\begin{corollary}` environments in the source) and only on the final scheduled round (`current_round == MAX_ROUNDS`).
+
+This is a late-stage adversarial check. It must always use **fresh** `spawn_agent` reviewers, never `codex-reply`, and it must not reuse any prior review context.
+
+**Thread 1: Attack**
+- Use a fresh thread with only the current paper files.
+- Prompt: "Construct the single best argument to reject this paper in 200 words. Focus on theorem validity, assumption mismatch, missing proof obligations, limit-order ambiguity, and claim/evidence gaps. Do not reference prior rounds or fixes."
+
+**Thread 2: Defense**
+- Use a second fresh thread with the current paper files plus the attack memo.
+- Prompt: "Now defend the paper against the attack memo. For each rejection point, classify it as already fixed, partially fixed, or still unresolved, and cite the current files. Do not reuse prior review context."
+
+**Merge rule**
+- Dedupe attack points against the Round 2 weakness list by semantic overlap.
+- Append any novel unresolved attack point to the Step 6 fix list before implementation.
+- If the defense cannot refute a point, keep it at the original severity or raise it by one level if it exposes a main-theorem or core-assumption failure.
+- If the defense shows the issue is already fixed in the current files, only downgrade after verifying the file evidence.
+- Record both memos in `PAPER_IMPROVEMENT_LOG.md`.
+- If `HUMAN_CHECKPOINT = true`, include the merged findings in the checkpoint summary before asking the user to proceed.
+
+This phase feeds directly into Step 6. The attack/defense findings must be merged before the final recompile.
+
+**Empirical motivation:** in our April 2026 NeurIPS run, after 5 rounds of standard improvement (score 7-8/10), the kill-argument exercise surfaced framing weaknesses that no prior review caught (e.g., "width-w is mostly conditional", "CRF irrelevant to real D-LLMs"). Author rebuttal forced explicit scope qualifications in abstract and discussion.
 
 ### Step 5b: Human Checkpoint (if enabled)
 
@@ -187,37 +298,68 @@ cp main.pdf main_round2.pdf
 
 ### Step 8: Format Check
 
-After the final recompilation, run a format compliance check:
+After the final recompilation, run a **location-aware** format compliance check.
+
+```bash
+# If the log lacks file/line data, rerun the final compile once with -file-line-error.
+cd paper && latexmk -pdf -file-line-error -interaction=nonstopmode -halt-on-error main.tex
+```
 
 ```bash
 # 1. Page count vs venue limit
 PAGES=$(pdfinfo paper/main.pdf | grep Pages | awk '{print $2}')
 echo "Pages: $PAGES (limit: 9 main body for ICLR/NeurIPS)"
 
-# 2. Overfull hbox warnings (content exceeding margins)
-OVERFULL=$(grep -c "Overfull" paper/main.log 2>/dev/null || echo 0)
-echo "Overfull hbox warnings: $OVERFULL"
-grep "Overfull" paper/main.log 2>/dev/null | head -10
+# 2. Duplicate labels: HARD BLOCK
+DUP_LABELS=$(grep -Rho "\\\\label{[^}]*}" paper/main.tex paper/sections 2>/dev/null | sort | uniq -d || true)
+if [ -n "$DUP_LABELS" ]; then
+    echo "Duplicate labels found (BLOCKING):"
+    echo "$DUP_LABELS"
+fi
 
-# 3. Underfull hbox warnings (loose spacing)
-UNDERFULL=$(grep -c "Underfull" paper/main.log 2>/dev/null || echo 0)
-echo "Underfull hbox warnings: $UNDERFULL"
+# 3. Overfull warnings with location classification
+OVERFULLS=$(grep -n "Overfull \\\\hbox" paper/main.log 2>/dev/null || true)
 
-# 4. Bad boxes summary
-grep -c "badness" paper/main.log 2>/dev/null || echo "0 badness warnings"
+# Main body = source files before \appendix in main.tex.
+# Appendix = source files after \appendix, or files whose path contains "appendix".
+# Bibliography = paper.bbl, references.bib, or bibliography-generated output.
+MAIN_BODY_OVERFULL=$(echo "$OVERFULLS" | grep -v -E 'appendix|paper\.bbl|references\.bib' || true)
+APPENDIX_OVERFULL=$(echo "$OVERFULLS" | grep -E 'appendix' || true)
+BIB_OVERFULL=$(echo "$OVERFULLS" | grep -E 'paper\.bbl|references\.bib' || true)
+
+echo "Main-body overfulls (any size BLOCKS):"
+echo "$MAIN_BODY_OVERFULL"
+echo "Appendix overfulls (>10pt blocks):"
+echo "$APPENDIX_OVERFULL"
+echo "Bibliography overfulls (>20pt blocks):"
+echo "$BIB_OVERFULL"
 ```
 
-**Auto-fix patterns:**
+**Stop criteria:**
+- Any duplicate label blocks completion.
+- Any overfull in the main body blocks completion, regardless of size.
+- Appendix overfulls block completion only if they exceed 10pt or are visibly clipping.
+- Bibliography overfulls block completion only if they exceed 20pt or are visibly clipping.
+- Underfull hboxes remain warnings unless they create obvious layout damage.
+
+**Auto-fix patterns (location-aware):**
 
 | Issue | Fix |
 |-------|-----|
-| Overfull hbox in equation | Wrap in `\resizebox` or split with `\split`/`aligned` |
-| Overfull hbox in table | Reduce font (`\small`/`\footnotesize`) or use `\resizebox{\linewidth}{!}{...}` |
-| Overfull hbox in text | Rephrase sentence or add `\allowbreak` / `\-` hints |
+| Main-body overfull in equation | Split with `aligned` / `split` / `multline`, or shorten notation |
+| Main-body overfull in table | Reduce font, resize table, or break table across rows |
+| Main-body overfull in text | Rephrase; do not hide it with global `\sloppy` |
+| Appendix overfull ≤ 10pt | Warn only unless visibly clipping |
+| Appendix overfull > 10pt | Apply the same fix if the spill is visible |
+| Bibliography overfull ≤ 20pt | Warn only unless caused by malformed entry or clipping |
+| Bibliography overfull > 20pt | Fix malformed entry, URL, or DOI formatting |
 | Over page limit | Move content to appendix, compress tables, reduce figure sizes |
-| Underfull hbox (loose) | Rephrase for better line filling or add `\looseness=-1` |
 
-If any overfull hbox > 10pt is found, fix it and recompile before documenting.
+**Location-aware interpretation:**
+- Classify by the source file reported in the `-file-line-error` log.
+- If a warning cannot be classified, treat it as main body and fix it.
+
+**Empirical motivation:** in our April 2026 NeurIPS run, 28+ overfull hbox warnings (largest 160pt in the appendix bridge proof) survived 5 improvement rounds because the previous blanket "overfull > 10pt blocks" rule was too lax and treated all locations equally.
 
 ### Step 9: Document Results
 
@@ -300,7 +442,7 @@ paper/
 
 - **Preserve all PDF versions** — user needs to compare progression
 - **Save FULL raw review text** — do not summarize or truncate GPT-5.4 responses
-- **Use `send_input`** for Round 2 to maintain conversation context
+- **Reviewer independence (Round 2+)**: when `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `spawn_agent` reviewer for every review round; never use stale reviewer continuation and never include "since last round" / fix summaries in the prompt. See the Reviewer Independence Protocol section above.
 - **Always recompile after fixes** — verify 0 errors before proceeding
 - **Do not fabricate experimental results** — synthetic validation must describe methodology, not invent numbers
 - **Respect the paper's claims** — soften overclaims rather than adding unsupported new claims
@@ -319,3 +461,6 @@ Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
 
 **+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final: 8 pages main body, 0 overfull hbox, ICLR-compliant.
 
+## Review Tracing
+
+After each `spawn_agent`, `send_input`, or adversarial reviewer call, save the trace following `../shared-references/review-tracing.md`. Write files directly to `.aris/traces/auto-paper-improvement-loop/<date>_run<NN>/`. Respect the `--- trace:` parameter when present (default: `full`).

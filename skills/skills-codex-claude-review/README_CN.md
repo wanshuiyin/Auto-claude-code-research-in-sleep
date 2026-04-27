@@ -27,17 +27,16 @@
 
 ## 安装方式
 
-1. 先安装上游原生 Codex 技能包：
+1. 先安装上游原生 Codex 基座：
 
 ```bash
-mkdir -p ~/.codex/skills
-cp -a skills/skills-codex/* ~/.codex/skills/
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project
 ```
 
-2. 再安装这个 Claude-review 覆盖层：
+2. 再用 Claude overlay 重跑一次：
 
 ```bash
-cp -a skills/skills-codex-claude-review/* ~/.codex/skills/
+bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --reconcile --with-claude-review-overlay
 ```
 
 3. 注册本地 reviewer bridge：

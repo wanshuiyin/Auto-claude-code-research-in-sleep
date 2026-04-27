@@ -11,7 +11,7 @@ Search topic or arXiv paper ID: $ARGUMENTS
 
 - **PAPER_DIR** - Local directory to save downloaded PDFs. Default: `papers/` in the current project directory.
 - **MAX_RESULTS = 10** - Default number of search results.
-- **FETCH_SCRIPT** - `tools/arxiv_fetch.py` relative to the ARIS install, or the same path relative to the current project. Fall back to inline Python if not found.
+- **FETCH_SCRIPT** - `$ARIS_REPO/tools/arxiv_fetch.py` from the ARIS repo recorded by the Codex install manifest. Fall back to inline Python if not found.
 
 > Overrides (append to arguments):
 > - `/arxiv "attention mechanism" - max: 20` - return up to 20 results
@@ -35,16 +35,21 @@ If the argument matches an arXiv ID pattern (`YYMM.NNNNN` or `category/NNNNNNN`)
 
 ### Step 2: Search arXiv
 
-Locate the fetch script:
+Locate the fetch script. Prefer the Codex managed install manifest when present, then fall back to the same project/global copy-install lookup style as the Claude skill:
 
 ```bash
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+export ARIS_REPO
 SCRIPT=$(python3 -c "
 import pathlib
+import os
 candidates = [
+    pathlib.Path(os.environ['ARIS_REPO']) / 'tools' / 'arxiv_fetch.py'
+    if os.environ.get('ARIS_REPO') else None,
     pathlib.Path('tools/arxiv_fetch.py'),
     pathlib.Path.home() / '.codex' / 'skills' / 'arxiv' / 'arxiv_fetch.py',
 ]
-for p in candidates:
+for p in [c for c in candidates if c is not None]:
     if p.exists():
         print(p)
         break
@@ -108,7 +113,7 @@ Present results as a table:
 When a single paper ID is requested (either directly or from Step 2):
 
 ```bash
-python3 "$SCRIPT" search "id:ARXIV_ID" --max 1
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" search "id:ARXIV_ID" --max 1
 # or fallback:
 python3 -c "
 import urllib.request, xml.etree.ElementTree as ET
@@ -128,7 +133,7 @@ When download is requested, for each paper ID to download:
 
 ```bash
 # Using fetch script:
-python3 "$SCRIPT" download ARXIV_ID --dir PAPER_DIR
+[ -n "$SCRIPT" ] && python3 "$SCRIPT" download ARXIV_ID --dir PAPER_DIR
 
 # Fallback:
 mkdir -p PAPER_DIR && python3 -c "
@@ -175,7 +180,16 @@ For each paper (downloaded or fetched by API):
 - **Local PDF**: papers/[ID].pdf (if downloaded)
 ```
 
-### Step 6: Final Output
+### Step 6: Update Research Wiki (if active)
+
+If the project has an active research wiki, update it after search or download:
+
+1. Add each accepted paper to the canonical paper table.
+2. Record arXiv ID, title, authors, abstract URL, PDF URL, local PDF path, and source query.
+3. Follow the integration contract in [`shared-references/integration-contract.md`](../shared-references/integration-contract.md).
+4. If the wiki path or schema is unclear, ask before writing rather than inventing a location.
+
+### Step 7: Final Output
 
 Summarize what was done:
 
@@ -199,4 +213,3 @@ Suggest follow-up skills:
 - Handle both arXiv ID formats: new (`2301.07041`) and old (`cs/0601001`)
 - PAPER_DIR is created automatically if it does not exist
 - If the arXiv API is unreachable, report the error clearly and suggest using `/research-lit` with `- sources: web` as a fallback
-

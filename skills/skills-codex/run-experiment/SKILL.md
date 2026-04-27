@@ -15,6 +15,8 @@ Read the project's `AGENTS.md` to determine the experiment environment:
 
 - **Local GPU**: Look for local CUDA/MPS setup info
 - **Remote server**: Look for SSH alias, conda env, code directory
+- **Vast.ai instance**: Look for `gpu: vast`, `vast_instance`, SSH host/port, remote path, and optional `auto_destroy`
+- **Modal serverless**: Look for `gpu: modal`, app/function name, image/dependency setup, and secrets
 
 If no server info is found in `AGENTS.md`, ask the user.
 
@@ -59,6 +61,17 @@ ssh <server> "cd <remote_dst> && git pull"
 ```
 
 Benefits: version-tracked, multi-server sync with one push, no rsync include/exclude rules needed.
+
+#### Option C: Vast.ai instance
+
+If `gpu: vast` is configured, treat the Vast.ai machine as a remote server with an explicit lifecycle:
+
+1. Verify the instance is running and reachable.
+2. Sync code to the configured remote path.
+3. Confirm data/checkpoints are already mounted or intentionally copied.
+4. Record the instance id in the launch summary for later cleanup.
+
+Do not silently ignore a requested Vast.ai route. If Vast.ai CLI credentials or instance metadata are missing, stop and ask the user to configure them.
 
 ### Step 3.5: W&B Integration (when `wandb: true` in AGENTS.md)
 
@@ -112,6 +125,24 @@ ssh <server> "screen -dmS <exp_name> bash -c '\
   CUDA_VISIBLE_DEVICES=<gpu_id> python <script> <args> 2>&1 | tee <log_file>'"
 ```
 
+#### Vast.ai instance
+
+Use the same SSH + screen pattern, but include the Vast.ai instance id, public SSH endpoint, and remote working directory in the report. If `auto_destroy: true`, write a cleanup command to the run notes before launch.
+
+Record the estimated hourly cost, expected run duration, and cleanup owner. If the command fails to start or the instance becomes unreachable, do not relaunch blindly; capture logs and ask for a rescue / second opinion before spending more GPU time.
+
+#### Modal (serverless)
+
+If `gpu: modal` is configured, deploy through Modal instead of SSH:
+
+```bash
+modal run <module_or_app>.py -- <args>
+```
+
+Before launch, verify required secrets, volumes, image dependencies, and output persistence. If Modal is requested but the project lacks Modal configuration, stop and ask the user to configure it rather than falling back to local execution.
+
+Record the Modal app/function name, GPU type, timeout, mounted volumes, and where results will be stored. If Modal reports an image, secret, or volume error, preserve the exact error and run a configuration fix before retrying.
+
 #### Local
 
 ```bash
@@ -140,6 +171,17 @@ After deployment is verified, check `~/.codex/feishu.json`:
 - Send `experiment_done` notification: which experiments launched, which GPUs, estimated time
 - If config absent or mode `"off"`: skip entirely (no-op)
 
+### Step 7: Auto-Destroy Vast.ai Instance (when `gpu: vast` and `auto_destroy: true`)
+
+Only run this after the experiment has completed and results/logs/checkpoints have been copied or otherwise persisted.
+
+1. Verify the target process has exited.
+2. Copy result files and logs to the configured durable location.
+3. Ask for confirmation unless AGENTS.md explicitly says `auto_destroy: true`.
+4. Destroy only the recorded instance id for this run.
+
+If any artifact copy fails, do not destroy the instance.
+
 ## Key Rules
 
 - ALWAYS check GPU availability first — never blindly assign GPUs
@@ -163,6 +205,19 @@ Users should add their server info to their project's `AGENTS.md`:
 - wandb: false              # set to "true" to auto-add W&B logging to experiment scripts
 - wandb_project: my-project # W&B project name (required if wandb: true)
 - wandb_entity: my-team     # W&B team/user (optional, uses default if omitted)
+
+## Vast.ai
+- gpu: vast
+- vast_instance: 123456
+- SSH: `ssh -p 12345 root@ssh.vast.ai`
+- Code dir: `/workspace/experiments/`
+- auto_destroy: false
+
+## Modal
+- gpu: modal
+- modal_app: `train.py`
+- modal_secrets: `wandb-secret`
+- modal_volume: `experiment-results`
 
 ## Local Environment
 - Mac MPS / Linux CUDA

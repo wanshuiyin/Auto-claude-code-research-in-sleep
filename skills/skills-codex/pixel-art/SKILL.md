@@ -112,7 +112,7 @@ Row 7 (legs):         2+2 pixels — with gap in middle
 
 ### Step 2: Generate SVG
 - Write to a temp file or project directory
-- Open with `open <file.svg>` for preview
+- Open with a local preview command for visual inspection
 - Keep viewBox tight — measure actual content bounds
 
 ### Step 3: Iterate with User
@@ -126,6 +126,10 @@ Row 7 (legs):         2+2 pixels — with gap in middle
 - Clean up: remove unused defs, tighten viewBox
 - Suggest adding to README: `![Alt text](filename.svg)`
 
+## Capability Rule
+
+If the user expects local preview or interactive visual iteration and the current environment cannot open or preview the generated asset, stop and tell the user what needs to be configured. Do not silently downgrade into a write-only path unless the user explicitly asked for that mode.
+
 ## Common Pitfalls
 - **Arrow direction**: `orient="auto"` follows line direction. Line going right→left = arrowhead points left
 - **Bubble overlap**: keep 38-44px vertical spacing between rows
@@ -133,4 +137,3 @@ Row 7 (legs):         2+2 pixels — with gap in middle
 - **Character overlap with bubbles**: keep character x-zone and bubble x-zone separated by ≥10px
 - **viewBox too large**: match viewBox to actual content, add ~10px padding
 - **Tail stroke artifact**: always add a small `<rect>` at the bubble-tail junction to cover the stroke line
-

@@ -18,11 +18,34 @@ Given a broad research direction from the user, systematically generate, validat
 - **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
 - **REVIEWER_MODEL = `gpt-5.4`** — Model used via a secondary Codex agent for brainstorming and review. Must be an OpenAI model (e.g., `gpt-5.4`, `o3`, `gpt-4o`).
+- **REVIEWER_BACKEND = `codex`** — Default: Codex xhigh reviewer through `spawn_agent` / `send_input`. Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and fall back to Codex xhigh.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 
 > 💡 Override via argument, e.g., `/idea-creator "topic" — pilot budget: 4h per idea, 20h total`.
 
 ## Workflow
+
+### Phase 0: Load Research Wiki (if active)
+
+Skip this phase entirely if `research-wiki/` does not exist.
+
+Resolve the wiki helper from the Codex install manifest when available:
+
+```bash
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+WIKI_SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
+```
+
+If `research-wiki/query_pack.md` exists and is less than 7 days old, read it as initial landscape context:
+
+- treat listed gaps as priority search seeds
+- treat failed ideas as a banlist
+- treat top papers as known prior work
+- still run Phase 1 for papers from the last 3-6 months because the wiki may be stale
+
+If `research-wiki/` exists but `query_pack.md` is stale or missing, rebuild it only when `WIKI_SCRIPT` is available. If the helper is unavailable, continue without rebuilding and report that wiki refresh was skipped.
 
 ### Phase 1: Landscape Survey (5-10 min)
 
@@ -87,6 +110,8 @@ spawn_agent:
 
 Save the agent id for follow-up.
 
+Save a Review Tracing record for this `spawn_agent` call following `../shared-references/review-tracing.md`, including the landscape summary, prompt summary, raw idea list path, reviewer route, and saved agent id.
+
 ### Phase 3: First-Pass Filtering
 
 For each generated idea, quickly evaluate:
@@ -112,15 +137,18 @@ For each surviving idea, run a deeper evaluation:
 1. **Novelty check**: Use the `/novelty-check` workflow (multi-source search + GPT-5.4 cross-verification) for each idea
 
 2. **Critical review**: Use GPT-5.4 via `send_input` (same agent):
-   ```
-   Here are our top ideas after filtering:
-   [paste surviving ideas with novelty check results]
+   ```text
+   send_input:
+     target: [saved reviewer id from the earlier idea review]
+     message: |
+       Here are our top ideas after filtering:
+       [paste surviving ideas with novelty check results]
 
-   For each, play devil's advocate:
-   - What's the strongest objection a reviewer would raise?
-   - What's the most likely failure mode?
-   - How would you rank these for a top venue submission?
-   - Which 2-3 would you actually work on?
+       For each, play devil's advocate:
+       - What's the strongest objection a reviewer would raise?
+       - What's the most likely failure mode?
+       - How would you rank these for a top venue submission?
+       - Which 2-3 would you actually work on?
    ```
 
 3. **Combine rankings**: Merge your assessment with GPT-5.4's ranking. Select top 2-3 ideas for pilot experiments.
@@ -208,6 +236,28 @@ Write a structured report to `idea-stage/IDEA_REPORT.md`:
 - [ ] If confirmed, invoke /auto-review-loop for full iteration
 ```
 
+## Phase 7: Write Ideas to Research Wiki (if active)
+
+Skip this phase entirely if `research-wiki/` does not exist.
+
+This is critical for spiral learning: without it, `ideas/` stays empty and re-ideation has no memory.
+
+For each recommended and eliminated idea:
+
+1. Create or update `research-wiki/ideas/<idea_id>.md`.
+2. Include `node_id`, `stage`, `outcome`, `based_on`, `target_gaps`, hypothesis, proposed method, expected outcome, and pilot results when available.
+3. If `WIKI_SCRIPT` is available, add edges from idea to source papers and target gaps, then rebuild `query_pack.md`.
+4. If `WIKI_SCRIPT` is unavailable, write the idea pages and report that graph edges/query-pack rebuild require ARIS `research_wiki.py`.
+
+Required edge semantics when helper support exists:
+
+```text
+idea:<id> --inspired_by--> paper:<slug>
+idea:<id> --addresses_gap--> gap:<id>
+```
+
+Log the update as: `idea-creator wrote N ideas (M recommended, K eliminated)`.
+
 ## Output Protocols
 
 > Follow these shared protocols for all output files:
@@ -240,3 +290,6 @@ implement                     → write code
 /auto-review-loop             → iterate until submission-ready
 ```
 
+## Review Tracing
+
+After each `spawn_agent` or `send_input` reviewer call, save the trace following `../shared-references/review-tracing.md`. Include the reviewer route, saved agent id, prompt summary, raw output path, selected ideas, and rejected ideas.

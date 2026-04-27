@@ -14,6 +14,7 @@ Compile the LaTeX paper and fix any issues: **$ARGUMENTS**
 - **MAX_COMPILE_ATTEMPTS = 3** — Maximum attempts to fix errors and recompile.
 - **PAPER_DIR = `paper/`** — Directory containing LaTeX source files.
 - **MAX_PAGES** — Page limit. ML conferences: main body to Conclusion end (excluding references & appendix). ICLR=9, NeurIPS=9, ICML=8. **IEEE venues: references ARE included in page count.** IEEE journal ≈ 12-14 pages, IEEE conference ≈ 5-8 pages (all inclusive).
+- **RESCUE_ON_REPEAT_FAILURE = true** — If the same compile class fails after two attempts, preserve `compile.log` and ask for a focused rescue / second opinion before further edits.
 
 ## Workflow
 
@@ -250,4 +251,3 @@ For conference submission, additional checks:
 | ICML 2025 | `icml2025.sty` | `natbib` (`\citep`/`\citet`) | 8 pages (to Conclusion end) | No | OpenReview |
 | IEEE Journal | `IEEEtran.cls` [journal] | `cite` (`\cite{}`, numeric) | ~12-14 pages (Transactions) / ~4-5 (Letters) | **Yes** | IEEE Author Portal / ScholarOne |
 | IEEE Conference | `IEEEtran.cls` [conference] | `cite` (`\cite{}`, numeric) | 5-8 pages (varies by conf) | **Yes** | EDAS / IEEE Author Portal |
-

@@ -198,6 +198,17 @@ cd Auto-claude-code-research-in-sleep && git pull
 bash tools/smart_update.sh          # dry-run: shows what's new/changed/safe
 bash tools/smart_update.sh --apply  # apply: adds new + updates safe ones
 
+# Optional Codex mirror managed project install
+bash tools/install_aris_codex.sh ~/your-codex-project
+
+# Managed Codex project update
+cd Auto-claude-code-research-in-sleep && git pull
+bash tools/install_aris_codex.sh ~/your-codex-project --reconcile
+
+# Copied Codex installs only (not for projects installed by install_aris_codex.sh)
+bash tools/smart_update_codex.sh --local ~/.codex/skills
+bash tools/smart_update_codex.sh --local ~/.codex/skills --apply
+
 # 2. Set up Codex MCP (for review skills)
 npm install -g @openai/codex
 codex setup                    # set model to gpt-5.4 when prompted
@@ -299,6 +310,8 @@ claude
 > **Want Codex to execute but Claude Code to review?** See [`docs/CODEX_CLAUDE_REVIEW_GUIDE.md`](docs/CODEX_CLAUDE_REVIEW_GUIDE.md). That path installs the base `skills/skills-codex/*`, then overlays `skills/skills-codex-claude-review/*`, and routes review-heavy skills through the local `claude-review` MCP bridge.
 
 > **Want Codex to execute but Gemini to review locally?** See [`docs/CODEX_GEMINI_REVIEW_GUIDE.md`](docs/CODEX_GEMINI_REVIEW_GUIDE.md) and [CN](docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md). That path installs the base `skills/skills-codex/*`, then overlays `skills/skills-codex-gemini-review/*`, and routes the reviewer-aware predefined skills through the local `gemini-review` MCP bridge using direct Gemini API by default.
+
+> **Want the Codex mirror install chain?** Use `tools/install_aris_codex.sh` for managed project installs and `tools/smart_update_codex.sh` for copied Codex installs. The Claude scripts remain the mainline entry points for Claude projects.
 
 See [full setup guide](#%EF%B8%8F-setup) for details and [alternative model combinations](#-alternative-model-combinations) if you don't have Claude/OpenAI API.
 
@@ -1197,6 +1210,8 @@ export OPENAI_API_KEY="your-key"
 ### Install Skills
 
 > 💡 **Recommended: project-local flat symlink install** (since 2026-04-20). Each ARIS skill is symlinked individually into `.claude/skills/<skill-name>`, so Claude Code's slash-command discovery picks them up. A manifest at `.aris/installed-skills.txt` tracks what ARIS installed — uninstall and reconcile only ever touch managed entries, never your own skills.
+>
+> 🤖 **Codex mirror route:** keep Claude on `install_aris.sh` / `smart_update.sh`. For Codex-native project installs, use `install_aris_codex.sh`; for copied Codex installs, use `smart_update_codex.sh`.
 
 ```bash
 # 1. Clone ARIS once to a stable location

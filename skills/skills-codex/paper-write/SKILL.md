@@ -200,6 +200,26 @@ Before drafting the front matter, re-read the one-sentence contribution from `PA
 - Implementation details, hyperparameter tables
 - Additional visualizations
 
+### Step 3.5: Theory Paper Consistency Pass (theory papers only)
+
+Run this pass after drafting all sections and before building the bibliography.
+
+Trigger it when `PAPER_PLAN.md` labels the paper as theory/analysis, or when the drafted sections contain five or more formal result environments (`theorem`, `lemma`, `proposition`, or `corollary`).
+
+**Proof source search:** search the workspace for standalone full-proof sources whose names or contents indicate a canonical proof version (`proof`, `appendix`, `full`, `complete`, `supplement`, `supplementary`). If one exists, ask:
+
+`Inline full proofs from {file}? [Y/n]`
+
+Default to `Y`. If accepted:
+
+- import the full theorem/lemma statement plus proof block into the appendix source;
+- use the main-body theorem statement as the canonical public statement;
+- do not leave placeholders such as "see supplementary proof document" or "proof omitted for brevity";
+- preserve theorem labels, equation labels, and proof structure exactly;
+- keep main-body proof sketches short, but never let the appendix be sketch-only when a full proof source exists.
+
+**Restatement audit:** compare every theorem/lemma/proposition statement restated in the appendix against the main-body version. Audit statements, hypotheses, case splits, quantifiers, domains, notation, variable names, and terminology for defined objects. Resolve all mismatches before Step 4.
+
 ### Step 4: Build Bibliography
 
 **CRITICAL: Only include entries that are actually cited in the paper.**
@@ -258,7 +278,19 @@ This prevents bib bloat (e.g., 948 lines → 215 lines in testing).
 4. Double-check year and venue for every entry
 5. Remove duplicate entries (same paper with different keys)
 
-### Step 5: De-AI Polish (from kgraph57/paper-writer-skill)
+### Step 5: Scientific Writing Quality Pass (5 audit passes)
+
+After drafting all sections, run five sequential audit passes. De-AI polish is included as one part of this quality pass, not a replacement for it.
+
+**Pass 1: Clutter Extraction** — strip sentences to their cleanest components, remove filler, and remove AI-isms.
+
+**Pass 2: Active Voice and Verb Vitality** — identify who did what, convert unnecessary passive voice, and resurrect smothered verbs.
+
+**Pass 3: Sentence Architecture** — flag sentences over 40 words, keep subject and verb close, put familiar context first and new information later, and ensure each paragraph does one job.
+
+**Pass 4: Keyword Consistency** — apply the Banana Rule: do not rename defined technical terms just to avoid repetition. If Methods defines a group, variable, or technique name, Results, Discussion, tables, and captions must use the same term.
+
+**Pass 5: Numerical and Citation Integrity** — check sample sizes, percentages, significant figures, figure/table values, and whether citations support the claims they are attached to.
 
 After drafting all sections, scan for common AI writing patterns and fix them:
 

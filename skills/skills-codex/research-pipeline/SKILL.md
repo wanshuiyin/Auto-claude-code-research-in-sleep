@@ -12,23 +12,28 @@ End-to-end autonomous research workflow for: **$ARGUMENTS**
 - **AUTO_PROCEED = true** — When `true`, Gate 1 auto-selects the top-ranked idea (highest pilot signal + novelty confirmed) and continues to implementation. When `false`, always waits for explicit user confirmation before proceeding.
 - **ARXIV_DOWNLOAD = false** — When `true`, `/research-lit` downloads the top relevant arXiv PDFs during literature survey. When `false` (default), only fetches metadata via arXiv API. Passed through to `/idea-discovery` → `/research-lit`.
 - **HUMAN_CHECKPOINT = false** — When `true`, the auto-review loops (Stage 4) pause after each round's review to let you see the score and provide custom modification instructions before fixes are implemented. When `false` (default), loops run fully autonomously. Passed through to `/auto-review-loop`.
+- **REVIEWER_DIFFICULTY = medium** — Passed through to `/auto-review-loop`. `medium` uses Codex xhigh review; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification.
+- **AUTO_WRITE = false** — When `true`, automatically invoke Workflow 3 (`/paper-writing`) after Stage 5. Requires `VENUE` to be set. When `false` (default), Stage 5 generates `NARRATIVE_REPORT.md` and stops so the user can invoke `/paper-writing` manually.
+- **VENUE = ICLR** — Target venue for paper writing when `AUTO_WRITE=true`. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_CONF`, `IEEE_JOURNAL`.
 
-> 💡 Override via argument, e.g., `/research-pipeline "topic" — AUTO_PROCEED: false, human checkpoint: true`.
+> 💡 Override via argument, e.g., `/research-pipeline "topic" — AUTO_PROCEED: false, human checkpoint: true, difficulty: nightmare, auto_write: true, venue: NeurIPS`.
 
 ## Overview
 
 This skill chains the entire research lifecycle into a single pipeline:
 
 ```
-/idea-discovery → implement → /run-experiment → /auto-review-loop → submission-ready
-├── Workflow 1 ──┤            ├────────── Workflow 2 ──────────────┤
+/idea-discovery → implement → /run-experiment → /auto-review-loop → /paper-writing (optional)
+├── Workflow 1 ──┤            ├────────── Workflow 2 ──────────────┤ ├── Workflow 3 ──┤
 ```
 
-It orchestrates two major workflows plus the implementation bridge between them.
+It orchestrates up to three major workflows plus the implementation bridge between them. Workflow 3 is optional and controlled by `AUTO_WRITE`.
 
 ## Pipeline
 
 ### Stage 1: Idea Discovery (Workflow 1)
+
+If `RESEARCH_BRIEF.md` exists in the project root, it will be loaded by `/idea-discovery` as detailed context and used as the primary brief for the pipeline. The one-line `$ARGUMENTS` still sets the high-level direction.
 
 Invoke the idea discovery pipeline:
 
@@ -85,16 +90,25 @@ Once the user confirms which idea to pursue:
 
 ### Stage 3: Deploy Experiments (Workflow 2 — Part 1)
 
-Deploy the full-scale experiments:
+Deploy the full-scale experiments. Route by job count:
 
+**Small batch (≤5 jobs)** — direct deployment:
 ```
 /run-experiment [experiment command]
 ```
+
+**Large batch (≥10 jobs, multi-seed sweeps, teacher→student chains)** — queue scheduler:
+```
+/experiment-queue [grid spec or manifest]
+```
+
+`experiment-bridge` auto-routes based on milestone job count. For pipeline runs with multi-seed sweeps from the start, allow an explicit `batch: queue` override to force `/experiment-queue` for all milestones.
 
 **What this does:**
 - Check GPU availability on configured servers
 - Sync code to remote server
 - Launch experiments in screen sessions with proper CUDA_VISIBLE_DEVICES
+- For `/experiment-queue`: also OOM retry, stale-screen cleanup, phase dependencies, and crash-safe state
 - Verify experiments started successfully
 
 **Monitor progress:**
@@ -113,6 +127,8 @@ Once initial results are in, start the autonomous improvement loop:
 /auto-review-loop "$ARGUMENTS — [chosen idea title]"
 ```
 
+Pass `REVIEWER_DIFFICULTY` through unchanged. For `hard` and `nightmare`, the downstream loop must preserve Reviewer Memory, Debate Protocol, Review Tracing, and any saved reviewer `agent_id` across rounds.
+
 **What this does (up to 4 rounds):**
 1. GPT-5.4 xhigh reviews the work (score, weaknesses, minimum fixes)
 2. Codex implements fixes (code changes, new experiments, reframing)
@@ -121,9 +137,26 @@ Once initial results are in, start the autonomous improvement loop:
 
 **Output:** `review-stage/AUTO_REVIEW.md` with full review history and final assessment.
 
-### Stage 5: Final Summary
+### Stage 5: Research Summary & Writing Handoff
 
-After the auto-review loop completes, write a final status report:
+After the auto-review loop completes, prepare the handoff for paper writing.
+
+**Step 1:** Write the final research status report.
+
+**Step 2:** Generate `NARRATIVE_REPORT.md` from:
+- `idea-stage/IDEA_REPORT.md` (chosen idea, hypothesis, novelty justification)
+- implementation details from the repo
+- experiment configs and final results
+- `review-stage/AUTO_REVIEW.md` (review history, weaknesses fixed, remaining limitations)
+
+The narrative report must contain:
+- problem statement and core claim
+- method summary
+- key quantitative results with evidence for each claim
+- figure/table inventory (which exist, which need manual creation)
+- limitations and remaining follow-up items
+
+**Output:** `NARRATIVE_REPORT.md` + research pipeline report.
 
 ```markdown
 # Research Pipeline Report
@@ -139,15 +172,32 @@ After the auto-review loop completes, write a final status report:
 - Experiments: [number of GPU experiments, total compute time]
 - Review rounds: N/4, final score: X/10
 
-## Final Status
-- [ ] Ready for submission / [ ] Needs manual follow-up
+## Writing Handoff
+- NARRATIVE_REPORT.md: generated
+- Venue: [VENUE or "not set — run /paper-writing manually"]
+- Manual figures needed: [list or "none"]
 
 ## Remaining TODOs (if any)
 - [items flagged by reviewer that weren't addressed]
-
-## Files Changed
-- [list of key files created/modified]
 ```
+
+### Stage 6: Paper Writing (Workflow 3 — Optional)
+
+Skip this stage if `AUTO_WRITE=false` (default). Present the manual command:
+
+```
+/paper-writing "NARRATIVE_REPORT.md" — venue: ICLR
+```
+
+If `AUTO_WRITE=true`, stop and ask if `VENUE` is missing. Do not silently use a default venue. If manual figures are required, pause and list them before invoking paper writing.
+
+When ready, invoke:
+
+```
+/paper-writing "NARRATIVE_REPORT.md" — venue: $VENUE
+```
+
+Workflow 3 handles its own phases: `/paper-plan → /paper-figure → /paper-write → /paper-compile → /auto-paper-improvement-loop`. When it finishes, update the pipeline report with final PDF path, improvement scores, and remaining issues.
 
 ## Output Protocols
 
@@ -177,4 +227,3 @@ After the auto-review loop completes, write a final status report:
 | 4. Auto Review | 1-4 hours (depends on experiments) | Yes ✅ |
 
 **Sweet spot**: Run Stage 1-2 in the evening, launch Stage 3-4 before bed, wake up to a reviewed paper.
-

@@ -69,17 +69,17 @@ _INSTALL_MESSAGE = "exa-py not found. Install it with: pip install exa-py"
 
 def _get_client() -> Any:
     """Create and return an Exa client with the integration tracking header."""
-    try:
-        from exa_py import Exa
-    except ImportError:
-        raise RuntimeError(_INSTALL_MESSAGE)
-
     api_key = os.getenv("EXA_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError(
             "EXA_API_KEY environment variable is required. "
             "Get your key from: https://exa.ai"
         )
+
+    try:
+        from exa_py import Exa
+    except ImportError:
+        raise RuntimeError(_INSTALL_MESSAGE)
 
     client = Exa(api_key=api_key)
     client.headers["x-exa-integration"] = "auto-claude-code-research-in-sleep"

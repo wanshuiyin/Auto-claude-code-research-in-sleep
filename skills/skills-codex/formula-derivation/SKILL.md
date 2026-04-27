@@ -1,207 +1,280 @@
 ---
-name: "formula-derivation"
-description: "Structure and derive research formulas when the user wants to 推导公式, derive a theory line, build equations from a problem statement, clarify assumptions, separate formal derivation from remarks, or turn messy theory notes into a paper-ready derivation skeleton. Use for research-style formula development, not for fully rigorous theorem proving once the claim is already fixed."
+name: formula-derivation
+description: Structures and derives research formulas when the user wants to 推导公式, build a theory line, organize assumptions, turn scattered equations into a coherent derivation, or rewrite theory notes into a paper-ready formula document. Use when the derivation target is not yet fully fixed, the main object still needs to be chosen, or the user needs a coherent derivation package rather than a finished theorem proof.
+argument-hint: [problem-goal-current-formulas-or-notes]
+allowed-tools: Read, Write, Edit, Grep, Glob
 ---
 
-# Formula Derivation
+# Formula Derivation: Research Theory Line Construction
 
-Use this skill when the task is not merely to prove a finished theorem, but to **build the derivation itself**:
+Build an honest derivation package, not a fake polished theorem story.
 
-- define the right object,
-- decide what should be assumed,
-- determine what is identity vs proposition vs approximation,
-- connect simple and general regimes without splitting into two unrelated stories,
-- and turn messy notes into a derivation line that can later be written into a paper.
+## Constants
 
-Do **not** use this skill as a replacement for strict proof writing once the exact claim is already fixed and the user wants a theorem-proof package. In that case, hand off to `proof-writer`.
+- DEFAULT_DERIVATION_DOC = `DERIVATION_PACKAGE.md` in project root
+- STATUS = `COHERENT AS STATED | COHERENT AFTER REFRAMING / EXTRA ASSUMPTION | NOT YET COHERENT`
 
-## Core Principle
+## Context: $ARGUMENTS
 
-The derivation must be built around **one invariant object**. Do not start from scattered formulas. Start from the object that survives across regimes, then derive proxies, decompositions, and interpretations from it.
+## Goal
 
-## What to Produce
+Produce exactly one of:
+1. a coherent derivation package for the original target
+2. a reframed derivation package with corrected object / assumptions / scope
+3. a blocker report explaining why the current notes cannot yet support a coherent derivation
 
-Prefer one of these outputs:
+## Inputs
 
-1. a **mainline derivation note** for internal alignment;
-2. a **paper-style theory draft** with tighter narrative;
-3. a **blocker report** if the current notes cannot support a coherent derivation.
+Extract and normalize:
+- the target phenomenon, formula, relation, or theory line
+- the intended role of the derivation:
+  - exact identity / algebra
+  - proposition / local theorem
+  - approximation
+  - mechanism interpretation
+- explicit assumptions
+- notation and definitions
+- any user-provided formula chain, sketch, messy notes, or current draft
+- nearby local theory files if the request points to them
+- desired output style if specified:
+  - internal alignment note
+  - paper-style theory draft
+  - blocker report
+
+If the target, object, notation, or assumptions are ambiguous, state the exact interpretation you are using before deriving anything.
 
 ## Workflow
 
-### 1. Freeze the Target
+### Step 1: Gather Derivation Context
+Determine the target derivation file with this priority:
+1. a file path explicitly specified by the user
+2. a derivation draft already referenced in local notes
+3. `DERIVATION_PACKAGE.md` in project root as the default target
 
+Read the relevant local context:
+- the chosen target derivation file, if it already exists
+- any local theory notes, formula drafts, appendix notes, or files explicitly mentioned by the user
+
+Extract:
+- target formula / theory goal
+- current formula chain
+- assumptions
+- notation
+- known blockers
+- desired output mode
+
+### Step 2: Freeze the Target
 State explicitly:
-
-- what phenomenon is being explained;
-- what claim is being supported;
-- whether the goal is:
-  - identity / algebra,
-  - local comparative statics,
-  - approximation,
-  - or mechanism interpretation.
+- what is being explained, derived, or supported
+- whether the immediate goal is:
+  - identity / algebra
+  - proposition
+  - approximation
+  - interpretation
+- what the derivation is expected to output in the end
 
 Do not start symbolic manipulation before this is fixed.
 
-### 2. Choose the Invariant Object
+### Step 3: Choose the Invariant Object
+Identify the single quantity or conceptual object that should organize the derivation.
 
-Find the single quantity that should remain meaningful across regimes.
+Typical possibilities include:
+- objective / utility / loss
+- total cost / energy / welfare
+- conserved quantity / state variable
+- expected metric / effective rate / effective cost
 
-Examples:
+If the current notes start from a narrower quantity, decide explicitly whether it is:
+- the true top-level object
+- a proxy
+- a local slice
+- an approximation
 
-- objective / loss / utility
-- total energy / cost / welfare
-- state variable / conserved quantity / effective rate
-- expected performance metric
+Do not let a convenient proxy silently replace the actual conceptual object.
 
-If the current notes use a narrower quantity (`c_i`, throughput, delay, CW, etc.), decide whether it is:
+### Step 4: Normalize Assumptions and Notation
+Restate:
+- all assumptions
+- all symbols
+- regime boundaries or special cases
+- which quantities are fixed, adaptive, or state dependent
 
-- the true top-level object,
-- or only a proxy / slice / approximation.
+Identify:
+- hidden assumptions
+- undefined notation
+- scope ambiguities
+- whether the current formula chain already mixes exact steps with approximations
 
-### 3. Put Assumptions and Notation First
+Preserve the user's original notation unless a cleanup is necessary for coherence.
+If you adopt a cleaner internal formulation, keep that as a derivation device rather than silently replacing the user's target.
 
-Before deriving, list:
+### Step 5: Classify the Derivation Steps
+For every nontrivial step, determine whether it is:
+- **identity**: exact algebraic reformulation
+- **proposition**: a claim requiring conditions
+- **approximation**: model simplification or surrogate
+- **interpretation**: prose-level meaning of a formula
 
-- assumptions;
-- notation;
-- regime boundaries;
-- which quantities are fixed and which are state dependent.
+Never merge these categories without signaling the transition.
+If one part is only interpretive, do not present it as if it were mathematically proved.
 
-Do not introduce hidden assumptions mid-derivation unless they are clearly marked as extra local assumptions.
+### Step 6: Build a Derivation Map
+Choose a derivation strategy, for example:
+- definition -> substitution -> simplification
+- primitive law -> intermediate variable -> target expression
+- global quantity -> perturbation -> decomposition
+- exact model -> approximation -> interpretable closed form
+- general dynamic object -> simplified slice -> local theorem -> return to general case
 
-### 4. Classify Every Step
+Then write a derivation map:
+- target formula or theory line
+- required intermediate identities or lemmas
+- which assumptions each nontrivial step uses
+- where approximations enter
+- where special-case and general-case regimes diverge or collapse
 
-Every nontrivial part of the derivation must be labeled mentally as one of:
+If the derivation needs a decomposition, derive it from the chosen global quantity.
+Do not make a split appear magically from one local variable itself.
 
-- **identity**: exact algebraic reformulation;
-- **proposition**: a claim requiring conditions;
-- **approximation**: model simplification or surrogate;
-- **interpretation**: prose-level explanation of what the formula means.
+### Step 7: Write the Derivation Document
+Write to the chosen target derivation file.
 
-Never mix these without signaling the change.
+If the target derivation file already exists:
+- read it first
+- update the relevant section
+- do not blindly duplicate prior content
 
-### 5. Derive from the Global Quantity When Splitting Costs
+If the user does not specify a target, default to `DERIVATION_PACKAGE.md` in project root.
 
-If the goal is to split a quantity into components, start from the **global quantity** and then differentiate / decompose.
+Do NOT write directly into paper sections or appendix `.tex` files unless the user explicitly asks for that target.
 
-Pattern:
+The derivation package must include:
+- target
+- status
+- invariant object
+- assumptions
+- notation
+- derivation strategy
+- derivation map
+- main derivation steps
+- remarks / interpretations
+- boundaries and non-claims
 
-1. define the global quantity, e.g. `W = \sum_j \Gamma_j`;
-2. perturb one local variable, e.g. `c_i`;
-3. compute the marginal social effect;
-4. split the result into:
-   - direct term,
-   - indirect term,
-   - or private / external terms if that distinction is part of the model.
+Writing rules:
+- do not hide gaps with words like "clearly", "obviously", or "similarly"
+- define every symbol before use
+- mark approximations explicitly
+- separate derivation body from remarks
+- if the true object is dynamic or state dependent but a simpler slice is analyzed, say so explicitly
+- if a formula line is only heuristic, label it honestly
 
-Do **not** present the decomposition as if it appeared magically from one local variable itself. The split must come from the effect of changing that variable on the chosen global quantity.
+### Step 8: Final Verification
+Before finishing the target derivation file, verify:
+- the target is explicit
+- the invariant object is stable across the derivation
+- every assumption used is stated
+- each formula step is correctly labeled as identity / proposition / approximation / interpretation
+- the derivation does not silently switch objects
+- special cases and general cases still belong to one theory line
+- boundaries and non-claims are stated
 
-### 6. Keep Special Cases and General Cases in One Line
+If the derivation still lacks a coherent object, stable assumptions, or an honest path from premises to result, downgrade the status and write a blocker report instead of forcing a clean story.
 
-If the theory must cover both a simplified regime and a more general regime, do not write two unrelated stories.
+## Required File Structure
 
-Use this pattern:
+Write the target derivation file using this structure:
 
-- same invariant object across all regimes;
-- special case: some terms vanish or collapse;
-- general case: the same object gains extra structure.
+```md
+# Derivation Package
 
-This prevents the simple case from looking like an exception and the general case from looking like a different theory.
+## Target
+[what is being derived or explained]
 
-### 7. Treat Simplified Parameters as Analysis Slices
+## Status
+COHERENT AS STATED / COHERENT AFTER REFRAMING / NOT YET COHERENT
 
-If the true object is state dependent, adaptive, vector-valued, or otherwise complicated, but a theorem needs a simpler parameterization, write:
+## Invariant Object
+[top-level quantity organizing the derivation]
 
-- the general object first;
-- then define the simpler case as a **tractable slice**.
+## Assumptions
+- ...
 
-Use language such as:
+## Notation
+- ...
 
-- frozen-parameter approximation;
-- constant-coefficient slice;
-- local linearization;
-- reduced-order case.
+## Derivation Strategy
+[chosen route and why]
 
-Do not let the simplified case silently replace the real conceptual object.
+## Derivation Map
+1. Target depends on ...
+2. Intermediate step A uses ...
+3. Approximation enters at ...
 
-### 8. Separate Main Text from Remarks
+## Main Derivation
+Step 1. ...
+Step 2. ...
+...
 
-For derivations intended for papers:
+## Remarks and Interpretation
+- ...
 
-- the **main derivation** should contain only equations and immediate mathematical consequences;
-- explanatory prose, intuition, scenario reading, and caveats should be moved to **Remark / Discussion / Scope** paragraphs.
+## Boundaries and Non-Claims
+- ...
 
-If a section starts to read like an internal lecture note, split it into:
+## Open Risks
+- ...
+```
 
-- derivation body;
-- remark.
+## Output Modes
 
-### 9. Write Boundaries Explicitly
+### If the derivation is coherent as stated
+Write the full structure above with a clean derivation package.
 
-At the end, state:
+### If the notes are close but not coherent yet
+Write:
+- the exact mismatch
+- the corrected invariant object, assumption, or scope
+- the reframed derivation package
 
-- what the derivation actually proves;
-- what remains approximation;
-- what should **not** be claimed.
-
-Especially guard against:
-
-- turning a local proposition into a universal theorem;
-- letting an interpretation sound like a proof;
-- hiding a proxy as if it were the true quantity.
-
-## Common Derivation Patterns
-
-When the user is unsure how to start, try one of these common patterns:
-
-1. **Definition -> substitution -> simplification**
-   Use when the target formula is mostly algebraic.
-
-2. **Global quantity -> perturbation -> decomposition**
-   Use when the target needs direct / indirect, private / external, or local / global splitting.
-
-3. **Primitive law -> intermediate variable -> target expression**
-   Use when deriving from a physical principle, conservation law, or probabilistic identity.
-
-4. **Exact model -> approximation -> interpretable closed form**
-   Use when the exact formula is too heavy and a paper needs a usable surrogate.
-
-5. **General dynamic object -> frozen slice -> theorem -> return to general case**
-   Use when the real system is adaptive or state dependent, but the proof needs a simpler slice.
-
-## Recommended Output Structure
-
-For an internal derivation note:
-
-1. Target
-2. Invariant object
-3. Assumptions and notation
-4. Main derivation
-5. Regime interpretation
-6. Approximations and open risks
-
-For a paper-style theory section:
-
-1. Unified object
-2. Formal proxy and assumptions
-3. Special-case to general-case decomposition
-4. Reward / objective reformulation
-5. Local theorem or proposition
-6. State-dependent extension
-7. Scope and non-claims
+### If the derivation cannot be made coherent honestly
+Write:
+- `Status: NOT YET COHERENT`
+- the exact blocker:
+  - missing object
+  - unstable assumptions
+  - notation conflict
+  - unsupported approximation
+  - theorem-level claim without enough conditions
+- what extra assumption, reframe, or intermediate derivation would be needed
 
 ## Relationship to `proof-writer`
 
 Use `formula-derivation` when the user says things like:
-
 - “我不知道怎么起这条推导主线”
 - “这个公式到底该从哪个量出发”
 - “帮我把理论搭顺”
 - “把说明文档变成可写进论文的公式文档”
+- “这几段公式之间逻辑不通”
 
 Use `proof-writer` only after:
+- the exact claim is fixed
+- the assumptions are stable
+- the notation is settled
+- and the task is now to prove or refute that claim rigorously
 
-- the exact claim is already fixed,
-- the assumptions are stable,
-- and the task is now to prove or refute that claim rigorously.
+## Chat Response
+
+After writing the target derivation file, respond briefly with:
+- status
+- whether the target survived unchanged or had to be reframed
+- what file was updated
+
+## Key Rules
+
+- Never fabricate a coherent derivation if the object, assumptions, or scope do not support one.
+- Prefer reframing the derivation over overclaiming.
+- Separate assumptions, identities, propositions, approximations, and interpretations.
+- Keep one invariant object across special and general cases whenever possible.
+- Treat simplified constant-parameter cases as analysis slices, not as the conceptual main object.
+- If uncertainty remains, mark it explicitly in `Open Risks`; do not hide it in polished prose.
+- Coherence matters more than elegance.

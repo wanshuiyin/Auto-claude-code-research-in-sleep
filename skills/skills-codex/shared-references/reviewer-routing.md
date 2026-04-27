@@ -1,89 +1,85 @@
 # Reviewer Routing
 
-## Default (NEVER changes without explicit user request)
+## Default Reviewer Contract
 
-All review calls use **Codex MCP** (`mcp__codex__codex`) with `reasoning_effort: xhigh`.
+All reviewer-heavy Codex base skills use the same default contract:
 
-This is the default for ALL skills. No parameter, no config, no effort level changes this.
+- executor: current Codex main agent
+- reviewer: second Codex reviewer
+- reasoning effort: `xhigh`
+- round 1: `spawn_agent`
+- follow-up rounds: `send_input`
 
-## Optional: GPT-5.4 Pro via Oracle
+This is the base default for `skills/skills-codex/`. No effort level or unrelated parameter changes it.
 
-When the user explicitly passes `— reviewer: oracle-pro`, route the review through Oracle MCP instead of Codex MCP.
+## Default Pattern
 
-### Routing Logic (add to any reviewer-invoking skill)
+Single-round review:
 
-```
-Parse $ARGUMENTS for `— reviewer:` directive.
-
-If not specified OR `— reviewer: codex`:
-    → Use mcp__codex__codex with reasoning_effort: xhigh
-    → This is the DEFAULT. No change from current behavior.
-
-If `— reviewer: oracle-pro`:
-    → Check if mcp__oracle__consult tool is available
-    → If available:
-        Use mcp__oracle__consult with:
-          model: "gpt-5.4-pro"
-          prompt: [same prompt you would send to Codex]
-          files: [file paths for reviewer to read directly]
-        Note: Oracle may use API mode (fast, needs OPENAI_API_KEY)
-              or browser mode (slow ~1-2 min, needs Chrome + ChatGPT login)
-    → If NOT available:
-        Print: "⚠️ Oracle MCP not installed. Falling back to Codex xhigh."
-        Use mcp__codex__codex as normal.
+```text
+spawn_agent:
+  model: gpt-5.4
+  reasoning_effort: xhigh
+  message: |
+    [role + task]
+    Read the listed files directly.
 ```
 
-### Invariants
+Multi-round review:
 
-- `— reviewer: oracle-pro` ONLY takes effect when explicitly passed
-- Reviewer independence protocol still applies (pass file paths, not summaries)
-- `effort` and `difficulty` are orthogonal — they don't change reviewer backend
-- `beast` mode may RECOMMEND oracle-pro but never requires it
-- Browser mode: acceptable for one-shot reviews; NOT recommended inside multi-round loops (too slow/brittle)
-
-### Oracle MCP Call Format
-
-```
-mcp__oracle__consult:
-  prompt: |
-    [role + task + output schema]
-    Read all listed files directly.
-  model: "gpt-5.4-pro"
-  files:
-    - /absolute/path/to/file1
-    - /absolute/path/to/file2
+```text
+spawn_agent:
+  model: gpt-5.4
+  reasoning_effort: xhigh
+  message: |
+    [initial review prompt]
 ```
 
-### Skills That Support `— reviewer: oracle-pro`
+Save the returned reviewer id, then continue with:
 
-| Skill | Use case for Pro |
-|-------|-----------------|
-| `/research-review` | Deeper critique on paper drafts |
-| `/auto-review-loop` | Final stress test (last round only in browser mode) |
-| `/experiment-audit` | Line-by-line eval code audit |
-| `/proof-checker` | Deep mathematical reasoning |
-| `/rebuttal` | Stress test before submission |
-| `/idea-creator` | Idea evaluation depth |
-| `/research-lit` | Literature analysis depth |
-
-### Installation
-
-```bash
-# Install Oracle CLI + MCP
-npm install -g @steipete/oracle
-
-# Add Oracle MCP to Claude Code
-claude mcp add oracle -s user -- oracle-mcp
-
-# Restart Claude Code session to load
-
-# API mode (fast, recommended):
-export OPENAI_API_KEY="your-key"
-
-# Browser mode (no API key, slower):
-# Just log in to ChatGPT in Chrome
+```text
+send_input:
+  target: <saved reviewer id>
+  message: |
+    [follow-up materials only]
 ```
 
-### NOT installed = ZERO impact
+## Oracle Pro Override
 
-If Oracle is not installed, `— reviewer: oracle-pro` gracefully falls back to Codex. No error, no breakage, just a warning.
+When the user explicitly passes `--reviewer: oracle-pro`, switch only the reviewer route:
+
+- default reviewer remains Codex xhigh if no reviewer is specified
+- `oracle-pro` is optional, not the base default
+
+Routing rule:
+
+```text
+If reviewer is omitted or reviewer=codex:
+  use spawn_agent / send_input with Codex reviewer at xhigh
+
+If reviewer=oracle-pro:
+  check Oracle MCP availability
+  if available:
+    call mcp__oracle__consult with model gpt-5.4-pro
+  if unavailable:
+    print a clear warning
+    fall back to the default Codex xhigh reviewer
+```
+
+## Invariants
+
+- Base skills do not use the legacy Codex MCP thread path as the default reviewer route.
+- Reviewer independence still applies: pass file paths and task framing, not executor summaries.
+- Overlay packages may replace only the reviewer route.
+- Overlay packages do not change executor semantics.
+- Browser-based Oracle review is acceptable for one-shot stress tests, not ideal for tight multi-round loops.
+
+## Skills That Commonly Benefit From `oracle-pro`
+
+- `research-review`
+- `auto-review-loop`
+- `experiment-audit`
+- `proof-checker`
+- `rebuttal`
+- `idea-creator`
+- `research-lit`

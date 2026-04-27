@@ -21,10 +21,13 @@ refine-logs/FINAL_PROPOSAL.md
 ## Constants
 
 - **AUTO_DEPLOY = true** — Automatically deploy experiments after implementation. Set `false` to review code before deploying.
+- **CODE_REVIEW = true** — Secondary Codex reviewer with xhigh reasoning reviews experiment code before deployment. Catches logic bugs before wasting GPU hours. Set `false` to skip.
 - **SANITY_FIRST = true** — Run the sanity-stage experiment first (smallest, fastest) before launching the rest. Catches setup bugs early.
 - **MAX_PARALLEL_RUNS = 4** — Maximum number of experiments to deploy in parallel (limited by available GPUs).
 - **BASE_REPO = false** — GitHub repo URL to use as a base codebase. When set, clone it first and implement experiments on top of it.
 - **COMPACT = false** — When `true`, prefer `idea-stage/IDEA_CANDIDATES.md` over the full `idea-stage/IDEA_REPORT.md`, and append completed runs to `EXPERIMENT_LOG.md`.
+- **BACKENDS = local | ssh | vast | modal** — Preserve the Claude mainline backend lifecycle. Vast.ai and Modal routes are first-class when configured; do not silently fall back to local execution if the user requested either backend.
+- **RESCUE_ON_FAILURE = true** — If sanity or deployment fails, run a Codex-native rescue / second opinion review before abandoning the experiment plan.
 
 > Override: `/experiment-bridge "EXPERIMENT_PLAN.md" — compact: true, base repo: https://github.com/org/project`
 
@@ -99,6 +102,42 @@ For each milestone (in order), write the experiment scripts:
    - Does the code match FINAL_PROPOSAL.md's method description?
    - **CRITICAL**: does evaluation compare predictions against dataset ground truth, never another model's output?
 
+### Phase 2.5: Cross-Model Code Review (when CODE_REVIEW = true)
+
+Skip this step if `CODE_REVIEW` is `false`.
+
+Before deploying, send the experiment code to a secondary Codex reviewer with xhigh reasoning:
+
+```text
+spawn_agent:
+  reasoning_effort: xhigh
+  message: |
+    Review the following experiment implementation for correctness.
+
+    ## Experiment Plan
+    [paste key sections from EXPERIMENT_PLAN.md]
+
+    ## Method Description
+    [paste from FINAL_PROPOSAL.md]
+
+    ## Implementation
+    [paste the experiment scripts or exact file paths plus relevant snippets]
+
+    Check for:
+    1. Does the code correctly implement the method described in the proposal?
+    2. Are all hyperparameters from the plan reflected in the code?
+    3. Are there logic bugs: wrong loss, wrong data split, missing eval, leakage, metric mismatch?
+    4. Is the evaluation metric computed against ground truth, not another model's output?
+    5. Are seeds, result paths, logging, and failure handling sufficient for reproducible experiments?
+
+    Output:
+    - BLOCKING issues that must be fixed before deployment
+    - NON-BLOCKING issues that can wait
+    - Suggested patches or checks
+```
+
+If BLOCKING issues are found, fix them and re-run this review once before Phase 3. Save the reviewer response and any fixes in `refine-logs/EXPERIMENT_CODE_REVIEW.md`. If reviewer delegation is unavailable, run the same checklist locally and mark the review `[local-only]`.
+
 ### Phase 3: Sanity Check (if SANITY_FIRST = true)
 
 Before deploying the full experiment suite, run the sanity-stage experiment:
@@ -115,18 +154,34 @@ Wait for completion. Verify:
 
 If sanity fails → fix the code, re-run. Do not proceed to full deployment with broken code.
 
+If the same sanity failure repeats, trigger a second opinion: summarize the plan, code diff, command, logs, backend, and failure, then ask a fresh Codex reviewer agent for a rescue diagnosis. Apply only concrete fixes grounded in the logs.
+
 ### Phase 4: Deploy Full Experiments
 
-Deploy experiments following the plan's milestone order:
+Deploy experiments following the plan's milestone order. Route by job count and dependencies:
 
 ```
 /run-experiment [experiment commands]
 ```
 
+For large batches (≥10 jobs), multi-seed sweeps, or teacher→student phase dependencies, use the queue scheduler:
+
+```
+/experiment-queue [grid spec or manifest]
+```
+
+Auto-routing rule: if any milestone in `EXPERIMENT_PLAN.md` declares ≥10 jobs or declares phase dependencies, route that milestone to `/experiment-queue`; otherwise use `/run-experiment`. `/experiment-queue` adds OOM-aware retry with backoff, stale-screen cleanup, wave-transition race prevention, phase dependency enforcement, and crash-safe state persistence in `queue_state.json`.
+
 For each milestone:
-1. Deploy experiments in parallel (up to MAX_PARALLEL_RUNS)
-2. Use `/monitor-experiment` to track progress
+1. Deploy experiments in parallel (up to MAX_PARALLEL_RUNS for `/run-experiment`, or `max_parallel` from the queue manifest for `/experiment-queue`)
+2. Use `/monitor-experiment` to track progress; if `/experiment-queue` is active, monitor `queue_state.json`
 3. Collect results as experiments complete
+
+Backend lifecycle rules:
+- **Vast.ai**: record instance id, SSH endpoint, mounted data/checkpoints, estimated hourly cost, and cleanup policy. If `auto_destroy` is configured, write the exact cleanup command before launch.
+- **Modal**: verify app/function, image/dependencies, secrets, volumes, and output persistence before launch.
+- **Local/SSH**: verify GPU availability, environment activation, log path, and result path before launching.
+- If a backend is unreachable or misconfigured, stop with a configuration issue instead of silently switching backend.
 
 **🚦 Checkpoint (if AUTO_DEPLOY = false):**
 
