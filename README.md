@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/wanshuiyin-auto-claude-code-research-in-sleep-badge.png)](https://mseep.ai/app/wanshuiyin-auto-claude-code-research-in-sleep)
+
 # Auto-claude-code-research-in-sleep (ARIS ⚔️🌙)
 
 💡 *Use ARIS in Claude Code / Cursor / Trae as a skill-based workflow, or get the full experience with the standalone CLI — enjoy any way you like!*
