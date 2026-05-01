@@ -209,6 +209,16 @@ PY
 
 **Empirical motivation:** in our April 2026 NeurIPS run, `thm:dsm-oracle` had a 3-case split (w=0/1/>1) in main but no case split in appendix; `nu_T` was named "stationary" in main and "terminal" in appendix. These drifted multiple times across fix rounds because no automated check caught regression.
 
+**Optional deeper check: `/proof-checker --restatement-check`**
+
+The inline Python check above is the default and is sufficient for routine main-vs-appendix consistency. For broader coverage, you may additionally invoke `/proof-checker --restatement-check` (added in PR #189), which extends the comparison to:
+
+- Restatements in summary tables, abstract, "Key Contributions" lists, and discussion sections (not just main vs appendix).
+- Six named drift signatures classified by reviewer: `conditional_loss`, `scope_change`, `quantifier_loss`, `regime_envelope_change`, `constant_change`, `variable_rename`.
+- Structured findings emitted as `details.restatement_drift[]` in `PROOF_AUDIT.json`, suitable for downstream tooling or audit trails.
+
+This is advisory only — the inline Step 4.5 check remains the default and continues to run on every loop round. Consider invoking `/proof-checker --restatement-check` when (a) you suspect cross-location drift outside the main↔appendix axis (e.g., abstract overclaim relative to theorem statement), or (b) you want reviewer-graded drift signatures rather than raw string mismatches. Running both is supported and they are independent: the inline check fails fast on string drift, the proof-checker pass surfaces semantic-class drift.
+
 ### Step 5: Round 2 Review
 
 If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__codex__codex` thread for Round 2. Do not reuse the Round 1 threadId for prompting. Save the returned threadId only for recovery bookkeeping.
