@@ -3572,6 +3572,8 @@ impl ApiClient for AnthropicRuntimeClient {
                                 input.push_str(&partial_json);
                             }
                         }
+                        ContentBlockDelta::ThinkingDelta { .. } => {},
+                        ContentBlockDelta::SignatureDelta { .. } => {},
                     },
                     ApiStreamEvent::ContentBlockStop(_) => {
                         if let Some(rendered) = markdown_stream.flush(&renderer) {
@@ -4134,6 +4136,7 @@ fn push_output_block(
             };
             *pending_tool = Some((id, name, initial_input));
         }
+        OutputContentBlock::Thinking { .. } => {},
     }
     Ok(())
 }

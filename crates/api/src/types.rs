@@ -192,6 +192,10 @@ pub enum OutputContentBlock {
         name: String,
         input: Value,
     },
+    Thinking {
+        thinking: String,
+        signature: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -247,6 +251,8 @@ pub struct ContentBlockDeltaEvent {
 pub enum ContentBlockDelta {
     TextDelta { text: String },
     InputJsonDelta { partial_json: String },
+    ThinkingDelta { thinking: String },
+    SignatureDelta { signature: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
