@@ -8,7 +8,7 @@ use crate::config::RuntimeFeatureConfig;
 use crate::event_sink::{EventSink, EventType, NoopEventSink, RuntimeEvent, now_iso8601};
 use crate::hooks::{HookRunResult, HookRunner};
 use crate::permissions::{PermissionOutcome, PermissionPolicy, PermissionPrompter};
-use crate::session::{ContentBlock, ConversationMessage, Session};
+use crate::session::{ContentBlock, ConversationMessage, MessageRole, Session};
 use crate::usage::{TokenUsage, UsageTracker};
 
 const DEFAULT_AUTO_COMPACTION_INPUT_TOKENS_THRESHOLD: u32 = 200_000;
@@ -27,6 +27,10 @@ pub enum AssistantEvent {
         id: String,
         name: String,
         input: String,
+    },
+    Thinking {
+        thinking: String,
+        signature: String,
     },
     Usage(TokenUsage),
     MessageStop,
@@ -242,6 +246,7 @@ where
                 break;
             }
 
+            let mut turn_tool_results = Vec::new();
             for (tool_use_id, tool_name, input) in pending_tool_uses {
                 let permission_outcome = if let Some(prompt) = prompter.as_mut() {
                     self.permission_policy
@@ -250,17 +255,17 @@ where
                     self.permission_policy.authorize(&tool_name, &input, None)
                 };
 
-                let result_message = match permission_outcome {
+                let result_blocks = match permission_outcome {
                     PermissionOutcome::Allow => {
                         let pre_hook_result = self.hook_runner.run_pre_tool_use(&tool_name, &input);
                         if pre_hook_result.is_denied() {
                             let deny_message = format!("PreToolUse hook denied tool `{tool_name}`");
-                            ConversationMessage::tool_result(
+                            vec![ContentBlock::ToolResult {
                                 tool_use_id,
                                 tool_name,
-                                format_hook_message(&pre_hook_result, &deny_message),
-                                true,
-                            )
+                                output: format_hook_message(&pre_hook_result, &deny_message),
+                                is_error: true,
+                            }]
                         } else {
                             let (mut output, mut is_error) =
                                 match self.tool_executor.execute(&tool_name, &input) {
@@ -311,17 +316,30 @@ where
                                 },
                             });
 
-                            ConversationMessage::tool_result(
+                            vec![ContentBlock::ToolResult {
                                 tool_use_id,
                                 tool_name,
                                 output,
                                 is_error,
-                            )
+                            }]
                         }
                     }
                     PermissionOutcome::Deny { reason } => {
-                        ConversationMessage::tool_result(tool_use_id, tool_name, reason, true)
+                        vec![ContentBlock::ToolResult {
+                            tool_use_id,
+                            tool_name,
+                            output: reason,
+                            is_error: true,
+                        }]
                     }
+                };
+                turn_tool_results.extend(result_blocks);
+            }
+            if !turn_tool_results.is_empty() {
+                let result_message = ConversationMessage {
+                    role: MessageRole::User,
+                    blocks: turn_tool_results,
+                    usage: None,
                 };
                 self.session.messages.push(result_message.clone());
                 tool_results.push(result_message);
@@ -421,6 +439,10 @@ fn build_assistant_message(
             AssistantEvent::ToolUse { id, name, input } => {
                 flush_text_block(&mut text, &mut blocks);
                 blocks.push(ContentBlock::ToolUse { id, name, input });
+            }
+            AssistantEvent::Thinking { thinking, signature } => {
+                flush_text_block(&mut text, &mut blocks);
+                blocks.push(ContentBlock::Thinking { thinking, signature });
             }
             AssistantEvent::Usage(value) => usage = Some(value),
             AssistantEvent::MessageStop => {

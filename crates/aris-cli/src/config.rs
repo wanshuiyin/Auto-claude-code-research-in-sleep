@@ -233,6 +233,11 @@ impl ArisConfig {
                             std::env::set_var("ARIS_REVIEWER_AUTH_TOKEN", key);
                         }
                     }
+                    "deepseek" => {
+                        if force_reviewer || std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_err() {
+                            std::env::set_var("ARIS_REVIEWER_AUTH_TOKEN", key);
+                        }
+                    }
                     _ => {}
                 }
             }
@@ -297,9 +302,14 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     println!("  4. GLM         (GLM-5)");
     println!("  5. MiniMax     (MiniMax-M2.7)");
     println!("  6. Kimi        (kimi-k2.5)");
+    println!("  7. DeepSeek    (deepseek-chat)");
 
     let default_executor = match config.executor_provider.as_deref() {
-        Some("anthropic") | Some("anthropic-compat") => "1",
+        Some("anthropic") => "1",
+        Some("anthropic-compat") => match config.executor_base_url.as_deref() {
+            Some(u) if u.contains("deepseek") => "7",
+            _ => "1",
+        },
         Some("openai") => match config.executor_base_url.as_deref() {
             Some(u) if u.contains("googleapis") => "3",
             Some(u) if u.contains("bigmodel") => "4",
@@ -309,7 +319,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         },
         _ => "1",
     };
-    let exec_choice_raw = prompt_with_default("  Choose [1-6]", default_executor)?;
+    let exec_choice_raw = prompt_with_default("  Choose [1-7]", default_executor)?;
     let exec_choice = exec_choice_raw.trim();
     // Detect real menu change, not just provider-string change. OpenAI / Gemini /
     // GLM / MiniMax / Kimi all serialize to provider="openai" so we must compare
@@ -323,6 +333,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         "4" => ("openai", "EXECUTOR_API_KEY", "GLM API key", Some("https://open.bigmodel.cn/api/paas/v4"), "GLM-5"),
         "5" => ("openai", "EXECUTOR_API_KEY", "MiniMax API key", Some("https://api.minimax.chat/v1"), "MiniMax-M2.7"),
         "6" => ("openai", "EXECUTOR_API_KEY", "Kimi API key", Some("https://api.moonshot.cn/v1"), "kimi-k2.5"),
+        "7" => ("anthropic-compat", "ANTHROPIC_AUTH_TOKEN", "DeepSeek API key", Some("https://api.deepseek.com/anthropic"), "deepseek-v4-pro"),
         _ => ("anthropic", "ANTHROPIC_API_KEY", "Anthropic API key", None, "claude-opus-4-6"),
     };
 
@@ -405,7 +416,8 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     println!("  4. MiniMax         (MiniMax-M2.7)");
     println!("  5. Kimi            (kimi-k2.5)");
     println!("  6. Anthropic Proxy (claude via proxy)");
-    println!("  7. Skip (no reviewer)");
+    println!("  7. DeepSeek         (deepseek-chat)");
+    println!("  8. Skip (no reviewer)");
     let default_reviewer = match config.reviewer_provider.as_deref() {
         Some("openai") => "1",
         Some("gemini") => "2",
@@ -413,10 +425,11 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         Some("minimax") => "4",
         Some("kimi") => "5",
         Some("anthropic-compat") => "6",
+        Some("deepseek") => "7",
         None => "1",
-        _ => "7",
+        _ => "8",
     };
-    let reviewer_choice_raw = prompt_with_default("  Choose [1-7]", default_reviewer)?;
+    let reviewer_choice_raw = prompt_with_default("  Choose [1-8]", default_reviewer)?;
     let reviewer_choice = reviewer_choice_raw.trim();
     let switched_reviewer = reviewer_choice != default_reviewer;
 
@@ -428,6 +441,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         "4" => Some(("minimax", "MINIMAX_API_KEY", "MiniMax API key", "MiniMax-M2.7")),
         "5" => Some(("kimi", "KIMI_API_KEY", "Kimi API key", "kimi-k2.5")),
         "6" => Some(("anthropic-compat", "ARIS_REVIEWER_AUTH_TOKEN", "Reviewer auth token", "claude-sonnet-4-6")),
+        "7" => Some(("deepseek", "ARIS_REVIEWER_AUTH_TOKEN", "DeepSeek API key", "deepseek-v4-pro")),
         _ => None,
     };
 
@@ -532,10 +546,12 @@ fn print_executor_url_hints(exec_choice: &str) {
             println!("    \x1b[2m• https://api.deepseek.com/v1                         (DeepSeek)\x1b[0m");
             println!("    \x1b[2m• https://dashscope.aliyuncs.com/compatible-mode/v1   (阿里云百练 OpenAI-compat)\x1b[0m");
         }
-        _ => {
-            // Options 3-6 are provider-specific (Gemini/GLM/MiniMax/Kimi) with
-            // their own defaults already populated. No hints needed.
+        "7" => {
+            // DeepSeek via Anthropic-compatible API (supports extended thinking).
+            println!("  \x1b[2mDeepSeek Anthropic-compatible endpoint:\x1b[0m");
+            println!("    \x1b[2m• https://api.deepseek.com/anthropic                       (official)\x1b[0m");
         }
+        _ => {}
     }
 }
 
@@ -550,6 +566,10 @@ fn print_reviewer_url_hints(reviewer_choice: &str) {
             println!("    \x1b[2m• https://openrouter.ai/api/v1                        (OpenRouter)\x1b[0m");
             println!("    \x1b[2m• https://api.deepseek.com/v1                         (DeepSeek)\x1b[0m");
             println!("    \x1b[2m• https://dashscope.aliyuncs.com/compatible-mode/v1   (阿里云百练 OpenAI-compat)\x1b[0m");
+        }
+        "7" => {
+            println!("  \x1b[2mDeepSeek Anthropic-compatible endpoint:\x1b[0m");
+            println!("    \x1b[2m• https://api.deepseek.com/anthropic                       (official)\x1b[0m");
         }
         _ => {}
     }

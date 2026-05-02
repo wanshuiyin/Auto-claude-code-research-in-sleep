@@ -3109,6 +3109,9 @@ fn render_export_text(session: &Session) -> String {
                         "[tool_result id={tool_use_id} name={tool_name} error={is_error}] {output}"
                     ));
                 }
+                ContentBlock::Thinking { thinking, .. } => {
+                    lines.push(format!("[thinking] {thinking}"));
+                }
             }
         }
         lines.push(String::new());
@@ -3529,6 +3532,7 @@ impl ApiClient for AnthropicRuntimeClient {
             let mut markdown_stream = MarkdownStreamState::default();
             let mut events = Vec::new();
             let mut pending_tool: Option<(String, String, String)> = None;
+        let mut pending_thinking: Option<(String, String)> = None;
             let mut saw_stop = false;
 
             while let Some(event) = stream
@@ -3548,13 +3552,22 @@ impl ApiClient for AnthropicRuntimeClient {
                         }
                     }
                     ApiStreamEvent::ContentBlockStart(start) => {
-                        push_output_block(
-                            start.content_block,
-                            out,
-                            &mut events,
-                            &mut pending_tool,
-                            true,
-                        )?;
+                        if let OutputContentBlock::Thinking {
+                            thinking,
+                            signature,
+                        } = &start.content_block
+                        {
+                            pending_thinking =
+                                Some((thinking.clone(), signature.clone()));
+                        } else {
+                            push_output_block(
+                                start.content_block,
+                                out,
+                                &mut events,
+                                &mut pending_tool,
+                                true,
+                            )?;
+                        }
                     }
                     ApiStreamEvent::ContentBlockDelta(delta) => match delta.delta {
                         ContentBlockDelta::TextDelta { text } => {
@@ -3572,8 +3585,16 @@ impl ApiClient for AnthropicRuntimeClient {
                                 input.push_str(&partial_json);
                             }
                         }
-                        ContentBlockDelta::ThinkingDelta { .. } => {},
-                        ContentBlockDelta::SignatureDelta { .. } => {},
+                        ContentBlockDelta::ThinkingDelta { thinking } => {
+                            if let Some((ref mut t, _)) = pending_thinking {
+                                t.push_str(&thinking);
+                            }
+                        }
+                        ContentBlockDelta::SignatureDelta { signature } => {
+                            if let Some((_, ref mut s)) = pending_thinking {
+                                *s = signature;
+                            }
+                        },
                     },
                     ApiStreamEvent::ContentBlockStop(_) => {
                         if let Some(rendered) = markdown_stream.flush(&renderer) {
@@ -3587,6 +3608,12 @@ impl ApiClient for AnthropicRuntimeClient {
                                 .and_then(|()| out.flush())
                                 .map_err(|error| RuntimeError::new(error.to_string()))?;
                             events.push(AssistantEvent::ToolUse { id, name, input });
+                        }
+                        if let Some((thinking, signature)) = pending_thinking.take() {
+                            events.push(AssistantEvent::Thinking {
+                                thinking,
+                                signature,
+                            });
                         }
                     }
                     ApiStreamEvent::MessageDelta(delta) => {
@@ -4136,7 +4163,15 @@ fn push_output_block(
             };
             *pending_tool = Some((id, name, initial_input));
         }
-        OutputContentBlock::Thinking { .. } => {},
+        OutputContentBlock::Thinking {
+            thinking,
+            signature,
+        } => {
+            events.push(AssistantEvent::Thinking {
+                thinking,
+                signature,
+            });
+        }
     }
     Ok(())
 }
@@ -4260,6 +4295,13 @@ fn convert_messages(messages: &[ConversationMessage]) -> Vec<InputMessage> {
                         }],
                         is_error: *is_error,
                     },
+                    ContentBlock::Thinking {
+                        thinking,
+                        signature,
+                    } => InputContentBlock::Thinking {
+                        thinking: thinking.clone(),
+                        signature: signature.clone(),
+                    },
                 })
                 .collect::<Vec<_>>();
             (!content.is_empty()).then(|| InputMessage {
@@ -4340,7 +4382,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(
         out,
-        "  DeepSeek:  EXECUTOR_PROVIDER=openai EXECUTOR_BASE_URL=https://api.deepseek.com EXECUTOR_API_KEY=xxx aris --model deepseek-chat"
+        "  DeepSeek:  EXECUTOR_PROVIDER=anthropic-compat EXECUTOR_BASE_URL=https://api.deepseek.com/anthropic EXECUTOR_API_KEY=xxx aris --model deepseek-v4-pro"
     )?;
     writeln!(
         out,

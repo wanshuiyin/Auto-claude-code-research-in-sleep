@@ -2097,6 +2097,13 @@ fn convert_messages(messages: &[ConversationMessage]) -> Vec<InputMessage> {
                         }],
                         is_error: *is_error,
                     },
+                    ContentBlock::Thinking {
+                        thinking,
+                        signature,
+                    } => InputContentBlock::Thinking {
+                        thinking: thinking.clone(),
+                        signature: signature.clone(),
+                    },
                 })
                 .collect::<Vec<_>>();
             (!content.is_empty()).then(|| InputMessage {
@@ -2130,7 +2137,15 @@ fn push_output_block(
             };
             *pending_tool = Some((id, name, initial_input));
         }
-        OutputContentBlock::Thinking { .. } => {}
+        OutputContentBlock::Thinking {
+            thinking,
+            signature,
+        } => {
+            events.push(AssistantEvent::Thinking {
+                thinking,
+                signature,
+            });
+        }
     }
 }
 
@@ -3183,8 +3198,10 @@ fn route_openai_compat_model(model: &str) -> (&'static str, &'static str, &'stat
         ("MINIMAX_API_KEY", "https://api.minimax.chat/v1/chat/completions", "minimax")
     } else if model.contains("kimi") || model.contains("moonshot") {
         ("KIMI_API_KEY", "https://api.moonshot.cn/v1/chat/completions", "kimi")
+    } else if model.contains("deepseek") {
+        ("DEEPSEEK_API_KEY", "https://api.deepseek.com/v1/chat/completions", "deepseek")
     } else {
-        // Default: OpenAI (also covers gpt, o3, o4, deepseek via OPENAI_API_KEY)
+        // Default: OpenAI (also covers gpt, o3, o4)
         ("OPENAI_API_KEY", "https://api.openai.com/v1/chat/completions", "openai")
     }
 }
@@ -3244,11 +3261,13 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
     let reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER").ok().filter(|s| !s.is_empty());
     let custom_base_url = std::env::var("ARIS_REVIEWER_BASE_URL").ok().filter(|s| !s.is_empty());
 
-    // Anthropic-compatible reviewer mode (e.g., Claude via proxy, Kimi coding endpoint).
+    // Anthropic-compatible reviewer mode (e.g., Claude via proxy, DeepSeek).
     // This path uses ARIS_REVIEWER_AUTH_TOKEN (Bearer) and ignores the openai-compat
     // key routing. We still honor an explicit input.model override here because
     // the target endpoint decides which Anthropic-format model name it accepts.
-    if reviewer_provider.as_deref() == Some("anthropic-compat") {
+    if reviewer_provider.as_deref() == Some("anthropic-compat")
+        || reviewer_provider.as_deref() == Some("deepseek")
+    {
         let key = std::env::var("ARIS_REVIEWER_AUTH_TOKEN")
             .or_else(|_| std::env::var("ANTHROPIC_AUTH_TOKEN"))
             .ok()
@@ -3259,7 +3278,12 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
             .as_deref()
             .filter(|s| !s.is_empty())
             .unwrap_or(configured_model);
-        let base = custom_base_url.unwrap_or_else(|| "https://api.anthropic.com".to_string());
+        let default_base = if reviewer_provider.as_deref() == Some("deepseek") {
+            "https://api.deepseek.com/anthropic"
+        } else {
+            "https://api.anthropic.com"
+        };
+        let base = custom_base_url.unwrap_or_else(|| default_base.to_string());
         let endpoint = format!("{}/v1/messages", base.trim_end_matches('/'));
         return call_anthropic_compat_reviewer(&key, &endpoint, model, &input.prompt);
     }
@@ -4896,8 +4920,8 @@ printf 'pwsh:%s' "$1"
         assert_eq!(route_openai_compat_model("MiniMax-M2.7").0, "MINIMAX_API_KEY");
         assert_eq!(route_openai_compat_model("kimi-k2.5").0, "KIMI_API_KEY");
         assert_eq!(route_openai_compat_model("moonshot-v1").0, "KIMI_API_KEY");
-        // Unknown model → OpenAI fallback (matches OpenRouter / DeepSeek convention).
-        assert_eq!(route_openai_compat_model("deepseek-chat").0, "OPENAI_API_KEY");
+        // DeepSeek models route to their own API key.
+        assert_eq!(route_openai_compat_model("deepseek-chat").0, "DEEPSEEK_API_KEY");
     }
 
     #[test]

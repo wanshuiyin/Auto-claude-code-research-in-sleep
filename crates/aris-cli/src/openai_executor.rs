@@ -524,6 +524,7 @@ fn convert_messages_openai(
                             }));
                         }
                         ContentBlock::ToolResult { .. } => {}
+                        ContentBlock::Thinking { .. } => {}
                     }
                 }
 
