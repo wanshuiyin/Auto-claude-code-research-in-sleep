@@ -44,6 +44,10 @@
 #   S9  If .aris/, .claude/, or .claude/skills/ is itself a symlink, abort.
 #   S10 Reject upstream entries that are symlinks to outside aris-repo.
 #   S11 Revalidate exact target match (lstat + readlink) before every mutation.
+#   S12 The optional `.aris/tools` symlink (added in #174) is the only managed
+#       artifact NOT tracked in the manifest. It is identified at uninstall
+#       time by exact target match against `<aris-repo>/tools`. Any other
+#       path or differently-targeted symlink at `.aris/tools` is left alone.
 #   S12 Temp files live in the same directory as the destination.
 #   S13 Skill names must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ (slug regex).
 
@@ -526,6 +530,65 @@ apply_plan() {
     done < "$plan"
 }
 
+# Phase 0 (#174): ensure project-local `.aris/tools` symlink exists, pointing
+# to the canonical aris-repo `tools/` dir. Pure-additive: existing users who
+# don't rerun the installer never see this. The symlink is currently inert
+# (no SKILL.md references it); it sets up future #177 path-rewrites.
+#
+# Idempotent. If `.aris/tools` already exists with a different target (or as
+# a real file/dir), warn and leave it alone — never replace user content.
+# Membership in the "managed" set is determined by exact target match against
+# `$ARIS_REPO/tools`, not via the manifest, so we don't need to bump the
+# manifest format for this single-link addition (per #174 non-goals).
+ensure_tools_symlink() {
+    local link_path="$PROJECT_ARIS_DIR/tools"
+    local expected_target="$ARIS_REPO/tools"
+
+    if is_symlink "$link_path"; then
+        local cur; cur="$(read_link_target "$link_path")"
+        [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$link_path")/$cur")"
+        if [[ "$cur" == "$expected_target" ]]; then
+            return 0
+        fi
+        warn ".aris/tools already exists with different target ($cur); leaving alone (#174)"
+        return 0
+    fi
+
+    if [[ -e "$link_path" ]]; then
+        warn ".aris/tools already exists as a non-symlink path; leaving alone (#174)"
+        return 0
+    fi
+
+    if $DRY_RUN; then
+        log "  (dry-run) ln -s $expected_target $link_path"
+    else
+        ln -s "$expected_target" "$link_path"
+        log "  + .aris/tools -> tools/ (Phase 0, #174)"
+    fi
+}
+
+# Counterpart for uninstall: only remove `.aris/tools` if it is exactly the
+# managed symlink (target == $ARIS_REPO/tools). User-created directories /
+# files / different symlinks are untouched.
+remove_tools_symlink() {
+    local link_path="$PROJECT_ARIS_DIR/tools"
+    local expected_target="$ARIS_REPO/tools"
+
+    is_symlink "$link_path" || return 0
+    local cur; cur="$(read_link_target "$link_path")"
+    [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$link_path")/$cur")"
+    if [[ "$cur" != "$expected_target" ]]; then
+        return 0
+    fi
+
+    if $DRY_RUN; then
+        log "  (dry-run) rm $link_path"
+    else
+        rm -f "$link_path"
+        log "  - .aris/tools (managed symlink)"
+    fi
+}
+
 commit_manifest() {
     local manifest_tmp="$1"
     if $DRY_RUN; then log "  (dry-run) would commit manifest"; return; fi
@@ -625,6 +688,10 @@ do_uninstall() {
         fi
     done < "$manifest_data"
     rm -f "$manifest_data"
+    # #174 Phase 0: best-effort cleanup of `.aris/tools` symlink, only if it
+    # is exactly the managed symlink. Anything else (user-created dir, custom
+    # symlink target) is left alone.
+    remove_tools_symlink
     if ! $DRY_RUN; then
         # Keep .prev for forensics, remove current manifest
         [[ -f "$MANIFEST_PATH" ]] && mv -f "$MANIFEST_PATH" "$MANIFEST_PREV"
@@ -701,6 +768,9 @@ if (( N_CONFLICT > 0 )); then
 fi
 
 if $DRY_RUN; then
+    # #174 preview: print the planned `.aris/tools` symlink action (function
+    # is idempotent + DRY_RUN-aware, so it just logs in this mode)
+    ensure_tools_symlink
     log ""
     log "(dry-run) no changes made"
     exit 0
@@ -720,6 +790,10 @@ log ""
 log "Applying:"
 apply_plan "$PLAN_FILE" "$MANIFEST_TMP"
 commit_manifest "$MANIFEST_TMP"
+
+# #174 Phase 0: ensure project-local .aris/tools symlink (purely additive).
+# Runs after manifest commit so a failure here doesn't roll back skill links.
+ensure_tools_symlink
 
 # Handle prefer-upstream legacy archive AFTER successful apply
 if [[ "$LEGACY_KIND" == "real_dir" && "$MIGRATE_COPY" == "prefer-upstream" ]]; then
