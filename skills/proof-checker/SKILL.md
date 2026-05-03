@@ -639,7 +639,7 @@ Field semantics:
   ...
   "restatement_drift": [
     {
-      "label": "thm:dsm-oracle",
+      "label": "thm:main",
       "canonical_location": "sections/2.setup.tex:117",
       "restatement_location": "sections/appendix.tex:1614",
       "drift_type": "conditional_loss" | "scope_change" | "quantifier_loss" |

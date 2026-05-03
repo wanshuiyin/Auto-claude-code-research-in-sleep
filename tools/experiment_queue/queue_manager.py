@@ -32,7 +32,7 @@ State file format (queue_state.json):
       "attempts": 1,
       "started": "...",
       "completed": null,
-      "expected_output": "figures/pcdistill_sw_N64_n50K_...json",
+      "expected_output": "figures/distill_sw_N64_n50K_...json",
       "error": null
     }, ...
   ]

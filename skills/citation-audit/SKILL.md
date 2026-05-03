@@ -176,15 +176,15 @@ Write `CITATION_AUDIT.md`:
 
 ## Priority Fixes (CRITICAL — apply before submission)
 
-### REMOVE: hidden2025aiscientistpitfalls
-- Author listed as "Anonymous" — actual authors are Luo, Kasirzadeh, Shah
+### REMOVE: anon2025placeholder
+- Author listed as "Anonymous" — canonical record exists with real authors and full title
 - Title is incomplete
-- ACTION: Replace key with `luo2025aiscientistpitfalls`, update authors and title
+- ACTION: Replace key with the canonical citekey, update authors and title
 
-### REPLACE-CONTEXT: madaan2023selfrefine in sec/2.overview.tex:42
-- Cited to support: "single-model self-refinement can produce correlated errors"
-- Self-Refine paper actually demonstrates iterative IMPROVEMENT, not correlated errors
-- ACTION: Rewrite the sentence; cite Self-Refine for "self-feedback loop" framing instead
+### REPLACE-CONTEXT: example2023priorwork in sec/2.overview.tex:42
+- Cited to support a specific technical claim
+- The cited paper actually demonstrates a different (related but distinct) phenomenon
+- ACTION: Rewrite the sentence; cite the prior work for what it actually establishes
 
 [... continues for each entry ...]
 
@@ -200,9 +200,9 @@ When `--uncited` is set, append the following section after "All-Clean Entries":
 
 The following bib entries are present in the audited bib file(s) but are not referenced by any `\cite{...}` in the paper body:
 
-- `wainwright2008` — suggestion: prune (uncited; no local evidence of intent)
-- `lafferty2001` — suggestion: prune (uncited; no local evidence of intent)
-- `figueroa2024` — suggestion: check (a `% TODO: cite figueroa2024` comment was found in `sections/3.related.tex`)
+- `author2010example` — suggestion: prune (uncited; no local evidence of intent)
+- `someone2015othercite` — suggestion: prune (uncited; no local evidence of intent)
+- `third2024todo` — suggestion: check (a `% TODO: cite third2024todo` comment was found in `sections/3.related.tex`)
 
 This section is detect-only; it does not change the top-level verdict.
 ```

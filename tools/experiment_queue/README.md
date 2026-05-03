@@ -26,9 +26,9 @@ scp "$ARIS_REPO/tools/experiment_queue/queue_manager.py" \
 
 `grid_spec.yaml`:
 ```yaml
-project: dllm_distill
-cwd: /home/rfyang/rfyang_code/dllm_experiments_torch
-conda: dllm
+project: my_grid_experiment
+cwd: /home/user/your_project
+conda: my_env
 gpus: [0, 1, 2, 3, 4, 5, 6, 7]
 max_parallel: 8
 oom_retry: {delay: 120, max_attempts: 3}
@@ -42,11 +42,11 @@ phases:
     template:
       id: "s${seed}_N${N}_n${n_train_subset}"
       cmd: >
-        python run_pc_distill_exp.py --backbone softmax --lam 0.5
+        python run_distill.py --backbone softmax --lam 0.5
         --t_max_distill 0 --K 500 --L 96 --W 16 --n_steps 30000
         --batch_size 128 --lr 1e-4 --seed ${seed} --subset_seed 2024
         --n_hidden ${N} --n_train_subset ${n_train_subset}
-      expected_output: "figures/pcdistill_sw_N${N}_*_seed${seed}.json"
+      expected_output: "figures/distill_sw_N${N}_*_seed${seed}.json"
 ```
 
 ### 2. Build manifest

@@ -43,22 +43,22 @@ All of these are pure engineering friction that can be orchestrated.
 A manifest lists jobs with explicit state:
 
 ```yaml
-project: dllm_distill
-cwd: /home/rfyang/rfyang_code/dllm_experiments_torch
-conda: dllm
+project: my_grid_experiment
+cwd: /home/user/your_project
+conda: my_env
 # Optional: override conda hook path if conda is not at a standard location.
 # Can be a bare path (wrapped automatically) or a full `eval "$(... shell.bash hook)"` string.
 # Falls back to auto-detect of ~/anaconda3, ~/miniconda3, /opt/anaconda3, etc.,
 # or the ARIS_CONDA_HOOK environment variable.
 # conda_hook: /custom/path/to/conda
-ssh: SJTUServer5
+ssh: gpu-server
 default_cmd: >
-  python run_pc_distill_exp.py --backbone softmax --lam 0.5
+  python run_distill.py --backbone softmax --lam 0.5
   --K 500 --L 96 --W 16 --n_steps 30000 --batch_size 128 --lr 1e-4
 
 preconditions:
   - type: checkpoint_exists
-    path: checkpoints/transformer/pcc_softmax_L96_K500_N{N}_wikitext103.pt
+    path: checkpoints/transformer/teacher_L96_K500_N{N}.pt
 
 gpus: [0, 1, 2, 3, 4, 5, 6, 7]
 max_parallel: 8
@@ -237,8 +237,8 @@ phases:
     grid:
       N: [384, 512]
     template:
-      cmd: python run_pc_exp.py --direction c --backbone softmax --n_hidden ${N} ...
-      output_check: checkpoints/transformer/pcc_softmax_L96_K500_N${N}_wikitext103.pt
+      cmd: python run_train.py --direction c --backbone softmax --n_hidden ${N} ...
+      output_check: checkpoints/transformer/teacher_L96_K500_N${N}.pt
   
   - name: distill_students
     depends_on: train_teachers
@@ -246,8 +246,8 @@ phases:
       N: [384, 512]
       seed: [42, 200, 201]
     template:
-      cmd: python run_pc_distill_exp.py --n_hidden ${N} --seed ${seed} ...
-      output_check: figures/pcdistill_sw_N${N}_*_seed${seed}.json
+      cmd: python run_distill.py --n_hidden ${N} --seed ${seed} ...
+      output_check: figures/distill_sw_N${N}_*_seed${seed}.json
 ```
 
 Scheduler enforces `depends_on`: `distill_students` jobs stay `pending` until all
@@ -290,7 +290,7 @@ If scheduler crashes / is killed:
 ```markdown
 # Experiment Queue Summary
 
-**Project**: dllm_distill
+**Project**: my_grid_experiment
 **Started**: 2026-04-16 11:36:29
 **Completed**: 2026-04-16 18:02:14
 **Total wall-clock**: 6h 25m
@@ -304,7 +304,7 @@ If scheduler crashes / is killed:
 | multi_seed_validation | 16 | 16 | 0 | 1h 25m |
 
 ## Results Files
-- 42 JSON files in `figures/pcdistill_sw_*.json`
+- 42 JSON files in `figures/distill_sw_*.json`
 
 ## Next Steps
 - Run `/analyze-results` on output JSONs

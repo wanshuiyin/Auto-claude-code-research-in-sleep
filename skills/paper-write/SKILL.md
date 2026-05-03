@@ -237,7 +237,7 @@ If no standalone full-proof source exists:
 - If the appendix needs different wording, add an explicit notation bridge instead of silently renaming concepts
 - Resolve all mismatches before Step 4
 
-**Empirical motivation:** in our April 2026 NeurIPS run, the default behavior generated `"see supplementary proof document"` placeholders in the appendix. We had to manually pull 1264 lines of full proofs from a standalone `proof_dllm_full.tex` file. Without this pass, theory papers ship with sketch-only appendices that fail at theory venues.
+**Empirical motivation:** in a real theory-paper run, the default behavior generated `"see supplementary proof document"` placeholders in the appendix. The author had to manually pull hundreds of lines of full proofs from a standalone proofs file (e.g. `proof_full.tex`). Without this pass, theory papers ship with sketch-only appendices that fail at theory venues.
 
 ### Step 4: Build Bibliography
 
@@ -382,7 +382,7 @@ If `VERIFY` or `MISMATCH` is printed, do not invent metadata:
 
 **Citation reachability rule:** an entry is dead if its key does not appear in any `\cite...{}` command in `paper/main.tex` or any `paper/sections/*.tex` file.
 
-**Empirical motivation:** in our April 2026 NeurIPS run, 3 dead bib entries (`bresler2015`, `sedd2024`, `wainwright2008`) sat in `references.bib` for 5+ improvement rounds, and a `codd2025` entry had `year = {2026}` (key/year mismatch). Neither was flagged by the existing automated cleaning.
+**Empirical motivation:** in a real submission run, several dead bib entries sat in `references.bib` for many improvement rounds, and at least one entry had a key/year mismatch. Neither was flagged by the existing automated cleaning.
 
 **Citation verification rules (from claude-scholar + Imbad0202):**
 1. Every BibTeX entry must have: author, title, year, venue/journal

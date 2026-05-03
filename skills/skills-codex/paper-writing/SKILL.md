@@ -352,7 +352,7 @@ elif [ -n "$NUMERIC_CLAIMS" ]; then
 fi
 ```
 
-**Empirical motivation:** in our April 2026 NeurIPS run, the final paper claimed `w ∈ {0,1,2,3}` for the width-tradeoff experiment but the raw JSON had `w ∈ {0,1,2,3,4,5}`. The crossing-point tolerance was claimed as `0.05%` but the actual relative error was `0.0577%`. Both were caught only after manual `paper-claim-audit` invocation in the final round; the improvement loop did not detect them.
+**Empirical motivation:** in a real submission run, the final paper claimed a narrower experiment grid than the raw JSON actually contained, and a tolerance value was rounded down past the actual relative error. Both were caught only after manual `paper-claim-audit` invocation in the final round; the improvement loop did not detect them.
 
 ### Phase 5.8: Citation Audit (submission gate)
 
@@ -384,7 +384,7 @@ else:
 
 **Why this is the most diagnostic of the four audit layers:** wildly fake citations are easy to spot. The dangerous failure mode is a real paper used to support a claim it does not actually establish (wrong-context citations) — these slip past metadata-only checks and damage submission credibility. Run cost is wall-clock heavy (web lookup per entry); run once per submission, not per save.
 
-**Empirical motivation:** in our April 2026 ARIS technical-report run, two real papers (`madaan2023selfrefine`, `liu2023reviewergpt`) were cited in contexts they did not actually support, and one entry (`hidden2025aiscientistpitfalls`) had `author = "Anonymous"` because the metadata had not been resolved. None were caught by the improvement loop or numeric claim audit; only fresh web-lookup review surfaced them.
+**Empirical motivation:** in a real submission run, several real papers were cited in contexts they did not actually support, and at least one bib entry shipped with `author = "Anonymous"` because the metadata had not been resolved. None were caught by the improvement loop or numeric claim audit; only fresh web-lookup review surfaced them.
 
 ### Phase 6: Final Report
 
