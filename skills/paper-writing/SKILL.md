@@ -51,6 +51,10 @@ Lets the user steer **structural** style (section ordering, theorem density, sen
 When `— style-ref: <source>` is in `$ARGUMENTS`, run the helper FIRST, before Phase 1 (paper-plan):
 
 ```bash
+if [ ! -f tools/extract_paper_style.py ]; then
+  echo "error: tools/extract_paper_style.py not found — re-run 'bash tools/install_aris.sh' to refresh the '.aris/tools' symlink (added in #174), or copy the helper manually from the ARIS repo" >&2
+  exit 1
+fi
 CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
 case $? in
   0) ;;                                       # share $CACHE/style_profile.md with downstream WRITER phases only
@@ -125,6 +129,8 @@ Invoke `/paper-plan` to create the structural outline:
 ```
 /paper-plan "$ARGUMENTS"
 ```
+
+If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded above, append `— style-ref: <source>` to the invocation: `/paper-plan "<topic> — style-ref: <source>"`. (Writer-side phase — forwarding is allowed; reviewer/auditor phases below must not see the style ref.)
 
 **What this does:**
 - Parse NARRATIVE_REPORT.md for claims, evidence, and figure descriptions

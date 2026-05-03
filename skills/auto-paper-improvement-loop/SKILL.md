@@ -32,6 +32,10 @@ Lets the user steer **structural fixes only** during improvement (section reorde
 Only when `— style-ref: <source>` appears in `$ARGUMENTS`, run the helper FIRST, before the loop starts:
 
 ```bash
+if [ ! -f tools/extract_paper_style.py ]; then
+  echo "error: tools/extract_paper_style.py not found — re-run 'bash tools/install_aris.sh' to refresh the '.aris/tools' symlink (added in #174), or copy the helper manually from the ARIS repo" >&2
+  exit 1
+fi
 CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
 case $? in
   0) ;;                                       # use $CACHE/style_profile.md as structural guidance for the FIX phase only

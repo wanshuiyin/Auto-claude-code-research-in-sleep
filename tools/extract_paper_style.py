@@ -91,7 +91,10 @@ Output schema
 
 Cache layout
 ------------
-Default cache root: $ARIS_STYLE_REF_CACHE (env) or `.aris/style_refs/`
+Default cache root: $ARIS_STYLE_REF_CACHE (env) or `~/.cache/aris-style-refs/`
+                    (XDG-friendly; avoids polluting the user's project repo
+                    when the user runs the writer skill from inside their
+                    paper directory)
 Per-source dir:     <root>/<sha256(source_input)[:16]>/
                        source_manifest.json
                        style_profile.md
@@ -451,7 +454,9 @@ def _cache_root() -> Path:
     env = os.environ.get("ARIS_STYLE_REF_CACHE")
     if env:
         return Path(env).expanduser().resolve()
-    return Path.cwd() / ".aris" / "style_refs"
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".cache"
+    return base / "aris-style-refs"
 
 
 def main() -> int:
@@ -464,7 +469,8 @@ def main() -> int:
                          "Overleaf URLs are rejected — clone via overleaf-sync first "
                          "and pass the local clone path instead.")
     ap.add_argument("--out", default=None,
-                    help="Override cache root (default: $ARIS_STYLE_REF_CACHE or .aris/style_refs/)")
+                    help="Override cache root (default: $ARIS_STYLE_REF_CACHE, "
+                         "$XDG_CACHE_HOME/aris-style-refs/, or ~/.cache/aris-style-refs/)")
     ap.add_argument("--force", action="store_true",
                     help="Refetch and overwrite even if cache hit exists.")
     args = ap.parse_args()
