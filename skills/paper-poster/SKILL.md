@@ -1,7 +1,7 @@
 ---
 name: paper-poster
 description: "Generate a conference poster (article + tcbposter LaTeX → A0/A1 PDF + editable PPTX + SVG) from a compiled paper. Use when user says \"做海报\", \"制作海报\", \"conference poster\", \"make poster\", \"生成poster\", \"poster session\", or wants to create a poster for a conference presentation."
-argument-hint: [paper-directory-or-venue]
+argument-hint: "[paper-directory-or-venue] [— style-ref: <source>]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
@@ -29,6 +29,29 @@ Unlike papers (dense prose, 8-15 pages), posters are **visual-first**: one page,
 - **ENGINE = `pdflatex`** — LaTeX engine. Use `xelatex` for CJK text.
 
 > 💡 Override: `/paper-poster "paper/" — venue: CVPR, size: A1, orientation: portrait, columns: 3`
+
+## Optional: Style reference (`— style-ref: <source>`, opt-in)
+
+Lets the user steer the poster's **structural** layout (panel-to-text ratio, figure density, caption length) toward a reference paper. **Default OFF — when the user does not pass `— style-ref`, do nothing differently from before.**
+
+When invoked, run the helper FIRST:
+
+```bash
+CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
+case $? in
+  0) ;;                                       # use $CACHE/style_profile.md as structural guidance
+  2) echo "warning: style-ref skipped (missing optional dep)" >&2 ;;
+  3) echo "error: --style-ref source failed; aborting poster" >&2 ; exit 1 ;;
+esac
+```
+
+Sources accepted: local TeX dir / file, local PDF, arXiv id, http(s) URL. Overleaf URLs/IDs are rejected — clone via `/overleaf-sync setup <id>` first and pass the local clone path.
+
+**Strict rules** (full contract in `tools/extract_paper_style.py` docstring):
+
+- Use `style_profile.md` to align figure-to-text ratio, caption length tendency, and paragraph density. Venue color scheme and column count above still take precedence — `--style-ref` only refines density tendencies.
+- **Never copy poster content, design elements, slogans, or section names verbatim** from anything reachable through the cache.
+- **Never pass `— style-ref` (or the cache contents) to the GPT-5.4 reviewer sub-agent** — the reviewer must judge the poster's clarity on its own merits.
 
 ## Venue Color Schemes
 

@@ -1,7 +1,7 @@
 ---
 name: paper-illustration
 description: "Generate publication-quality AI illustrations for academic papers using Gemini image generation. Creates architecture diagrams, method illustrations with Claude-supervised iterative refinement loop. Use when user says \"生成图表\", \"画架构图\", \"AI绘图\", \"paper illustration\", \"generate diagram\", or needs visual figures for papers."
-argument-hint: [description-or-method-file]
+argument-hint: "[description-or-method-file] [— style-ref: <source>]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply, WebSearch
 ---
 
@@ -71,6 +71,29 @@ Generate publication-quality illustrations using a **multi-stage workflow** with
 - **TARGET_SCORE = 9** — Minimum acceptable score (1-10) — RAISED FOR QUALITY
 - **OUTPUT_DIR = `figures/ai_generated/`** — Output directory
 - **API_KEY_ENV = `GEMINI_API_KEY`** — Environment variable
+
+## Optional: Style reference (`— style-ref: <source>`, opt-in)
+
+Lets the user steer **structural** figure conventions (caption length, panel-count distribution, figure-to-table ratio in the parent paper) toward a reference paper. **Default OFF — when the user does not pass `— style-ref`, do nothing differently from before.**
+
+When invoked, run the helper FIRST, before generating prompts:
+
+```bash
+CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
+case $? in
+  0) ;;                                       # use $CACHE/style_profile.md as structural guidance
+  2) echo "warning: style-ref skipped (missing optional dep)" >&2 ;;
+  3) echo "error: --style-ref source failed; aborting illustration" >&2 ; exit 1 ;;
+esac
+```
+
+Sources accepted: local TeX dir / file, local PDF, arXiv id, http(s) URL. Overleaf URLs/IDs are rejected — clone via `/overleaf-sync setup <id>` first and pass the local clone path.
+
+**Strict rules** (full contract in `tools/extract_paper_style.py` docstring):
+
+- Use `style_profile.md` to align caption length and figure density with the reference paper. The CVPR/ICLR/NeurIPS visual standards above still take precedence — `--style-ref` only refines length-and-density tendencies, never image content.
+- **Never copy figure content, color palettes, or specific design elements** from anything reachable through the cache. The visual design comes from the user's prompt, not the reference.
+- **Never pass `— style-ref` (or the cache contents) to the Claude vision-checker / Gemini reasoning-checker sub-agents** when they score the generated image — the image must be judged on its own merits.
 
 ## CVPR/ICLR/NeurIPS Top-Tier Conference Style Guide
 
