@@ -47,7 +47,7 @@ Grant proposals argue for **future work** (feasibility + potential), not complet
 
 Lets the PI steer the proposal's **structural** layout (section order tendency, paragraph length, figure density, citation style) toward a successful past proposal or paper they'd like to mirror. **Default OFF — when the user does not pass `— style-ref`, do nothing differently from before.**
 
-When invoked, run the helper FIRST, before drafting:
+Only when `— style-ref: <source>` appears in `$ARGUMENTS`, run the helper FIRST, before drafting:
 
 ```bash
 CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
@@ -55,6 +55,7 @@ case $? in
   0) ;;                                       # use $CACHE/style_profile.md as structural guidance
   2) echo "warning: style-ref skipped (missing optional dep)" >&2 ;;
   3) echo "error: --style-ref source failed; aborting proposal" >&2 ; exit 1 ;;
+  *) echo "error: helper failed unexpectedly; aborting proposal" >&2 ; exit 1 ;;
 esac
 ```
 

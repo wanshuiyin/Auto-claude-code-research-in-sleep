@@ -34,7 +34,7 @@ Unlike papers (dense prose, 8-15 pages), posters are **visual-first**: one page,
 
 Lets the user steer the poster's **structural** layout (panel-to-text ratio, figure density, caption length) toward a reference paper. **Default OFF — when the user does not pass `— style-ref`, do nothing differently from before.**
 
-When invoked, run the helper FIRST:
+Only when `— style-ref: <source>` appears in `$ARGUMENTS`, run the helper FIRST:
 
 ```bash
 CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
@@ -42,6 +42,7 @@ case $? in
   0) ;;                                       # use $CACHE/style_profile.md as structural guidance
   2) echo "warning: style-ref skipped (missing optional dep)" >&2 ;;
   3) echo "error: --style-ref source failed; aborting poster" >&2 ; exit 1 ;;
+  *) echo "error: helper failed unexpectedly; aborting poster" >&2 ; exit 1 ;;
 esac
 ```
 

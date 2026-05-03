@@ -29,7 +29,7 @@ Unlike `/auto-review-loop` (which iterates on **research** — running experimen
 
 Lets the user steer **structural fixes only** during improvement (section reordering hints, paragraph length nudges, figure density adjustments) toward a reference paper. **Default OFF — when the user does not pass `— style-ref`, do nothing differently from before.**
 
-When invoked, run the helper FIRST, before the loop starts:
+Only when `— style-ref: <source>` appears in `$ARGUMENTS`, run the helper FIRST, before the loop starts:
 
 ```bash
 CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
@@ -37,6 +37,7 @@ case $? in
   0) ;;                                       # use $CACHE/style_profile.md as structural guidance for the FIX phase only
   2) echo "warning: style-ref skipped (missing optional dep)" >&2 ;;
   3) echo "error: --style-ref source failed; aborting loop" >&2 ; exit 1 ;;
+  *) echo "error: helper failed unexpectedly; aborting loop" >&2 ; exit 1 ;;
 esac
 ```
 

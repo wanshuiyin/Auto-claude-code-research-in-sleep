@@ -56,6 +56,7 @@ case $? in
   0) ;;                                       # share $CACHE/style_profile.md with downstream WRITER phases only
   2) echo "warning: style-ref skipped (missing optional dep)" >&2 ;;
   3) echo "error: --style-ref source failed; aborting pipeline" >&2 ; exit 1 ;;
+  *) echo "error: helper failed unexpectedly; aborting pipeline" >&2 ; exit 1 ;;
 esac
 ```
 
@@ -152,6 +153,8 @@ Shall I proceed with figure generation?
 
 ### Phase 2: Figure Generation
 
+If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded above, append `— style-ref: <source>` to every writer-side sub-skill invocation in this pipeline (Phases 1, 2b, 3, 5). Do **not** append it to reviewer/auditor invocations (Phases 4.5, 4.7, 5.5, 5.8).
+
 Invoke `/paper-figure` to generate data-driven plots and tables:
 
 ```
@@ -183,6 +186,8 @@ If the paper plan includes architecture diagrams, pipeline figures, audit cascad
 - Best for: system architecture, workflow pipelines, audit cascades, layered topology
 - Output: `figures/*.svg` + `figures/*.pdf` (via rsvg-convert) + `figures/specs/*.json`
 - No external API, runs fully local
+
+If `— style-ref: <source>` was passed and the helper succeeded above, append `— style-ref: <source>` to the invocation below as well.
 
 **When `illustration: gemini`** — invoke `/paper-illustration`:
 ```
@@ -243,6 +248,8 @@ Invoke `/paper-write` to generate section-by-section LaTeX:
 ```
 /paper-write "PAPER_PLAN.md"
 ```
+
+If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded above, append `— style-ref: <source>` to the invocation: `/paper-write "PAPER_PLAN.md — style-ref: <source>"`.
 
 **What this does:**
 - Write each section following the plan, with proper LaTeX formatting
@@ -344,6 +351,8 @@ Invoke `/auto-paper-improvement-loop` to polish the paper:
 ```
 /auto-paper-improvement-loop "paper/"
 ```
+
+If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded above, append `— style-ref: <source>` to the invocation: `/auto-paper-improvement-loop "paper/ — style-ref: <source>"`. The improvement loop's reviewer sub-agent will still NOT see the style ref (the loop's own SKILL forbids it); only the fix-implementation phase consumes it.
 
 **What this does (2 rounds):**
 

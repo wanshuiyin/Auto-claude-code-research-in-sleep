@@ -39,7 +39,7 @@ Keep the existing `insleep` workflow and outputs, but use the shared references 
 
 Lets the user steer the **structural** layout of the outline (section ordering, subsection density, theorem-environment density, figure budget, citation style) toward a reference paper. **Default OFF — when the user does not pass `— style-ref`, do nothing differently from before.**
 
-When invoked, run the helper FIRST, before drafting the outline:
+Only when `— style-ref: <source>` appears in `$ARGUMENTS`, run the helper FIRST, before drafting the outline:
 
 ```bash
 CACHE=$(python3 tools/extract_paper_style.py --source "<source>")
@@ -47,6 +47,7 @@ case $? in
   0) ;;                                       # use $CACHE/style_profile.md as structural guidance
   2) echo "warning: style-ref skipped (missing optional dep)" >&2 ;;
   3) echo "error: --style-ref source failed; aborting outline" >&2 ; exit 1 ;;
+  *) echo "error: helper failed unexpectedly; aborting outline" >&2 ; exit 1 ;;
 esac
 ```
 

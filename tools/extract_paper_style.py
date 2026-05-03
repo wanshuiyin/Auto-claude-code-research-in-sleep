@@ -122,8 +122,15 @@ from typing import Any
 
 TOOL_VERSION = "1"
 ARXIV_ID_RE = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
-OVERLEAF_URL_RE = re.compile(r"https?://(www\.)?overleaf\.com/project/[A-Za-z0-9]+/?$")
-HEX32_RE = re.compile(r"^[A-Fa-f0-9]{24,}$")
+# Match any URL whose host is overleaf.com (or *.overleaf.com) AND whose path
+# contains "/project/...". Rejects regardless of trailing slash, query string,
+# fragment, or extra path segments like "/file/main.tex".
+OVERLEAF_URL_RE = re.compile(
+    r"^https?://([A-Za-z0-9-]+\.)*overleaf\.com(:\d+)?/project(/|$)",
+    re.IGNORECASE,
+)
+# Bare hex blob that looks like an Overleaf project id (24+ hex chars, no path).
+OVERLEAF_BARE_ID_RE = re.compile(r"^[A-Fa-f0-9]{24,}$")
 
 
 # ---------------------------------------------------------------------------
@@ -131,7 +138,7 @@ HEX32_RE = re.compile(r"^[A-Fa-f0-9]{24,}$")
 # ---------------------------------------------------------------------------
 
 def _classify_source(src: str) -> str:
-    if OVERLEAF_URL_RE.match(src) or HEX32_RE.match(src):
+    if OVERLEAF_URL_RE.match(src) or OVERLEAF_BARE_ID_RE.match(src):
         return "overleaf"
     if src.startswith("arxiv:"):
         return "arxiv"
