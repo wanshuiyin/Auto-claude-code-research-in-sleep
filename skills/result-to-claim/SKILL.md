@@ -140,6 +140,25 @@ See `shared-references/experiment-integrity.md` for the full integrity protocol.
 
 **Skip this step entirely if `research-wiki/` does not exist.**
 
+If `research-wiki/` exists, resolve `$WIKI_SCRIPT` per the canonical
+chain documented in
+[`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)
+(Variant B — warn-and-skip for caller skills). The verdict / claim
+status / idea-outcome page edits below run on raw markdown and don't
+need the helper, but edges, query-pack rebuild, and the log line do.
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+WIKI_SCRIPT=".aris/tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+[ -f "$WIKI_SCRIPT" ] || {
+  echo "WARN: research_wiki.py not found; verdict will be reported but wiki edges/query-pack/log will be skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+  WIKI_SCRIPT=""
+}
+```
+
 ```
 if research-wiki/ exists:
     # 1. Create experiment page
@@ -149,27 +168,27 @@ if research-wiki/ exists:
       - date, hardware, duration, metrics
       - verdict, confidence, reasoning summary
 
-    # 2. Update claim status
+    # 2. Update claim status (page edits run unconditionally; edges only if $WIKI_SCRIPT resolved)
     for each claim resolved by this verdict:
         if verdict == "yes":
             Update claim page: status → supported
-            python3 tools/research_wiki.py add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "<metric>"
+            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "<metric>"
         elif verdict == "partial":
             Update claim page: status → partial
-            python3 tools/research_wiki.py add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "partial"
+            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "partial"
         else:
             Update claim page: status → invalidated
-            python3 tools/research_wiki.py add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type invalidates --evidence "<why>"
+            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type invalidates --evidence "<why>"
 
-    # 3. Update idea outcome
+    # 3. Update idea outcome (raw markdown, helper-free)
     Update research-wiki/ideas/<idea_id>.md:
       - outcome: positive | mixed | negative
       - If negative: fill "Failure / Risk Notes" and "Lessons Learned"
       - If positive: fill "Actual Outcome" and "Reusable Components"
 
-    # 4. Rebuild + log
-    python3 tools/research_wiki.py rebuild_query_pack research-wiki/
-    python3 tools/research_wiki.py log research-wiki/ "result-to-claim: exp:<id> verdict=<verdict> for idea:<idea_id>"
+    # 4. Rebuild + log (only if $WIKI_SCRIPT resolved)
+    [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" rebuild_query_pack research-wiki/
+    [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" log research-wiki/ "result-to-claim: exp:<id> verdict=<verdict> for idea:<idea_id>"
 
     # 5. Re-ideation suggestion
     Count failed/partial ideas since last /idea-creator run.

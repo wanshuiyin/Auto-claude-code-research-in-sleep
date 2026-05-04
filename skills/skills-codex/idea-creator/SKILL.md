@@ -29,13 +29,15 @@ Given a broad research direction from the user, systematically generate, validat
 
 Skip this phase entirely if `research-wiki/` does not exist.
 
-Resolve the wiki helper from the Codex install manifest when available:
+Resolve the wiki helper using the Codex-side canonical chain (see
+`../shared-references/wiki-helper-resolution.md`):
 
 ```bash
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
 WIKI_SCRIPT=""
 [ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
 [ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
 ```
 
 If `research-wiki/query_pack.md` exists and is less than 7 days old, read it as initial landscape context:

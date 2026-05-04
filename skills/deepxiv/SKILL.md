@@ -192,22 +192,38 @@ Do not jump to full-paper reads when a brief or one section answers the question
 ### Step 6: Update Research Wiki (if active)
 
 **Required when `research-wiki/` exists in the project**; skip silently
-otherwise. Ingest papers that were meaningfully read (brief / head /
-section / full) during this invocation — mere `search` hits without a
-depth read do not need ingestion:
+otherwise. When the wiki dir exists, resolve `$WIKI_SCRIPT` per the
+canonical chain at
+[`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)
+(Variant B — warn-and-skip). Ingest papers that were meaningfully
+read (brief / head / section / full) during this invocation — mere
+`search` hits without a depth read do not need ingestion:
 
-```
-if [ -d research-wiki/ ]:
+```bash
+if [ -d research-wiki/ ]; then
+  cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+  ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+  WIKI_SCRIPT=".aris/tools/research_wiki.py"
+  [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+  [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+  [ -f "$WIKI_SCRIPT" ] || {
+    echo "WARN: research_wiki.py not found; depth-read summary delivered, wiki ingest skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+    WIKI_SCRIPT=""
+  }
+  if [ -n "$WIKI_SCRIPT" ]; then
     for each arxiv_id the user asked this skill to read in depth:
-        python3 tools/research_wiki.py ingest_paper research-wiki/ \
+        python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
             --arxiv-id "<arxiv_id>"
+  fi
+fi
 ```
 
 The helper handles metadata / slug / dedup / page / index / log in one
 call — **do not handwrite `papers/<slug>.md`**. See
 [`shared-references/integration-contract.md`](../shared-references/integration-contract.md).
 Backfill missed ingests with
-`python3 tools/research_wiki.py sync research-wiki/ --arxiv-ids <id1>,<id2>,...`.
+`python3 "$WIKI_SCRIPT" sync research-wiki/ --arxiv-ids <id1>,<id2>,...`
+after resolving `$WIKI_SCRIPT` as above.
 
 ## Key Rules
 

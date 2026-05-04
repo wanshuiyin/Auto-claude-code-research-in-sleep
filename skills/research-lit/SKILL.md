@@ -364,19 +364,38 @@ error) if the directory is absent. Per
 this step follows the canonical ingest contract — business logic lives
 in `tools/research_wiki.py`, not in this prose.
 
+When `research-wiki/` exists, resolve `$WIKI_SCRIPT` per the canonical
+chain documented in
+[`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)
+(Variant B — warn-and-skip):
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+WIKI_SCRIPT=".aris/tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+[ -f "$WIKI_SCRIPT" ] || {
+  echo "WARN: research_wiki.py not found; literature synthesis will be reported but wiki ingest will be skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+  WIKI_SCRIPT=""
+}
+```
+
 ```
 📋 Research Wiki ingest (runs once, at end of research-lit):
    [ ] 1. Predicate: `research-wiki/` exists? If no, skip this step.
-   [ ] 2. For each of the top 8–12 relevant papers (arxiv IDs collected above):
-          python3 tools/research_wiki.py ingest_paper research-wiki/ \
+   [ ] 2. If $WIKI_SCRIPT empty (helper unreachable), skip the rest of this step
+          (the warning above already explains why).
+   [ ] 3. For each of the top 8–12 relevant papers (arxiv IDs collected above):
+          python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
               --arxiv-id <id> [--thesis "<one-line>"] [--tags <t1>,<t2>]
-   [ ] 3. For each explicit relationship to an existing wiki entity,
+   [ ] 4. For each explicit relationship to an existing wiki entity,
           add an edge:
-          python3 tools/research_wiki.py add_edge research-wiki/ \
+          python3 "$WIKI_SCRIPT" add_edge research-wiki/ \
               --from "paper:<slug>" --to "<target_node_id>" \
               --type <extends|contradicts|addresses_gap|inspired_by|...> \
               --evidence "<one-sentence quote or reasoning>"
-   [ ] 4. Confirm papers/<slug>.md files were created (helper prints
+   [ ] 5. Confirm papers/<slug>.md files were created (helper prints
           "Paper ingested: ..."); if any failed with a network error,
           retry or fall back to the --title/--authors/--year manual form.
 ```
@@ -385,14 +404,15 @@ in `tools/research_wiki.py`, not in this prose.
 (skips an existing paper by arXiv id), page rendering, `index.md`
 rebuild, `query_pack.md` rebuild, and log append in a single call —
 **do not manually write `papers/<slug>.md`**. If the helper is
-unavailable (e.g., offline on a non-ARIS machine), log the gap and let
-`/research-wiki sync --arxiv-ids …` backfill later.
+unavailable (e.g., offline on a non-ARIS machine, or `$WIKI_SCRIPT`
+empty), log the gap and let `/research-wiki sync --arxiv-ids …`
+backfill later.
 
 For non-arXiv sources (Semantic Scholar only, IEEE/ACM journals without
 arXiv mirrors, blog posts), pass manual metadata instead:
 
-```
-python3 tools/research_wiki.py ingest_paper research-wiki/ \
+```bash
+python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
     --title "<full title>" --authors "A, B, C" --year <yyyy> \
     --venue "<venue>" [--external-id-doi "<doi>"] [--thesis "..."]
 ```

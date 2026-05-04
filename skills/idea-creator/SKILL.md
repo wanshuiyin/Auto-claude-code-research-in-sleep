@@ -31,6 +31,25 @@ Given a broad research direction from the user, systematically generate, validat
 
 **Skip this phase entirely if `research-wiki/` does not exist.**
 
+If `research-wiki/` exists, resolve the canonical helper using the
+shared resolution chain (see `../research-wiki/SKILL.md` for the
+contract):
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+WIKI_SCRIPT=".aris/tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+[ -f "$WIKI_SCRIPT" ] || {
+  echo "WARN: research_wiki.py not found at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "      The idea-creation primary output (idea ranking) will still be produced." >&2
+  echo "      Wiki integration (load query_pack, write idea pages, add edges, rebuild query_pack) will be skipped." >&2
+  echo "      Fix: rerun 'bash tools/install_aris.sh', export ARIS_REPO, or 'cp <ARIS-repo>/tools/research_wiki.py tools/'." >&2
+  WIKI_SCRIPT=""
+}
+```
+
 ```
 if research-wiki/query_pack.md exists AND is less than 7 days old:
     Read query_pack.md and use it as initial landscape context:
@@ -39,7 +58,7 @@ if research-wiki/query_pack.md exists AND is less than 7 days old:
     - Treat top papers as known prior work (do not re-search them)
     Still run Phase 1 below for papers from the last 3-6 months (wiki may be stale)
 else if research-wiki/ exists but query_pack.md is stale or missing:
-    python3 tools/research_wiki.py rebuild_query_pack research-wiki/
+    if [ -n "$WIKI_SCRIPT" ]: python3 "$WIKI_SCRIPT" rebuild_query_pack research-wiki/
     Then read query_pack.md as above
 ```
 
@@ -233,6 +252,13 @@ Write a structured report to `idea-stage/IDEA_REPORT.md`:
 
 This is critical for spiral learning — without it, `ideas/` stays empty and re-ideation has no memory.
 
+`$WIKI_SCRIPT` was resolved in Phase 0 above. If Phase 0 did not run
+(no `research-wiki/`), this phase is skipped. If Phase 0 ran but the
+resolution chain failed to find the helper (`$WIKI_SCRIPT` is empty),
+the page-write step still runs (idea pages are plain markdown the
+agent writes directly), but the edge / query-pack / log steps that
+require the helper are skipped with a single warning.
+
 ```
 if research-wiki/ exists:
     for each idea in recommended_ideas + eliminated_ideas:
@@ -245,14 +271,17 @@ if research-wiki/ exists:
            - Include: hypothesis, proposed method, expected outcome
            - If pilot was run: actual outcome, failure notes, reusable components
 
-        2. Add edges:
-           python3 tools/research_wiki.py add_edge research-wiki/ --from "idea:<id>" --to "paper:<slug>" --type inspired_by --evidence "..."
-           python3 tools/research_wiki.py add_edge research-wiki/ --from "idea:<id>" --to "gap:<id>" --type addresses_gap --evidence "..."
+        2. Add edges (only if $WIKI_SCRIPT resolved):
+           [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "idea:<id>" --to "paper:<slug>" --type inspired_by --evidence "..."
+           [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "idea:<id>" --to "gap:<id>" --type addresses_gap --evidence "..."
 
-    Rebuild query pack:
-        python3 tools/research_wiki.py rebuild_query_pack research-wiki/
-    Log:
-        python3 tools/research_wiki.py log research-wiki/ "idea-creator wrote N ideas (M recommended, K eliminated)"
+    Rebuild query pack (only if $WIKI_SCRIPT resolved):
+        [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" rebuild_query_pack research-wiki/
+    Log (only if $WIKI_SCRIPT resolved):
+        [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" log research-wiki/ "idea-creator wrote N ideas (M recommended, K eliminated)"
+
+    if [ -z "$WIKI_SCRIPT" ]:
+        echo "WARN: idea pages were written but edges / query_pack / log were skipped because research_wiki.py is unreachable (see Phase 0 warning above)." >&2
 ```
 
 ## Output Protocols

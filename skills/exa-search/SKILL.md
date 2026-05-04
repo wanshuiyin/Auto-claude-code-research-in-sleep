@@ -143,18 +143,30 @@ results of `category: "research paper"`**; skip silently otherwise.
 General web results (blog posts, docs, news) are **not** ingested —
 the wiki is for papers only.
 
-For each research paper hit, try to recover an arXiv ID from the URL
-(`arxiv.org/abs/<id>`); if present, use `--arxiv-id`. Otherwise fall
-back to manual metadata:
+When the predicates hold, resolve `$WIKI_SCRIPT` per the canonical
+chain at
+[`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)
+(Variant B — warn-and-skip). For each research paper hit, try to
+recover an arXiv ID from the URL (`arxiv.org/abs/<id>`); if present,
+use `--arxiv-id`. Otherwise fall back to manual metadata:
 
-```
+```bash
 if [ -d research-wiki/ ] and query category was "research paper":
-    for each research-paper hit in results:
+    cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+    ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+    WIKI_SCRIPT=".aris/tools/research_wiki.py"
+    [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+    [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+    [ -f "$WIKI_SCRIPT" ] || {
+      echo "WARN: research_wiki.py not found; exa-search results delivered, wiki ingest skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+      WIKI_SCRIPT=""
+    }
+    [ -n "$WIKI_SCRIPT" ] && for each research-paper hit in results:
         if URL matches arxiv.org/abs/<id>:
-            python3 tools/research_wiki.py ingest_paper research-wiki/ \
+            python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --arxiv-id "<id>"
         else:
-            python3 tools/research_wiki.py ingest_paper research-wiki/ \
+            python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --title "<title>" --authors "<authors joined by , >" \
                 --year <year> --venue "<venue or publisher>"
 ```

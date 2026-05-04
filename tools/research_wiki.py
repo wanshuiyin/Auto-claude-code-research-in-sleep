@@ -29,6 +29,14 @@ Usage:
     python3 research_wiki.py sync <wiki_root> --from-file ids.txt
 """
 
+# `from __future__ import annotations` defers annotation evaluation so that
+# PEP 604 union syntax (`Path | None`) used below works on Python 3.7+ —
+# without it the module fails to import on the macOS system default
+# (`/usr/bin/python3` = 3.9.6), which is a path that many community users
+# end up on if they have not installed a newer Python via miniforge / brew /
+# pyenv. The helper is otherwise pure-stdlib.
+from __future__ import annotations
+
 import argparse
 import json
 import os

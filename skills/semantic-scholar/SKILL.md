@@ -154,21 +154,34 @@ For each paper (or top 5 if many results):
 ### Step 7: Update Research Wiki (if active)
 
 **Required when `research-wiki/` exists in the project**; skip silently
-otherwise. Ingest the papers presented to the user. For results with an
-`externalIds.ArXiv` field, use `--arxiv-id`; for venue-only papers (no
-arXiv mirror — common for IEEE/ACM), fall back to manual metadata:
+otherwise. When the wiki dir exists, resolve `$WIKI_SCRIPT` per the
+canonical chain at
+[`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)
+(Variant B — warn-and-skip). For results with an `externalIds.ArXiv`
+field, use `--arxiv-id`; for venue-only papers (no arXiv mirror —
+common for IEEE/ACM), fall back to manual metadata:
 
-```
-if [ -d research-wiki/ ]:
-    for each paper in results:
+```bash
+if [ -d research-wiki/ ]; then
+  cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+  ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+  WIKI_SCRIPT=".aris/tools/research_wiki.py"
+  [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+  [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+  [ -f "$WIKI_SCRIPT" ] || {
+    echo "WARN: research_wiki.py not found; semantic-scholar results delivered, wiki ingest skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+    WIKI_SCRIPT=""
+  }
+  [ -n "$WIKI_SCRIPT" ] && for each paper in results:
         if paper.externalIds.ArXiv:
-            python3 tools/research_wiki.py ingest_paper research-wiki/ \
+            python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --arxiv-id "<ArXiv>"
         else:
-            python3 tools/research_wiki.py ingest_paper research-wiki/ \
+            python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --title "<title>" --authors "<authors joined by , >" \
                 --year <year> --venue "<venue>" \
                 [--external-id-doi "<externalIds.DOI>"]
+fi
 ```
 
 The helper handles slug / dedup / page / index / log — **do not

@@ -63,20 +63,65 @@ research-wiki/
 
 ## Subcommands
 
+## Helper resolution (run before any subcommand below)
+
+All wiki operations except plain directory bootstrap go through a single
+canonical helper, `tools/research_wiki.py`. Skills that touch the wiki
+must resolve `$WIKI_SCRIPT` via the chain below — never hard-code
+`python3 tools/research_wiki.py …`. Hard-coding silently fails when
+the project does not have `tools/` on disk (the post-`install_aris.sh`
+default), which is exactly the failure mode that left a real user's
+`research-wiki/` empty for a week.
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+WIKI_SCRIPT=".aris/tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+[ -f "$WIKI_SCRIPT" ] || {
+  echo "ERROR: research_wiki.py not found at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "       Fix one of:" >&2
+  echo "         1. rerun 'bash tools/install_aris.sh' from the ARIS repo (creates .aris/tools symlink)" >&2
+  echo "         2. export ARIS_REPO=<path-to-ARIS-repo>" >&2
+  echo "         3. cp <ARIS-repo>/tools/research_wiki.py tools/" >&2
+  exit 1
+}
+```
+
+`/research-wiki` itself is the wiki tool — if the helper is missing the
+skill **hard-fails**. Caller skills that update the wiki as a side
+effect (`/idea-creator`, `/result-to-claim`, `/research-lit`, `/arxiv`,
+`/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) use the
+same chain but **warn-and-skip** instead of hard-failing — their
+primary output (idea list, claim verdict, paper summary) must still be
+delivered to the user.
+
 ### `/research-wiki init`
 
-Initialize the wiki for the current project:
+Initialize the wiki for the current project. After resolving
+`$WIKI_SCRIPT` per the chain above:
 
-1. Create `research-wiki/` directory structure
-2. Create empty `index.md`, `log.md`, `gap_map.md`
-3. Create empty `graph/edges.jsonl`
-4. Log: "Wiki initialized"
+```bash
+python3 "$WIKI_SCRIPT" init research-wiki/
+```
+
+The helper creates `research-wiki/{papers,ideas,experiments,claims,graph}/`
+plus `index.md`, `log.md`, `gap_map.md`, **`query_pack.md`**, and
+`graph/edges.jsonl`, then appends `"Wiki initialized"` to `log.md`.
+
+(Earlier versions of this skill described a prose-only init that
+omitted `query_pack.md` — that drifted from the helper and made
+`/idea-creator`'s Phase 0 query-pack check fall through to a
+`rebuild_query_pack` invocation that, under the old hard-coded path,
+silently failed. Delegating init to the helper is the single source of
+truth for the wiki schema.)
 
 ### `/research-wiki ingest "<paper title>" — arxiv: <id>`
 
-Add a paper to the wiki. This subcommand is thin wrapping around the
-canonical helper `python3 tools/research_wiki.py ingest_paper …`, which
-is the single implementation of paper ingest in ARIS (per
+Add a paper to the wiki. This subcommand is thin wrapping around
+`python3 "$WIKI_SCRIPT" ingest_paper …`, which is the single
+implementation of paper ingest in ARIS (per
 [`shared-references/integration-contract.md`](../shared-references/integration-contract.md)
 — one helper, no copies). The helper does all of:
 
@@ -93,16 +138,16 @@ identified:
 
 ```bash
 # arXiv-known paper
-python3 tools/research_wiki.py ingest_paper research-wiki/ \
+python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
     --arxiv-id 2501.12345 --thesis "One-line claim from abstract."
 
 # Venue paper with no arXiv mirror
-python3 tools/research_wiki.py ingest_paper research-wiki/ \
+python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
     --title "Attention Is All You Need" \
     --authors "Ashish Vaswani, Noam Shazeer, …" --year 2017 --venue "NeurIPS"
 
 # Manual edge after ingest
-python3 tools/research_wiki.py add_edge research-wiki/ \
+python3 "$WIKI_SCRIPT" add_edge research-wiki/ \
     --from "paper:vaswani2017_attention_all_you" \
     --to "paper:chen2025_factorized_gap" \
     --type "extends" --evidence "Section 3.2: adapts the encoder block …"
@@ -121,11 +166,11 @@ the reading happened, or a hook didn't fire).
 
 ```bash
 # Explicit list
-python3 tools/research_wiki.py sync research-wiki/ \
+python3 "$WIKI_SCRIPT" sync research-wiki/ \
     --arxiv-ids 2310.06770,1706.03762
 
 # From a file (one id per line, # comments ok)
-python3 tools/research_wiki.py sync research-wiki/ --from-file ids.txt
+python3 "$WIKI_SCRIPT" sync research-wiki/ --from-file ids.txt
 ```
 
 Dedup is handled per-id; already-ingested papers are skipped silently.
@@ -259,7 +304,7 @@ All paper-reading skills follow the same **integration contract** (see
 [`shared-references/integration-contract.md`](../shared-references/integration-contract.md)):
 
 - single predicate — `[ -d research-wiki/ ]`
-- single canonical helper — `python3 tools/research_wiki.py ingest_paper …`
+- single canonical helper — `python3 "$WIKI_SCRIPT" ingest_paper …` after resolving `$WIKI_SCRIPT` via the chain at the top of this SKILL
 - concrete artifact — `papers/<slug>.md` + `log.md` entry
 - backfill — `sync --arxiv-ids …`
 - diagnostic — `tools/verify_wiki_coverage.sh`
@@ -268,16 +313,18 @@ All paper-reading skills follow the same **integration contract** (see
 
 ```
 # At end of research-lit, after synthesis:
-if research-wiki/ exists:
+if research-wiki/ exists AND $WIKI_SCRIPT resolved (chain at top of this SKILL):
     for paper in top_relevant_papers (limit 8-12):
-        python3 tools/research_wiki.py ingest_paper research-wiki/ \
+        python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
             --arxiv-id <id> [--thesis "..."] [--tags "..."]
         for each explicit relation to existing wiki paper:
-            python3 tools/research_wiki.py add_edge research-wiki/ \
+            python3 "$WIKI_SCRIPT" add_edge research-wiki/ \
                 --from "paper:<slug>" --to "<target>" \
                 --type <extends|contradicts|addresses_gap|...> \
                 --evidence "..."
     log "research-lit ingested N papers"
+elif research-wiki/ exists but $WIKI_SCRIPT did not resolve:
+    warn "wiki update skipped — research_wiki.py unreachable; rerun install_aris.sh"
 ```
 
 Each paper-reading skill ships its own Step "Update Research Wiki (if

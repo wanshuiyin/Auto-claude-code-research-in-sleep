@@ -49,12 +49,29 @@ relevant."
 
 The business logic lives in **exactly one place** — a script under
 `tools/`, or a single subcommand of an existing helper. Every caller
-invokes the same entrypoint.
+invokes the same entrypoint, but every caller must also resolve
+**where** that entrypoint lives. On the Codex side the helper may be at:
 
-- ✅ `python3 tools/research_wiki.py ingest_paper <root> --arxiv-id <id>`
-- ✅ `bash tools/verify_paper_audits.sh <paper> --assurance submission`
-- ❌ N skills each paraphrasing the same 10-line bash snippet. When one
-     drifts, they all drift.
+- `$ARIS_REPO/tools/<helper>` — env var or auto-resolved from `.aris/installed-skills-codex.txt`
+- `<project>/tools/<helper>` — manual copy or running from inside the ARIS repo
+- `~/.codex/skills/<skill-name>/<helper>` — Codex global install layout
+
+Use a resolution chain, not a hard-coded path. Pattern:
+
+```bash
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+HELPER=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/<helper>" ] && HELPER="$ARIS_REPO/tools/<helper>"
+[ -z "$HELPER" ] && [ -f tools/<helper> ] && HELPER="tools/<helper>"
+[ -z "$HELPER" ] && [ -f ~/.codex/skills/<skill-name>/<helper> ] && HELPER="$HOME/.codex/skills/<skill-name>/<helper>"
+[ -z "$HELPER" ] && { echo "WARN: <helper> not found; set ARIS_REPO, copy to tools/, or use Codex global install. Skipping this step." >&2; }
+# ... then: [ -n "$HELPER" ] && python3 "$HELPER" <subcommand> ...
+```
+
+- ✅ Resolved-via-chain invocation: `python3 "$WIKI_SCRIPT" ingest_paper <root> --arxiv-id <id>` (where `$WIKI_SCRIPT` was set by the chain above with `<helper>=research_wiki.py`)
+- ✅ `bash tools/verify_paper_audits.sh <paper> --assurance submission` (helpers under `tools/` that are only run from inside the ARIS repo can stay as plain `tools/...`; the resolution chain only applies to helpers invoked from a downstream user project)
+- ❌ Hard-coded `python3 tools/research_wiki.py …` from a downstream skill that may run in a project without `tools/` on disk — it silently exits 2 and the caller proceeds with no side effect.
+- ❌ N skills each paraphrasing the same 10-line bash snippet. When one drifts, they all drift.
 
 If the same 3+ lines of prose appear in more than two SKILL.md files,
 factor them into a helper.

@@ -149,8 +149,14 @@ if [[ "$MISS_COUNT" -gt 0 ]]; then
     echo "" >&2
     # Build comma-joined list up to 20 ids for backfill hint
     HINT_IDS=$(head -20 "$MISSING" | paste -sd, -)
+    # Resolve helper path the same way the skills do (per
+    # skills/shared-references/wiki-helper-resolution.md)
+    HINT_SCRIPT=".aris/tools/research_wiki.py"
+    [[ -f "$HINT_SCRIPT" ]] || HINT_SCRIPT="tools/research_wiki.py"
+    [[ -f "$HINT_SCRIPT" ]] || { [[ -n "${ARIS_REPO:-}" ]] && HINT_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+    [[ -f "$HINT_SCRIPT" ]] || HINT_SCRIPT="<resolve-via-shared-ref>/research_wiki.py"
     echo "Backfill suggestion:" >&2
-    echo "    python3 tools/research_wiki.py sync $WIKI_ROOT --arxiv-ids $HINT_IDS" >&2
+    echo "    python3 \"$HINT_SCRIPT\" sync $WIKI_ROOT --arxiv-ids $HINT_IDS" >&2
     [[ "$MISS_COUNT" -gt 20 ]] && echo "    (or --from-file to pass the full list)" >&2
     echo "" >&2
 fi
