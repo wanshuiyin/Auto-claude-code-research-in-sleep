@@ -251,29 +251,25 @@ spawn_agent:
 
 If `REVIEWER_BIAS_GUARD = false` (legacy debugging only), use `send_input` with the saved reviewer id; this is **not** the recommended path.
 
-### Step 5.5: Kill Argument Exercise (theory papers only)
+### Step 5.5: Kill Argument Exercise (theory / scope-heavy papers only)
 
-Run this only if the paper is theory-heavy (≥5 `\begin{theorem}|\begin{lemma}|\begin{proposition}|\begin{corollary}` environments in the source) and only on the final scheduled round (`current_round == MAX_ROUNDS`).
+Run this only if the paper is theory-heavy (≥5 `\begin{theorem}|\begin{lemma}|\begin{proposition}|\begin{corollary}` environments in the source) or has explicit scope/generality claims in title/abstract, and only on the final scheduled round (`current_round == MAX_ROUNDS`).
 
-This is a late-stage adversarial check. It must always use **fresh** `spawn_agent` reviewers, never `codex-reply`, and it must not reuse any prior review context.
+**Delegate to the `kill-argument` skill** (extracted in May 2026 as a standalone primitive). This step does NOT re-implement the Attack-and-Adjudication prompt template; instead, invoke the skill and read its output. The Codex-CLI form is to call the installed skill the same way you would call any other ARIS skill from the agent's tool list, then parse `KILL_ARGUMENT.json` from the paper directory.
 
-**Thread 1: Attack**
-- Use a fresh thread with only the current paper files.
-- Prompt: "Construct the single best argument to reject this paper in 200 words. Focus on theorem validity, assumption mismatch, missing proof obligations, limit-order ambiguity, and claim/evidence gaps. Do not reference prior rounds or fixes."
+**Merge rule** (auto-loop's responsibility — `kill-argument` itself is detect-only):
 
-**Thread 2: Defense**
-- Use a second fresh thread with the current paper files plus the attack memo.
-- Prompt: "Now defend the paper against the attack memo. For each rejection point, classify it as already fixed, partially fixed, or still unresolved, and cite the current files. Do not reuse prior review context."
-
-**Merge rule**
-- Dedupe attack points against the Round 2 weakness list by semantic overlap.
-- Append any novel unresolved attack point to the Step 6 fix list before implementation.
-- If the defense cannot refute a point, keep it at the original severity or raise it by one level if it exposes a main-theorem or core-assumption failure.
-- If the defense shows the issue is already fixed in the current files, only downgrade after verifying the file evidence.
-- Record both memos in `PAPER_IMPROVEMENT_LOG.md`.
+- Read `details.decomposed_points` from `KILL_ARGUMENT.json`.
+- For each point with `verdict == "still_unresolved"` or `verdict == "partially_answered"` at `severity_if_unresolved == "critical"`:
+  - Dedupe against the Round 2 weakness list by semantic overlap (~85% similarity threshold).
+  - If novel, append it to the Step 6 fix list with the recommended_fix as the action description.
+- If the adjudication shows the issue is `answered_by_current_text`, only downgrade an existing weakness item after verifying the cited file:line evidence yourself.
+- Record both `KILL_ARGUMENT.md` and the merge decision in `PAPER_IMPROVEMENT_LOG.md`.
 - If `HUMAN_CHECKPOINT = true`, include the merged findings in the checkpoint summary before asking the user to proceed.
 
-This phase feeds directly into Step 6. The attack/defense findings must be merged before the final recompile.
+This phase feeds directly into Step 6. The merged findings must land before the final recompile.
+
+If kill-argument returns `verdict: NOT_APPLICABLE`, skip Step 5.5 entirely and proceed to Step 6. If it returns `BLOCKED` or `ERROR`, log the reason in `PAPER_IMPROVEMENT_LOG.md` and proceed without merging — the loop should not stall on an adversarial check that cannot run.
 
 **Empirical motivation:** in a real submission run, after several rounds of standard improvement (score 7-8/10), the kill-argument exercise surfaced framing weaknesses that no prior review caught (e.g., a setting being mostly conditional rather than truly general, or a baseline being irrelevant to real systems). Author rebuttal forced explicit scope qualifications in abstract and discussion.
 
@@ -450,7 +446,7 @@ paper/
 
 ## Typical Score Progression
 
-Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
+Based on end-to-end testing on a real theory-paper run:
 
 | Round | Score | Key Improvements |
 |-------|-------|-----------------|
@@ -459,7 +455,7 @@ Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
 | Round 2 | 7/10 (content) | Added synthetic validation, formal truncation proposition, stronger limitations |
 | Round 3 | 5→8.5/10 (format) | Removed hero fig, appendix, compressed conclusion, fixed overfull hbox |
 
-**+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final: 8 pages main body, 0 overfull hbox, ICLR-compliant.
+**+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final state at submission: clean overfull-hbox count and venue-format-compliant length.
 
 ## Review Tracing
 

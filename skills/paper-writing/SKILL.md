@@ -408,6 +408,34 @@ fi
 
 **Empirical motivation:** in a real submission run, the final paper claimed a narrower experiment grid than the raw JSON actually contained, and a tolerance value was rounded down past the actual relative error. Both were caught only after manual `paper-claim-audit` invocation in the final round; the improvement loop did not detect them.
 
+### Phase 5.6: Kill-Argument Adversarial Review (theory / scope-heavy papers)
+
+After Phase 5.5 (claim audit) passes, run `/kill-argument` whenever the paper is theory-heavy or makes explicit scope/generality claims in the title or abstract. This is a final adversarial check that complements the claim/citation/proof audits: those verify *local correctness* (numbers match, cites resolve, theorems prove); kill-argument tests *headline-level* survival — whether the paper as a whole answers the worst rejection paragraph a senior area chair would write.
+
+```bash
+THEORY_ENV_COUNT=$(rg -c '\\begin\{(theorem|lemma|proposition|corollary)\}' paper/main.tex paper/sections 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+SCOPE_HINT=$(rg -i 'general(ization)?|broad|universal|across|any [A-Za-z]+ model|holds for' paper/sections/0*abstract* 2>/dev/null | head -1)
+
+if [ "$THEORY_ENV_COUNT" -ge 5 ] || [ -n "$SCOPE_HINT" ]; then
+    /kill-argument "paper/"
+    KILL_VERDICT=$(jq -r '.verdict' paper/KILL_ARGUMENT.json)
+    KILL_REASON=$(jq -r '.reason_code' paper/KILL_ARGUMENT.json)
+fi
+```
+
+**Gating** (depends on the resolved `assurance` level from Phase 0):
+
+| Assurance level | THEORY/SCOPE detected | Behavior |
+|---|---|---|
+| `submission` | yes | **MANDATORY**. `FAIL` blocks the final report; `WARN` requires explicit user acknowledgment; `BLOCKED`/`ERROR` blocks the final report (cannot ship without an adversarial pass). |
+| `submission` | no | Skip — `KILL_ARGUMENT.json` is written with `verdict: NOT_APPLICABLE, reason_code: not_theory_or_scope_paper` so the submission verifier sees a record. |
+| `internal` / `draft` | yes | **Advisory**. Run if the user passed `— kill-argument: true`; otherwise skip. `WARN`/`FAIL` is logged but does not block. |
+| `internal` / `draft` | no | Skip. |
+
+`/kill-argument` itself never edits the paper; it writes `KILL_ARGUMENT.{md,json}`. If `still_unresolved critical` points are surfaced, queue them for the next `/auto-paper-improvement-loop` round (Step 5.5 of that skill auto-merges the findings into its fix list).
+
+**Why this is the right place:** Phase 5 (loop) optimizes for score, Phase 5.5 (claim audit) verifies numbers, Phase 5.8 (citation audit) verifies cites — none of these catches the case where every local component is correct but the paper still oversells what it actually proves. Kill-argument is the dedicated headline-scope check.
+
 ### Phase 5.8: Citation Audit (submission gate)
 
 After the final paper-claim-audit passes, run `/citation-audit` to verify every `\cite{...}` along three axes: existence, metadata correctness, and context appropriateness. This is the fourth and final layer of the evidence-and-claim assurance stack (`experiment-audit` → `result-to-claim` → `paper-claim-audit` → `citation-audit`).

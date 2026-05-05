@@ -37,6 +37,7 @@ MANDATORY_AUDITS=(
     "PROOF_AUDIT.json|proof-checker"
     "PAPER_CLAIM_AUDIT.json|paper-claim-audit"
     "CITATION_AUDIT.json|citation-audit"
+    "KILL_ARGUMENT.json|kill-argument"
 )
 ALLOWED_VERDICTS=("PASS" "WARN" "FAIL" "NOT_APPLICABLE" "BLOCKED" "ERROR")
 SUBMISSION_BLOCKING=("FAIL" "BLOCKED" "ERROR")

@@ -317,7 +317,7 @@ paper/
 
 ## Typical Score Progression
 
-Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
+Based on end-to-end testing on a real theory-paper run:
 
 | Round | Score | Key Improvements |
 |-------|-------|-----------------|
@@ -326,4 +326,4 @@ Based on end-to-end testing on a 9-page ICLR 2026 theory paper:
 | Round 2 | 7/10 (content) | Added synthetic validation, formal truncation proposition, stronger limitations |
 | Round 3 | 5→8.5/10 (format) | Removed hero fig, appendix, compressed conclusion, fixed overfull hbox |
 
-**+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final: 8 pages main body, 0 overfull hbox, ICLR-compliant.
+**+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final state at submission: clean overfull-hbox count and venue-format-compliant length.

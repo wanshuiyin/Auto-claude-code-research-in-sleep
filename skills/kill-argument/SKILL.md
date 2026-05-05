@@ -17,7 +17,7 @@ A balanced reviewer might list "scope-overclaim risk" as MAJOR alongside 3-5 oth
 
 This skill runs that adversarial pass deliberately, then forces a second fresh reviewer to defend point-by-point, classify each rejection as already-fixed / partially-fixed / still-unresolved, and surface what's actually load-bearing.
 
-**Empirical motivation** (NeurIPS 2026 D-LLM theory paper, April 2026): after 5 standard improvement rounds settling at score 7-8/10, kill-argument surfaced two framing weaknesses no prior review caught — "width-w is mostly conditional" and "CRF irrelevant to real D-LLMs".  Author rebuttal forced explicit scope qualifications in abstract and discussion that weren't visible from the score-based reviews alone.
+**Empirical motivation:** in a real submission run, after several rounds of standard improvement (score 7-8/10), the kill-argument exercise surfaced framing weaknesses that no prior review caught (e.g., a setting being mostly conditional rather than truly general, or a baseline being irrelevant to real systems).  Author rebuttal forced explicit scope qualifications in abstract and discussion that weren't visible from the score-based reviews alone.
 
 ## How This Differs From Other Review Skills
 
@@ -47,7 +47,7 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 - **CONTEXT_POLICY** = `fresh` (REVIEWER_BIAS_GUARD).  Each thread is a fresh `mcp__codex__codex` call.  **Never** use `mcp__codex__codex-reply`.  No prior review summary, fix list, or executor explanation enters either prompt.
 - **ATTACK_LENGTH** = approximately 200 words (do not exceed 250).  Single coherent argument, not a list.
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
-- **CLASSIFICATION** = `already_fixed` / `partially_fixed` / `still_unresolved`.
+- **CLASSIFICATION** = `answered_by_current_text` / `partially_answered` / `still_unresolved`.  (Names chosen so the adjudicator does not assume "fixed" implies prior history of patching — they read the paper as a fresh reviewer would.)
 - **OUTPUT** = `KILL_ARGUMENT.md` (human-readable) + `KILL_ARGUMENT.json` (machine-readable) in the paper directory.
 
 ## Workflow
@@ -133,7 +133,7 @@ mcp__codex__codex:
 
 Save the returned `threadId` for the trace; do NOT pass it to Thread 2.  Save the attack memo verbatim — both Thread 2 and the human-readable report use it.
 
-### Step 3: Defense memo (Thread 2, fresh codex with attack + paper)
+### Step 3: Adjudication memo (Thread 2, fresh codex with attack + paper)
 
 Invoke a second `mcp__codex__codex` call (still NOT `codex-reply` — Thread 2 is independent of Thread 1's codex history):
 
@@ -144,9 +144,12 @@ mcp__codex__codex:
   sandbox: read-only
   cwd: <paper directory>
   prompt: |
-    You are defending a paper against a hostile reviewer's rejection memo.
-    This is the defense pass of a kill-argument adversarial check. Fresh,
-    zero-context defense; do not reference any prior reviews / fix lists.
+    You are an independent area-chair adjudicator examining whether the
+    current paper text answers a hostile reviewer's rejection memo.
+    You are NOT the paper's defender — your job is to read the attack
+    point-by-point and rule, from the current source files alone,
+    whether each point stands or falls. Fresh, zero-context adjudication;
+    do not reference any prior reviews / fix lists.
 
     ## Paper files
     [list paths same as Step 2]
@@ -156,21 +159,25 @@ mcp__codex__codex:
 
     ## Your task
     The attack is one continuous argument, but it makes multiple distinct
-    rejection points that you must defend separately. Decompose the attack
-    into its atomic rejection points (3-7 of them), then for each point
-    classify it:
+    rejection points that you must adjudicate separately. Decompose the
+    attack into its atomic rejection points (3-7 of them), then for each
+    point classify it:
 
-    - already_fixed: the current paper text already mitigates this point
-      (cite specific file:line evidence)
-    - partially_fixed: paper has some response but not enough to refute
+    - answered_by_current_text: the current paper source already mitigates
+      this point (cite specific file:line evidence)
+    - partially_answered: paper has some response but not enough to refute
       the attack as written
     - still_unresolved: paper has no effective response
+
+    The label `answered_by_current_text` is intentional — "fixed" implies
+    history of patching and biases toward optimism. You are reading the
+    paper as a reviewer would, with no knowledge of prior round drafts.
 
     For each rejection point, output:
     ### Point P_n: <short label>
     **Attack claim**: <the specific accusation, ~30 words>
-    **Verdict**: already_fixed | partially_fixed | still_unresolved
-    **Defense evidence**: <cite file:line, ~50 words>
+    **Verdict**: answered_by_current_text | partially_answered | still_unresolved
+    **Evidence (or lack of)**: <cite file:line, ~50 words>
     **Severity if unresolved**: critical | major | minor
     **If unresolved, recommended fix**: <one specific actionable sentence>
 
@@ -178,14 +185,14 @@ mcp__codex__codex:
 
     ## Summary
     Total rejection points: N
-    - already_fixed: X
-    - partially_fixed: Y
+    - answered_by_current_text: X
+    - partially_answered: Y
     - still_unresolved: Z
 
     ## Net assessment
-    <one short paragraph: does the defense as a whole survive the attack,
-    or is the attack effective at the headline level? Be honest — if Y or Z
-    > 0 and they hit the headline, say so.>
+    <one short paragraph: would this paper survive a senior area-chair read
+    of the attack memo, given only what is in the current source? Be honest —
+    if Y or Z > 0 and they hit the headline, say so.>
 
     ## Top action items (in priority order, max 3)
     1. ...
@@ -193,15 +200,17 @@ mcp__codex__codex:
     3. ...
 
     ## Constraints
-    - Do NOT consult any prior round reviews or fix lists. Defense must be
-      made strictly from current paper files.
-    - If the defense cannot refute a point, do NOT minimize — keep severity
+    - Do NOT consult any prior round reviews or fix lists. Adjudication must
+      be made strictly from current paper files.
+    - If the paper cannot refute a point, do NOT minimize — keep severity
       honest.
     - If a point reflects an author-chosen position (e.g., conscious title
-      scope decision), classify as partially_fixed with a note that the
-      position is intentional, but say whether this position is sustainable
-      under the attack.
-    - Be specific. No flattery, no hedging.
+      scope decision), classify as `partially_answered` with a note that the
+      position is intentional, AND say whether this position is sustainable
+      under the attack — do NOT auto-grade as `answered_by_current_text`
+      just because it is intentional.
+    - Be specific. No flattery, no hedging, no rationalizing on the paper's
+      behalf.
 ```
 
 Save the returned `threadId`.
@@ -216,19 +225,20 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 **Date**: <YYYY-MM-DD>
 **Reviewer model**: gpt-5.5 xhigh, fresh threads (no codex-reply)
 **Attack thread**: <threadId 1>
-**Defense thread**: <threadId 2>
+**Adjudicator thread**: <threadId 2>
+**Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
 
-## Net verdict
+## Net assessment
 
-<paragraph from defense memo's "Net assessment">
+<paragraph from adjudicator memo's "Net assessment">
 
 ## Attack memo (verbatim)
 
 > <attack memo from Thread 1>
 
-## Defense memo (per-point)
+## Adjudication (per-point)
 
-<copy verbatim from Thread 2>
+<copy verbatim from Thread 2 — uses labels answered_by_current_text / partially_answered / still_unresolved>
 
 ## Top action items
 
@@ -241,46 +251,82 @@ it as a known open problem in the conclusion / limitations. If it is
 writing-level, queue for next /auto-paper-improvement-loop round.
 ```
 
-Compose the machine-readable `<paper-dir>/KILL_ARGUMENT.json`:
+Compose the machine-readable `<paper-dir>/KILL_ARGUMENT.json` per the
+ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
 
 ```json
 {
-  "skill": "kill-argument",
-  "verdict": "PASS | WARN | FAIL",
-  "summary": "<one-line summary>",
-  "attack_thread_id": "<...>",
-  "defense_thread_id": "<...>",
+  "audit_skill": "kill-argument",
+  "verdict": "PASS | WARN | FAIL | NOT_APPLICABLE | BLOCKED | ERROR",
+  "reason_code": "<see verdict mapping below>",
+  "summary": "<one-line summary, ~80 chars>",
+  "audited_input_hashes": {
+    "main.tex":                          "sha256:<...>",
+    "sec/0.abstract.tex":                "sha256:<...>",
+    "sec/<each-section>.tex":            "sha256:<...>",
+    "references.bib":                    "sha256:<...>",
+    "main.pdf":                          "sha256:<...>"
+  },
+  "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
+  "thread_id": "<defense threadId — primary; attack threadId in details>",
   "reviewer_model": "gpt-5.5",
   "reviewer_reasoning": "xhigh",
   "generated_at": "<UTC ISO-8601>",
   "details": {
+    "attack_thread_id": "<threadId 1>",
+    "defense_thread_id": "<threadId 2 — same as top-level thread_id>",
     "attack_memo": "<verbatim>",
     "decomposed_points": [
       {
         "id": "P_1",
         "label": "<short label>",
         "attack_claim": "<...>",
-        "verdict": "already_fixed | partially_fixed | still_unresolved",
-        "defense_evidence": "<file:line citation>",
+        "verdict": "answered_by_current_text | partially_answered | still_unresolved",
+        "evidence": "<file:line citation>",
         "severity_if_unresolved": "critical | major | minor",
         "recommended_fix": "<...>"
       }
     ],
     "counts": {
-      "already_fixed": <int>,
-      "partially_fixed": <int>,
-      "still_unresolved": <int>
+      "answered_by_current_text": <int>,
+      "partially_answered":       <int>,
+      "still_unresolved":         <int>
     },
-    "net_assessment": "<defense memo's net assessment>",
+    "net_assessment": "<adjudicator memo's net assessment>",
     "top_action_items": ["...", "...", "..."]
   }
 }
 ```
 
-Verdict mapping:
-- `PASS`: 0 still_unresolved AND ≤1 partially_fixed at critical severity → defense fully survives.
-- `WARN`: ≥1 partially_fixed at critical, OR ≥1 still_unresolved at major.
-- `FAIL`: ≥1 still_unresolved at critical → headline attack effective; defense does not survive.
+**Hash inputs** (`audited_input_hashes`): use paper-relative paths,
+`sha256` of every `.tex` consumed plus `references.bib` and the
+compiled `main.pdf` if it exists. The verifier rehashes these on
+`verify_paper_audits.sh` and flags `STALE` if the user edited the
+paper after running the audit.
+
+**Verdict mapping** (every (counts, severity) tuple must hit exactly one row):
+
+| Verdict | reason_code | Trigger |
+|---|---|---|
+| `FAIL` | `unresolved_critical` | ≥1 `still_unresolved` at `critical` severity |
+| `WARN` | `unresolved_major_or_minor` | ≥1 `still_unresolved` at `major` or `minor` severity (and no `critical`) |
+| `WARN` | `partial_critical_or_repeated_major` | ≥1 `partially_answered` at `critical`, OR ≥2 `partially_answered` at `major` |
+| `PASS` | `defense_survives_with_minor_partial_only` | 0 `still_unresolved`, AND all `partially_answered` are at `minor` severity |
+| `PASS` | `defense_survives` | 0 `still_unresolved`, AND 0 `partially_answered` |
+| `NOT_APPLICABLE` | `not_theory_or_scope_paper` | Paper has <2 `\begin{theorem\|lemma\|proposition\|corollary}` AND no scope / generality claims in abstract |
+| `NOT_APPLICABLE` | `headline_unstable` | Title or abstract changed within the last 2 commits — re-run after headline stabilizes |
+| `BLOCKED` | `paper_compile_failed` | Compiled PDF missing AND `main.tex` does not compile clean — adjudication needs source fidelity |
+| `BLOCKED` | `source_files_missing` | `main.tex` not found, or no `sec/*.tex` files |
+| `ERROR` | `codex_api_error` | `mcp__codex__codex` call failed |
+| `ERROR` | `decomposition_parse_failed` | Adjudicator thread did not return parseable per-point structure |
+| `ERROR` | `trace_save_failed` | Trace directory write failed |
+
+`PASS` requires `still_unresolved == 0`. Any `partially_answered` at
+`major` or higher → at most `WARN`.
+
+The verdict is computed from the per-point counts; do NOT let the
+defense thread output the top-level verdict directly (that would let
+it self-grade). The skill code does the verdict mapping.
 
 ### Step 5: Print summary
 
@@ -291,12 +337,13 @@ To the user:
 
   Attack: <one-sentence summary of the rejection thrust>
 
-  Defense breakdown:
-    already_fixed:     X
-    partially_fixed:   Y
-    still_unresolved:  Z   ← critical: <names>
+  Adjudication breakdown:
+    answered_by_current_text:   X
+    partially_answered:         Y
+    still_unresolved:           Z   ← critical: <names>
 
-  Verdict: <PASS / WARN / FAIL>
+  Verdict: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR>
+  Reason:  <reason_code, e.g., defense_survives, unresolved_critical>
 
   Top action items:
   1. ...
@@ -310,24 +357,25 @@ To the user:
 
 - `<paper-dir>/KILL_ARGUMENT.md` — human-readable report
 - `<paper-dir>/KILL_ARGUMENT.json` — machine-readable ledger
-- `.aris/traces/kill-argument/<date>_runNN/` — per-thread codex traces (Attack memo + Defense memo)
+- `.aris/traces/kill-argument/<date>_runNN/` — per-thread codex traces (Attack memo + Adjudication memo)
 - Optional: applied fixes if user explicitly requests; default is **detect-only, do not auto-modify**.
 
 ## Key Rules
 
-- **Fresh thread per call.**  Both Attack and Defense use `mcp__codex__codex`, never `codex-reply`.  Thread 1 and Thread 2 must not share codex context.
+- **Fresh thread per call.**  Both Attack and Adjudication use `mcp__codex__codex`, never `codex-reply`.  Thread 1 and Thread 2 must not share codex context.
 - **Zero prior context.**  Neither thread receives prior round reviews, fix lists, executor summaries, or improvement-loop logs.
 - **Attack must commit.**  Single argument, ~200 words.  No "consider also" hedge.  The whole value is in forcing the reviewer to pick the most damaging line.
-- **Defense must classify, not minimize.**  `still_unresolved` is honest if the paper has no effective response.  Don't downgrade to `partially_fixed` unless evidence is real.
-- **Author-chosen positions** (e.g., deliberate title scope, deliberate omission of qualifier): mark `partially_fixed` with note that the position is intentional, AND say whether the position is sustainable under the attack.  Don't auto-grade as `already_fixed` just because it's intentional.
-- **Detect-only by default.**  Do not edit paper .tex files.  The recommendation is informational; the human decides whether and how to act.
+- **Adjudicator must classify, not minimize.**  `still_unresolved` is honest if the paper has no effective response.  Don't downgrade to `partially_answered` unless evidence is real.
+- **Author-chosen positions** (e.g., deliberate title scope, deliberate omission of qualifier): mark `partially_answered` with note that the position is intentional, AND say whether the position is sustainable under the attack.  Don't auto-grade as `answered_by_current_text` just because it's intentional.
+- **Verdict is computed by the skill, not by the adjudicator.**  The Codex thread emits per-point classifications; the skill code maps those to one of the 6 audit verdicts via the table in Step 4.  Never let the adjudicator self-grade the top-level verdict.
+- **Detect-only by direct invocation; can be invoked by `/auto-paper-improvement-loop` Step 5.5 which then merges unresolved findings into its fix list.**  When a user runs `/kill-argument paper/` directly, the output is informational and the human decides whether to act.  When the skill is invoked from inside the auto-improvement loop, the loop reads `KILL_ARGUMENT.json`, deduplicates against its existing weakness list, and feeds novel `still_unresolved` points into Step 6 fixes — `/kill-argument` itself never edits paper files.
 
 ## When NOT to Use
 
-- Empirical papers without theorems / scope claims — `/peer-review` is more useful.
-- Very early drafts where the headline isn't stable yet — fix the headline first.
+- Empirical papers without theorems / scope claims — `/peer-review` is more useful.  The skill emits `NOT_APPLICABLE` with `reason_code: not_theory_or_scope_paper` in this case.
+- Very early drafts where the headline isn't stable yet — fix the headline first.  The skill emits `NOT_APPLICABLE` with `reason_code: headline_unstable` if the title or abstract changed within the last 2 commits.
 - Papers with ongoing experiments — wait until results stabilize, then run.
-- Inside `/auto-paper-improvement-loop` Step 5.5 — that already runs this protocol on the final scheduled round.
+- (`/auto-paper-improvement-loop` Step 5.5 used to run this protocol inline; as of May 2026 it now invokes `/kill-argument` and reads `KILL_ARGUMENT.json` instead, so there is no longer a "do not invoke from inside auto-loop" exclusion.)
 
 ## Review Tracing
 
