@@ -1,7 +1,7 @@
 ---
 name: citation-audit
 description: "Zero-context verification that every bibliographic entry in the paper is real, correctly attributed, and used in a context the cited paper actually supports. Uses a fresh cross-model reviewer with web/DBLP/arXiv lookup to catch hallucinated authors, wrong years, fabricated venues, version mismatches, and wrong-context citations (cite present but the cited paper does not establish the claim). Use when user says \"审查引用\", \"check citations\", \"citation audit\", \"verify references\", \"引用核对\", or before submission to ensure bibliography integrity."
-argument-hint: "[paper-directory-or-bib-file] [--uncited]"
+argument-hint: "[paper-directory-or-bib-file] [--uncited] [— soft-only]"
 allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent, WebSearch, WebFetch
 ---
 
@@ -43,6 +43,7 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
 - **STATE = `CITATION_AUDIT.json`** — Machine-readable verdict ledger consumable by downstream tools.
+- **SOFT_ONLY = `false`** — When true (set via `— soft-only` / `— soft_only` flag), the audit runs all three layers normally but **forbids any `.bib` file mutation**. Findings that would otherwise mutate the bib (FIX / REPLACE / REMOVE) are translated into per-occurrence sentence-rewrite proposals against the citing `*.tex` files. Used by `/resubmit-pipeline` Phase 1 to honor the user's hard "freeze the bib" constraint.
 
 ## Workflow
 
@@ -274,6 +275,7 @@ If the bib file cannot be read well enough to audit even the cited entries, fall
 - **Always emit, never block** — this skill always writes `CITATION_AUDIT.json` with a verdict; the decision to block finalization lives in `paper-writing` Phase 6 + `tools/verify_paper_audits.sh`, driven by the `assurance` level. See "Submission Artifact Emission" below.
 - **Run once per submission** — the audit is wall-clock expensive (web lookups for each entry); not for every save
 - **Uncited detection is opt-in only** — never auto-enable; never block on uncited entries; existing callers must observe identical output if they do not pass `--uncited`
+- **Under `--soft-only`, citation-audit emits text-rewrite proposals only; bib files are never mutated regardless of finding severity.** The audit semantics (existence + metadata + context) and the per-entry KEEP/FIX/REPLACE/REMOVE ledger are preserved verbatim; only the action layer is translated to per-occurrence sentence rewrites in the citing `*.tex` files. Refuse any downstream-proposed bib edit while `--soft-only` is set.
 
 ## Comparison with Other Audit Skills
 
@@ -304,6 +306,88 @@ After each reviewer agent call, save the trace following `shared-references/revi
 - `.aris/traces/citation-audit/<date>_runNN/` (per-entry review traces)
 - Optional: applied fixes to `references.bib` + `sec/*.tex` (with `--apply` flag)
 - Optional: `details.uncited_entries` field in JSON + `## Uncited Entries (opt-in)` MD section (with `--uncited` flag; field absent and section omitted when flag is unset)
+
+## Optional: Soft-Only Mode (— soft-only)
+
+**Default**: disabled. The audit emits the standard `KEEP / FIX / REPLACE / REMOVE` per-entry verdicts and a downstream caller (or the `--apply` path of Step 6) is free to mutate the bib.
+
+**Opt-in**: pass `— soft-only` (also accepts `— soft_only`) on invocation. This mode is designed for callers — notably `/resubmit-pipeline` Phase 1 — that operate under a **hard "freeze the bib" constraint**: if a citation is wrong-context, soften the surrounding sentence; do **not** change, add, or remove the cite itself.
+
+### What soft-only changes
+
+The audit semantics are **unchanged**: existence + metadata + context-appropriateness checks all run, the reviewer is still invoked once per cited entry, and the per-entry KEEP/FIX/REPLACE/REMOVE verdicts are still computed and emitted exactly as in default mode. Only the **action layer** changes — soft-only translates each base verdict into a text-rewrite proposal instead of a bib mutation.
+
+### Verdict translation table
+
+| Base verdict | Soft-only translation | Notes |
+|---|---|---|
+| `KEEP` | `keep_unchanged` | No action. Cite + sentence are both fine. |
+| `FIX` (metadata wrong) | `keep_metadata_drift_acknowledged` | Bib stays as-is. Flag for human review at submission time. Append note: "metadata drift detected but not fixed under --soft-only". |
+| `REPLACE` (wrong-context cite) | `soften_citing_sentence` | Per-occurrence sentence-rewrite proposal. For each `\cite{X}` in the body, locate the surrounding sentence and propose a softened version that does not claim what `X` actually establishes. |
+| `REMOVE` (cite refers to nonexistent paper — i.e., hallucinated citation) | `drop_cite_in_body_only` | The bib entry is left untouched (per the `--soft-only` invariant), but **the inline `\cite{X}` references in the body MUST be removed and the surrounding sentence rewritten** so it no longer relies on a nonexistent paper. Two sub-strategies: (a) drop the inline `\cite{X}` entirely and rephrase the sentence; (b) re-attribute to a different in-bib source that genuinely supports the claim. **Never** leave a `\cite{X}` to a hallucinated paper in the body. The bib entry itself stays (uncited entries are harmless and surfaced separately by uncited-detection). |
+
+### Augmented JSON schema (under `--soft-only`)
+
+When the flag is set, the standard top-level fields (`audit_skill`, `verdict`, `reason_code`, `summary`, etc.) and the existing `details.per_entry` ledger are emitted exactly as in default mode. In addition:
+
+- A top-level `soft_only_mode: true` boolean is added.
+- `details` gains a `soft_only_actions` array — one entry per audited bib key, in the same order as `details.per_entry`.
+
+```json
+{
+  "audit_skill": "citation-audit",
+  "verdict": "...",
+  "soft_only_mode": true,
+  "details": {
+    "soft_only_actions": [
+      {
+        "citekey": "smith2023example",
+        "base_verdict": "REPLACE",
+        "soft_action": "soften_citing_sentence",
+        "occurrences": [
+          {
+            "file": "sec/3.method.tex",
+            "line": 142,
+            "current_sentence": "Smith et al. [2023] proves a generic result that...",
+            "proposed_rewrite": "Smith et al. [2023] discusses a related setting; while not directly applicable, the framing motivates...",
+            "rationale": "Original sentence claims smith2023 'proves' a result, but smith2023 actually only conjectures it. Softened to 'discusses ... motivates' to remove the unsupported claim."
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`soft_action` is one of `keep_unchanged | keep_metadata_drift_acknowledged | soften_citing_sentence | drop_cite_in_body_only`. For `keep_unchanged` and `keep_metadata_drift_acknowledged`, `occurrences` MAY be omitted or emitted as `[]`. For `soften_citing_sentence` and `drop_cite_in_body_only`, `occurrences` MUST list one object per `\cite{X}` site in the body that triggered the verdict.
+
+For `drop_cite_in_body_only`, the `proposed_rewrite` field shows the sentence with the inline `\cite{X}` removed (or replaced by a `\cite{Y}` to an alternate in-bib source). The `bib_entry_action` field is fixed to `"leave_as_is_per_soft_only"` — the bib record itself is never modified by the audit.
+
+### Augmented human-readable report
+
+`CITATION_AUDIT.md` gains a new section `## Soft-Only Rewrites (— soft-only mode)` listing each occurrence with the proposed sentence rewrite for human approval. Example:
+
+```markdown
+## Soft-Only Rewrites (— soft-only mode)
+
+The bib file is frozen. The following sentence rewrites are proposed in lieu of bib edits.
+
+### `smith2023example` — base verdict REPLACE → `soften_citing_sentence`
+
+- **File**: `sec/3.method.tex:142`
+- **Current**: "Smith et al. [2023] proves a generic result that..."
+- **Proposed**: "Smith et al. [2023] discusses a related setting; while not directly applicable, the framing motivates..."
+- **Rationale**: Original sentence claims smith2023 "proves" a result, but smith2023 actually only conjectures it. Softened to "discusses ... motivates" to remove the unsupported claim.
+```
+
+The existing per-entry verdict table in the Summary block is **kept** but FIX/REPLACE/REMOVE rows are annotated with a `🔒 bib frozen by --soft-only` badge so downstream readers see immediately why the bib was not mutated.
+
+### Hard guarantees under `--soft-only`
+
+- **No `.bib` file mutations under any circumstance.** Step 6 ("Apply fixes (interactive)") is bypassed for the bib file; only `*.tex` rewrite proposals are produced (and still require human approval before any text edit).
+- If a downstream caller — including `paper-writing` Phase 6 or any wrapper — proposes a bib edit while `--soft-only` is set, **refuse it**: emit a one-line refusal in the trace and continue to the next finding.
+- The top-level `verdict` decision table is **unchanged**: a wrong-context cite still produces `FAIL` with `reason_code: wrong_context`. Soft-only does not silence the finding; it only constrains the action layer.
+- `--soft-only` composes with `--uncited`: both flags can be set together. Uncited entries remain detect-only and are not subject to soft-only translation (there is no citing sentence to soften).
 
 ## Submission Artifact Emission
 
