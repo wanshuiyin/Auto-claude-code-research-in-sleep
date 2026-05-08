@@ -24,6 +24,7 @@
 #                          the correct upstream target (repeatable)
 #   --replace-link NAME    replace an upstream-internal symlink that points to
 #                          a DIFFERENT entry than expected (repeatable)
+#   --platform PLATFORM    force platform: codex or claude (default: auto-detect)
 #   --from-old             trigger migration from legacy nested install
 #                          (.claude/skills/aris/)
 #   --migrate-copy STRAT   for legacy COPY install: STRAT = keep-user | prefer-upstream
@@ -82,6 +83,31 @@ REPLACE_LINK_NAMES=()
 
 usage() { sed -n '2,40p' "$0" | sed 's/^# \?//'; }
 
+ORIGINAL_ARGS=("$@")
+PLATFORM_OVERRIDE=""
+DETECTED_PLATFORM=""
+
+# ─── Platform auto-detection for Codex CLI (#180) ──────────────────────────────
+# If the project has Codex markers (.agents/, AGENTS.md, .codex/config.toml)
+# and NO Claude markers (.claude/, CLAUDE.md), delegate to install_aris_codex.sh.
+auto_detect_platform() {
+    local proj="$1"
+    local has_codex_markers=false
+    local has_claude_markers=false
+
+    # Codex markers
+    [[ -d "$proj/.agents" || -f "$proj/AGENTS.md" || -f "$proj/.codex/config.toml" ]] && has_codex_markers=true
+
+    # Claude markers
+    [[ -d "$proj/.claude" || -f "$proj/CLAUDE.md" || -f "$proj/.claude/settings.json" ]] && has_claude_markers=true
+
+    if $has_codex_markers && ! $has_claude_markers; then
+        DETECTED_PLATFORM="codex"
+    elif $has_claude_markers; then
+        DETECTED_PLATFORM="claude"
+    fi
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --reconcile)         ACTION="reconcile"; shift ;;
@@ -96,9 +122,7 @@ while [[ $# -gt 0 ]]; do
         --adopt-existing)    ADOPT_NAMES+=("${2:?--adopt-existing requires NAME}"); shift 2 ;;
         --replace-link)      REPLACE_LINK_NAMES+=("${2:?--replace-link requires NAME}"); shift 2 ;;
         --platform)
-            echo "Error: --platform is removed. ARIS now only supports Claude Code (.claude/skills/)." >&2
-            echo "       Codex CLI users: see docs for the manual codex setup." >&2
-            exit 2 ;;
+            PLATFORM_OVERRIDE="${2:?--platform requires codex|claude}"; shift 2 ;;
         --force)
             echo "Error: --force is removed. Use the granular flags:" >&2
             echo "       --adopt-existing NAME (for non-managed symlinks pointing to correct upstream)" >&2
@@ -116,6 +140,9 @@ done
 
 if [[ -n "$MIGRATE_COPY" && "$MIGRATE_COPY" != "keep-user" && "$MIGRATE_COPY" != "prefer-upstream" ]]; then
     echo "Error: --migrate-copy must be keep-user or prefer-upstream (got: $MIGRATE_COPY)" >&2; exit 2
+fi
+if [[ -n "$PLATFORM_OVERRIDE" && "$PLATFORM_OVERRIDE" != "codex" && "$PLATFORM_OVERRIDE" != "claude" ]]; then
+    echo "Error: --platform must be codex or claude (got: $PLATFORM_OVERRIDE)" >&2; exit 2
 fi
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -249,6 +276,27 @@ MANIFEST_PATH="$PROJECT_ARIS_DIR/$MANIFEST_NAME"
 MANIFEST_PREV="$PROJECT_ARIS_DIR/$MANIFEST_PREV_NAME"
 LOCK_DIR="$PROJECT_ARIS_DIR/$LOCK_DIR_NAME"
 DOC_FILE="$PROJECT_PATH/$DOC_FILE_NAME"
+
+auto_detect_platform "$PROJECT_PATH"
+PLATFORM="${PLATFORM_OVERRIDE:-$DETECTED_PLATFORM}"
+if [[ "$PLATFORM" == "codex" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    CODEX_INSTALLER="$SCRIPT_DIR/install_aris_codex.sh"
+    [[ -f "$CODEX_INSTALLER" ]] || die "Codex installer not found: $CODEX_INSTALLER"
+    log ""
+    log "Codex CLI platform detected — delegating to install_aris_codex.sh"
+    log "  (override with --platform claude)"
+    log ""
+    # Strip --platform flag from args before delegating
+    FILTERED_ARGS=()
+    skip_next=false
+    for arg in "${ORIGINAL_ARGS[@]}"; do
+        if $skip_next; then skip_next=false; continue; fi
+        if [[ "$arg" == "--platform" ]]; then skip_next=true; continue; fi
+        FILTERED_ARGS+=("$arg")
+    done
+    exec bash "$CODEX_INSTALLER" "${FILTERED_ARGS[@]}"
+fi
 
 # ─── S9: refuse if .aris / .claude / .claude/skills is itself a symlink ───────
 # (.aris and .claude/skills may not exist yet — only check if present.)
