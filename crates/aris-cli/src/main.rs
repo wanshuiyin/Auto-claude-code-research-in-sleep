@@ -1648,6 +1648,10 @@ impl LiveCli {
                         ("GLM-5", "Zhipu · GLM 5 latest"),
                         ("MiniMax-M2.7", "MiniMax · M2.7 latest"),
                         ("kimi-k2.5", "Kimi · K2.5 reasoning"),
+                        ("mimo-v2.5-pro", "Xiaomi · MiMo v2.5 Pro"),
+                        ("mimo-v2.5", "Xiaomi · MiMo v2.5"),
+                        ("mimo-v2-pro", "Xiaomi · MiMo v2 Pro"),
+                        ("mimo-v2-omni", "Xiaomi · MiMo v2 Omni"),
                     ]
                     .into_iter()
                     .map(|(name, desc)| input::SelectItem {
@@ -3194,11 +3198,20 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
         "claude-opus-4-6" => "Claude Opus 4.6",
         "claude-sonnet-4-6" => "Claude Sonnet 4.6",
         "claude-haiku-4-5-20251001" => "Claude Haiku 4.5",
+        "mimo-v2.5-pro" => "Xiaomi MiMo v2.5 Pro",
+        "mimo-v2.5" => "Xiaomi MiMo v2.5",
+        "mimo-v2-pro" => "Xiaomi MiMo v2 Pro",
+        "mimo-v2-omni" => "Xiaomi MiMo v2 Omni",
         other => other,
+    };
+    let developer = if model_name.starts_with("mimo-") {
+        "Xiaomi"
+    } else {
+        "Anthropic"
     };
     prompt.push(format!(
         "You are running inside ARIS (Auto Research in Sleep), a research automation CLI. \
-         Your exact model is {model_name} ({friendly_name}), developed by Anthropic. \
+         Your exact model is {model_name} ({friendly_name}), developed by {developer}. \
          When users ask what model you are, answer: \"{friendly_name}\" (model ID: {model_name}). \
          Do NOT guess or hallucinate a different version number."
     ));
