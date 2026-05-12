@@ -1652,6 +1652,12 @@ impl LiveCli {
                         ("mimo-v2.5", "Xiaomi · MiMo v2.5"),
                         ("mimo-v2-pro", "Xiaomi · MiMo v2 Pro"),
                         ("mimo-v2-omni", "Xiaomi · MiMo v2 Omni"),
+                        ("deepseek-chat", "DeepSeek · V3 general"),
+                        ("deepseek-reasoner", "DeepSeek · R1 reasoning"),
+                        ("qwen-max", "Alibaba · Qwen Max latest"),
+                        ("qwen-plus", "Alibaba · Qwen Plus fast"),
+                        ("doubao-pro", "ByteDance · Doubao Pro"),
+                        ("doubao-lite", "ByteDance · Doubao Lite fast"),
                     ]
                     .into_iter()
                     .map(|(name, desc)| input::SelectItem {
@@ -3202,10 +3208,22 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
         "mimo-v2.5" => "Xiaomi MiMo v2.5",
         "mimo-v2-pro" => "Xiaomi MiMo v2 Pro",
         "mimo-v2-omni" => "Xiaomi MiMo v2 Omni",
+        "deepseek-chat" => "DeepSeek V3",
+        "deepseek-reasoner" => "DeepSeek R1",
+        "qwen-max" => "Qwen Max",
+        "qwen-plus" => "Qwen Plus",
+        "doubao-pro" => "Doubao Pro",
+        "doubao-lite" => "Doubao Lite",
         other => other,
     };
     let developer = if model_name.starts_with("mimo-") {
         "Xiaomi"
+    } else if model_name.starts_with("deepseek-") {
+        "DeepSeek"
+    } else if model_name.starts_with("qwen-") {
+        "Alibaba"
+    } else if model_name.starts_with("doubao-") {
+        "ByteDance"
     } else {
         "Anthropic"
     };
