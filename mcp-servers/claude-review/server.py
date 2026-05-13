@@ -142,7 +142,11 @@ def parse_claude_json(raw_stdout: str) -> tuple[dict[str, Any] | None, str | Non
                 return item, None
         return None, "Claude CLI returned a JSON array without a 'result' event"
 
-    # Legacy CLI 1.x: NDJSON stream of dicts, walk lines in reverse for the last dict.
+    # Legacy CLI 1.x: NDJSON stream of dicts, walk lines in reverse for the
+    # last useful payload. Same array-vs-dict policy as above so a CLI 2.x
+    # JSON-array line surrounded by non-JSON noise (wrapper warnings, nvm/asdf
+    # banners, future CLI debug prints) still surfaces the result event
+    # instead of being silently dropped.
     for candidate in reversed(stripped.splitlines()):
         candidate = candidate.strip()
         if not candidate:
@@ -153,6 +157,12 @@ def parse_claude_json(raw_stdout: str) -> tuple[dict[str, Any] | None, str | Non
             continue
         if isinstance(line_payload, dict):
             return line_payload, None
+        if isinstance(line_payload, list):
+            for item in reversed(line_payload):
+                if isinstance(item, dict) and item.get("type") == "result":
+                    return item, None
+            # fall through: this line was an array without a result event,
+            # but earlier lines might still carry one — keep scanning.
 
     return None, "Claude CLI did not return JSON output"
 

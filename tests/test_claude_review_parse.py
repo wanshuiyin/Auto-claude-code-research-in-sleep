@@ -121,6 +121,36 @@ class ParseClaudeJsonTests(unittest.TestCase):
         self.assertIsNone(payload)
         self.assertEqual(err, "Claude CLI did not return JSON output")
 
+    def test_noisy_stdout_with_compact_array_line_recovers(self) -> None:
+        """Wrapper banner + compact JSON-array line on the next line still recovers result.
+
+        Defends against Codex adversarial review finding: CLI wrappers (nvm,
+        asdf, mise, future claude --debug) may print non-JSON banners to
+        stdout before/after the JSON. Whole-stdout json.loads fails; the
+        per-line fallback must scan list payloads too, not only dicts.
+        """
+        events = [_system_init_event(), _assistant_event(), _result_event("recovered", "sess-noisy")]
+        stdout = (
+            "warning: nvm couldn't find xyz\n"
+            + json.dumps(events) + "\n"
+        )
+        payload, err = MODULE.parse_claude_json(stdout)
+        self.assertIsNone(err)
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["result"], "recovered")
+        self.assertEqual(payload["session_id"], "sess-noisy")
+
+    def test_noisy_stdout_with_array_line_no_result_falls_through(self) -> None:
+        """Noisy stdout + JSON-array line that has no result event continues scanning earlier lines."""
+        events_no_result = [_system_init_event(), _assistant_event()]
+        stdout = (
+            "warning: banner\n"
+            + json.dumps(events_no_result) + "\n"
+        )
+        payload, err = MODULE.parse_claude_json(stdout)
+        self.assertIsNone(payload)
+        self.assertEqual(err, "Claude CLI did not return JSON output")
+
 
 def _completed_process(stdout: str, returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=["claude"], returncode=returncode, stdout=stdout, stderr=stderr)
