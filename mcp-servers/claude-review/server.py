@@ -108,28 +108,42 @@ def find_claude_bin() -> str | None:
 
 
 def parse_claude_json(raw_stdout: str) -> tuple[dict[str, Any] | None, str | None]:
-    lines = [line.strip() for line in raw_stdout.splitlines() if line.strip()]
-    if not lines:
+    stripped = raw_stdout.strip()
+    if not stripped:
         return None, "Claude CLI returned empty output"
 
-    for candidate in reversed(lines):
+    # CLI 2.x: try whole stdout as a single JSON value first.
+    # Handles both compact one-line arrays and pretty-printed multi-line arrays.
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        payload = None
+
+    if isinstance(payload, dict):
+        return payload, None
+    if isinstance(payload, list):
+        # claude CLI 2.x emits a JSON array of event objects under --output-format json
+        # (system init -> assistant -> rate_limit_event -> result). Only the terminal
+        # "result" event carries the fields run_claude_review consumes downstream
+        # (result text, session_id, duration_ms, stop_reason). Falling back to any
+        # other dict (e.g. rate_limit_event) would surface as a "successful parse"
+        # producing an empty review — strictly worse than a clear error.
+        for item in reversed(payload):
+            if isinstance(item, dict) and item.get("type") == "result":
+                return item, None
+        return None, "Claude CLI returned a JSON array without a 'result' event"
+
+    # Legacy CLI 1.x: NDJSON stream of dicts, walk lines in reverse for the last dict.
+    for candidate in reversed(stripped.splitlines()):
+        candidate = candidate.strip()
+        if not candidate:
+            continue
         try:
-            payload = json.loads(candidate)
+            line_payload = json.loads(candidate)
         except json.JSONDecodeError:
             continue
-        if isinstance(payload, dict):
-            return payload, None
-        if isinstance(payload, list):
-            # claude CLI 2.x emits a single JSON array of event objects under
-            # --output-format json (system init -> assistant -> rate_limit -> result),
-            # not the NDJSON-style dict stream this parser originally expected.
-            # Prefer the terminal "result" event; fall back to the last dict.
-            for item in reversed(payload):
-                if isinstance(item, dict) and item.get("type") == "result":
-                    return item, None
-            for item in reversed(payload):
-                if isinstance(item, dict):
-                    return item, None
+        if isinstance(line_payload, dict):
+            return line_payload, None
 
     return None, "Claude CLI did not return JSON output"
 
