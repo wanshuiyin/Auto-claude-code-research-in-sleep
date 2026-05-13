@@ -337,7 +337,7 @@ where
             }
             if !turn_tool_results.is_empty() {
                 let result_message = ConversationMessage {
-                    role: MessageRole::User,
+                    role: MessageRole::Tool,
                     blocks: turn_tool_results,
                     usage: None,
                 };
