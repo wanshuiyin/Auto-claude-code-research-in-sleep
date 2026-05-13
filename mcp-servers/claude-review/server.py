@@ -277,7 +277,20 @@ def run_claude_review(
     if payload is None:
         return None, "Failed to parse Claude CLI output"
     if result.returncode != 0 or payload.get("is_error"):
-        message = str(payload.get("result") or payload.get("error") or result.stderr.strip() or "Claude review failed")
+        # Claude CLI 2.x emits structured error events without `result` / `error`
+        # fields — the diagnostic text lives in an `errors` list (e.g.
+        # subtype="error_max_budget_usd", errors=["Reached maximum budget ..."]).
+        # Surface it explicitly; otherwise the user sees only the generic
+        # "Claude review failed" and loses the actionable message.
+        errors_list = payload.get("errors")
+        errors_text = "; ".join(str(e) for e in errors_list) if isinstance(errors_list, list) and errors_list else ""
+        message = str(
+            payload.get("result")
+            or payload.get("error")
+            or errors_text
+            or result.stderr.strip()
+            or "Claude review failed"
+        )
         return None, message
 
     thread_id = payload.get("session_id")

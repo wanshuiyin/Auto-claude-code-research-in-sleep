@@ -205,6 +205,56 @@ class RunClaudeReviewTests(unittest.TestCase):
         assert err is not None
         self.assertIn("Claude CLI not found", err)
 
+    def test_error_result_with_errors_list_surfaces_specific_message(self) -> None:
+        """CLI 2.x error result: payload.get('errors') list -> specific message in returned err.
+
+        Reproduces the budget-exceeded shape observed against claude CLI 2.1.140:
+        result event has subtype="error_max_budget_usd", is_error=true, and the
+        diagnostic lives in an `errors` list — there is no `result`/`error` field.
+        Without explicit handling, run_claude_review degrades to the generic
+        "Claude review failed", losing the actionable message.
+
+        Note: subprocess returncode is 0 here — claude CLI exits cleanly even
+        for these error result events. We rely on payload.get("is_error") to
+        trigger the error branch.
+        """
+        error_event = {
+            "type": "result",
+            "subtype": "error_max_budget_usd",
+            "is_error": True,
+            "errors": ["Reached maximum budget ($0.01)"],
+            # deliberately no `result` / `error` / `session_id` — matches real CLI shape
+        }
+        stdout = json.dumps([error_event])
+
+        with mock.patch.object(MODULE, "find_claude_bin", return_value="/fake/claude"), \
+             mock.patch.object(MODULE.subprocess, "run", return_value=_completed_process(stdout, returncode=0)):
+            payload, err = MODULE.run_claude_review("hello")
+
+        self.assertIsNone(payload)
+        assert err is not None
+        self.assertIn("Reached maximum budget", err)
+        self.assertNotEqual(err.strip(), "Claude review failed")
+
+    def test_error_result_multiple_errors_joined(self) -> None:
+        """Multiple entries in the errors list are joined with '; '."""
+        error_event = {
+            "type": "result",
+            "is_error": True,
+            "errors": ["First problem", "Second problem"],
+        }
+        stdout = json.dumps([error_event])
+
+        with mock.patch.object(MODULE, "find_claude_bin", return_value="/fake/claude"), \
+             mock.patch.object(MODULE.subprocess, "run", return_value=_completed_process(stdout, returncode=0)):
+            payload, err = MODULE.run_claude_review("hello")
+
+        self.assertIsNone(payload)
+        assert err is not None
+        self.assertIn("First problem", err)
+        self.assertIn("Second problem", err)
+        self.assertIn(";", err)
+
 
 if __name__ == "__main__":
     unittest.main()
