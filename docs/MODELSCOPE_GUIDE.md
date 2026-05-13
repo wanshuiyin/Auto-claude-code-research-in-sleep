@@ -14,14 +14,14 @@
 
 - **免费**：注册即送每日 2000 次 API 调用，无需付费套餐
 - **一个 Key 双协议**：同一个 `ms-xxx` API Key 同时支持 Anthropic 和 OpenAI 兼容端点
-- **模型丰富**：DeepSeek-R1、Qwen3-Coder、GLM-4、Yi 等主流开源模型均可用
+- **模型丰富**：DeepSeek-V4-Pro、DeepSeek-R1、Qwen3-Coder、GLM-5.1、Yi 等主流开源模型均可用
 - **无使用限制**：不像 Coding Plan 有"禁止自动化调用"的条款限制
 
 ### 支持的模型（推荐）
 
 | 模型 | 推荐用途 | 说明 |
 |------|---------|------|
-| `deepseek-ai/DeepSeek-V3.1` | 执行器主力 | 综合能力强 |
+| `deepseek-ai/DeepSeek-V4-Pro` | 执行器主力 | 综合能力强 |
 | `Qwen/Qwen3-Coder-30B-A3B-Instruct` | 执行器轻量 / 快速模型 | 代码能力优秀，速度快 |
 | `deepseek-ai/DeepSeek-R1` | 审查器主力 | 推理质量高，适合深度 review |
 | `Qwen/Qwen3-235B-A22B-Instruct` | 审查器备选 | 大参数量，综合审查 |
@@ -109,14 +109,14 @@ cp -r skills/* ~/.claude/skills/
 
 ### Step 5：配置 ~/.claude/settings.json
 
-以下为推荐配置（DeepSeek-V3.1 执行 + DeepSeek-R1 审查）。用 `which python3` 替换 `command` 中的 python3 路径，用 `echo $HOME` 替换路径中的 `$HOME`：
+以下为推荐配置（DeepSeek-V4-Pro 执行 + DeepSeek-R1 审查）。用 `which python3` 替换 `command` 中的 python3 路径，用 `echo $HOME` 替换路径中的 `$HOME`：
 
 ```json
 {
   "env": {
     "ANTHROPIC_API_KEY": "ms-your-modelscope-token",
     "ANTHROPIC_BASE_URL": "https://api-inference.modelscope.cn",
-    "ANTHROPIC_MODEL": "deepseek-ai/DeepSeek-V3.1",
+    "ANTHROPIC_MODEL": "deepseek-ai/DeepSeek-V4-Pro",
     "ANTHROPIC_SMALL_FAST_MODEL": "Qwen/Qwen3-Coder-30B-A3B-Instruct",
     "API_TIMEOUT_MS": "3000000"
   },
@@ -157,9 +157,9 @@ Claude Code 会自动扫描并改写所有相关 skill。
 
 | 场景 | 执行器 | 审查器 | 说明 |
 |------|--------|--------|------|
-| **推荐：能力均衡** | `deepseek-ai/DeepSeek-V3.1` | `deepseek-ai/DeepSeek-R1` | DeepSeek 系列综合最强 |
+| **推荐：能力均衡** | `deepseek-ai/DeepSeek-V4-Pro` | `deepseek-ai/DeepSeek-R1` | DeepSeek 系列综合最强 |
 | 备选：速度优先 | `Qwen/Qwen3-Coder-30B-A3B-Instruct` | `Qwen/Qwen3-235B-A22B-Instruct` | Qwen 系列，代码能力优秀 |
-| 备选：跨模型 | `deepseek-ai/DeepSeek-V3.1` | `Qwen/Qwen3-235B-A22B-Instruct` | 不同模型族，更强对抗性 |
+| 备选：跨模型 | `deepseek-ai/DeepSeek-V4-Pro` | `Qwen/Qwen3-235B-A22B-Instruct` | 不同模型族，更强对抗性 |
 
 > **关于跨模型优势**：ARIS 的核心设计是执行器和审查器使用不同模型，形成真正的反馈循环。推荐使用不同模型族（如 DeepSeek 执行 + Qwen 审查）以最大化对抗性。
 
@@ -199,7 +199,7 @@ curl -s "https://api-inference.modelscope.cn/v1/messages" \
   -H "Content-Type: application/json" \
   -H "x-api-key: ms-your-modelscope-token" \
   -H "anthropic-version: 2023-06-01" \
-  -d '{"model":"deepseek-ai/DeepSeek-V3.1","max_tokens":50,"messages":[{"role":"user","content":"Say hello"}]}'
+  -d '{"model":"deepseek-ai/DeepSeek-V4-Pro","max_tokens":50,"messages":[{"role":"user","content":"Say hello"}]}'
 ```
 
 预期：返回包含 `"content"` 字段的 JSON。
@@ -240,7 +240,7 @@ claude
 
 | | 默认方案 | Coding Plan | **本方案（ModelScope）** | GLM + MiniMax |
 |---|---|---|---|---|
-| 执行器 | Claude Opus/Sonnet | kimi-k2.5 | **DeepSeek-V3.1** | GLM-5 (Z.ai) |
+| 执行器 | Claude Opus/Sonnet | kimi-k2.5 | **DeepSeek-V4-Pro** | GLM-5 (Z.ai) |
 | 审查器 | GPT-5.4 (Codex MCP) | glm-5 | **DeepSeek-R1** | MiniMax-M2.7 |
 | 需要 Claude API | 是 | 否 | **否** | 否 |
 | 需要 OpenAI API | 是 | 否 | **否** | 否 |
