@@ -333,7 +333,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         "6" => ("openai", "EXECUTOR_API_KEY", "Kimi API key", Some("https://api.moonshot.cn/v1"), "kimi-k2.5"),
         "7" => ("openai", "EXECUTOR_API_KEY", "Xiaomi API key", Some("https://token-plan-cn.xiaomimimo.com/v1"), "mimo-v2.5-pro"),
         "8" => ("openai", "EXECUTOR_API_KEY", "DeepSeek API key", Some("https://api.deepseek.com/v1"), "deepseek-v4-pro"),
-        "9" => ("openai", "EXECUTOR_API_KEY", "Qwen (DashScope) API key", Some("https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen-max"),
+        "9" => ("openai", "EXECUTOR_API_KEY", "Qwen (DashScope) API key", Some("https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen3.6-plus"),
         "10" => ("openai", "EXECUTOR_API_KEY", "Doubao (Ark) API key", Some("https://ark.cn-beijing.volces.com/api/v3"), "doubao-pro-4k"),
         _ => ("anthropic", "ANTHROPIC_API_KEY", "Anthropic API key", None, "claude-opus-4-6"),
     };
@@ -544,9 +544,14 @@ fn print_executor_url_hints(exec_choice: &str) {
             println!("    \x1b[2m• https://api.deepseek.com/v1                         (DeepSeek)\x1b[0m");
             println!("    \x1b[2m• https://dashscope.aliyuncs.com/compatible-mode/v1   (阿里云百练 OpenAI-compat)\x1b[0m");
         }
+        "9" => {
+            // Qwen: DashScope has both standard and Coding Plan endpoints.
+            println!("  \x1b[2mProxy examples (leave blank for official DashScope):\x1b[0m");
+            println!("    \x1b[2m• https://coding.dashscope.aliyuncs.com/v1               (百炼 Coding Plan)\x1b[0m");
+        }
         _ => {
-            // Options 3-6 are provider-specific (Gemini/GLM/MiniMax/Kimi) with
-            // their own defaults already populated. No hints needed.
+            // Options 3-8,10 are provider-specific with their own defaults
+            // already populated. No hints needed.
         }
     }
 }
