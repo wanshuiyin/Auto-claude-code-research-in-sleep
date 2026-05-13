@@ -72,7 +72,9 @@ impl OpenAIRuntimeClient {
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             runtime: tokio::runtime::Runtime::new()?,
-            http: reqwest::Client::new(),
+            http: reqwest::Client::builder()
+                .user_agent("aris/0.4.4")
+                .build()?,
             api_key: config.api_key,
             base_url: config.base_url,
             model,

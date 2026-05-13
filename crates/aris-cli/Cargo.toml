@@ -16,7 +16,7 @@ compat-harness = { path = "../compat-harness" }
 crossterm = "0.28"
 ctrlc = "3"
 serde = { version = "1", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
 pulldown-cmark = "0.13"
 rustyline = "15"
 runtime = { path = "../runtime" }
