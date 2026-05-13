@@ -1656,8 +1656,8 @@ impl LiveCli {
                         ("deepseek-reasoner", "DeepSeek · R1 reasoning"),
                         ("qwen-max", "Alibaba · Qwen Max latest"),
                         ("qwen-plus", "Alibaba · Qwen Plus fast"),
-                        ("doubao-pro", "ByteDance · Doubao Pro"),
-                        ("doubao-lite", "ByteDance · Doubao Lite fast"),
+                        ("doubao-pro-4k", "ByteDance · Doubao Pro 4K"),
+                        ("doubao-lite-4k", "ByteDance · Doubao Lite 4K"),
                     ]
                     .into_iter()
                     .map(|(name, desc)| input::SelectItem {
@@ -3212,8 +3212,8 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
         "deepseek-reasoner" => "DeepSeek R1",
         "qwen-max" => "Qwen Max",
         "qwen-plus" => "Qwen Plus",
-        "doubao-pro" => "Doubao Pro",
-        "doubao-lite" => "Doubao Lite",
+        "doubao-pro-4k" => "Doubao Pro 4K",
+        "doubao-lite-4k" => "Doubao Lite 4K",
         other => other,
     };
     let developer = if model_name.starts_with("mimo-") {
