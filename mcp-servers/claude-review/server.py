@@ -20,8 +20,17 @@ from pathlib import Path
 from typing import Any
 
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), "wb", buffering=0)
-sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
+def _configure_stdio_for_mcp() -> None:
+    """Re-bind sys.stdout/sys.stdin as raw binary streams for the MCP protocol.
+
+    Called from main() rather than module import so that unit tests can
+    safely `importlib.exec_module(server.py)` without globally clobbering
+    the test process's text-mode stdio (which breaks subsequent print()
+    calls with TypeError).
+    """
+    sys.stdout = os.fdopen(sys.stdout.fileno(), "wb", buffering=0)
+    sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
+
 
 SERVER_NAME = os.environ.get("CLAUDE_REVIEW_SERVER_NAME", "claude-review")
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "claude")
@@ -620,6 +629,8 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def main() -> None:
+    _configure_stdio_for_mcp()
+
     if len(sys.argv) == 3 and sys.argv[1] == "--run-job":
         raise SystemExit(run_async_job(sys.argv[2]))
 

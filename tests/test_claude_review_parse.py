@@ -1,16 +1,23 @@
-"""Unit tests for parse_claude_json in the claude-review MCP bridge.
+"""Unit tests for parse_claude_json and run_claude_review in the claude-review MCP bridge.
 
-Covers the JSON-shape change between claude CLI 1.x (NDJSON of dicts) and
-2.x (single JSON array of events under --output-format json), plus defensive
-cases for pretty-printed arrays and arrays missing the terminal result event.
+parse_claude_json tests cover the JSON-shape change between claude CLI 1.x
+(NDJSON of dicts) and 2.x (single JSON array of events under --output-format json),
+plus defensive cases for pretty-printed arrays and arrays missing the terminal
+result event.
+
+run_claude_review tests cover the end-to-end mapping from a parsed result event
+into the (threadId, response, model, duration_ms, stop_reason) dict the MCP
+bridge surfaces to its caller.
 """
 
 from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -113,6 +120,90 @@ class ParseClaudeJsonTests(unittest.TestCase):
         payload, err = MODULE.parse_claude_json("hello world\nthis is not json\n")
         self.assertIsNone(payload)
         self.assertEqual(err, "Claude CLI did not return JSON output")
+
+
+def _completed_process(stdout: str, returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(args=["claude"], returncode=returncode, stdout=stdout, stderr=stderr)
+
+
+class RunClaudeReviewTests(unittest.TestCase):
+    """End-to-end mapping from a CLI result event into the MCP bridge dict.
+
+    Mocks subprocess.run + find_claude_bin so tests don't depend on a local
+    claude CLI install. Locks the contract that downstream MCP callers
+    consume: threadId / response / model / duration_ms / stop_reason.
+    """
+
+    def test_cli_2x_array_maps_all_result_fields(self) -> None:
+        """Happy path: CLI 2.x JSON-array stdout -> all five downstream fields populated."""
+        events = [
+            _system_init_event(),
+            _assistant_event(),
+            _result_event("review body text", "sess-abc"),
+        ]
+        events[-1]["model"] = "claude-opus-4-7"
+        events[-1]["duration_ms"] = 8765
+        events[-1]["stop_reason"] = "end_turn"
+        stdout = json.dumps(events)
+
+        with mock.patch.object(MODULE, "find_claude_bin", return_value="/fake/claude"), \
+             mock.patch.object(MODULE.subprocess, "run", return_value=_completed_process(stdout)) as run:
+            payload, err = MODULE.run_claude_review("hello prompt")
+
+        self.assertIsNone(err)
+        self.assertEqual(payload, {
+            "threadId": "sess-abc",
+            "response": "review body text",
+            "model": "claude-opus-4-7",
+            "duration_ms": 8765,
+            "stop_reason": "end_turn",
+        })
+        # also verify subprocess actually called with the expected --output-format json shape
+        called_cmd = run.call_args.args[0]
+        self.assertIn("--output-format", called_cmd)
+        self.assertEqual(called_cmd[called_cmd.index("--output-format") + 1], "json")
+
+    def test_legacy_ndjson_stdout_maps_correctly_end_to_end(self) -> None:
+        """CLI 1.x NDJSON path -> downstream consumer still gets correct fields."""
+        result = _result_event("legacy review", "sess-legacy")
+        result["model"] = "claude-sonnet-4-6"
+        result["duration_ms"] = 4321
+        stdout = "\n".join([
+            json.dumps(_system_init_event()),
+            json.dumps(_assistant_event()),
+            json.dumps(result),
+        ]) + "\n"
+
+        with mock.patch.object(MODULE, "find_claude_bin", return_value="/fake/claude"), \
+             mock.patch.object(MODULE.subprocess, "run", return_value=_completed_process(stdout)):
+            payload, err = MODULE.run_claude_review("hello")
+
+        self.assertIsNone(err)
+        assert payload is not None
+        self.assertEqual(payload["threadId"], "sess-legacy")
+        self.assertEqual(payload["response"], "legacy review")
+        self.assertEqual(payload["model"], "claude-sonnet-4-6")
+        self.assertEqual(payload["duration_ms"], 4321)
+
+    def test_array_without_result_event_surfaces_clear_error(self) -> None:
+        """Maintainer's fail-fast requirement holds end-to-end (no silent empty review)."""
+        stdout = json.dumps([_system_init_event(), _rate_limit_event()])
+
+        with mock.patch.object(MODULE, "find_claude_bin", return_value="/fake/claude"), \
+             mock.patch.object(MODULE.subprocess, "run", return_value=_completed_process(stdout)):
+            payload, err = MODULE.run_claude_review("hello")
+
+        self.assertIsNone(payload)
+        assert err is not None
+        self.assertIn("JSON array without a 'result' event", err)
+
+    def test_claude_binary_missing_returns_clear_error(self) -> None:
+        """If no claude CLI is on PATH, surface the FileNotFoundError message, not a crash."""
+        with mock.patch.object(MODULE, "find_claude_bin", return_value=None):
+            payload, err = MODULE.run_claude_review("hello")
+        self.assertIsNone(payload)
+        assert err is not None
+        self.assertIn("Claude CLI not found", err)
 
 
 if __name__ == "__main__":
