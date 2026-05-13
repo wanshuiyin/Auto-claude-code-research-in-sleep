@@ -332,7 +332,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         "5" => ("openai", "EXECUTOR_API_KEY", "MiniMax API key", Some("https://api.minimax.chat/v1"), "MiniMax-M2.7"),
         "6" => ("openai", "EXECUTOR_API_KEY", "Kimi API key", Some("https://api.moonshot.cn/v1"), "kimi-k2.5"),
         "7" => ("openai", "EXECUTOR_API_KEY", "Xiaomi API key", Some("https://token-plan-cn.xiaomimimo.com/v1"), "mimo-v2.5-pro"),
-        "8" => ("openai", "EXECUTOR_API_KEY", "DeepSeek API key", Some("https://api.deepseek.com/v1"), "deepseek-chat"),
+        "8" => ("openai", "EXECUTOR_API_KEY", "DeepSeek API key", Some("https://api.deepseek.com/v1"), "deepseek-v4-pro"),
         "9" => ("openai", "EXECUTOR_API_KEY", "Qwen (DashScope) API key", Some("https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen-max"),
         "10" => ("openai", "EXECUTOR_API_KEY", "Doubao (Ark) API key", Some("https://ark.cn-beijing.volces.com/api/v3"), "doubao-pro-4k"),
         _ => ("anthropic", "ANTHROPIC_API_KEY", "Anthropic API key", None, "claude-opus-4-6"),
