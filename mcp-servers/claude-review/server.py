@@ -119,6 +119,17 @@ def parse_claude_json(raw_stdout: str) -> tuple[dict[str, Any] | None, str | Non
             continue
         if isinstance(payload, dict):
             return payload, None
+        if isinstance(payload, list):
+            # claude CLI 2.x emits a single JSON array of event objects under
+            # --output-format json (system init -> assistant -> rate_limit -> result),
+            # not the NDJSON-style dict stream this parser originally expected.
+            # Prefer the terminal "result" event; fall back to the last dict.
+            for item in reversed(payload):
+                if isinstance(item, dict) and item.get("type") == "result":
+                    return item, None
+            for item in reversed(payload):
+                if isinstance(item, dict):
+                    return item, None
 
     return None, "Claude CLI did not return JSON output"
 
