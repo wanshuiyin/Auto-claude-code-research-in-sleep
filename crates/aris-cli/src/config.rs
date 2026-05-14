@@ -560,6 +560,11 @@ fn print_executor_url_hints(exec_choice: &str) {
             println!("  \x1b[2mDeepSeek Anthropic-compatible endpoint:\x1b[0m");
             println!("    \x1b[2m• https://api.deepseek.com/anthropic                       (official)\x1b[0m");
         }
+        "9" => {
+            // Qwen: DashScope has both standard and Coding Plan endpoints.
+            println!("  \x1b[2mProxy examples (leave blank for official DashScope):\x1b[0m");
+            println!("    \x1b[2m• https://coding.dashscope.aliyuncs.com/v1               (百炼 Coding Plan)\x1b[0m");
+        }
         _ => {}
     }
 }
