@@ -147,6 +147,7 @@ def parse_claude_json(raw_stdout: str) -> tuple[dict[str, Any] | None, str | Non
     # JSON-array line surrounded by non-JSON noise (wrapper warnings, nvm/asdf
     # banners, future CLI debug prints) still surfaces the result event
     # instead of being silently dropped.
+    saw_array_without_result = False
     for candidate in reversed(stripped.splitlines()):
         candidate = candidate.strip()
         if not candidate:
@@ -156,6 +157,8 @@ def parse_claude_json(raw_stdout: str) -> tuple[dict[str, Any] | None, str | Non
         except json.JSONDecodeError:
             continue
         if isinstance(line_payload, dict):
+            if saw_array_without_result and line_payload.get("type") != "result":
+                continue
             return line_payload, None
         if isinstance(line_payload, list):
             for item in reversed(line_payload):
@@ -163,7 +166,10 @@ def parse_claude_json(raw_stdout: str) -> tuple[dict[str, Any] | None, str | Non
                     return item, None
             # fall through: this line was an array without a result event,
             # but earlier lines might still carry one — keep scanning.
+            saw_array_without_result = True
 
+    if saw_array_without_result:
+        return None, "Claude CLI returned a JSON array without a 'result' event"
     return None, "Claude CLI did not return JSON output"
 
 
@@ -293,7 +299,12 @@ def run_claude_review(
         # Surface it explicitly; otherwise the user sees only the generic
         # "Claude review failed" and loses the actionable message.
         errors_list = payload.get("errors")
-        errors_text = "; ".join(str(e) for e in errors_list) if isinstance(errors_list, list) and errors_list else ""
+        if isinstance(errors_list, list) and errors_list:
+            errors_text = "; ".join(str(e) for e in errors_list)
+        elif isinstance(errors_list, str):
+            errors_text = errors_list
+        else:
+            errors_text = ""
         message = str(
             payload.get("result")
             or payload.get("error")
