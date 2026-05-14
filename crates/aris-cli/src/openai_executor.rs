@@ -122,11 +122,11 @@ impl ApiClient for OpenAIRuntimeClient {
             Some(request.system_prompt.join("\n\n"))
         };
 
-        let is_kimi = self.base_url.contains("moonshot");
+        let supports_reasoning = true;
         let messages = convert_messages_openai(
             &request.messages,
             system_prompt.as_deref(),
-            is_kimi,
+            supports_reasoning,
             &self.kimi_reasoning_cache,
         );
 
@@ -354,7 +354,7 @@ impl ApiClient for OpenAIRuntimeClient {
                         };
 
                         // Kimi: capture reasoning_content from delta
-                        if is_kimi {
+                        if supports_reasoning {
                             if let Some(rc) = delta.get("reasoning_content").and_then(|r| r.as_str()) {
                                 current_reasoning.push_str(rc);
                             }
@@ -442,7 +442,7 @@ impl ApiClient for OpenAIRuntimeClient {
             }
 
             // Kimi: save reasoning_content for this turn so we can replay it
-            if is_kimi && !current_reasoning.is_empty() {
+            if supports_reasoning && !current_reasoning.is_empty() {
                 self.kimi_reasoning_cache.insert(current_msg_index, current_reasoning);
             }
 
@@ -472,7 +472,7 @@ fn flush_pending_tools(
 fn convert_messages_openai(
     messages: &[ConversationMessage],
     system_prompt: Option<&str>,
-    is_kimi: bool,
+    supports_reasoning: bool,
     kimi_reasoning_cache: &std::collections::HashMap<usize, String>,
 ) -> Vec<Value> {
     let mut result: Vec<Value> = Vec::new();
@@ -572,12 +572,11 @@ fn convert_messages_openai(
                 if !tool_calls.is_empty() {
                     msg["tool_calls"] = json!(tool_calls);
                 }
-                // Kimi K2.5: attach cached reasoning_content for this message
-                if is_kimi {
-                    if let Some(reasoning) = kimi_reasoning_cache.get(&msg_idx) {
+                // Attach cached reasoning_content for providers that support
+                // thinking mode (Kimi, Xiaomi MiMo, DeepSeek R1, etc.)
+                if let Some(reasoning) = kimi_reasoning_cache.get(&msg_idx) {
+                    if !reasoning.is_empty() {
                         msg["reasoning_content"] = json!(reasoning);
-                    } else {
-                        msg["reasoning_content"] = json!("");
                     }
                 }
                 result.push(msg);
