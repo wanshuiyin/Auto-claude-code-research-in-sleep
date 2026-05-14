@@ -1342,25 +1342,34 @@ impl LiveCli {
         }
 
         let executor_label = if openai_executor::resolve_openai_executor_config().is_some() {
-            let base = std::env::var("EXECUTOR_BASE_URL").unwrap_or_default();
-            if base.contains("deepseek") {
-                "DeepSeek"
-            } else if base.contains("bigmodel") {
-                "GLM"
-            } else if base.contains("minimax") {
-                "MiniMax"
-            } else if base.contains("moonshot") {
-                "Moonshot"
-            } else if base.contains("dashscope") || base.contains("qwen") {
-                "Qwen"
-            } else if base.contains("generativelanguage.googleapis") {
-                "Gemini"
-            } else if base.contains("xiaomimimo") {
-                "Xiaomi"
-            } else if base.contains("volces") {
-                "Doubao"
+            // Check if this is a custom provider
+            let is_custom = config::ArisConfig::load()
+                .executor_provider
+                .as_deref()
+                == Some("custom");
+            if is_custom {
+                "Custom"
             } else {
-                "OpenAI"
+                let base = std::env::var("EXECUTOR_BASE_URL").unwrap_or_default();
+                if base.contains("deepseek") {
+                    "DeepSeek"
+                } else if base.contains("bigmodel") {
+                    "GLM"
+                } else if base.contains("minimax") {
+                    "MiniMax"
+                } else if base.contains("moonshot") {
+                    "Moonshot"
+                } else if base.contains("dashscope") || base.contains("qwen") {
+                    "Qwen"
+                } else if base.contains("generativelanguage.googleapis") {
+                    "Gemini"
+                } else if base.contains("xiaomimimo") {
+                    "Xiaomi"
+                } else if base.contains("volces") {
+                    "Doubao"
+                } else {
+                    "OpenAI"
+                }
             }
         } else {
             "Anthropic"
@@ -1806,7 +1815,10 @@ impl LiveCli {
                 }
 
                 if items.is_empty() {
-                    println!("No reviewer API key found. Set GEMINI_API_KEY or OPENAI_API_KEY.");
+                    // No known API keys set — could be a custom provider or no config.
+                    // Allow the user to type a model name directly.
+                    println!("No reviewer API key found. Set GEMINI_API_KEY, OPENAI_API_KEY, or use /setup to configure a custom provider.");
+                    println!("  You can also type: /reviewer <model-name>");
                     return Ok(false);
                 }
 

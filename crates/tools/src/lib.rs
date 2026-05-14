@@ -3261,6 +3261,33 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
     let reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER").ok().filter(|s| !s.is_empty());
     let custom_base_url = std::env::var("ARIS_REVIEWER_BASE_URL").ok().filter(|s| !s.is_empty());
 
+    // Custom OpenAI-compatible reviewer mode. Uses ARIS_REVIEWER_AUTH_TOKEN as
+    // the API key and ARIS_REVIEWER_BASE_URL for the endpoint. Routes through
+    // the same OpenAI-compat call path — no third routing path added.
+    if reviewer_provider.as_deref() == Some("custom") {
+        let key = std::env::var("ARIS_REVIEWER_AUTH_TOKEN")
+            .ok()
+            .filter(|k| !k.is_empty())
+            .ok_or_else(|| "LlmReview: ARIS_REVIEWER_AUTH_TOKEN not set (needed for custom reviewer)".to_string())?;
+        let model = input
+            .model
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(configured_model);
+        let base = custom_base_url.ok_or_else(|| {
+            "LlmReview: ARIS_REVIEWER_BASE_URL not set (needed for custom reviewer)".to_string()
+        })?;
+        let trimmed = base.trim_end_matches('/');
+        let url = if trimmed.ends_with("/chat/completions") {
+            trimmed.to_string()
+        } else if trimmed.ends_with("/v1") {
+            format!("{trimmed}/chat/completions")
+        } else {
+            format!("{trimmed}/v1/chat/completions")
+        };
+        return call_openai_compat_reviewer(&key, &url, model, &input.prompt);
+    }
+
     // Anthropic-compatible reviewer mode (e.g., Claude via proxy, DeepSeek).
     // This path uses ARIS_REVIEWER_AUTH_TOKEN (Bearer) and ignores the openai-compat
     // key routing. We still honor an explicit input.model override here because

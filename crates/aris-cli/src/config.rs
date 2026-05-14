@@ -142,8 +142,8 @@ impl ArisConfig {
         let force_reviewer = force_rev;
 
         if let Some(provider) = &self.executor_provider {
-            if provider == "openai" {
-                std::env::set_var("EXECUTOR_PROVIDER", provider);
+            if provider == "openai" || provider == "custom" {
+                std::env::set_var("EXECUTOR_PROVIDER", "openai");
             }
         }
 
@@ -180,7 +180,7 @@ impl ArisConfig {
                         }
                     }
                 }
-                "openai" => {
+                "openai" | "custom" => {
                     if force || std::env::var("EXECUTOR_API_KEY").is_err() {
                         std::env::set_var("EXECUTOR_API_KEY", key);
                     }
@@ -190,7 +190,7 @@ impl ArisConfig {
         }
 
         // Executor base URL (for openai-compat providers)
-        if provider == "openai" {
+        if provider == "openai" || provider == "custom" {
             if force || std::env::var("EXECUTOR_BASE_URL").is_err() {
                 if let Some(url) = &self.executor_base_url {
                     std::env::set_var("EXECUTOR_BASE_URL", url);
@@ -234,6 +234,14 @@ impl ArisConfig {
                         }
                     }
                     "deepseek" => {
+                        if force_reviewer || std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_err() {
+                            std::env::set_var("ARIS_REVIEWER_AUTH_TOKEN", key);
+                        }
+                    }
+                    "custom" => {
+                        // Custom OpenAI-compatible reviewer: store key in
+                        // ARIS_REVIEWER_AUTH_TOKEN so it doesn't collide with
+                        // the executor's OPENAI_API_KEY.
                         if force_reviewer || std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_err() {
                             std::env::set_var("ARIS_REVIEWER_AUTH_TOKEN", key);
                         }
@@ -306,6 +314,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     println!("  8. Xiaomi      (mimo-v2.5-pro)");
     println!("  9. Qwen        (qwen3.6-plus)");
     println!(" 10. Doubao      (doubao-pro-4k)");
+    println!(" 11. Custom      (OpenAI-compatible endpoint)");
 
     let default_executor = match config.executor_provider.as_deref() {
         Some("anthropic") => "1",
@@ -313,6 +322,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             Some(u) if u.contains("deepseek") => "7",
             _ => "1",
         },
+        Some("custom") => "11",
         Some("openai") => match config.executor_base_url.as_deref() {
             Some(u) if u.contains("googleapis") => "3",
             Some(u) if u.contains("bigmodel") => "4",
@@ -325,7 +335,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         },
         _ => "1",
     };
-    let exec_choice_raw = prompt_with_default("  Choose [1-10]", default_executor)?;
+    let exec_choice_raw = prompt_with_default("  Choose [1-11]", default_executor)?;
     let exec_choice = exec_choice_raw.trim();
     // Detect real menu change, not just provider-string change. OpenAI / Gemini /
     // GLM / MiniMax / Kimi all serialize to provider="openai" so we must compare
@@ -343,6 +353,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         "8" => ("openai", "EXECUTOR_API_KEY", "Xiaomi API key", Some("https://token-plan-cn.xiaomimimo.com/v1"), "mimo-v2.5-pro"),
         "9" => ("openai", "EXECUTOR_API_KEY", "Qwen (DashScope) API key", Some("https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen3.6-plus"),
         "10" => ("openai", "EXECUTOR_API_KEY", "Doubao (Ark) API key", Some("https://ark.cn-beijing.volces.com/api/v3"), "doubao-pro-4k"),
+        "11" => ("custom", "EXECUTOR_API_KEY", "API key", None, ""),
         _ => ("anthropic", "ANTHROPIC_API_KEY", "Anthropic API key", None, "claude-opus-4-7"),
     };
 
@@ -414,8 +425,21 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     // auto-switch made issues #158 and #162 unreachable via the UI.
 
     // Auto-set best model for the chosen provider
-    config.executor_model = Some(exec_info.4.to_string());
-    println!("  \x1b[2mModel: {}\x1b[0m", exec_info.4);
+    if exec_choice == "11" {
+        // Custom provider: ask user for model name
+        let current_model_hint = config.executor_model.as_deref().unwrap_or("(not set)");
+        let custom_model = prompt_with_default(
+            &format!("  Model name [{current_model_hint}]"),
+            config.executor_model.as_deref().unwrap_or(""),
+        )?;
+        if !custom_model.is_empty() {
+            config.executor_model = Some(custom_model.clone());
+        }
+        println!("  \x1b[2mModel: {}\x1b[0m", config.executor_model.as_deref().unwrap_or("(none)"));
+    } else {
+        config.executor_model = Some(exec_info.4.to_string());
+        println!("  \x1b[2mModel: {}\x1b[0m", exec_info.4);
+    }
 
     // ── Step 4: Reviewer ──
     println!("\n\x1b[1m[2/3] Reviewer (for LlmReview tool)\x1b[0m");
@@ -425,8 +449,9 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     println!("  4. MiniMax         (MiniMax-M2.7)");
     println!("  5. Kimi            (kimi-k2.5)");
     println!("  6. Anthropic Proxy (claude via proxy)");
-    println!("  7. DeepSeek         (deepseek-chat)");
-    println!("  8. Skip (no reviewer)");
+    println!("  7. DeepSeek        (deepseek-chat)");
+    println!("  8. Custom          (OpenAI-compatible endpoint)");
+    println!("  9. Skip (no reviewer)");
     let default_reviewer = match config.reviewer_provider.as_deref() {
         Some("openai") => "1",
         Some("gemini") => "2",
@@ -435,10 +460,11 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         Some("kimi") => "5",
         Some("anthropic-compat") => "6",
         Some("deepseek") => "7",
+        Some("custom") => "8",
         None => "1",
-        _ => "8",
+        _ => "9",
     };
-    let reviewer_choice_raw = prompt_with_default("  Choose [1-8]", default_reviewer)?;
+    let reviewer_choice_raw = prompt_with_default("  Choose [1-9]", default_reviewer)?;
     let reviewer_choice = reviewer_choice_raw.trim();
     let switched_reviewer = reviewer_choice != default_reviewer;
 
@@ -451,6 +477,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         "5" => Some(("kimi", "KIMI_API_KEY", "Kimi API key", "kimi-k2.5")),
         "6" => Some(("anthropic-compat", "ARIS_REVIEWER_AUTH_TOKEN", "Reviewer auth token", "claude-sonnet-4-6")),
         "7" => Some(("deepseek", "ARIS_REVIEWER_AUTH_TOKEN", "DeepSeek API key", "deepseek-v4-pro")),
+        "8" => Some(("custom", "ARIS_REVIEWER_AUTH_TOKEN", "API key", "")),
         _ => None,
     };
 
@@ -498,8 +525,21 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         }
 
         // Auto-set best model for the chosen reviewer provider
-        config.reviewer_model = Some(default_model.to_string());
-        println!("  \x1b[2mModel: {default_model}\x1b[0m");
+        if reviewer_choice == "8" {
+            // Custom provider: ask user for model name
+            let current_model_hint = config.reviewer_model.as_deref().unwrap_or("(not set)");
+            let custom_model = prompt_with_default(
+                &format!("  Model name [{current_model_hint}]"),
+                config.reviewer_model.as_deref().unwrap_or(""),
+            )?;
+            if !custom_model.is_empty() {
+                config.reviewer_model = Some(custom_model.clone());
+            }
+            println!("  \x1b[2mModel: {}\x1b[0m", config.reviewer_model.as_deref().unwrap_or("(none)"));
+        } else {
+            config.reviewer_model = Some(default_model.to_string());
+            println!("  \x1b[2mModel: {default_model}\x1b[0m");
+        }
     } else {
         config.reviewer_provider = None;
         config.reviewer_api_key = None;
