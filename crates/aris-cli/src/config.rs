@@ -426,14 +426,47 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
 
     // Auto-set best model for the chosen provider
     if exec_choice == "11" {
-        // Custom provider: ask user for model name
-        let current_model_hint = config.executor_model.as_deref().unwrap_or("(not set)");
-        let custom_model = prompt_with_default(
-            &format!("  Model name [{current_model_hint}]"),
-            config.executor_model.as_deref().unwrap_or(""),
-        )?;
-        if !custom_model.is_empty() {
-            config.executor_model = Some(custom_model.clone());
+        // Custom provider: try fetching available models from /models endpoint
+        let api_key = config.executor_api_key.as_deref().unwrap_or("");
+        let base_url = config.executor_base_url.as_deref().unwrap_or("");
+        if !api_key.is_empty() && !base_url.is_empty() {
+            println!("  \x1b[2mFetching models from {base_url}...\x1b[0m");
+            match crate::openai_compat::fetch_openai_models(base_url, api_key) {
+                Ok(models) => {
+                    let current = config.executor_model.as_deref().unwrap_or("");
+                    let items = crate::openai_compat::model_select_items(&models, current);
+                    match crate::input::select_menu(
+                        "Select model",
+                        "Choose a model from the provider's /models endpoint.",
+                        &items,
+                    ) {
+                        Ok(Some(idx)) => {
+                            config.executor_model = Some(items[idx].label.clone());
+                        }
+                        Ok(None) => {
+                            // User cancelled — keep existing model
+                        }
+                        Err(_) => {
+                            // select_menu I/O error — fall through to manual
+                        }
+                    }
+                }
+                Err(err) => {
+                    println!("  \x1b[33m⚠ Could not fetch models: {err}\x1b[0m");
+                    println!("  \x1b[2mYou can type the model name manually below.\x1b[0m");
+                }
+            }
+        }
+        // If no model set yet (fetch failed or user has no key/url), ask manually
+        if config.executor_model.as_deref().unwrap_or("").is_empty() {
+            let current_model_hint = config.executor_model.as_deref().unwrap_or("(not set)");
+            let custom_model = prompt_with_default(
+                &format!("  Model name [{current_model_hint}]"),
+                config.executor_model.as_deref().unwrap_or(""),
+            )?;
+            if !custom_model.is_empty() {
+                config.executor_model = Some(custom_model.clone());
+            }
         }
         println!("  \x1b[2mModel: {}\x1b[0m", config.executor_model.as_deref().unwrap_or("(none)"));
     } else {
@@ -526,14 +559,43 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
 
         // Auto-set best model for the chosen reviewer provider
         if reviewer_choice == "8" {
-            // Custom provider: ask user for model name
-            let current_model_hint = config.reviewer_model.as_deref().unwrap_or("(not set)");
-            let custom_model = prompt_with_default(
-                &format!("  Model name [{current_model_hint}]"),
-                config.reviewer_model.as_deref().unwrap_or(""),
-            )?;
-            if !custom_model.is_empty() {
-                config.reviewer_model = Some(custom_model.clone());
+            // Custom provider: try fetching available models from /models endpoint
+            let api_key = config.reviewer_api_key.as_deref().unwrap_or("");
+            let base_url = config.reviewer_base_url.as_deref().unwrap_or("");
+            if !api_key.is_empty() && !base_url.is_empty() {
+                println!("  \x1b[2mFetching models from {base_url}...\x1b[0m");
+                match crate::openai_compat::fetch_openai_models(base_url, api_key) {
+                    Ok(models) => {
+                        let current = config.reviewer_model.as_deref().unwrap_or("");
+                        let items = crate::openai_compat::model_select_items(&models, current);
+                        match crate::input::select_menu(
+                            "Select reviewer model",
+                            "Choose a model from the provider's /models endpoint.",
+                            &items,
+                        ) {
+                            Ok(Some(idx)) => {
+                                config.reviewer_model = Some(items[idx].label.clone());
+                            }
+                            Ok(None) => {}
+                            Err(_) => {}
+                        }
+                    }
+                    Err(err) => {
+                        println!("  \x1b[33m⚠ Could not fetch models: {err}\x1b[0m");
+                        println!("  \x1b[2mYou can type the model name manually below.\x1b[0m");
+                    }
+                }
+            }
+            // If no model set yet, ask manually
+            if config.reviewer_model.as_deref().unwrap_or("").is_empty() {
+                let current_model_hint = config.reviewer_model.as_deref().unwrap_or("(not set)");
+                let custom_model = prompt_with_default(
+                    &format!("  Model name [{current_model_hint}]"),
+                    config.reviewer_model.as_deref().unwrap_or(""),
+                )?;
+                if !custom_model.is_empty() {
+                    config.reviewer_model = Some(custom_model.clone());
+                }
             }
             println!("  \x1b[2mModel: {}\x1b[0m", config.reviewer_model.as_deref().unwrap_or("(none)"));
         } else {

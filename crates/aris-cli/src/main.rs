@@ -3,6 +3,7 @@ mod init;
 mod input;
 mod memories;
 mod meta_optimize;
+mod openai_compat;
 mod openai_executor;
 mod render;
 
@@ -1650,7 +1651,32 @@ impl LiveCli {
             None => {
                 // Show interactive menu
                 let is_openai = openai_executor::resolve_openai_executor_config().is_some();
-                let items: Vec<input::SelectItem> = if is_openai {
+                let is_custom = config::ArisConfig::load()
+                    .executor_provider
+                    .as_deref()
+                    == Some("custom");
+
+                let items: Vec<input::SelectItem> = if is_custom {
+                    // Custom provider: try dynamic /models fetch
+                    let cfg = config::ArisConfig::load();
+                    let api_key = cfg.executor_api_key.as_deref().unwrap_or("");
+                    let base_url = cfg.executor_base_url.as_deref().unwrap_or("");
+                    if !api_key.is_empty() && !base_url.is_empty() {
+                        match openai_compat::fetch_openai_models(base_url, api_key) {
+                            Ok(models) => {
+                                openai_compat::model_select_items(&models, &self.model)
+                            }
+                            Err(err) => {
+                                println!("\x1b[33m⚠ Could not fetch models: {err}\x1b[0m");
+                                println!("  Use /model <name> to switch directly.");
+                                return Ok(false);
+                            }
+                        }
+                    } else {
+                        println!("Custom provider not fully configured. Run /setup first.");
+                        return Ok(false);
+                    }
+                } else if is_openai {
                     // OpenAI-compat mode: show common models
                     vec![
                         ("gpt-5.5", "OpenAI · Best intelligence at scale (xhigh reasoning)"),
