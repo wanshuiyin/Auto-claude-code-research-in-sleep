@@ -1,5 +1,66 @@
 # ARIS-Code Changelog
 
+## v0.4.6 (2026-05-14)
+
+A small but high-impact follow-up to v0.4.5. Two critical fixes that were
+shipping silently broken for multiple releases, plus a third community-driven
+feature ([@Anduin9527](https://github.com/Anduin9527)'s reworked PR #221/#222
+landing as a custom OpenAI-compatible provider).
+
+### Fix
+
+- **🚨 `PermissionMode::Prompt` was silently granting every tool** — The
+  `PermissionMode` enum derived `Ord` with `Prompt` placed *above*
+  `DangerFullAccess` (positions 4 vs 3), so the short-circuit
+  `current_mode >= required_mode` inside `authorize()` was always true when
+  the active mode was `Prompt`, and the prompter branch was unreachable.
+  Users who explicitly chose "ask me before every tool" were getting silent
+  approval for every request — the exact opposite of the intent. Fix splits
+  the `Allow` short-circuit from the Ord comparison and excludes `Prompt`
+  from the latter, with two new regression tests pinning the corrected
+  behavior. ([permissions.rs:97-108](crates/runtime/src/permissions.rs#L97))
+- **🚨 System prompt hard-coded `current_date = "2026-03-31"`** — Every
+  conversation (main + subagent) injected that frozen date into the
+  Anthropic system prompt via `ProjectContext::current_date`, so the model
+  literally believed today was 2026-03-31 forever. Real data from later
+  dates was rejected as "future / prompt injection" — including a user's own
+  arXiv paper submitted after the cutoff, which the model loudly flagged as
+  fabricated. Added `runtime::today_iso()` (reusing the existing
+  chrono-free `days_to_ymd` algorithm) and threaded it through all 5 prompt
+  call-sites (`aris-cli/main.rs:529, 2707, 2856, 3232`,
+  `tools/lib.rs` subagent date). The `aris --version` "Build date" still
+  uses the old constant — that one is *supposed* to be frozen.
+
+### New
+
+- **Custom OpenAI-compatible provider** (`/setup` option **11**, reviewer
+  option **9**) — Plug ARIS into any OpenAI-compatible endpoint that isn't
+  in the built-in menu: OpenRouter, self-hosted LLM gateways, internal
+  inference servers, small Chinese vendors, etc. Stores `provider="custom"`
+  internally but maps to the same OpenAI-compat HTTP path as the built-in
+  presets at runtime, so existing routing / `reasoning_effort` allow-list
+  still applies. Reviewer "Custom" uses `ARIS_REVIEWER_AUTH_TOKEN` /
+  `ARIS_REVIEWER_BASE_URL` so it doesn't collide with the executor's
+  `OPENAI_API_KEY`. Banner now reports "Custom" rather than mislabeling it
+  as "OpenAI". Credit [@Anduin9527](https://github.com/Anduin9527)
+  ([#221](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/221)).
+- **Dynamic `/models` discovery for custom providers** — When the user
+  selects the Custom provider in `/setup` (or invokes `/model`), ARIS calls
+  the provider's `GET /v1/models` endpoint to populate the interactive
+  picker with the actual available model list. We added a 10s connect
+  timeout + 20s total timeout so a bad URL / TLS stall / half-open
+  connection can no longer hang the wizard, and we clear stale
+  `executor_model` / `reviewer_model` on menu-switch so the manual-entry
+  fallback prompt always fires when the fetch fails. The new
+  `crates/aris-cli/src/openai_compat.rs` carries 3 `TcpListener`-based
+  offline tests so CI never hits `api.openai.com`. Credit
+  [@Anduin9527](https://github.com/Anduin9527)
+  ([#222](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/222)).
+
+### Credits
+
+- [@Anduin9527](https://github.com/Anduin9527) — Custom OpenAI-compatible provider + dynamic `/models` discovery (PR [#121](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/121) reworked into [#221](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/221) + [#222](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/222), then cherry-picked with three small follow-up adjustments)
+
 ## v0.4.5 (2026-05-13)
 
 A reasoning-model + multi-provider release. The headline is **first-class support for thinking-content models** (DeepSeek V4 Pro, OpenAI o1/o3/o4 family, GPT-5.5 with `reasoning_effort='xhigh'`) — both the wire-format plumbing and the interactive setup were missing pieces. Bundled with that: 3 new Chinese provider presets (Xiaomi MiMo / Qwen 3.6 / Doubao), object-style hooks parser, default model bump to Claude Opus 4.7 + GPT-5.5, and a stack of REPL input fixes (multi-line wrap, bracketed paste, CJK wide-char layout).
