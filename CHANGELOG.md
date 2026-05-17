@@ -1,5 +1,100 @@
 # ARIS-Code Changelog
 
+## v0.4.9 (2026-05-17)
+
+The "v0.4.8 second half" release — closes the three Codex v0.4.7
+cross-cutting audit residuals (L1 TLS double-stack, L3 reasoning
+cache misalignment, L4 reasoning replay unbounded + no provider
+gate), syncs two missing main-branch skills with `scripts/`
+helpers, promotes `research_wiki.py` to the shared `tools/`
+namespace, finishes the SKILL.md fallback-chain migration started
+in v0.4.8, and lays down the regression test surface that v0.4.8
+had deferred.
+
+### 🚨 Fix (Codex T16 audit residuals)
+
+- **L1: TLS double-stack** — `crates/tools/Cargo.toml` switches reqwest
+  features from `rustls-tls` to `native-tls`. Now all three reqwest
+  consumers (`api`, `aris-cli`, `tools`) use platform TLS uniformly.
+  Previously v0.4.7 #225 only switched `api` + `aris-cli`, leaving
+  the `LlmReview` reviewer path on the rustls fingerprint and
+  DashScope-class endpoints still 405-able via reviewer. `cargo
+  tree -i hyper-rustls` now returns "did not match any packages".
+  `.github/workflows/release.yml` gains a Linux-only step that
+  installs `libssl-dev` + `pkg-config` for openssl-sys's
+  compile-time headers.
+
+- **L3: reasoning_cache compaction misalignment** — `ApiClient` trait
+  gains `on_session_compacted(removed_count)` default-no-op.
+  `maybe_auto_compact()` in `crates/runtime/src/conversation.rs`
+  notifies the client after replacing the session.
+  `OpenAIRuntimeClient` clears its message-index-keyed
+  `kimi_reasoning_cache` on compaction so re-injected reasoning
+  aims at the right turn after the index shift.
+
+- **L4: reasoning replay no cap + no gate** — Two changes:
+  (a) split predicate `supports_reasoning_content_replay` as a
+  superset of `supports_reasoning_effort` (adds Kimi / Moonshot /
+  Xiaomi MiMo / DeepSeek-R1 — providers that emit reasoning_content
+  but don't accept reasoning_effort as a request field, which is
+  the reason this cache exists). (b) Per-turn cap
+  `MAX_REASONING_CHARS_PER_TURN = 32_000` (UTF-8-safe char-boundary
+  truncate) + total cap `MAX_REASONING_CACHE_TOTAL_CHARS = 128_000`
+  with oldest-eviction. Drops vestigial `supports_reasoning: bool`
+  parameter from `convert_messages_openai`.
+
+### 🆕 Skill helper subsystem completion
+
+- **Bundle 2 new skills with `scripts/` subdir**: `/figure-spec`
+  (`scripts/figure_renderer.py`, 29.9KB) and `/paper-illustration-image2`
+  (`scripts/paper_illustration_image2.py`, 8.7KB). Both follow
+  main-branch ARIS's Phase 3 Arch C ("single-owner helpers in
+  `skills/<owner>/scripts/`"). Their SKILL.md resolvers gain a new
+  **Layer 0b**: `$ARIS_CACHE_DIR/skills/<name>/scripts/<helper>.py`,
+  the primary path under the aris-code single-binary distribution.
+  Bundle inventory: 64 skills + 36 helpers (was 62 + 34 in v0.4.8).
+
+- **Promote `research_wiki.py` to shared `tools/`** — used by 9+
+  skills (idea-creator, research-lit, result-to-claim, future
+  `/research-wiki` redesign). Moved from `skills/research-wiki/`
+  to `tools/research_wiki.py` so the policy table in
+  `shared-references/integration-contract.md` correctly classifies
+  it as "shared cross-skill helper" per the Repo A contract.
+  14 callsites across 3 SKILL.md updated to
+  `python3 "${ARIS_CACHE_DIR:-.}/tools/research_wiki.py"`.
+
+- **5 more SKILL.md migrated to 4-layer fallback chain**:
+  `/exa-search` (Policy A — gate), `/semantic-scholar` (Policy D1 —
+  primary cascade to inline-urllib fallback), `/arxiv` (Policy D1 —
+  expanded inline-Python candidate list with `$ARIS_CACHE_DIR`),
+  `/idea-creator` (5 callsites). `/research-lit` + `/deepxiv`
+  migrated in v0.4.8.
+
+### 🧪 Tests (closes the v0.4.8 deferred T9-T12 work)
+
+- **`cache::tests::bundle_inventory_skill_md_refs_resolve_to_bundled_resources`**
+  (cargo test, every CI invocation). Scans every `BUNDLED_SKILLS`
+  prompt for `$ARIS_CACHE_DIR/<key>` and bare `python3
+  tools/<helper>.{py,sh}` references; asserts every captured key
+  exists in `BUNDLED_RESOURCES`. Closes the H6 regression class.
+
+- **`idea-stage/v0.4.9/skill_helper_smoke.sh`** — release-binary
+  smoke test in isolated `$HOME`/`$cwd`: validates cache layout, 9
+  shared helpers present, each Python helper passes `python3 -m
+  py_compile`, shell helpers pass `sh -n`, and **cwd has zero
+  pollution** (H6 regression guard: v0.4.7 wrote helpers to
+  `cwd/<skill_name>/`).
+
+### Provenance
+
+- 8 commits, all individually reviewed by Codex 5.5 xhigh. Final
+  audit (T30) caught one **Hold** blocker — the new figure-spec /
+  image2 skills used Repo A's `$CLAUDE_SKILL_DIR` resolver which
+  doesn't exist under the aris-code bundle. Fixed by adding Layer 0b.
+  Final ship verdict: **B / ship** (not A because provider routing
+  split + Responses API support are v0.5.0 work; not a v0.4.9
+  blocker).
+
 ## v0.4.8 (2026-05-17)
 
 The skill-helper subsystem rewrite. v0.4.7 was the last release where bundled helper scripts (`tools/*.py`, `templates/*.tex`) extracted into the user's current working directory and where SKILL.md files hardcoded `python3 tools/foo.py` paths that frequently silent-exit-2'd because `tools/` didn't exist there. v0.4.8 materialises the bundle into a versioned global cache (`~/.config/aris/cache/<version>/`), surfaces the materialisation report to the model on every Skill invocation, and ships a four-layer fallback chain documented in a new integration contract. Plus two community-reported bug fixes that landed on the way through.
