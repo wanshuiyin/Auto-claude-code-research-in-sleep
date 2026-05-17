@@ -38,6 +38,17 @@ pub enum AssistantEvent {
 
 pub trait ApiClient {
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError>;
+
+    /// Notifies the client that the session was just compacted, removing
+    /// `removed_count` messages from the head. Implementations that keep
+    /// per-message-index state (e.g. OpenAI executor's reasoning-content
+    /// replay cache keyed by `usize` message index) must clear or remap
+    /// that state — otherwise post-compaction replay aims at stale indices
+    /// and the assistant sees re-injected reasoning aimed at the wrong turn.
+    ///
+    /// Default no-op for stateless clients (Anthropic uses thinking blocks
+    /// in the session itself; no out-of-band cache).
+    fn on_session_compacted(&mut self, _removed_count: usize) {}
 }
 
 pub trait ToolExecutor {
@@ -402,6 +413,10 @@ where
         }
 
         self.session = result.compacted_session;
+        // Notify the client so any per-message-index state (e.g. OpenAI
+        // executor's reasoning_cache keyed by usize) is cleared.
+        // Default no-op for stateless clients.
+        self.api_client.on_session_compacted(result.removed_message_count);
         Some(AutoCompactionEvent {
             removed_message_count: result.removed_message_count,
         })

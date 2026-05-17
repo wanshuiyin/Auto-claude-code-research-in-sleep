@@ -114,6 +114,18 @@ impl OpenAIRuntimeClient {
 }
 
 impl ApiClient for OpenAIRuntimeClient {
+    fn on_session_compacted(&mut self, removed_count: usize) {
+        // reasoning_cache is keyed by absolute message index in the session.
+        // After auto-compaction the session is replaced with [summary,
+        // ...preserved_tail], so every index in the cache now points at the
+        // wrong message (or no message at all). Re-populating organically
+        // from subsequent assistant turns is cheaper and more correct than
+        // attempting an index remap. Clear unconditionally.
+        if removed_count > 0 && !self.kimi_reasoning_cache.is_empty() {
+            self.kimi_reasoning_cache.clear();
+        }
+    }
+
     #[allow(clippy::too_many_lines)]
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
         let system_prompt = if request.system_prompt.is_empty() {

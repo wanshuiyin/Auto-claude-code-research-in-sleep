@@ -3655,6 +3655,19 @@ impl ApiClient for ExecutorClient {
             Self::OpenAI(c) => c.stream(request),
         }
     }
+
+    fn on_session_compacted(&mut self, removed_count: usize) {
+        match self {
+            // Anthropic uses thinking blocks inside session content, no
+            // out-of-band cache to invalidate.
+            Self::Anthropic(_) => {}
+            // OpenAI executor's reasoning_cache is keyed by message index;
+            // compaction shifts every index so we drop the whole cache.
+            // Re-population happens organically as the model emits new
+            // reasoning_content blocks post-compaction.
+            Self::OpenAI(c) => c.on_session_compacted(removed_count),
+        }
+    }
 }
 
 struct AnthropicRuntimeClient {
