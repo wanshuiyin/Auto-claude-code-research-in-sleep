@@ -76,9 +76,8 @@ impl ArisConfig {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let json = serde_json::to_string_pretty(self).map_err(|e| {
-            io::Error::new(io::ErrorKind::Other, e)
-        })?;
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
         fs::write(&path, json)
     }
 
@@ -160,7 +159,8 @@ impl ArisConfig {
                             std::env::set_var("ANTHROPIC_BASE_URL", url);
                         }
                         // Third-party providers may reject Anthropic-specific beta flags
-                        if force || std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").is_err() {
+                        if force || std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").is_err()
+                        {
                             std::env::set_var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "1");
                         }
                     }
@@ -175,7 +175,8 @@ impl ArisConfig {
                             std::env::set_var("ANTHROPIC_BASE_URL", url);
                         }
                         // Third-party providers may reject Anthropic-specific beta flags
-                        if force || std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").is_err() {
+                        if force || std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").is_err()
+                        {
                             std::env::set_var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS", "1");
                         }
                     }
@@ -288,7 +289,6 @@ impl ArisConfig {
     pub fn executor_model(&self) -> Option<&str> {
         self.executor_model.as_deref()
     }
-
 }
 
 /// Interactive setup wizard. Returns the configured settings.
@@ -340,17 +340,77 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
 
     // (provider, key_env, key_label, base_url, default_model)
     let exec_info: (&str, &str, &str, Option<&str>, &str) = match exec_choice {
-        "2" => ("openai", "EXECUTOR_API_KEY", "OpenAI API key", Some("https://api.openai.com/v1"), "gpt-5.5"),
-        "3" => ("openai", "EXECUTOR_API_KEY", "Gemini API key", Some("https://generativelanguage.googleapis.com/v1beta/openai"), "gemini-2.5-pro"),
-        "4" => ("openai", "EXECUTOR_API_KEY", "GLM API key", Some("https://open.bigmodel.cn/api/paas/v4"), "GLM-5"),
-        "5" => ("openai", "EXECUTOR_API_KEY", "MiniMax API key", Some("https://api.minimax.chat/v1"), "MiniMax-M2.7"),
-        "6" => ("openai", "EXECUTOR_API_KEY", "Kimi API key", Some("https://api.moonshot.cn/v1"), "kimi-k2.5"),
-        "7" => ("anthropic-compat", "ANTHROPIC_AUTH_TOKEN", "DeepSeek API key", Some("https://api.deepseek.com/anthropic"), "deepseek-v4-pro"),
-        "8" => ("openai", "EXECUTOR_API_KEY", "Xiaomi API key", Some("https://token-plan-cn.xiaomimimo.com/v1"), "mimo-v2.5-pro"),
-        "9" => ("openai", "EXECUTOR_API_KEY", "Qwen (DashScope) API key", Some("https://dashscope.aliyuncs.com/compatible-mode/v1"), "qwen3.6-plus"),
-        "10" => ("openai", "EXECUTOR_API_KEY", "Doubao (Ark) API key", Some("https://ark.cn-beijing.volces.com/api/v3"), "doubao-pro-4k"),
+        "2" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "OpenAI API key",
+            Some("https://api.openai.com/v1"),
+            "gpt-5.5",
+        ),
+        "3" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "Gemini API key",
+            Some("https://generativelanguage.googleapis.com/v1beta/openai"),
+            "gemini-2.5-pro",
+        ),
+        "4" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "GLM API key",
+            Some("https://open.bigmodel.cn/api/paas/v4"),
+            "GLM-5",
+        ),
+        "5" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "MiniMax API key",
+            Some("https://api.minimax.chat/v1"),
+            "MiniMax-M2.7",
+        ),
+        "6" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "Kimi API key",
+            Some("https://api.moonshot.cn/v1"),
+            "kimi-k2.5",
+        ),
+        "7" => (
+            "anthropic-compat",
+            "ANTHROPIC_AUTH_TOKEN",
+            "DeepSeek API key",
+            Some("https://api.deepseek.com/anthropic"),
+            "deepseek-v4-pro",
+        ),
+        "8" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "Xiaomi API key",
+            Some("https://token-plan-cn.xiaomimimo.com/v1"),
+            "mimo-v2.5-pro",
+        ),
+        "9" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "Qwen (DashScope) API key",
+            Some("https://dashscope.aliyuncs.com/compatible-mode/v1"),
+            "qwen3.6-plus",
+        ),
+        "10" => (
+            "openai",
+            "EXECUTOR_API_KEY",
+            "Doubao (Ark) API key",
+            Some("https://ark.cn-beijing.volces.com/api/v3"),
+            "doubao-pro-4k",
+        ),
         "11" => ("custom", "EXECUTOR_API_KEY", "API key", None, ""),
-        _ => ("anthropic", "ANTHROPIC_API_KEY", "Anthropic API key", None, "claude-opus-4-7"),
+        _ => (
+            "anthropic",
+            "ANTHROPIC_API_KEY",
+            "Anthropic API key",
+            None,
+            "claude-opus-4-7",
+        ),
     };
 
     // Preserve an explicit `anthropic-compat` choice across re-runs of `/setup`.
@@ -397,10 +457,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         .filter(|k| k.len() > 8)
         .map(|k| format!("{}...{}", &k[..4], &k[k.len() - 4..]))
         .unwrap_or_else(|| "(not set)".into());
-    let new_key = prompt_with_default(
-        &format!("  {} [{current_key_masked}]", exec_info.2),
-        "",
-    )?;
+    let new_key = prompt_with_default(&format!("  {} [{current_key_masked}]", exec_info.2), "")?;
     if !new_key.is_empty() {
         config.executor_api_key = Some(new_key);
     }
@@ -412,7 +469,10 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     // "Enter to keep" — pressing Enter preserves the current value, it does
     // NOT reset to the provider's official default. To switch back to the
     // official endpoint, type the URL explicitly.
-    let current_url_hint = config.executor_base_url.as_deref().unwrap_or("(none — uses official default)");
+    let current_url_hint = config
+        .executor_base_url
+        .as_deref()
+        .unwrap_or("(none — uses official default)");
     let custom_url = prompt_with_default(
         &format!("  Proxy base URL [{current_url_hint}] (Enter to keep)"),
         "",
@@ -471,7 +531,10 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
                 config.executor_model = Some(custom_model.clone());
             }
         }
-        println!("  \x1b[2mModel: {}\x1b[0m", config.executor_model.as_deref().unwrap_or("(none)"));
+        println!(
+            "  \x1b[2mModel: {}\x1b[0m",
+            config.executor_model.as_deref().unwrap_or("(none)")
+        );
     } else {
         config.executor_model = Some(exec_info.4.to_string());
         println!("  \x1b[2mModel: {}\x1b[0m", exec_info.4);
@@ -507,12 +570,32 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
     // (provider_name, key_env_var, key_label, default_model)
     let reviewer_info: Option<(&str, &str, &str, &str)> = match reviewer_choice {
         "1" => Some(("openai", "OPENAI_API_KEY", "OpenAI API key", "gpt-5.5")),
-        "2" => Some(("gemini", "GEMINI_API_KEY", "Gemini API key", "gemini-2.5-pro")),
+        "2" => Some((
+            "gemini",
+            "GEMINI_API_KEY",
+            "Gemini API key",
+            "gemini-2.5-pro",
+        )),
         "3" => Some(("glm", "GLM_API_KEY", "GLM API key", "GLM-5")),
-        "4" => Some(("minimax", "MINIMAX_API_KEY", "MiniMax API key", "MiniMax-M2.7")),
+        "4" => Some((
+            "minimax",
+            "MINIMAX_API_KEY",
+            "MiniMax API key",
+            "MiniMax-M2.7",
+        )),
         "5" => Some(("kimi", "KIMI_API_KEY", "Kimi API key", "kimi-k2.5")),
-        "6" => Some(("anthropic-compat", "ARIS_REVIEWER_AUTH_TOKEN", "Reviewer auth token", "claude-sonnet-4-6")),
-        "7" => Some(("deepseek", "ARIS_REVIEWER_AUTH_TOKEN", "DeepSeek API key", "deepseek-v4-pro")),
+        "6" => Some((
+            "anthropic-compat",
+            "ARIS_REVIEWER_AUTH_TOKEN",
+            "Reviewer auth token",
+            "claude-sonnet-4-6",
+        )),
+        "7" => Some((
+            "deepseek",
+            "ARIS_REVIEWER_AUTH_TOKEN",
+            "DeepSeek API key",
+            "deepseek-v4-pro",
+        )),
         "9" => Some(("custom", "ARIS_REVIEWER_AUTH_TOKEN", "API key", "")),
         _ => None,
     };
@@ -539,10 +622,7 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             .filter(|k| k.len() > 8)
             .map(|k| format!("{}...{}", &k[..4], &k[k.len() - 4..]))
             .unwrap_or_else(|| "(not set)".into());
-        let new_key = prompt_with_default(
-            &format!("  {key_label} [{current_masked}]"),
-            "",
-        )?;
+        let new_key = prompt_with_default(&format!("  {key_label} [{current_masked}]"), "")?;
         if !new_key.is_empty() {
             config.reviewer_api_key = Some(new_key.clone());
             std::env::set_var(key_env, &new_key);
@@ -554,7 +634,10 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         print_reviewer_url_hints(reviewer_choice);
 
         // Ask for proxy/custom base URL for reviewer
-        let current_reviewer_url = config.reviewer_base_url.as_deref().unwrap_or("(none — uses official default)");
+        let current_reviewer_url = config
+            .reviewer_base_url
+            .as_deref()
+            .unwrap_or("(none — uses official default)");
         let custom_reviewer_url = prompt_with_default(
             &format!("  Proxy base URL [{current_reviewer_url}] (Enter to keep)"),
             "",
@@ -609,7 +692,10 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
                     config.reviewer_model = Some(custom_model.clone());
                 }
             }
-            println!("  \x1b[2mModel: {}\x1b[0m", config.reviewer_model.as_deref().unwrap_or("(none)"));
+            println!(
+                "  \x1b[2mModel: {}\x1b[0m",
+                config.reviewer_model.as_deref().unwrap_or("(none)")
+            );
         } else {
             config.reviewer_model = Some(default_model.to_string());
             println!("  \x1b[2mModel: {default_model}\x1b[0m");
@@ -632,7 +718,14 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
             _ => "1",
         },
     )?;
-    config.language = Some(if lang_choice.trim() == "2" { "en" } else { "cn" }.into());
+    config.language = Some(
+        if lang_choice.trim() == "2" {
+            "en"
+        } else {
+            "cn"
+        }
+        .into(),
+    );
 
     // ── Save ──
     println!("\n\x1b[1mSaving configuration\x1b[0m");
@@ -658,7 +751,9 @@ fn print_executor_url_hints(exec_choice: &str) {
     match exec_choice {
         "1" => {
             // Anthropic: official api.anthropic.com or an Anthropic-format proxy.
-            println!("  \x1b[2mProxy examples (leave blank for official api.anthropic.com):\x1b[0m");
+            println!(
+                "  \x1b[2mProxy examples (leave blank for official api.anthropic.com):\x1b[0m"
+            );
             println!("    \x1b[2m• https://code.newcli.com/claude        (Claude-Code-compatible proxy)\x1b[0m");
             println!("    \x1b[2m• https://api-inference.modelscope.cn   (ModelScope Anthropic endpoint)\x1b[0m");
         }
@@ -731,10 +826,7 @@ mod tests {
 
     impl EnvSnapshot {
         fn capture(names: &[&'static str]) -> Self {
-            let vars = names
-                .iter()
-                .map(|n| (*n, std::env::var(n).ok()))
-                .collect();
+            let vars = names.iter().map(|n| (*n, std::env::var(n).ok())).collect();
             // Clear them so the test starts from a known state.
             for n in names {
                 std::env::remove_var(n);
@@ -786,7 +878,9 @@ mod tests {
             Some("https://bedrock-proxy.example.com")
         );
         assert_eq!(
-            std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").ok().as_deref(),
+            std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS")
+                .ok()
+                .as_deref(),
             Some("1")
         );
     }
@@ -831,7 +925,9 @@ mod tests {
             Some("https://minimax.example.com/anthropic")
         );
         assert_eq!(
-            std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS").ok().as_deref(),
+            std::env::var("CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS")
+                .ok()
+                .as_deref(),
             Some("1")
         );
     }

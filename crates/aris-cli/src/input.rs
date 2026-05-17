@@ -3,8 +3,8 @@ use std::io::{self, IsTerminal, Write};
 use crossterm::{
     cursor,
     event::{
-        self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent,
-        KeyEventKind, KeyModifiers,
+        self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyEventKind,
+        KeyModifiers,
     },
     style::{Color, Print, ResetColor, SetForegroundColor},
     terminal::{self, ClearType},
@@ -127,7 +127,13 @@ impl LineEditor {
                 continue;
             }
 
-            let Event::Key(KeyEvent { code, modifiers, kind, .. }) = ev else {
+            let Event::Key(KeyEvent {
+                code,
+                modifiers,
+                kind,
+                ..
+            }) = ev
+            else {
                 continue;
             };
             if kind == KeyEventKind::Release {
@@ -392,13 +398,7 @@ impl LineEditor {
 
         // Move cursor back to the logical cursor position inside the input
         // area, accounting for both input wrap rows and dropdown rows below.
-        move_to_input_cursor(
-            stdout,
-            input_rows,
-            dropdown_rows,
-            cursor_row,
-            cursor_col,
-        )?;
+        move_to_input_cursor(stdout, input_rows, dropdown_rows, cursor_row, cursor_col)?;
         render.cursor_row = cursor_row;
         stdout.flush()
     }
@@ -553,12 +553,7 @@ fn layout_rows(prompt_width: usize, buf: &[char], term_w: usize) -> u16 {
 /// - After filling the last cell of a row, the cursor stays at (row, term_w-1)
 ///   with a pending-wrap flag — terminals don't physically advance to the
 ///   next row until the next char is drawn.
-fn layout_position(
-    prompt_width: usize,
-    buf: &[char],
-    pos: usize,
-    term_w: usize,
-) -> (u16, u16) {
+fn layout_position(prompt_width: usize, buf: &[char], pos: usize, term_w: usize) -> (u16, u16) {
     let term_w = term_w.max(1);
     let mut row = 0usize;
     let mut col = 0usize;
@@ -647,20 +642,13 @@ pub struct SelectItem {
 
 /// Show an interactive select menu. Returns the index of the selected item,
 /// or `None` if the user pressed Esc.
-pub fn select_menu(
-    title: &str,
-    subtitle: &str,
-    items: &[SelectItem],
-) -> io::Result<Option<usize>> {
+pub fn select_menu(title: &str, subtitle: &str, items: &[SelectItem]) -> io::Result<Option<usize>> {
     if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
         return Ok(None);
     }
 
     // Start with current item selected, or 0
-    let mut sel: usize = items
-        .iter()
-        .position(|item| item.is_current)
-        .unwrap_or(0);
+    let mut sel: usize = items.iter().position(|item| item.is_current).unwrap_or(0);
 
     terminal::enable_raw_mode()?;
 
@@ -691,10 +679,7 @@ fn select_menu_raw(
 
     loop {
         let ev = event::read()?;
-        let Event::Key(KeyEvent {
-            code, kind, ..
-        }) = ev
-        else {
+        let Event::Key(KeyEvent { code, kind, .. }) = ev else {
             if let Event::Resize(..) = ev {
                 draw_select_menu(&mut stdout, title, subtitle, items, *sel)?;
             }
@@ -842,7 +827,8 @@ fn char_width(ch: char) -> usize {
         || (0xFF01..=0xFF60).contains(&cp)  // Fullwidth Forms
         || (0xFFE0..=0xFFE6).contains(&cp)  // Fullwidth Signs
         || (0x20000..=0x2FA1F).contains(&cp) // CJK Extensions B-F
-        || (0x30000..=0x3134F).contains(&cp) // CJK Extension G
+        || (0x30000..=0x3134F).contains(&cp)
+    // CJK Extension G
     {
         2
     } else {

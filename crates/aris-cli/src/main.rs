@@ -88,10 +88,7 @@ fn has_any_executor_auth() -> bool {
     // If we trimmed here but the resolver didn't, a value like `"openai "` would
     // pass the gate but the resolver would reject it, causing a silent fallback
     // to the Anthropic runtime with an OpenAI model.
-    let openai_selected = std::env::var("EXECUTOR_PROVIDER")
-        .ok()
-        .as_deref()
-        == Some("openai");
+    let openai_selected = std::env::var("EXECUTOR_PROVIDER").ok().as_deref() == Some("openai");
 
     if openai_selected {
         // OpenAI-compat executor: only OpenAI-style keys count. Anthropic
@@ -120,7 +117,10 @@ fn has_any_executor_auth() -> bool {
         if !expired {
             return true;
         }
-        let has_refresh = token.refresh_token.as_deref().is_some_and(|s| !s.is_empty());
+        let has_refresh = token
+            .refresh_token
+            .as_deref()
+            .is_some_and(|s| !s.is_empty());
         if has_refresh && runtime_oauth_config_loadable() {
             return true;
         }
@@ -1124,7 +1124,10 @@ fn run_repl(
     permission_mode: PermissionMode,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode)?;
-    let mut editor = input::LineEditor::new("\x1b[38;5;74m❯\x1b[0m ", slash_command_completion_candidates());
+    let mut editor = input::LineEditor::new(
+        "\x1b[38;5;74m❯\x1b[0m ",
+        slash_command_completion_candidates(),
+    );
 
     // Install Ctrl+C handler: set runtime interrupt flag instead of killing the process
     let _ = ctrlc::set_handler(|| {
@@ -1166,7 +1169,9 @@ fn run_repl(
                 }
                 editor.push_history(input);
                 // Visual separator before assistant response
-                let term_w = crossterm::terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
+                let term_w = crossterm::terminal::size()
+                    .map(|(w, _)| w as usize)
+                    .unwrap_or(80);
                 let sep = "─".repeat(term_w.min(80));
                 println!("\x1b[38;5;240m{sep}\x1b[0m");
                 // Clear interrupt flag before starting
@@ -1253,9 +1258,9 @@ impl LiveCli {
         // gpt-5.5 — that's surely the wrong default for a custom proxy. Warn
         // and leave the field empty so LlmReview's Custom branch hard-errors
         // with a clear message instead of silently routing to gpt-5.5.
-        let has_custom_reviewer_provider =
-            std::env::var("ARIS_REVIEWER_PROVIDER").as_deref() == Ok("custom")
-                && std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_ok();
+        let has_custom_reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER").as_deref()
+            == Ok("custom")
+            && std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_ok();
         let reviewer_model = std::env::var("ARIS_REVIEWER_MODEL")
             .ok()
             .filter(|s| !s.is_empty())
@@ -1398,10 +1403,8 @@ impl LiveCli {
 
         let executor_label = if openai_executor::resolve_openai_executor_config().is_some() {
             // Check if this is a custom provider
-            let is_custom = config::ArisConfig::load()
-                .executor_provider
-                .as_deref()
-                == Some("custom");
+            let is_custom =
+                config::ArisConfig::load().executor_provider.as_deref() == Some("custom");
             if is_custom {
                 "Custom"
             } else {
@@ -1431,15 +1434,23 @@ impl LiveCli {
         };
 
         let info_lines = [
-            format!("\x1b[2mExecutor\x1b[0m     {executor_label} · {}", self.model),
+            format!(
+                "\x1b[2mExecutor\x1b[0m     {executor_label} · {}",
+                self.model
+            ),
             format!("\x1b[2mReviewer\x1b[0m     {}", self.reviewer_model),
-            format!("\x1b[2mPermissions\x1b[0m  {}", self.permission_mode.as_str()),
+            format!(
+                "\x1b[2mPermissions\x1b[0m  {}",
+                self.permission_mode.as_str()
+            ),
             format!("\x1b[2mDirectory\x1b[0m    {cwd}"),
             format!("\x1b[2mSession\x1b[0m      {}", self.session.id),
         ];
 
         // Box drawing
-        let term_w = crossterm::terminal::size().map(|(w, _)| w as usize).unwrap_or(80);
+        let term_w = crossterm::terminal::size()
+            .map(|(w, _)| w as usize)
+            .unwrap_or(80);
         let box_w = term_w.min(76);
         let hr = "─".repeat(box_w.saturating_sub(2));
         let dim = "\x1b[38;5;240m";
@@ -1447,7 +1458,10 @@ impl LiveCli {
 
         let mut banner = String::new();
         // Top border with title
-        banner.push_str(&format!("{dim}╭─ {reset}ARIS-Code v{VERSION}{dim} {hr}{reset}\n", hr = "─".repeat(box_w.saturating_sub(18 + VERSION.len()))));
+        banner.push_str(&format!(
+            "{dim}╭─ {reset}ARIS-Code v{VERSION}{dim} {hr}{reset}\n",
+            hr = "─".repeat(box_w.saturating_sub(18 + VERSION.len()))
+        ));
         // Sprite lines
         for line in &sprite_lines {
             banner.push_str(&format!("{dim}│{reset} {line}\n"));
@@ -1602,9 +1616,7 @@ impl LiveCli {
             SlashCommand::Model { model } => self.set_model(model)?,
             SlashCommand::Reviewer { model } => self.set_reviewer(model)?,
             SlashCommand::Setup => self.run_inline_setup()?,
-            SlashCommand::Plan { task } => {
-                self.handle_plan_mode(task.as_deref())?
-            }
+            SlashCommand::Plan { task } => self.handle_plan_mode(task.as_deref())?,
             SlashCommand::Tasks { action } => {
                 Self::handle_tasks(action.as_deref())?;
                 false
@@ -1705,10 +1717,8 @@ impl LiveCli {
             None => {
                 // Show interactive menu
                 let is_openai = openai_executor::resolve_openai_executor_config().is_some();
-                let is_custom = config::ArisConfig::load()
-                    .executor_provider
-                    .as_deref()
-                    == Some("custom");
+                let is_custom =
+                    config::ArisConfig::load().executor_provider.as_deref() == Some("custom");
 
                 let items: Vec<input::SelectItem> = if is_custom {
                     // Custom provider: try dynamic /models fetch
@@ -1717,9 +1727,7 @@ impl LiveCli {
                     let base_url = cfg.executor_base_url.as_deref().unwrap_or("");
                     if !api_key.is_empty() && !base_url.is_empty() {
                         match openai_compat::fetch_openai_models(base_url, api_key) {
-                            Ok(models) => {
-                                openai_compat::model_select_items(&models, &self.model)
-                            }
+                            Ok(models) => openai_compat::model_select_items(&models, &self.model),
                             Err(err) => {
                                 println!("\x1b[33m⚠ Could not fetch models: {err}\x1b[0m");
                                 println!("  Use /model <name> to switch directly.");
@@ -1733,7 +1741,10 @@ impl LiveCli {
                 } else if is_openai {
                     // OpenAI-compat mode: show common models
                     vec![
-                        ("gpt-5.5", "OpenAI · Best intelligence at scale (xhigh reasoning)"),
+                        (
+                            "gpt-5.5",
+                            "OpenAI · Best intelligence at scale (xhigh reasoning)",
+                        ),
                         ("gpt-5.4", "OpenAI · Previous flagship"),
                         ("gpt-5.4-mini", "OpenAI · Strong mini model"),
                         ("gpt-5.4-nano", "OpenAI · Cheapest, high-volume"),
@@ -1762,9 +1773,15 @@ impl LiveCli {
                 } else {
                     // Anthropic mode
                     vec![
-                        ("claude-opus-4-7", "Opus 4.7 · Most capable for complex work"),
+                        (
+                            "claude-opus-4-7",
+                            "Opus 4.7 · Most capable for complex work",
+                        ),
                         ("claude-sonnet-4-6", "Sonnet 4.6 · Best for everyday tasks"),
-                        ("claude-haiku-4-5-20251001", "Haiku 4.5 · Fastest for quick answers"),
+                        (
+                            "claude-haiku-4-5-20251001",
+                            "Haiku 4.5 · Fastest for quick answers",
+                        ),
                     ]
                     .into_iter()
                     .map(|(name, desc)| input::SelectItem {
@@ -1775,7 +1792,11 @@ impl LiveCli {
                     .collect()
                 };
 
-                match input::select_menu("Select executor model", "Switch the model used for the main conversation.", &items)? {
+                match input::select_menu(
+                    "Select executor model",
+                    "Switch the model used for the main conversation.",
+                    &items,
+                )? {
                     Some(idx) => items[idx].label.clone(),
                     None => return Ok(false),
                 }
@@ -1829,8 +1850,7 @@ impl LiveCli {
                 // bare `/reviewer` menu used to miss this entirely and tell
                 // users "No reviewer API key found" even when they had just
                 // configured a custom provider.
-                let has_custom_reviewer = std::env::var("ARIS_REVIEWER_PROVIDER")
-                    .as_deref()
+                let has_custom_reviewer = std::env::var("ARIS_REVIEWER_PROVIDER").as_deref()
                     == Ok("custom")
                     && std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_ok();
 
@@ -1865,7 +1885,10 @@ impl LiveCli {
                 // MiniMax models
                 if std::env::var("MINIMAX_API_KEY").is_ok() {
                     for (name, desc) in [
-                        ("MiniMax-M2.7", "MiniMax · Latest, recursive self-improvement"),
+                        (
+                            "MiniMax-M2.7",
+                            "MiniMax · Latest, recursive self-improvement",
+                        ),
                         ("MiniMax-M2.7-highspeed", "MiniMax · Fast inference"),
                         ("MiniMax-M2.5", "MiniMax · Code generation"),
                     ] {
@@ -1878,9 +1901,7 @@ impl LiveCli {
                 }
                 // Kimi models
                 if std::env::var("KIMI_API_KEY").is_ok() {
-                    for (name, desc) in [
-                        ("kimi-k2.5", "Kimi · K2.5 reasoning"),
-                    ] {
+                    for (name, desc) in [("kimi-k2.5", "Kimi · K2.5 reasoning")] {
                         items.push(input::SelectItem {
                             label: name.to_string(),
                             description: desc.to_string(),
@@ -1890,7 +1911,10 @@ impl LiveCli {
                 }
                 if has_openai {
                     for (name, desc) in [
-                        ("gpt-5.5", "OpenAI · Best intelligence for reviews (xhigh reasoning)"),
+                        (
+                            "gpt-5.5",
+                            "OpenAI · Best intelligence for reviews (xhigh reasoning)",
+                        ),
                         ("gpt-5.4", "OpenAI · Previous flagship"),
                         ("gpt-5.4-mini", "OpenAI · Strong and affordable"),
                         ("gpt-5.4-nano", "OpenAI · Cheapest, high-volume"),
@@ -1930,7 +1954,11 @@ impl LiveCli {
                     return Ok(false);
                 }
 
-                match input::select_menu("Select reviewer model", "Switch the model used by LlmReview for external reviews.", &items)? {
+                match input::select_menu(
+                    "Select reviewer model",
+                    "Switch the model used by LlmReview for external reviews.",
+                    &items,
+                )? {
                     Some(idx) => items[idx].label.clone(),
                     None => return Ok(false),
                 }
@@ -2004,8 +2032,12 @@ impl LiveCli {
                         } else {
                             println!("\x1b[1mTasks\x1b[0m\n");
                             for todo in &todos {
-                                let status = todo.get("status").and_then(|s| s.as_str()).unwrap_or("pending");
-                                let content_text = todo.get("content").and_then(|c| c.as_str()).unwrap_or("?");
+                                let status = todo
+                                    .get("status")
+                                    .and_then(|s| s.as_str())
+                                    .unwrap_or("pending");
+                                let content_text =
+                                    todo.get("content").and_then(|c| c.as_str()).unwrap_or("?");
                                 let icon = match status {
                                     "completed" => "\x1b[1;32m✓\x1b[0m",
                                     "in_progress" => "\x1b[1;33m●\x1b[0m",
@@ -2162,7 +2194,10 @@ impl LiveCli {
             None => {
                 let items: Vec<input::SelectItem> = vec![
                     ("read-only", "Safe · Read files only, no writes or commands"),
-                    ("workspace-write", "Normal · Read + write files in workspace"),
+                    (
+                        "workspace-write",
+                        "Normal · Read + write files in workspace",
+                    ),
                     ("danger-full-access", "Full · All tools, no restrictions"),
                 ]
                 .into_iter()
@@ -2355,10 +2390,7 @@ impl LiveCli {
         }
     }
 
-    fn handle_plan_mode(
-        &mut self,
-        task: Option<&str>,
-    ) -> Result<bool, Box<dyn std::error::Error>> {
+    fn handle_plan_mode(&mut self, task: Option<&str>) -> Result<bool, Box<dyn std::error::Error>> {
         match task.map(str::trim) {
             // /plan execute — exit plan mode and execute
             Some(arg) if arg.starts_with("execute") => {
@@ -2366,7 +2398,11 @@ impl LiveCli {
                     println!("Not in plan mode. Use /plan <task> to enter plan mode first.");
                     return Ok(false);
                 }
-                let state = self.plan_mode.as_ref().expect("plan_mode checked above").clone();
+                let state = self
+                    .plan_mode
+                    .as_ref()
+                    .expect("plan_mode checked above")
+                    .clone();
                 let session = self.runtime.session().clone();
                 let new_runtime = match build_runtime(
                     session,
@@ -2446,9 +2482,17 @@ impl LiveCli {
 
                 // Prepare plan-mode tools
                 let plan_tools: AllowedToolSet = [
-                    "read_file", "glob_search", "grep_search",
-                    "WebFetch", "WebSearch", "ToolSearch", "Skill",
-                ].iter().map(|s| s.to_string()).collect();
+                    "read_file",
+                    "glob_search",
+                    "grep_search",
+                    "WebFetch",
+                    "WebSearch",
+                    "ToolSearch",
+                    "Skill",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
 
                 // Try rebuilding runtime FIRST, then commit state only on success
                 let session = self.runtime.session().clone();
@@ -2509,20 +2553,18 @@ impl LiveCli {
                     println!("Usage: /meta-optimize apply <proposal-number>");
                     return Ok(());
                 };
-                let id: usize = id_str.parse().map_err(|_| {
-                    format!("Invalid proposal number: {id_str}")
-                })?;
+                let id: usize = id_str
+                    .parse()
+                    .map_err(|_| format!("Invalid proposal number: {id_str}"))?;
                 match meta_optimize::apply_proposal(id) {
                     Ok(msg) => println!("{msg}"),
                     Err(e) => eprintln!("\x1b[1;31mError\x1b[0m: {e}"),
                 }
             }
-            Some("status") | None => {
-                match meta_optimize::status_report() {
-                    Ok(report) => println!("{report}"),
-                    Err(e) => eprintln!("\x1b[1;31mError\x1b[0m: {e}"),
-                }
-            }
+            Some("status") | None => match meta_optimize::status_report() {
+                Ok(report) => println!("{report}"),
+                Err(e) => eprintln!("\x1b[1;31mError\x1b[0m: {e}"),
+            },
             Some(other) => {
                 // Anything else (e.g., a skill name or "all") → run as skill invocation
                 let args = if let Some(t) = target {
@@ -3406,7 +3448,11 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
         "Alibaba"
     } else if model_name.starts_with("doubao-") {
         "ByteDance"
-    } else if model_name.starts_with("gpt-") || model_name.starts_with("o1") || model_name.starts_with("o3") || model_name.starts_with("o4") {
+    } else if model_name.starts_with("gpt-")
+        || model_name.starts_with("o1")
+        || model_name.starts_with("o3")
+        || model_name.starts_with("o4")
+    {
         "OpenAI"
     } else if model_name.starts_with("gemini-") {
         "Google"
@@ -3483,11 +3529,17 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
         if let Ok(content) = fs::read_to_string(&tasks_path) {
             if let Ok(todos) = serde_json::from_str::<Vec<serde_json::Value>>(&content) {
                 if !todos.is_empty() {
-                    let summary: Vec<String> = todos.iter().map(|t| {
-                        let status = t.get("status").and_then(|s| s.as_str()).unwrap_or("pending");
-                        let text = t.get("content").and_then(|c| c.as_str()).unwrap_or("?");
-                        format!("- [{status}] {text}")
-                    }).collect();
+                    let summary: Vec<String> = todos
+                        .iter()
+                        .map(|t| {
+                            let status = t
+                                .get("status")
+                                .and_then(|s| s.as_str())
+                                .unwrap_or("pending");
+                            let text = t.get("content").and_then(|c| c.as_str()).unwrap_or("?");
+                            format!("- [{status}] {text}")
+                        })
+                        .collect();
                     prompt.push(format!(
                         "# ARIS Task List\n\
                          Current tasks:\n{}\n\n\
@@ -3520,10 +3572,12 @@ fn aris_tasks_path() -> PathBuf {
 /// Ensure TodoWrite uses ARIS tasks path.
 fn init_aris_tasks_env() {
     if env::var("CLAWD_TODO_STORE").is_err() {
-        env::set_var("CLAWD_TODO_STORE", aris_tasks_path().to_string_lossy().as_ref());
+        env::set_var(
+            "CLAWD_TODO_STORE",
+            aris_tasks_path().to_string_lossy().as_ref(),
+        );
     }
 }
-
 
 fn build_runtime_feature_config(
 ) -> Result<runtime::RuntimeFeatureConfig, Box<dyn std::error::Error>> {
@@ -3584,8 +3638,7 @@ fn build_runtime(
 fn build_event_sink(
     _feature_config: &runtime::RuntimeFeatureConfig,
 ) -> Box<dyn runtime::EventSink> {
-    let level_str = std::env::var("ARIS_META_LOGGING")
-        .unwrap_or_default();
+    let level_str = std::env::var("ARIS_META_LOGGING").unwrap_or_default();
     let level = runtime::MetaLoggingLevel::parse(&level_str);
     if level == runtime::MetaLoggingLevel::Off {
         return Box::new(runtime::NoopEventSink);
@@ -3765,7 +3818,7 @@ impl ApiClient for AnthropicRuntimeClient {
             let mut markdown_stream = MarkdownStreamState::default();
             let mut events = Vec::new();
             let mut pending_tool: Option<(String, String, String)> = None;
-        let mut pending_thinking: Option<(String, String)> = None;
+            let mut pending_thinking: Option<(String, String)> = None;
             let mut saw_stop = false;
             // v0.4.10 T35: cache initial input/cache token usage from
             // MessageStart so the eventual MessageDelta can merge them
@@ -3802,8 +3855,7 @@ impl ApiClient for AnthropicRuntimeClient {
                             signature,
                         } = &start.content_block
                         {
-                            pending_thinking =
-                                Some((thinking.clone(), signature.clone()));
+                            pending_thinking = Some((thinking.clone(), signature.clone()));
                         } else {
                             push_output_block(
                                 start.content_block,
@@ -3839,7 +3891,7 @@ impl ApiClient for AnthropicRuntimeClient {
                             if let Some((_, ref mut s)) = pending_thinking {
                                 *s = signature;
                             }
-                        },
+                        }
                     },
                     ApiStreamEvent::ContentBlockStop(_) => {
                         if let Some(rendered) = markdown_stream.flush(&renderer) {
@@ -3893,7 +3945,12 @@ impl ApiClient for AnthropicRuntimeClient {
                         events.push(AssistantEvent::MessageStop);
                     }
                     ApiStreamEvent::Error(e) => {
-                        let msg = e.error.get("message").and_then(|v| v.as_str()).unwrap_or("stream error").to_string();
+                        let msg = e
+                            .error
+                            .get("message")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("stream error")
+                            .to_string();
                         return Err(RuntimeError::new(msg));
                     }
                 }
@@ -4073,9 +4130,7 @@ pub(crate) fn format_tool_call_start(name: &str, input: &str) -> String {
         _ => summarize_tool_payload(input),
     };
 
-    format!(
-        "\x1b[38;5;74m●\x1b[0m \x1b[1m{name}\x1b[0m\x1b[38;5;245m({detail})\x1b[0m"
-    )
+    format!("\x1b[38;5;74m●\x1b[0m \x1b[1m{name}\x1b[0m\x1b[38;5;245m({detail})\x1b[0m")
 }
 
 fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
@@ -4106,9 +4161,16 @@ fn format_tool_result(name: &str, output: &str, is_error: bool) -> String {
         "web_search" | "WebSearch" => {
             // Show just query and hit count
             let query = parsed.get("query").and_then(|v| v.as_str()).unwrap_or("?");
-            let hit_count = parsed.get("results")
+            let hit_count = parsed
+                .get("results")
                 .and_then(|v| v.as_array())
-                .map_or(0, |a| a.iter().filter(|v| v.get("content").is_some()).flat_map(|v| v.get("content").and_then(|c| c.as_array())).map(|a| a.len()).sum::<usize>());
+                .map_or(0, |a| {
+                    a.iter()
+                        .filter(|v| v.get("content").is_some())
+                        .flat_map(|v| v.get("content").and_then(|c| c.as_array()))
+                        .map(|a| a.len())
+                        .sum::<usize>()
+                });
             format!("{icon} \x1b[38;5;245mWebSearch:\x1b[0m \"{query}\" ({hit_count} results)")
         }
         "web_fetch" | "WebFetch" => {
@@ -4599,7 +4661,10 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         "      Inspect or maintain a saved session without entering the REPL"
     )?;
     writeln!(out, "  aris setup                                          Configure API keys / model / language (interactive)")?;
-    writeln!(out, "  aris doctor                                         Health check")?;
+    writeln!(
+        out,
+        "  aris doctor                                         Health check"
+    )?;
     writeln!(out, "  aris dump-manifests")?;
     writeln!(out, "  aris bootstrap-plan")?;
     writeln!(out, "  aris system-prompt [--cwd PATH] [--date YYYY-MM-DD]")?;
@@ -4631,10 +4696,7 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
     )?;
     writeln!(out)?;
     writeln!(out, "Executor providers:")?;
-    writeln!(
-        out,
-        "  Default:   Anthropic Claude (ANTHROPIC_API_KEY)"
-    )?;
+    writeln!(out, "  Default:   Anthropic Claude (ANTHROPIC_API_KEY)")?;
     writeln!(
         out,
         "  OpenAI:    EXECUTOR_PROVIDER=openai EXECUTOR_API_KEY=xxx aris --model gpt-4o"
@@ -4697,13 +4759,20 @@ fn check_auth_status() -> &'static str {
         return "OK (bearer token)";
     }
     let home = runtime::home_dir();
-    let creds_path = PathBuf::from(&home).join(".claude").join("credentials.json");
+    let creds_path = PathBuf::from(&home)
+        .join(".claude")
+        .join("credentials.json");
     if creds_path.exists() {
         return "OK (OAuth saved)";
     }
     // Check macOS Keychain for Claude Code's OAuth token
     if let Ok(output) = Command::new("security")
-        .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+        .args([
+            "find-generic-password",
+            "-s",
+            "Claude Code-credentials",
+            "-w",
+        ])
         .output()
     {
         if output.status.success() {
@@ -4720,10 +4789,12 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     let mut all_ok = true;
 
     // Check 0: Executor provider
-    let executor_provider = std::env::var("EXECUTOR_PROVIDER").unwrap_or_else(|_| "anthropic".into());
+    let executor_provider =
+        std::env::var("EXECUTOR_PROVIDER").unwrap_or_else(|_| "anthropic".into());
     print!("  Executor:     ");
     if executor_provider == "openai" {
-        let base = std::env::var("EXECUTOR_BASE_URL").unwrap_or_else(|_| "https://api.openai.com/v1".into());
+        let base = std::env::var("EXECUTOR_BASE_URL")
+            .unwrap_or_else(|_| "https://api.openai.com/v1".into());
         let has_key = std::env::var("EXECUTOR_API_KEY")
             .or_else(|_| std::env::var("OPENAI_API_KEY"))
             .is_ok();
@@ -4740,7 +4811,9 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     // Check 1: API auth
     let auth_status = check_auth_status();
     println!("  API auth:     {auth_status}");
-    if auth_status == "NOT FOUND" && executor_provider != "openai" { all_ok = false; }
+    if auth_status == "NOT FOUND" && executor_provider != "openai" {
+        all_ok = false;
+    }
 
     // Check 2: Skills directory + discovered skills
     let skills_dir = dirs_claude_skills();
@@ -4791,7 +4864,9 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     print!("  Codex CLI:    ");
     match which_codex() {
         Some(path) => println!("OK ({})", path.display()),
-        None => { println!("NOT FOUND (optional)"); }
+        None => {
+            println!("NOT FOUND (optional)");
+        }
     }
 
     // Check 4: Codex MCP in config
@@ -4801,7 +4876,8 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     if config_path.exists() {
         if let Ok(content) = fs::read_to_string(&config_path) {
             if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
-                if config.get("mcpServers")
+                if config
+                    .get("mcpServers")
                     .and_then(|s| s.as_object())
                     .map_or(false, |s| s.contains_key("codex"))
                 {
@@ -4831,7 +4907,10 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
 /// ARIS-specific skills directory (highest priority).
 fn dirs_aris_skills() -> PathBuf {
     let home = runtime::home_dir();
-    PathBuf::from(home).join(".config").join("aris").join("skills")
+    PathBuf::from(home)
+        .join(".config")
+        .join("aris")
+        .join("skills")
 }
 
 /// Claude Code user skills directory.
@@ -4869,7 +4948,11 @@ fn which_codex() -> Option<PathBuf> {
     let output = Command::new("which").arg("codex").output().ok()?;
     if output.status.success() {
         let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if path.is_empty() { None } else { Some(PathBuf::from(path)) }
+        if path.is_empty() {
+            None
+        } else {
+            Some(PathBuf::from(path))
+        }
     } else {
         None
     }

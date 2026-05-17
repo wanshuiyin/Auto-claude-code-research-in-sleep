@@ -194,7 +194,11 @@ impl ConfigLoader {
         let cwd = cwd.into();
         let config_home = std::env::var_os("CLAUDE_CONFIG_HOME")
             .map(PathBuf::from)
-            .or_else(|| std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(|home| PathBuf::from(home).join(".claude")))
+            .or_else(|| {
+                std::env::var_os("HOME")
+                    .or_else(|| std::env::var_os("USERPROFILE"))
+                    .map(|home| PathBuf::from(home).join(".claude"))
+            })
             .unwrap_or_else(|| PathBuf::from(".claude"));
         Self { cwd, config_home }
     }

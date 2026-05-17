@@ -340,10 +340,7 @@ on a compatible third-party proxy, or use Claude/another provider as executor an
             });
         }
 
-        let url = format!(
-            "{}/chat/completions",
-            self.base_url.trim_end_matches('/')
-        );
+        let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
 
         self.runtime.block_on(async {
             const MAX_ATTEMPTS: u32 = 4;

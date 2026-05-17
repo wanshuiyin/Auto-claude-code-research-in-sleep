@@ -728,10 +728,11 @@ impl McpStdioProcess {
     ///
     /// Behaviour now (post-codex-review):
     /// * The entire send+read round trip is wrapped in
-    ///   `tokio::time::timeout`. Default 60s, override via
-    ///   `MCP_REQUEST_TIMEOUT_SECS` env (clamped 1..=600). Wrapping
-    ///   both halves means a server that blocks on stdin (write-side
-    ///   hang because the pipe buffer fills) also unblocks the caller.
+    ///   `tokio::time::timeout`. Default 300s (5 min, covers agent-style
+    ///   MCP servers like codex), override via `MCP_REQUEST_TIMEOUT_SECS`
+    ///   env (clamped 1..=1800). Wrapping both halves means a server
+    ///   that blocks on stdin (write-side hang because the pipe buffer
+    ///   fills) also unblocks the caller.
     /// * After a successful read, the response id must equal the
     ///   request id.
     /// * On *any* failure mode (timeout, I/O error during
@@ -758,11 +759,8 @@ impl McpStdioProcess {
             self.read_response::<TResult>().await
         };
 
-        let response: JsonRpcResponse<TResult> = match tokio::time::timeout(
-            timeout,
-            send_then_read,
-        )
-        .await
+        let response: JsonRpcResponse<TResult> = match tokio::time::timeout(timeout, send_then_read)
+            .await
         {
             Ok(Ok(response)) => response,
             Ok(Err(error)) => {
@@ -776,7 +774,7 @@ impl McpStdioProcess {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
                     format!(
-                        "MCP server did not respond within {}s (override via MCP_REQUEST_TIMEOUT_SECS env, max 600s)",
+                        "MCP server did not respond within {}s (override via MCP_REQUEST_TIMEOUT_SECS env, max 1800s)",
                         timeout.as_secs()
                     ),
                 ));
@@ -890,12 +888,19 @@ fn encode_frame(payload: &[u8]) -> Vec<u8> {
 }
 
 /// Resolve the MCP request read timeout from `MCP_REQUEST_TIMEOUT_SECS`
-/// env or fall back to 60s. Value is clamped to 1..=600s so a bogus
+/// env or fall back to 300s. Value is clamped to 1..=1800s so a bogus
 /// override can't disable the timeout entirely or make it absurdly long.
+///
+/// Rationale for the 5-minute default: the most common MCP servers
+/// users wire into `aris` are agent-style (codex, oracle, claude). A
+/// single tool call there routinely takes 60-180s of model think time
+/// before the first response byte. The earlier 60s default would have
+/// killed those mid-call. 300s comfortably covers the p95 of observed
+/// agent tool calls while still bounding a runaway server.
 fn mcp_request_timeout() -> std::time::Duration {
-    const DEFAULT_SECS: u64 = 60;
+    const DEFAULT_SECS: u64 = 300;
     const MIN_SECS: u64 = 1;
-    const MAX_SECS: u64 = 600;
+    const MAX_SECS: u64 = 1800;
     let secs = std::env::var("MCP_REQUEST_TIMEOUT_SECS")
         .ok()
         .and_then(|s| s.parse::<u64>().ok())
@@ -1939,10 +1944,7 @@ mod tests {
         script_path
     }
 
-    fn die_after_tools_list_config(
-        script_path: &Path,
-        log_path: &Path,
-    ) -> ScopedMcpServerConfig {
+    fn die_after_tools_list_config(script_path: &Path, log_path: &Path) -> ScopedMcpServerConfig {
         ScopedMcpServerConfig {
             scope: ConfigSource::Local,
             config: McpServerConfig::Stdio(McpStdioServerConfig {

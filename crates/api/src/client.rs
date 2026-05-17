@@ -401,7 +401,12 @@ fn load_keychain_oauth_token() -> Option<OAuthTokenSet> {
     #[cfg(target_os = "macos")]
     {
         let output = std::process::Command::new("security")
-            .args(["find-generic-password", "-s", "Claude Code-credentials", "-w"])
+            .args([
+                "find-generic-password",
+                "-s",
+                "Claude Code-credentials",
+                "-w",
+            ])
             .output()
             .ok()?;
         if !output.status.success() {
@@ -683,10 +688,19 @@ impl MessageStream {
             if let Some(event) = self.pending.pop_front() {
                 // Convert in-stream error events to ApiError
                 if let StreamEvent::Error(e) = &event {
-                    let msg = e.error.get("message").and_then(|v| v.as_str()).unwrap_or("stream error").to_string();
+                    let msg = e
+                        .error
+                        .get("message")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("stream error")
+                        .to_string();
                     return Err(ApiError::Api {
                         status: reqwest::StatusCode::OK,
-                        error_type: e.error.get("type").and_then(|v| v.as_str()).map(ToOwned::to_owned),
+                        error_type: e
+                            .error
+                            .get("type")
+                            .and_then(|v| v.as_str())
+                            .map(ToOwned::to_owned),
                         message: Some(msg.clone()),
                         body: msg,
                         retryable: false,
@@ -710,10 +724,7 @@ impl MessageStream {
                 // so a half-parsed JSON tail doesn't bypass the retry.
                 let finish_result = self.parser.finish();
                 let parser_errored = finish_result.is_err();
-                let leftover_empty = finish_result
-                    .as_ref()
-                    .map(Vec::is_empty)
-                    .unwrap_or(false);
+                let leftover_empty = finish_result.as_ref().map(Vec::is_empty).unwrap_or(false);
                 if self.events_emitted == 0
                     && !self.observed_terminal
                     && (parser_errored || leftover_empty)
@@ -757,8 +768,7 @@ impl MessageStream {
                         self.stream_retries_remaining -= 1;
                         eprintln!(
                             "stream restart (body abort: {}, {} attempt(s) left)",
-                            error,
-                            self.stream_retries_remaining
+                            error, self.stream_retries_remaining
                         );
                         self.try_refresh_stream().await?;
                         continue;
