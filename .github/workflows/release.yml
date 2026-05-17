@@ -38,6 +38,15 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # v0.4.9: native-tls (api + aris-cli + tools, all crates) requires
+      # OpenSSL system headers on Linux. ubuntu-22.04 runners ship libssl3
+      # by default but NOT libssl-dev / pkg-config. Without these the
+      # build fails on openssl-sys with "could not find OpenSSL". macOS
+      # uses Secure Transport (no system dep) and Windows uses SChannel.
+      - name: Install OpenSSL deps (Linux only)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libssl-dev pkg-config
+
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
