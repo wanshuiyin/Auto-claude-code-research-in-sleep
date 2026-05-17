@@ -3,6 +3,7 @@ include!(concat!(env!("OUT_DIR"), "/bundled_skills.rs"));
 
 mod bash;
 mod bootstrap;
+mod cache;
 mod compact;
 mod config;
 mod conversation;
@@ -23,6 +24,7 @@ mod usage;
 
 pub use bash::{execute_bash, BashCommandInput, BashCommandOutput};
 pub use bootstrap::{BootstrapPhase, BootstrapPlan};
+pub use cache::{extract_bundle, extraction_report, ExtractionError, ExtractionReport};
 pub use compact::{
     compact_session, estimate_session_tokens, format_compact_summary,
     get_compact_continuation_message, should_compact, CompactionConfig, CompactionResult,

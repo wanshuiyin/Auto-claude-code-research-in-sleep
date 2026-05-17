@@ -155,6 +155,29 @@ Run `aris --help` for usage."
 }
 
 fn run() -> Result<(), Box<dyn std::error::Error>> {
+    // Materialise bundled skill helpers into ~/.config/aris/cache/<version>/
+    // and set ARIS_CACHE_DIR so SKILL.md resolver chains + bash subprocesses can
+    // find helpers via a stable path. Must run BEFORE any other init that may
+    // spawn child processes. See idea-stage/v0.4.8/T1_cache_design.md.
+    let report = runtime::extract_bundle();
+    if let Some(dir) = &report.used_dir {
+        env::set_var("ARIS_CACHE_DIR", dir);
+    } else {
+        env::remove_var("ARIS_CACHE_DIR");
+    }
+    if report.hard_error {
+        eprintln!(
+            "warning: bundled helper extraction failed at all locations ({}). \
+             Skills that depend on bundled helpers may not work; see fallback chain.",
+            report.paths_tried.join(", ")
+        );
+    } else if !report.failed.is_empty() {
+        eprintln!(
+            "warning: {} bundled helper(s) failed to extract; see SkillOutput.helperReport for details.",
+            report.failed.len()
+        );
+    }
+
     // Load saved ARIS config and apply to env (env vars always take priority)
     let saved_config = config::ArisConfig::load();
     saved_config.apply_to_env();
