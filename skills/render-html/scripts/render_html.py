@@ -231,6 +231,10 @@ _CALLOUT_PREFIX_MAP = [
     (re.compile(r"^🛠\s*"), "callout-info", "Note"),
     (re.compile(r"^🆕\s*"), "callout-info", "New"),
     (re.compile(r"^⚙️⚡?\s*"), "callout-info", "Config"),
+    (re.compile(r"^🔁\s*"), "callout-info", "Loop"),
+    (re.compile(r"^🌱\s*"), "callout-info", "Note"),
+    (re.compile(r"^📚\s*"), "callout-info", "Reference"),
+    (re.compile(r"^🧬\s*"), "callout-info", "Meta"),
 ]
 
 

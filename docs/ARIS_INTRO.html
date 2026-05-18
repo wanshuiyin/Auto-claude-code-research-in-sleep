@@ -7,8 +7,8 @@
 
 <meta name="generator" content="ARIS render-html (academic, v1)">
 <meta name="aris:source-path" content="docs/ARIS_INTRO.md">
-<meta name="aris:source-sha256" content="6684ab2eb8c39733e5a7772896e90b1b8144b8818242044bfa285dc29332708a">
-<meta name="aris:generated-at" content="2026-05-18 17:05 UTC">
+<meta name="aris:source-sha256" content="612bea09bdbe22bc29de5779741f55dd112599247a01e8c29586b78a35d90db0">
+<meta name="aris:generated-at" content="2026-05-18 17:27 UTC">
 
 <!-- MathJax 3 -->
 <script>
@@ -332,9 +332,16 @@ footer.aris-footer a { color: var(--ink-muted); border-bottom: 1px dotted var(--
 <li><a href="#the-reviewer-independence-protocol">The reviewer-independence protocol</a></li>
 </ul>
 </li>
-<li><a href="#the-six-workflows">The Six Workflows</a>
+<li><a href="#the-workflows">The Workflows</a>
 <ul>
-<li><a href="#workflow-2--auto-review-loop-in-detail">Workflow 2 — Auto Review Loop in detail</a></li>
+<li><a href="#workflow-1--idea-discovery--method-refinement">Workflow 1 — Idea Discovery &amp; Method Refinement</a></li>
+<li><a href="#workflow-15--experiment-bridge">Workflow 1.5 — Experiment Bridge</a></li>
+<li><a href="#workflow-2--auto-review-loop">Workflow 2 — Auto Review Loop</a></li>
+<li><a href="#workflow-3--paper-writing-pipeline">Workflow 3 — Paper Writing Pipeline</a></li>
+<li><a href="#workflow-4--rebuttal">Workflow 4 — Rebuttal</a></li>
+<li><a href="#workflow-5--resubmit-pipeline">Workflow 5 — Resubmit Pipeline</a></li>
+<li><a href="#workflow-6--conference-talk-pipeline">Workflow 6 — Conference Talk Pipeline</a></li>
+<li><a href="#cross-cutting-research-wiki--meta-optimize">Cross-cutting: Research Wiki &amp; Meta-Optimize</a></li>
 </ul>
 </li>
 <li><a href="#real-results">Real Results</a>
@@ -365,8 +372,8 @@ footer.aris-footer a { color: var(--ink-muted); border-bottom: 1px dotted var(--
   <p class="byline">By <strong>Ruofeng Yang (杨若峰), Shanghai Jiao Tong University</strong></p>
   <div class="meta">
     <span><strong>Source:</strong> <code>docs/ARIS_INTRO.md</code></span>
-    <span><strong>SHA256:</strong> <code>6684ab2eb8c3</code></span>
-    <span><strong>Rendered:</strong> 2026-05-18 17:05 UTC</span>
+    <span><strong>SHA256:</strong> <code>612bea09bdbe</code></span>
+    <span><strong>Rendered:</strong> 2026-05-18 17:27 UTC</span>
     
   </div>
 </header>
@@ -375,7 +382,7 @@ footer.aris-footer a { color: var(--ink-muted); border-bottom: 1px dotted var(--
 <blockquote><p><strong>Let Claude Code do research while you sleep.</strong> Wake up to find your paper scored, weaknesses identified, experiments run, and narrative rewritten — autonomously. Repo: <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep">github.com/wanshuiyin/Auto-claude-code-research-in-sleep</a>.</p></blockquote>
 <h2 id="tldr">TL;DR</h2>
 <p>ARIS is a collection of <strong>74 composable Claude Code skills</strong> that orchestrate <strong>cross-model collaboration</strong>: Claude Code drives the research (reads files, writes code, deploys experiments) while an external LLM (GPT-5.4 / 5.5 via <a href="https://github.com/openai/codex">Codex MCP</a>) acts as a critical reviewer. The two models disagree, debate, and force each other to do better — adversarial, not self-play.</p>
-<p>Six workflows compose into a full research lifecycle: idea discovery → experiments → auto-review → paper writing → rebuttal → resubmit. Tested end-to-end on real ICLR/NeurIPS submissions. Score progression on a real overnight run: <strong>5/10 → 7.5/10 with 20+ GPU experiments</strong>.</p>
+<p>Seven workflows (W1 / W1.5 / W2 / W3 / W4 / W5 / W6) compose into a full research lifecycle: idea discovery → experiment bridge → auto-review → paper writing → rebuttal → resubmit → conference talk. Tested end-to-end on real ICLR/NeurIPS submissions. Score progression on a real overnight run: <strong>5/10 → 7.5/10 with 20+ GPU experiments</strong>.</p>
 <div class="callout callout-info"><div class="callout-title">The ARIS bet.</div><p>Markdown is for writers. HTML is for readers. Every workflow artifact stays in Markdown (auditable, machine-parseable, future-proof). When a human needs to actually <em>read</em> one, <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/render-html/SKILL.md"><code>/render-html</code></a> produces this view — gated by a fresh cross-model Codex review (the same ARIS invariant every other audit-class skill follows).</p></div>
 <hr />
 <h2 id="the-problem">The Problem</h2>
@@ -406,11 +413,28 @@ footer.aris-footer a { color: var(--ink-muted); border-bottom: 1px dotted var(--
                         └─────────────────────────┘</code></pre>
 <div class="callout callout-good"><div class="callout-title">Cross-family invariant.</div><p>The executor and reviewer <strong>must</strong> be different model families (Claude × GPT, GLM × DeepSeek, Antigravity × Gemini, …). Same-family review is a non-feature; if you only have one provider, the cheapest fix is to add a free DeepSeek or Gemini reviewer via <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/tree/main/mcp-servers/llm-chat"><code>llm-chat</code> MCP</a>.</p></div>
 <hr />
-<h2 id="the-six-workflows">The Six Workflows</h2>
+<h2 id="the-workflows">The Workflows</h2>
 <table><thead><tr><th style="text-align:center">W</th><th>Name</th><th>One-line summary</th><th>Entry point</th></tr></thead><tbody><tr><td style="text-align:center"><strong>1</strong></td><td>Idea Discovery</td><td>Literature → brainstorm 8-12 → novelty check → pilot 2-3 on GPU → ranked report</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/idea-discovery/SKILL.md"><code>/idea-discovery</code></a></td></tr><tr><td style="text-align:center"><strong>1.5</strong></td><td>Experiment Bridge</td><td>Plan → implement → GPT-5.4 code review → sanity check → deploy → collect</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/experiment-bridge/SKILL.md"><code>/experiment-bridge</code></a></td></tr><tr><td style="text-align:center"><strong>2</strong></td><td>Auto Review Loop</td><td>Review → fix → re-run → repeat until score ≥ 6/10 (or <code>MAX_ROUNDS=4</code> hit)</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/auto-review-loop/SKILL.md"><code>/auto-review-loop</code></a></td></tr><tr><td style="text-align:center"><strong>3</strong></td><td>Paper Writing</td><td>Narrative → outline → figures → LaTeX → PDF → 2 rounds review (4 → 8.5/10)</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-writing/SKILL.md"><code>/paper-writing</code></a></td></tr><tr><td style="text-align:center"><strong>4</strong></td><td>Rebuttal</td><td>Parse reviews → strategy → optional experiments → draft → stress test</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/rebuttal/SKILL.md"><code>/rebuttal</code></a></td></tr><tr><td style="text-align:center"><strong>5</strong></td><td>Resubmit</td><td>Port paper to a new venue under hard constraints (no new exps, no bib edits)</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/resubmit-pipeline/SKILL.md"><code>/resubmit-pipeline</code></a></td></tr><tr><td style="text-align:center"><strong>6</strong></td><td>Conference Talk</td><td>Paper → Beamer + PPTX + speaker notes + assurance audits</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-talk/SKILL.md"><code>/paper-talk</code></a></td></tr></tbody></table>
-<h3 id="workflow-2--auto-review-loop-in-detail">Workflow 2 — Auto Review Loop in detail</h3>
-<p>The most interesting one. Run it the night before a deadline; wake up to a polished paper.</p>
-<ol><li>🔍 <strong>Deep review</strong> — GPT-5.4 xhigh reviews the paper, identifies weaknesses</li><li>🩹 <strong>Fix</strong> — Claude implements the fixes (rewrite, add baselines, run experiments); skips any experiment &gt; 4 GPU-hours, flags for manual follow-up</li><li>📊 <strong>Re-evaluate</strong> — collect results, update paper, feed back to the reviewer</li><li>🔁 <strong>Repeat</strong> — until score ≥ <code>POSITIVE_THRESHOLD</code> (default 6/10) or <code>MAX_ROUNDS</code> (default 4); if the context window fills mid-loop, auto-resume from <code>REVIEW_STATE.json</code></li></ol>
+<h3 id="workflow-1--idea-discovery--method-refinement">Workflow 1 — Idea Discovery &amp; Method Refinement</h3>
+<blockquote><p><strong>"I have a research direction. What should I actually work on?"</strong></p></blockquote>
+<p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/idea-discovery/SKILL.md"><code>/idea-discovery</code></a> takes a vague research direction and outputs a ranked, pilot-validated proposal:</p>
+<ol><li>📚 <strong>Survey</strong> — multi-source literature search (Zotero / Obsidian / arXiv / Semantic Scholar / DeepXiv / Exa) builds a landscape map</li><li>🧠 <strong>Brainstorm</strong> — GPT-5.4 xhigh generates 8-12 concrete ideas anchored to identified gaps</li><li>🔍 <strong>Novelty check</strong> — each top idea cross-checked against arXiv + DBLP for prior work; failed ideas killed early</li><li>🧪 <strong>Pilot</strong> — 2-3 surviving ideas get 1-2-hour single-GPU pilot runs (a real signal, not just LLM opinion)</li><li>🏆 <strong>Refine</strong> — top pilot result fed to <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/research-refine/SKILL.md"><code>/research-refine</code></a> which anchors the problem, tightens the method, and emits an experiment plan ready for Workflow 1.5</li></ol>
+<pre><code class="language-bash">/idea-discovery &quot;factorized gap in discrete diffusion LMs&quot; \
+    --- effort: max \
+    --- sources: zotero, web, deepxiv</code></pre>
+<div class="callout callout-info"><div class="callout-title">The bet here</div><p>a 1-hour GPU pilot tells you more than 1 hour of LLM-only reasoning. Failed pilots also get written to <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/research-wiki/SKILL.md">Research Wiki</a> so they become anti-repetition memory.</p></div>
+<hr />
+<h3 id="workflow-15--experiment-bridge">Workflow 1.5 — Experiment Bridge</h3>
+<blockquote><p><strong>"I have a plan. Make it run."</strong></p></blockquote>
+<p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/experiment-bridge/SKILL.md"><code>/experiment-bridge</code></a> closes the gap between paper plan and running code:</p>
+<ol><li>📋 <strong>Read</strong> <code>EXPERIMENT_PLAN.md</code> (from W1 or hand-written)</li><li>💻 <strong>Implement</strong> experiment scripts — reuses your existing codebase, adds <code>argparse</code> / <code>logging</code> / seeds where missing</li><li>🔬 <strong>GPT-5.4 code review</strong> — fresh-thread cross-model review of the generated code BEFORE any GPU time is spent (catches ~80% of bugs that would otherwise burn 8-GPU-hour runs)</li><li>✅ <strong>Sanity check</strong> — smallest config runs first; checks for OOM, NaN, runtime errors</li><li>🚀 <strong>Deploy</strong> — SSH to your GPU server (per <code>CLAUDE.md</code>), launch in <code>screen</code>, capture stdout/stderr</li><li>📊 <strong>Collect</strong> — <code>/monitor-experiment</code> polls until completion, fetches results, formats for downstream skills</li></ol>
+<pre><code class="language-bash">/experiment-bridge --- base repo: https://github.com/anthropic-experimental/some-baseline</code></pre>
+<div class="callout callout-good"><div class="callout-title">Hard rule</div><p>code review is <em>cross-model</em> (Claude wrote it, GPT reviews it). Same-family review on your own code is a non-feature — the model that wrote a bug usually can't see it.</p></div>
+<hr />
+<h3 id="workflow-2--auto-review-loop">Workflow 2 — Auto Review Loop</h3>
+<blockquote><p><strong>"Review my paper, fix what's wrong, repeat until it passes."</strong></p></blockquote>
+<p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/auto-review-loop/SKILL.md"><code>/auto-review-loop</code></a> is the most-cited workflow. Run it the night before a deadline; wake up to a polished paper.</p>
+<ol><li>🔍 <strong>Deep review</strong> — GPT-5.4 xhigh reviews the paper, identifies weaknesses (severity tagged)</li><li>🩹 <strong>Fix</strong> — Claude implements the fixes (rewrite, add baselines, run experiments); skips any experiment &gt; 4 GPU-hours, flags for manual follow-up</li><li>📊 <strong>Re-evaluate</strong> — collect results, update paper, feed back to the reviewer (fresh thread)</li><li>🔁 <strong>Repeat</strong> — until score ≥ <code>POSITIVE_THRESHOLD</code> (default 6/10) or <code>MAX_ROUNDS</code> (default 4); if the context window fills mid-loop, auto-resume from <code>REVIEW_STATE.json</code></li></ol>
 <pre><code class="language-bash">/auto-review-loop &quot;focus on Section 3-5, our CRF results are weak&quot; \
     --- difficulty: nightmare \
     --- effort: max</code></pre>
@@ -419,6 +443,39 @@ footer.aris-footer a { color: var(--ink-muted); border-bottom: 1px dotted var(--
 <summary><b>Key safety features (click to expand)</b></summary>
 <ul><li>🔒 <strong><code>MAX_ROUNDS = 4</code></strong> — prevents infinite loops; stops early if score threshold is met</li><li>⏱️ <strong>&gt; 4 GPU-hour experiments skipped</strong> — flagged for manual follow-up, never silently launched</li><li>🧠 <strong>Prefer reframing over new experiments</strong> — when both can address a weakness, picks the cheaper path</li><li>🪞 <strong>No hiding weaknesses</strong> — explicit rule: "Do NOT hide weaknesses to game a positive score"</li><li>🔧 <strong>Fix before re-review</strong> — must implement fixes before resubmitting; no empty promises</li><li>💾 <strong>Compact recovery</strong> — persists <code>REVIEW_STATE.json</code> each round; auto-resumes if context window fills</li></ul>
 </details>
+<div class="callout callout-info"><div class="callout-title">Why this workflow is the headline</div><p>it's the only one that runs <em>autonomously overnight</em> — the human signs off before bed, the system reviews + fixes + re-runs experiments + re-reviews until the threshold is hit, and writes a one-paragraph summary of what changed. Empirically the most-cited path; the real-results table above is from one of these runs.</p></div>
+<hr />
+<h3 id="workflow-3--paper-writing-pipeline">Workflow 3 — Paper Writing Pipeline</h3>
+<blockquote><p><strong>"I have results. Turn them into a submission-ready PDF."</strong></p></blockquote>
+<p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-writing/SKILL.md"><code>/paper-writing</code></a> takes a <code>NARRATIVE_REPORT.md</code> (claims, experiments, key figures) and produces compiled LaTeX:</p>
+<ol><li>📐 <strong>Plan</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-plan/SKILL.md"><code>/paper-plan</code></a> builds a claims-evidence matrix from the narrative, then a section-by-section outline</li><li>📊 <strong>Figures</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-figure/SKILL.md"><code>/paper-figure</code></a> auto-generates plots (line / bar / heatmap) and comparison tables from JSON/CSV results. Architecture diagrams via <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/figure-spec/SKILL.md"><code>/figure-spec</code></a> (deterministic JSON → SVG) or Gemini illustration</li><li>✍️ <strong>Write</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-write/SKILL.md"><code>/paper-write</code></a> emits per-section LaTeX following the venue's style file. Citations pulled from DBLP / CrossRef (real BibTeX, never LLM-generated)</li><li>🔧 <strong>Compile</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-compile/SKILL.md"><code>/paper-compile</code></a> runs <code>latexmk</code> until clean, fixes overfull <code>\hbox</code>, verifies the page limit via <code>pdftotext</code></li><li>✨ <strong>Polish</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/auto-paper-improvement-loop/SKILL.md"><code>/auto-paper-improvement-loop</code></a> runs 2 rounds of GPT-5.4 content review + 1 round of format check. Real ICLR run: <strong>4/10 → 8.5/10 across 3 rounds</strong></li></ol>
+<pre><code class="language-bash">/paper-writing NARRATIVE_REPORT.md --- venue: ICLR --- effort: max</code></pre>
+<div class="callout callout-good"><div class="callout-title">Submission gate</div><p>at <code>effort: max</code> / <code>effort: beast</code> (or explicit <code>assurance: submission</code>), the PDF is only labelled "submission-ready" if <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/proof-checker/SKILL.md"><code>/proof-checker</code></a>, <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-claim-audit/SKILL.md"><code>/paper-claim-audit</code></a>, and <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/citation-audit/SKILL.md"><code>/citation-audit</code></a> all return green via <code>tools/verify_paper_audits.sh</code>.</p></div>
+<hr />
+<h3 id="workflow-4--rebuttal">Workflow 4 — Rebuttal</h3>
+<blockquote><p><strong>"Reviews came back. Help me draft a safe rebuttal."</strong></p></blockquote>
+<p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/rebuttal/SKILL.md"><code>/rebuttal</code></a> is structured around three hard safety gates that block fabrication:</p>
+<ol><li>📥 <strong>Parse</strong> reviews — atomize into per-reviewer / per-concern entries; normalize against the venue's format (ICML char limit, NeurIPS per-reviewer threads, etc.)</li><li>🗺️ <strong>Strategy</strong> — global themes + per-reviewer priority + character budget + a list of blocked claims (things the reviewer flagged but the paper can't actually back)</li><li>🧪 <strong>Evidence sprint</strong> (optional) — if <code>--- auto experiment: true</code> and the reviewer asked for a missing experiment, hand off to <code>/experiment-bridge</code>, wait for results, fold into draft</li><li>✍️ <strong>Draft</strong> — global opener + numbered per-reviewer responses + closing for the meta-reviewer</li><li>🛡️ <strong>Safety check</strong> — 6 lints: coverage (no concern dropped), provenance (every claim cites paper/review/user-confirmed result), commitment (no overpromising), tone, internal consistency, character limit</li><li>🔬 <strong>GPT-5.4 stress test</strong> — fresh-thread reviewer reads the draft cold, tries to break it</li><li>📤 <strong>Finalize</strong> — two outputs: <code>PASTE_READY.txt</code> (exact character count, ready to drop into OpenReview) + <code>REBUTTAL_DRAFT_rich.md</code> (extended, for human editing)</li></ol>
+<pre><code class="language-bash">/rebuttal &quot;paper/ + reviews&quot; --- venue: ICML --- character limit: 5000</code></pre>
+<div class="callout callout-good"><div class="callout-title">Three safety gates — rebuttal will NOT finalize if any fails</div><p>(a) <strong>provenance</strong> — every claim maps to paper/review/user-confirmed result; (b) <strong>commitment</strong> — every promise is user-approved; (c) <strong>coverage</strong> — every reviewer concern is tracked through to a response.</p></div>
+<hr />
+<h3 id="workflow-5--resubmit-pipeline">Workflow 5 — Resubmit Pipeline</h3>
+<blockquote><p><strong>"Move a polished paper from venue A to venue B under hard constraints."</strong></p></blockquote>
+<p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/resubmit-pipeline/SKILL.md"><code>/resubmit-pipeline</code></a> is for the ICML→NeurIPS / workshop→archival transition. Distinct from Workflow 3 (which writes from scratch) — here the paper exists, the goal is targeted edits only:</p>
+<ol><li>📁 <strong>Physical isolation</strong> — copy into <code>&lt;NEW_VENUE_DIR&gt;/</code>; the original submission directory is <em>never touched</em></li><li>🛡️ <strong>5-layer anonymity check</strong> — author names, affiliations, self-citations, GitHub / Overleaf URLs, in-text "we" patterns that break double-blind</li><li>🔬 <strong>Soft-only audits</strong> — <code>/proof-checker</code>, <code>/paper-claim-audit</code>, <code>/citation-audit --soft-only</code> (the <code>--soft-only</code> mode rewrites instead of editing bib, since the bib is frozen)</li><li>✏️ <strong>Microedit</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/auto-paper-improvement-loop/SKILL.md"><code>/auto-paper-improvement-loop --edit-whitelist</code></a> with a YAML schema (<code>allowed_paths</code> / <code>forbidden_paths</code> / <code>forbidden_operations</code>)</li><li>🗡 <strong>Adversarial gate</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/kill-argument/SKILL.md"><code>/kill-argument</code></a> writes the strongest 200-word rejection memo a senior area chair would write; an independent adjudicator scores each point</li><li>📤 <strong>Compile + push</strong> — <code>/paper-compile</code> + optional <code>/overleaf-sync push</code></li></ol>
+<pre><code class="language-bash">/resubmit-pipeline &quot;paper/&quot; --- venue: NeurIPS</code></pre>
+<div class="callout callout-good"><div class="callout-title">Hard constraints (cannot be overridden)</div><p>no new experiments, no bib edits, no framework changes, never overwrites prior submissions. Microedit YAML schema enforces these at every diff.</p></div>
+<hr />
+<h3 id="workflow-6--conference-talk-pipeline">Workflow 6 — Conference Talk Pipeline</h3>
+<blockquote><p><strong>"Paper accepted. Prepare the talk."</strong></p></blockquote>
+<p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-talk/SKILL.md"><code>/paper-talk</code></a> is the post-acceptance sister workflow to <code>/paper-writing</code>:</p>
+<ol><li>📋 <strong>Outline</strong> — extracted from <code>paper/</code> (or <code>NARRATIVE_REPORT.md</code> if no compiled paper); one slide-cluster per contribution; section→talk-beat mapping</li><li>🎨 <strong>Generate</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-slides/SKILL.md"><code>/paper-slides</code></a> emits Beamer source + PPTX + speaker notes + Q&amp;A prep</li><li>💎 <strong>Polish</strong> — <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/slides-polish/SKILL.md"><code>/slides-polish</code></a> does per-page Codex review against the reference PDF; applies a fix-pattern catalog (PPTX font scaling 1.5-1.8× for projector legibility, banner-as-tcolorbox, em-dash spacing, Chinese EA font hint via PingFang SC, anonymity placeholder discipline)</li><li>🛡️ <strong>Audit</strong> (when <code>assurance: conference-ready</code>) — <code>/paper-claim-audit</code> + <code>/citation-audit</code> run against a synthetic paper directory at <code>.aris/paper-talk/audit-input/sections/*.tex</code> to verify slides don't introduce claims the paper can't back</li></ol>
+<pre><code class="language-bash">/paper-talk &quot;paper/&quot; --- venue: ICLR --- assurance: conference-ready</code></pre>
+<div class="callout callout-info"><div class="callout-title">Assurance ladder</div><p>(independent of <code>effort</code>): <code>draft</code> / <code>polished</code> (default) / <code>conference-ready</code>. Legal combination: <code>--- effort: lite --- assurance: conference-ready</code> = "fast pipeline, every audit must emit a verdict before the final report." Use it when you trust the writing pass but want hard claim/citation gates.</p></div>
+<hr />
+<h3 id="cross-cutting-research-wiki--meta-optimize">Cross-cutting: Research Wiki &amp; Meta-Optimize</h3>
+<p>Two skills that aren't bound to any single workflow but make the whole system smarter over time:</p>
+<ul><li>📚 <strong><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/research-wiki/SKILL.md"><code>/research-wiki</code></a></strong> — persistent knowledge base across all seven workflows. Stores every paper read, idea piloted (including failures), experiment run, claim verified. Failed ideas become anti-repetition memory: the next time <code>/idea-creator</code> runs, it sees what didn't work and steers around it.</li><li>🧬 <strong><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/meta-optimize/SKILL.md"><code>/meta-optimize</code></a></strong> — the outer-loop SKILL.md optimizer. Reads accumulated event logs from your past runs (<code>.aris/meta/events.jsonl</code>), analyzes patterns (which skills failed often? which parameter overrides were common? where did scores plateau?), and proposes SKILL.md improvements. Reviewer-gated, user-approved.</li></ul>
 <hr />
 <h2 id="real-results">Real Results</h2>
 <p>A real overnight 4-round run on an ML research project, from borderline reject to submission-ready:</p>
@@ -442,7 +499,7 @@ footer.aris-footer a { color: var(--ink-muted); border-bottom: 1px dotted var(--
 <h2 id="中文版速览">中文版速览</h2>
 <p>ARIS（<strong>A</strong>utonomous <strong>R</strong>esearch via Adversarial <strong>M</strong>ulti-Agent Collaboration，<strong>梦中科研</strong>）是一组 74 个可组合的 Claude Code skills，编排<strong>跨模型对抗式协作</strong>：</p>
 <ul><li><strong>执行</strong>：Claude Code 读文件、写代码、跑实验、改论文</li><li><strong>审稿</strong>：GPT-5.4/5.5（via <a href="https://github.com/openai/codex">Codex MCP</a>）以<strong>跨家族</strong>审稿人身份打分、找弱点、提建议</li><li><strong>关键</strong>：每轮 review 用新 thread；执行者绝不审判自己的实验诚实度</li></ul>
-<p>六大工作流端到端贯通：找 idea → 跑实验 → 自动审稿循环 → 写论文 → 写 rebuttal → 跨 venue 移植。在真实 ICLR/NeurIPS 投稿上验证过。</p>
+<p>七条工作流（W1 / W1.5 / W2 / W3 / W4 / W5 / W6）端到端贯通：找 idea → 实验桥接 → 自动审稿循环 → 写论文 → 写 rebuttal → 跨 venue 移植 → 会议演讲。在真实 ICLR/NeurIPS 投稿上验证过。</p>
 <div class="callout callout-info"><div class="callout-title">新加入的 skill</div><p><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/render-html/SKILL.md"><code>/render-html</code></a> —— 把任何 ARIS 产出的 MD（如 <code>IDEA_REPORT.md</code>、<code>AUTO_REVIEW.md</code>、<code>KILL_ARGUMENT.md</code>）渲染成单文件 HTML，适合给人类读。Markdown 仍是 canonical source，HTML 是 generated view，永远嵌入源 SHA256 + 渲染时间戳防 drift。<strong>academic 模板默认走跨模型 Codex review gate</strong>——同样的 ARIS 不变量。</p></div>
 <hr />
 <h2 id="get-started">Get Started</h2>
@@ -468,13 +525,13 @@ claude
 <hr />
 <h2 id="community">Community</h2>
 <table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td>💬 Group</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/docs/wechat_group.jpg">WeChat group QR</a> (refreshes weekly)</td></tr><tr><td>🌟 Star</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep">github.com/wanshuiyin/Auto-claude-code-research-in-sleep</a></td></tr><tr><td>📖 Technical report</td><td><a href="https://huggingface.co/papers/2605.03042">arXiv 2605.03042</a></td></tr><tr><td>📑 Skills catalog</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/docs/SKILLS_CATALOG.md"><code>docs/SKILLS_CATALOG.md</code></a></td></tr><tr><td>🐛 Bugs / requests</td><td><a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues">GitHub Issues</a></td></tr></tbody></table>
-<blockquote><p>🌱 <strong>From idea to paper to podium — one toolchain.</strong> ARIS is a methodology, not a platform. Take it wherever you go.</p></blockquote>
+<div class="callout callout-info"><div class="callout-title">From idea to paper to podium — one toolchain.</div><p>ARIS is a methodology, not a platform. Take it wherever you go.</p></div>
 
 <footer class="aris-footer">
   Generated by <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/render-html/SKILL.md">ARIS <code>/render-html</code></a> ·
   source path <code>docs/ARIS_INTRO.md</code> ·
-  SHA256 <code>6684ab2eb8c3</code> ·
-  generated at 2026-05-18 17:05 UTC.
+  SHA256 <code>612bea09bdbe</code> ·
+  generated at 2026-05-18 17:27 UTC.
   This is a generated view — edit the source Markdown, then re-render.
 </footer>
 </main>

@@ -1,7 +1,7 @@
 {
   "skill": "render-html",
   "source": "docs/ARIS_INTRO.md",
-  "source_sha256": "6684ab2eb8c39733e5a7772896e90b1b8144b8818242044bfa285dc29332708a",
+  "source_sha256": "612bea09bdbe22bc29de5779741f55dd112599247a01e8c29586b78a35d90db0",
   "output": "docs/ARIS_INTRO.html",
   "author": "Ruofeng Yang (杨若峰), Shanghai Jiao Tong University",
   "reviewer": "codex gpt-5.5 xhigh, fresh thread per run (never codex-reply)",
@@ -17,7 +17,9 @@
     "link_targets_absolute": "pass",
     "details_inner_markdown_rendered": "pass",
     "no_absolute_local_path_leak": "pass",
-    "author_byline_rendered": "pass"
+    "author_byline_rendered": "pass",
+    "per_workflow_schema_consistency": "pass",
+    "workflow_count_consistency": "pass"
   },
   "blocking_issues": [],
   "warnings": [],
@@ -27,7 +29,7 @@
       "verdict": "WARN",
       "thread_id": "019e3bfe-69de-7de1-8d64-7c70e3d19013",
       "issue": "<details><summary>Key safety features</summary> inner markdown bullets emitted as literal text",
-      "fix": "Added _render_html_block() in render_html.py — <details> blocks now recursively parse inner content as Markdown (GFM convention)"
+      "fix": "Added _render_html_block() in render_html.py — <details> blocks recursively parse inner content as Markdown (GFM convention)"
     },
     {
       "run": 2,
@@ -40,10 +42,38 @@
       "run": 3,
       "verdict": "PASS",
       "thread_id": "019e3c0d-7c4a-7b30-abd1-8df2aa9ad275",
-      "issue": "Privacy + byline pass — verified no absolute /Users/... path leaks, author byline renders correctly with CJK characters intact, SHA256 fingerprint retained for drift detection",
+      "issue": "Added privacy + byline pass — verified no absolute /Users/... path leaks, author byline renders with CJK characters intact",
       "fix": "Renderer: added _repo_relative() helper for display path; added --author flag + {{BYLINE_BLOCK}} placeholder; templates render byline between subtitle and meta strip"
+    },
+    {
+      "run": 4,
+      "verdict": "FAIL",
+      "thread_id": "019e3c17-a220-7f10-8237-ada07335a1e6",
+      "issue": "Expanded doc with 6 new workflow detail sections; FAIL because W2 lacked closing callout while other workflows had one; minor 'Six Workflows' vs 7 entries label inconsistency",
+      "fix": "Added W2 closing 🔁 callout; renamed section heading to 'The Workflows'"
+    },
+    {
+      "run": 5,
+      "verdict": "WARN",
+      "thread_id": "019e3c1c-0c52-7f02-8756-c92a0d251004",
+      "issue": "W2's new 🔁 callout rendered as plain <blockquote> not styled callout (emoji not in callout-prefix map); residual 'Six workflows'/'六大工作流' wording in TL;DR and CN section",
+      "fix": "Added 🔁 (+ 🌱 / 📚 / 🧬) to _CALLOUT_PREFIX_MAP in render_html.py; updated TL;DR + CN section to 'Seven workflows (W1/W1.5/W2/W3/W4/W5/W6)' / '七条工作流'"
+    },
+    {
+      "run": 6,
+      "verdict": "WARN",
+      "thread_id": "019e3c1f-3ccd-7b40-80ff-28d93a8b2408",
+      "issue": "One residual 'across all six workflows' phrase in Research Wiki bullet",
+      "fix": "Changed 'six' → 'seven' in Research Wiki bullet"
+    },
+    {
+      "run": 7,
+      "verdict": "PASS",
+      "thread_id": "019e3c20-e5fd-7872-baf2-7819a572cf03",
+      "issue": null,
+      "fix": null
     }
   ],
-  "summary": "Three-round review: WARN (details inner MD not parsed) → fix renderer → PASS → add author byline + privacy-clean repo-relative path → PASS again. 11 checks pass on run 3.",
+  "summary": "Seven-round review: WARN (details MD) → PASS → PASS (privacy+byline) → FAIL (W2 missing closing callout) → WARN (🔁 not styled, count drift) → WARN (one stale count phrase) → PASS. 13 checks pass on run 7. Each round generated a renderer or content fix; full audit trail above. Final source SHA256 612bea09bdbe.",
   "rendered_at": "2026-05-19"
 }
