@@ -113,6 +113,34 @@
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | MiniMax | `https://api.minimax.io/v1` | `MiniMax-M2.7` |
 
+### Codex OAuth 登录作为审查器
+
+如果你没有 OpenAI API key，但本机 `codex` 已经通过 ChatGPT/OAuth 登录，可以让 `llm-chat` 直接调用本地 Codex CLI：
+
+```bash
+codex login status
+```
+
+确认显示 `Logged in using ChatGPT` 后，在 MCP 配置中使用：
+
+```json
+{
+  "mcpServers": {
+    "llm-chat": {
+      "command": "/usr/bin/python3",
+      "args": ["/Users/yourname/.claude/mcp-servers/llm-chat/server.py"],
+      "env": {
+        "LLM_BACKEND": "codex-cli",
+        "LLM_MODEL": "gpt-5.5",
+        "CODEX_WORKDIR": "/path/to/your/project"
+      }
+    }
+  }
+}
+```
+
+这个模式不需要 `LLM_API_KEY`。它会通过 `codex exec --disable plugins --ephemeral --sandbox read-only` 获取最终回答，适合把已 OAuth 登录的 Codex 当作本地 reviewer 后端使用；默认禁用 Codex 插件以避免无关插件加载或 marketplace 同步失败影响 reviewer 调用。
+
 ---
 
 ## 完整配置示例
@@ -177,6 +205,8 @@ Claude Code 会自动：
 ### Q: 为什么不用 Codex MCP？
 
 Codex CLI 使用 OpenAI 的 **Responses API** (`/v1/responses`)，这个 API 只有 OpenAI 官方支持，第三方提供商（DeepSeek、MiniMax 等）都不支持。所以我们新建了 `llm-chat` MCP 服务器，使用标准的 **Chat Completions API** (`/v1/chat/completions`)，兼容所有 OpenAI-compatible API。
+
+如果目标是复用 ChatGPT/OAuth 登录，而不是第三方 OpenAI-compatible API，可以使用 `LLM_BACKEND=codex-cli`，它不走 HTTP API key，而是调用本机 `codex exec`。
 
 ### Q: GLM/Kimi/LongCat 能用吗？
 

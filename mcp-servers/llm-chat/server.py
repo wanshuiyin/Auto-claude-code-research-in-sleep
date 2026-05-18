@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
-"""Generic LLM Chat MCP Server - Supports any OpenAI-compatible API
+"""Generic LLM Chat MCP Server - Supports OpenAI-compatible APIs and Codex OAuth
 
 Environment Variables:
-    LLM_API_KEY         - API key (required)
+    LLM_BACKEND         - Backend to use: api, codex-cli, or auto (default: api)
+    LLM_API_KEY         - API key (required for api backend)
     LLM_BASE_URL        - API base URL (default: https://api.openai.com/v1)
     LLM_MODEL           - Model name (default: gpt-4o)
     LLM_FALLBACK_MODEL  - Fallback model on 504 timeout (default: gpt-4o)
     LLM_SERVER_NAME     - Server name for MCP (default: llm-chat)
+    CODEX_BIN           - Codex CLI binary for codex-cli backend (default: codex)
+    CODEX_WORKDIR       - Working directory for codex exec (default: current dir)
+    CODEX_TIMEOUT_SECS  - Timeout for codex exec calls (default: 600)
+    CODEX_DISABLE_PLUGINS - Disable Codex plugins for exec calls (default: 1)
 
 Supported Providers (examples):
     OpenAI:      LLM_BASE_URL=https://api.openai.com/v1 LLM_MODEL=gpt-4o
     DeepSeek:    LLM_BASE_URL=https://api.deepseek.com/v1 LLM_MODEL=deepseek-chat
     Kimi:        LLM_BASE_URL=https://api.moonshot.cn/v1 LLM_MODEL=moonshot-v1-32k
     MiniMax:     LLM_BASE_URL=https://api.minimax.io/v1 LLM_MODEL=MiniMax-M2.7
+    Codex OAuth: LLM_BACKEND=codex-cli LLM_MODEL=gpt-5.5
 """
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import httpx
@@ -28,9 +35,15 @@ sys.stdin = os.fdopen(sys.stdin.fileno(), 'rb', buffering=0)
 # Configuration from environment
 API_KEY = os.environ.get("LLM_API_KEY", "")
 BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
-DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
+MODEL_OVERRIDE = os.environ.get("LLM_MODEL", "")
+DEFAULT_MODEL = MODEL_OVERRIDE or "gpt-4o"
 FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", "gpt-4o")
 SERVER_NAME = os.environ.get("LLM_SERVER_NAME", "llm-chat")
+BACKEND = os.environ.get("LLM_BACKEND", "api").strip().lower()
+CODEX_BIN = os.environ.get("CODEX_BIN", "codex")
+CODEX_WORKDIR = os.environ.get("CODEX_WORKDIR", os.getcwd())
+CODEX_TIMEOUT_SECS = int(os.environ.get("CODEX_TIMEOUT_SECS", "600"))
+CODEX_DISABLE_PLUGINS = os.environ.get("CODEX_DISABLE_PLUGINS", "1").strip().lower() not in ("0", "false", "no")
 
 # Debug logging
 DEBUG_LOG = os.path.join(tempfile.gettempdir(), f"{SERVER_NAME}-mcp-debug.log")
@@ -57,8 +70,18 @@ debug_log(f"BASE_URL: {BASE_URL}")
 debug_log(f"MODEL: {DEFAULT_MODEL}")
 debug_log(f"FALLBACK_MODEL: {FALLBACK_MODEL}")
 debug_log(f"API_KEY set: {bool(API_KEY)}")
+debug_log(f"BACKEND: {BACKEND}")
+debug_log(f"CODEX_BIN: {CODEX_BIN}")
 
 _use_ndjson = False
+
+def resolve_backend():
+    """Return the effective backend for a request."""
+    if BACKEND in ("auto", ""):
+        return "api" if API_KEY else "codex-cli"
+    if BACKEND in ("codex", "codex-cli", "codex_cli"):
+        return "codex-cli"
+    return BACKEND
 
 def send_response(response):
     global _use_ndjson
@@ -74,10 +97,100 @@ def send_response(response):
     sys.stdout.write(output)
     sys.stdout.flush()
 
+def messages_to_prompt(messages):
+    """Convert chat messages into a plain prompt for command-line backends."""
+    chunks = []
+    for message in messages:
+        role = str(message.get("role", "user")).strip() or "user"
+        content = str(message.get("content", ""))
+        chunks.append(f"{role.upper()}:\n{content}")
+    return "\n\n".join(chunks).strip()
+
+def call_codex_cli(messages, model=None):
+    """Call local Codex CLI using the user's existing OAuth/API-key login."""
+    use_model = model or MODEL_OVERRIDE
+    prompt = messages_to_prompt(messages)
+    if not prompt:
+        return None, "Prompt is empty"
+
+    with tempfile.NamedTemporaryFile("w+", encoding="utf-8", delete=False) as output_file:
+        output_path = output_file.name
+
+    cmd = [
+        CODEX_BIN,
+        "exec",
+        "-C",
+        CODEX_WORKDIR,
+        "--skip-git-repo-check",
+        "--ephemeral",
+        "--color",
+        "never",
+        "--sandbox",
+        "read-only",
+        "--output-last-message",
+        output_path,
+        "-",
+    ]
+    if use_model:
+        cmd[2:2] = ["-m", use_model]
+    if CODEX_DISABLE_PLUGINS:
+        cmd[2:2] = ["--disable", "plugins"]
+
+    debug_log(f"Calling Codex CLI backend: model={use_model or '<codex-default>'}, workdir={CODEX_WORKDIR}")
+
+    try:
+        completed = subprocess.run(
+            cmd,
+            input=prompt,
+            text=True,
+            capture_output=True,
+            timeout=CODEX_TIMEOUT_SECS,
+            cwd=CODEX_WORKDIR if os.path.isdir(CODEX_WORKDIR) else None,
+        )
+
+        content = ""
+        try:
+            with open(output_path, "r", encoding="utf-8") as f:
+                content = f.read().strip()
+        except FileNotFoundError:
+            content = ""
+
+        if completed.returncode != 0:
+            stderr = (completed.stderr or completed.stdout or "").strip()
+            if not stderr:
+                stderr = f"codex exec exited with status {completed.returncode}"
+            return None, stderr[:1000]
+
+        if not content:
+            content = (completed.stdout or "").strip()
+
+        if not content:
+            return None, "codex exec completed but returned no final message"
+
+        debug_log(f"Codex CLI success, response length: {len(content)}")
+        return content, None
+    except FileNotFoundError:
+        return None, f"Codex CLI not found: {CODEX_BIN}"
+    except subprocess.TimeoutExpired:
+        return None, f"codex exec timed out after {CODEX_TIMEOUT_SECS}s"
+    except Exception as e:
+        return None, str(e)
+    finally:
+        try:
+            os.unlink(output_path)
+        except OSError:
+            pass
+
 def call_llm(messages, model=None):
     """Call LLM Chat Completions API with 504 retry and fallback"""
+    backend = resolve_backend()
+    if backend == "codex-cli":
+        return call_codex_cli(messages, model)
+    if backend != "api":
+        return None, f"Unsupported LLM_BACKEND: {BACKEND}"
+
     if not API_KEY:
-        return None, "LLM_API_KEY environment variable not set"
+        return None, "LLM_API_KEY environment variable not set. Set LLM_BACKEND=codex-cli to use an OAuth-authenticated local Codex CLI instead."
 
     use_model = model or DEFAULT_MODEL
     url = f"{BASE_URL.rstrip('/')}/chat/completions"
@@ -163,13 +276,15 @@ def handle_request(request):
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}
 
     elif method == "tools/list":
+        backend = resolve_backend()
+        model_label = MODEL_OVERRIDE or ("Codex config default" if backend == "codex-cli" else DEFAULT_MODEL)
         return {
             "jsonrpc": "2.0",
             "id": request_id,
             "result": {
                 "tools": [{
                     "name": "chat",
-                    "description": f"Send a message to {DEFAULT_MODEL} and get a response. Use this for research reviews, code analysis, and general AI tasks.",
+                    "description": f"Send a message to {model_label} via {backend} and get a response. Use this for research reviews, code analysis, and general AI tasks.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -179,7 +294,7 @@ def handle_request(request):
                             },
                             "model": {
                                 "type": "string",
-                                "description": f"Model to use (default: {DEFAULT_MODEL})"
+                                "description": f"Model to use (default: {model_label})"
                             },
                             "system": {
                                 "type": "string",
@@ -198,7 +313,7 @@ def handle_request(request):
 
         if tool_name == "chat":
             prompt = arguments.get("prompt", "")
-            model = arguments.get("model", DEFAULT_MODEL)
+            model = arguments.get("model")
             system = arguments.get("system", "")
 
             messages = []
