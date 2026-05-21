@@ -129,6 +129,42 @@ class LoopBudgetTest(unittest.TestCase):
         self.assertEqual(self._run("check", "--side", "claude").returncode, 0)
         self.assertEqual(self._run("check", "--side", "codex").returncode, 2)
 
+    def test_check_ignores_records_older_than_window(self):
+        os.environ["CLAUDE_LOOP_MAX_ITERATIONS"] = "2"
+        os.environ["CLAUDE_LOOP_WINDOW_HOURS"] = "5"
+        now = datetime.now(timezone.utc)
+        old = now - timedelta(hours=6)
+        self._write_records([
+            {"ts": self._iso(old), "side": "claude", "skill": "x"},
+            {"ts": self._iso(old), "side": "claude", "skill": "x"},
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+        ])
+        # Only 1 record falls within the 5h window; cap=2 → under.
+        self.assertEqual(self._run("check", "--side", "claude").returncode, 0)
+
+    def test_check_warns_at_threshold(self):
+        os.environ["CLAUDE_LOOP_MAX_ITERATIONS"] = "5"
+        os.environ["CLAUDE_LOOP_WARN_AT"] = "0.8"
+        now = datetime.now(timezone.utc)
+        self._write_records([
+            {"ts": self._iso(now), "side": "claude", "skill": "x"} for _ in range(4)
+        ])
+        out = self._run("check", "--side", "claude")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("warning", out.stderr.lower())
+        self.assertIn("80%", out.stderr)
+
+    def test_check_reports_reset_time_when_over_cap(self):
+        os.environ["CLAUDE_LOOP_MAX_ITERATIONS"] = "1"
+        os.environ["CLAUDE_LOOP_WINDOW_HOURS"] = "5"
+        ref = datetime.now(timezone.utc) - timedelta(hours=1)
+        self._write_records([{"ts": self._iso(ref), "side": "claude", "skill": "x"}])
+        out = self._run("check", "--side", "claude")
+        self.assertEqual(out.returncode, 2, out.stderr)
+        # Reset should be approx ref + 5h, i.e. ~4 hours from now.
+        # We just assert the message includes a "Next slot frees at" timestamp.
+        self.assertIn("Next slot frees at", out.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
