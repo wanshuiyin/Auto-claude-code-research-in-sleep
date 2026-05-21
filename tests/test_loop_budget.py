@@ -185,6 +185,31 @@ class LoopBudgetTest(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertIn("0/", out.stderr)
 
+    def test_status_prints_both_sides_and_exits_zero(self):
+        now = datetime.now(timezone.utc)
+        self._write_records([
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+            {"ts": self._iso(now), "side": "codex", "skill": "y"},
+            {"ts": self._iso(now), "side": "codex", "skill": "y"},
+        ])
+        out = self._run("status")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("claude", out.stdout)
+        self.assertIn("codex", out.stdout)
+        self.assertIn("1/", out.stdout)
+        self.assertIn("2/", out.stdout)
+
+    def test_status_with_no_state_shows_zero(self):
+        out = self._run("status")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("0/", out.stdout)
+
+    def test_aris_usage_dir_override_isolated_per_test(self):
+        # setUp pointed ARIS_USAGE_DIR at self.tmp; nothing should leak from $HOME.
+        self._run("record", "--side", "claude", "--skill", "x")
+        self.assertTrue((self.tmp / "loop-usage.jsonl").exists())
+        # And ~/.aris/usage/loop-usage.jsonl should NOT have been touched by this test.
+
 
 if __name__ == "__main__":
     unittest.main()

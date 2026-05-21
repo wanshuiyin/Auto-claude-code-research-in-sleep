@@ -131,6 +131,24 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_status(args: argparse.Namespace) -> int:
+    now = datetime.now(timezone.utc)
+    records = load_records(usage_path())
+    for side in SIDES:
+        cap, window_hours = _config_for(side)
+        in_window = filter_window(records, side, now, window_hours)
+        used = len(in_window)
+        pct = (used / cap * 100) if cap > 0 else 100
+        if in_window:
+            oldest = min(_parse_ts(r["ts"]) for r in in_window)
+            reset_local = (oldest + timedelta(hours=window_hours)).astimezone()
+            tail = f"next slot frees at {reset_local.strftime('%H:%M %Z').strip()}"
+        else:
+            tail = "plenty of headroom"
+        print(f"{side:8s}: {used}/{cap} in {window_hours}h window ({pct:.0f}%) — {tail}")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="loop_budget")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -143,6 +161,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_record.add_argument("--side", required=True, choices=SIDES)
     p_record.add_argument("--skill", required=True)
     p_record.set_defaults(func=cmd_record)
+
+    p_status = sub.add_parser("status", help="Print current usage per side.")
+    p_status.set_defaults(func=cmd_status)
 
     return parser
 
