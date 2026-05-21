@@ -140,8 +140,8 @@ class ParseClaudeJsonTests(unittest.TestCase):
         self.assertEqual(payload["result"], "recovered")
         self.assertEqual(payload["session_id"], "sess-noisy")
 
-    def test_noisy_stdout_with_array_line_no_result_falls_through(self) -> None:
-        """Noisy stdout + JSON-array line that has no result event continues scanning earlier lines."""
+    def test_noisy_stdout_with_array_line_no_result_surfaces_specific_diagnostic(self) -> None:
+        """Noisy stdout + JSON-array line with no result event: surface the specific 'array without result event' diagnostic (symmetry with the whole-stdout path)."""
         events_no_result = [_system_init_event(), _assistant_event()]
         stdout = (
             "warning: banner\n"
@@ -149,7 +149,7 @@ class ParseClaudeJsonTests(unittest.TestCase):
         )
         payload, err = MODULE.parse_claude_json(stdout)
         self.assertIsNone(payload)
-        self.assertEqual(err, "Claude CLI did not return JSON output")
+        self.assertEqual(err, "Claude CLI returned a JSON array without a 'result' event")
 
 
 def _completed_process(stdout: str, returncode: int = 0, stderr: str = "") -> subprocess.CompletedProcess:
