@@ -45,6 +45,39 @@ class LoopBudgetTest(unittest.TestCase):
         # Smoke test: import succeeds and module exposes `usage_path`.
         self.assertTrue(hasattr(self.mod, "usage_path"))
 
+    def _run(self, *args):
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *args],
+            capture_output=True, text=True, env={**os.environ},
+        )
+
+    def test_record_creates_state_dir_and_file(self):
+        out = self._run("record", "--side", "claude", "--skill", "auto-review-loop")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        state_file = self.tmp / "loop-usage.jsonl"
+        self.assertTrue(state_file.exists())
+        lines = state_file.read_text().strip().splitlines()
+        self.assertEqual(len(lines), 1)
+        rec = json.loads(lines[0])
+        self.assertEqual(rec["side"], "claude")
+        self.assertEqual(rec["skill"], "auto-review-loop")
+        # ts must parse as ISO-8601 UTC with Z suffix.
+        self.assertTrue(rec["ts"].endswith("Z"))
+        datetime.strptime(rec["ts"], "%Y-%m-%dT%H:%M:%SZ")
+
+    def test_record_appends_subsequent_calls(self):
+        self._run("record", "--side", "claude", "--skill", "auto-review-loop")
+        self._run("record", "--side", "codex", "--skill", "auto-review-loop-llm")
+        lines = (self.tmp / "loop-usage.jsonl").read_text().strip().splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(json.loads(lines[0])["side"], "claude")
+        self.assertEqual(json.loads(lines[1])["side"], "codex")
+
+    def test_record_rejects_unknown_side(self):
+        out = self._run("record", "--side", "bogus", "--skill", "x")
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("bogus", out.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
