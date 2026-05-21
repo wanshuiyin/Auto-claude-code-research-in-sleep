@@ -78,6 +78,57 @@ class LoopBudgetTest(unittest.TestCase):
         self.assertNotEqual(out.returncode, 0)
         self.assertIn("bogus", out.stderr)
 
+    def _write_records(self, recs):
+        """Write a list of dicts to the state file directly."""
+        path = self.tmp / "loop-usage.jsonl"
+        with path.open("w", encoding="utf-8") as fh:
+            for r in recs:
+                fh.write(json.dumps(r) + "\n")
+
+    @staticmethod
+    def _iso(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def test_check_empty_state_is_under_budget(self):
+        out = self._run("check", "--side", "claude")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("0/", out.stderr)
+
+    def test_check_exits_2_when_at_cap(self):
+        os.environ["CLAUDE_LOOP_MAX_ITERATIONS"] = "3"
+        now = datetime.now(timezone.utc)
+        self._write_records([
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+        ])
+        out = self._run("check", "--side", "claude")
+        self.assertEqual(out.returncode, 2, out.stderr)
+        self.assertIn("STOP", out.stderr)
+
+    def test_check_under_cap_when_one_short(self):
+        os.environ["CLAUDE_LOOP_MAX_ITERATIONS"] = "3"
+        now = datetime.now(timezone.utc)
+        self._write_records([
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+        ])
+        out = self._run("check", "--side", "claude")
+        self.assertEqual(out.returncode, 0, out.stderr)
+
+    def test_check_only_counts_matching_side(self):
+        os.environ["CLAUDE_LOOP_MAX_ITERATIONS"] = "2"
+        os.environ["CODEX_LOOP_MAX_ITERATIONS"] = "2"
+        now = datetime.now(timezone.utc)
+        self._write_records([
+            {"ts": self._iso(now), "side": "claude", "skill": "x"},
+            {"ts": self._iso(now), "side": "codex", "skill": "x"},
+            {"ts": self._iso(now), "side": "codex", "skill": "x"},
+        ])
+        # Claude side: 1/2, ok. Codex side: 2/2, over.
+        self.assertEqual(self._run("check", "--side", "claude").returncode, 0)
+        self.assertEqual(self._run("check", "--side", "codex").returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
