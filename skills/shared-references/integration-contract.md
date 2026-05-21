@@ -309,6 +309,7 @@ here first.
 | Helper (canonical name) | Policy | Rationale |
 |---|---|---|
 | `verify_paper_audits.sh` | A (gate) | Exit code is the source of truth for submission readiness |
+| `loop_budget.py` | A (gate) | Exit code is the gate for subscription quota; unresolved means the auto-review-loop cannot enforce its budget |
 | `save_trace.sh` | C (forensic) | Trace artifacts are load-bearing for audit traceability and reviewer-independence audit |
 | `research_wiki.py ingest_paper` (caller skills) | B (side-effect) | Primary output (idea ranking, paper summary) is delivered without wiki ingestion |
 | `research_wiki.py` (in `/research-wiki` itself) | A (gate) | The SKILL is the wiki tool; missing helper means no functionality (Variant A in `wiki-helper-resolution.md`) |
