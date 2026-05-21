@@ -165,6 +165,26 @@ class LoopBudgetTest(unittest.TestCase):
         # We just assert the message includes a "Next slot frees at" timestamp.
         self.assertIn("Next slot frees at", out.stderr)
 
+    def test_check_skips_unparseable_lines_without_crashing(self):
+        os.environ["CLAUDE_LOOP_MAX_ITERATIONS"] = "5"
+        now = datetime.now(timezone.utc)
+        path = self.tmp / "loop-usage.jsonl"
+        with path.open("w", encoding="utf-8") as fh:
+            fh.write("this is not json\n")
+            fh.write(json.dumps({"ts": self._iso(now), "side": "claude", "skill": "x"}) + "\n")
+            fh.write("\n")  # blank line
+            fh.write('{"ts": "garbage", "side": "claude"}\n')  # bad ts
+        out = self._run("check", "--side", "claude")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        # Should count only the one valid line.
+        self.assertIn("1/5", out.stderr)
+
+    def test_check_handles_missing_state_file(self):
+        # Setup left ARIS_USAGE_DIR pointing at a freshly-made empty dir.
+        out = self._run("check", "--side", "codex")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("0/", out.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()
