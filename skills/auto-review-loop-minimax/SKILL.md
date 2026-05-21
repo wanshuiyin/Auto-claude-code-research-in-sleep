@@ -111,7 +111,8 @@ LOOP_BUDGET_SCRIPT=".aris/tools/loop_budget.py"
 [ -f "$LOOP_BUDGET_SCRIPT" ] || LOOP_BUDGET_SCRIPT=""
 
 [ -n "$LOOP_BUDGET_SCRIPT" ] || {
-  echo "ERROR: loop_budget.py not resolved (Policy A — gate)." >&2
+  echo "ERROR: loop_budget.py not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "       The auto-review-loop guard cannot enforce subscription quota; aborting." >&2
   echo "       Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
   exit 1
 }

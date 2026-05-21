@@ -3,6 +3,10 @@
 This document describes how `auto-review-loop*` skills resolve `tools/loop_budget.py`.
 The pattern mirrors `wiki-helper-resolution.md` and `review-tracing.md`.
 
+See `shared-references/integration-contract.md` §2 for the canonical resolver chain
+and the per-helper Policy A (gate) classification, plus the "Known ARIS integrations"
+table row covering this guard.
+
 ## Resolver block
 
 Paste this into the skill's bash setup, then use `$LOOP_BUDGET_SCRIPT` thereafter.
