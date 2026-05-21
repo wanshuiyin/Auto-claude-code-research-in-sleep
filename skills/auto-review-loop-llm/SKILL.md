@@ -109,6 +109,44 @@ Persist state to `review-stage/REVIEW_STATE.json` after each round:
 2. Read project context and prior reviews
 3. Initialize round counter
 
+### Subscription Budget Guard
+
+Before entering the loop, resolve the budget helper and refuse to start if it
+cannot be found. See `skills/shared-references/loop-budget-resolution.md`.
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+LOOP_BUDGET_SCRIPT=".aris/tools/loop_budget.py"
+[ -f "$LOOP_BUDGET_SCRIPT" ] || LOOP_BUDGET_SCRIPT="tools/loop_budget.py"
+[ -f "$LOOP_BUDGET_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && LOOP_BUDGET_SCRIPT="$ARIS_REPO/tools/loop_budget.py"; }
+[ -f "$LOOP_BUDGET_SCRIPT" ] || LOOP_BUDGET_SCRIPT=""
+
+[ -n "$LOOP_BUDGET_SCRIPT" ] || {
+  echo "ERROR: loop_budget.py not resolved (Policy A — gate)." >&2
+  echo "       Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+  exit 1
+}
+```
+
+**Per-iteration usage (mandatory):**
+
+- **Before Phase A (reviewer call):** `python3 "$LOOP_BUDGET_SCRIPT" check --side codex` — if exit code is non-zero, persist round state to `review-stage/REVIEW_STATE.json` and stop the loop with the message the tool printed.
+- **After a successful reviewer call:** `python3 "$LOOP_BUDGET_SCRIPT" record --side codex --skill auto-review-loop-llm`.
+- **Before Phase C (executor implements fixes):** `python3 "$LOOP_BUDGET_SCRIPT" check --side claude` — same stop semantics.
+- **After a successful executor turn:** `python3 "$LOOP_BUDGET_SCRIPT" record --side claude --skill auto-review-loop-llm`.
+
+> **Reviewer-side note:** `auto-review-loop-llm` can target any
+> OpenAI-compatible reviewer, but for v1 the budget is always recorded as
+> `--side codex` regardless of backend. If you use a third-party
+> non-Codex-OAuth reviewer and want to disable that side's cap, set
+> `CODEX_LOOP_MAX_ITERATIONS=999999`.
+
+A stop here is a normal, expected outcome — not a failure. Run
+`python3 "$LOOP_BUDGET_SCRIPT" status` to see when the next slot frees.
+
 ### Loop (up to MAX_ROUNDS)
 
 #### Phase A: Review
