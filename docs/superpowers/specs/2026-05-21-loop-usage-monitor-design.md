@@ -18,17 +18,17 @@ The user runs auto-review-loop skills with Claude Opus 4.7 as executor (via Clau
 ## Components
 
 ```
-tools/loop_budget.py                                  ← new
-tools/install_aris.sh                                 ← edited: register LOOP_BUDGET_SCRIPT
-skills/shared-references/integration-contract.md     ← edited: add helper policy row
-skills/auto-review-loop/SKILL.md                      ← edited: pre-iter check + post-call record
-skills/auto-review-loop-llm/SKILL.md                  ← edited: same
-skills/auto-review-loop-minimax/SKILL.md              ← edited: same
-tests/test_loop_budget.py                             ← new
-~/.aris/usage/loop-usage.jsonl                        ← new (auto-created on first record)
+tools/loop_budget.py                                       ← new
+tests/test_loop_budget.py                                  ← new
+skills/shared-references/loop-budget-resolution.md         ← new (resolver doc for skills)
+skills/shared-references/integration-contract.md           ← edited: add Policy A row
+skills/auto-review-loop/SKILL.md                           ← edited: resolver + pre-iter check + post-call record
+skills/auto-review-loop-llm/SKILL.md                       ← edited: same
+skills/auto-review-loop-minimax/SKILL.md                   ← edited: same
+~/.aris/usage/loop-usage.jsonl                             ← new (auto-created at first record)
 ```
 
-No daemon, no provider API calls.
+No daemon, no provider API calls. **No edit to `install_aris.sh`** — that installer already symlinks `.aris/tools → <repo>/tools` as a directory (per `S12`), so any file added to `tools/` becomes resolvable in downstream projects automatically.
 
 ## `tools/loop_budget.py` — interface
 
@@ -91,13 +91,13 @@ Rationale for defaults: Claude cap is intentionally lower because executor turns
 
 ### Helper-resolution policy
 
-`loop_budget.py` is invoked from SKILL.md files, so per `skills/shared-references/integration-contract.md` it is in-scope for the per-helper policy table and must use the standard resolution chain (`${CLAUDE_SKILL_DIR}` → `.aris/tools/` → `tools/` → `$ARIS_REPO/tools/`), not hardcoded repo-root paths. Policy assignment: **Policy A (gate)** — the tool's exit code IS the gate; if it cannot be resolved, the loop must refuse to run rather than proceed unmonitored.
+`loop_budget.py` is invoked from three SKILL.md files, so per `skills/shared-references/integration-contract.md` it is in-scope for the per-helper policy table and must use the standard resolution chain (`.aris/tools/` → `tools/` → `$ARIS_REPO/tools/`), not hardcoded repo-root paths. Policy assignment: **Policy A (gate)** — the tool's exit code IS the gate; if it cannot be resolved, the loop must refuse to run rather than proceed unmonitored.
 
 The implementation must:
 
-1. Place the script at `tools/loop_budget.py` so legacy resolver layers find it.
+1. Place the script at `tools/loop_budget.py`. Because `install_aris.sh` symlinks `.aris/tools → tools` (rule `S12`), the first resolver layer auto-resolves in downstream projects with no installer change.
 2. Add a row to the per-helper policy table in `skills/shared-references/integration-contract.md` classifying it as Policy A with the rationale "Exit code is the gate for subscription quota; unresolved means the loop cannot enforce its budget."
-3. Register the resolver env var (e.g. `LOOP_BUDGET_SCRIPT`) in `tools/install_aris.sh` so the resolver chain populates it on install.
+3. Add a dedicated resolver doc at `skills/shared-references/loop-budget-resolution.md` (mirroring `wiki-helper-resolution.md` / `review-tracing.md`) so the three loop skills reference one place instead of duplicating the resolver block.
 
 ### Skill patch
 
