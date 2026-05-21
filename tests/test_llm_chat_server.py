@@ -170,6 +170,72 @@ class TestCallLlmSuccess(unittest.TestCase):
         self.assertIn("LLM_API_KEY", error)
 
 
+class TestCodexCliBackend(unittest.TestCase):
+    """Test the Codex CLI backend used for OAuth-authenticated Codex accounts."""
+
+    @patch("tests._llm_chat_helpers.BACKEND", "codex-cli")
+    @patch("tests._llm_chat_helpers.LLM_API_KEY", "")
+    @patch("tests._llm_chat_helpers.CODEX_BIN", "codex-test")
+    @patch("tests._llm_chat_helpers.CODEX_WORKDIR", "/tmp")
+    @patch("subprocess.run")
+    def test_codex_backend_works_without_api_key(self, mock_run):
+        """codex-cli backend should call codex exec and not require LLM_API_KEY."""
+
+        def run_side_effect(cmd, **kwargs):
+            output_path = cmd[cmd.index("--output-last-message") + 1]
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write("Codex reply")
+            completed = MagicMock()
+            completed.returncode = 0
+            completed.stdout = ""
+            completed.stderr = ""
+            return completed
+
+        mock_run.side_effect = run_side_effect
+
+        from tests._llm_chat_helpers import call_llm
+        content, error = call_llm(
+            [
+                {"role": "system", "content": "You are concise"},
+                {"role": "user", "content": "hello"},
+            ],
+            model="gpt-5.5",
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(content, "Codex reply")
+
+        cmd = mock_run.call_args[0][0]
+        self.assertEqual(cmd[:6], ["codex-test", "exec", "--disable", "plugins", "-m", "gpt-5.5"])
+        self.assertIn("--ephemeral", cmd)
+        self.assertIn("--output-last-message", cmd)
+        self.assertEqual(mock_run.call_args[1]["input"], "SYSTEM:\nYou are concise\n\nUSER:\nhello")
+
+    @patch("tests._llm_chat_helpers.BACKEND", "auto")
+    @patch("tests._llm_chat_helpers.LLM_API_KEY", "")
+    def test_auto_backend_uses_codex_when_api_key_missing(self):
+        """auto backend should fall back to codex-cli when no API key is configured."""
+        from tests._llm_chat_helpers import resolve_backend
+        self.assertEqual(resolve_backend(), "codex-cli")
+
+    @patch("tests._llm_chat_helpers.BACKEND", "codex-cli")
+    @patch("tests._llm_chat_helpers.CODEX_WORKDIR", "/tmp")
+    @patch("subprocess.run")
+    def test_codex_backend_surfaces_cli_errors(self, mock_run):
+        """Non-zero codex exec exits should be returned as tool errors."""
+        completed = MagicMock()
+        completed.returncode = 1
+        completed.stdout = ""
+        completed.stderr = "Not logged in"
+        mock_run.return_value = completed
+
+        from tests._llm_chat_helpers import call_llm
+        content, error = call_llm([{"role": "user", "content": "hello"}])
+
+        self.assertIsNone(content)
+        self.assertIn("Not logged in", error)
+
+
 class TestCallLlm504Retry(unittest.TestCase):
     """Test the 504 retry and fallback model logic in call_llm."""
 
