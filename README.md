@@ -1507,8 +1507,9 @@ bash ~/aris_repo/tools/install_aris.sh --dry-run        # show plan, no changes
 bash ~/aris_repo/tools/install_aris.sh --uninstall      # remove only managed symlinks (per manifest)
 bash ~/aris_repo/tools/install_aris.sh --from-old       # migrate from old nested .claude/skills/aris/
 
-# Windows (PowerShell, requires admin or developer mode for junctions):
-.\tools\install_aris.ps1 C:\path\to\your-paper-project
+# Windows (PowerShell, no WSL required; creates flat per-skill junctions):
+.\tools\install_aris.ps1 C:\path\to\your-paper-project -Platform claude
+.\tools\install_aris.ps1 C:\path\to\your-codex-project -Platform codex
 ```
 
 **Why "git pull" alone isn't enough for new/removed skills:** the flat layout uses one symlink per skill, so upstream additions/deletions don't propagate until the installer is re-run. The trade-off bought us Claude Code's automatic slash-command discovery (which only scans one directory level deep).

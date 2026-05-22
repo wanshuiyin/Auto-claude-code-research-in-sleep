@@ -1223,8 +1223,9 @@ bash ~/aris_repo/tools/install_aris.sh --dry-run        # 看计划，不写盘
 bash ~/aris_repo/tools/install_aris.sh --uninstall      # 按 manifest 卸载（不动你自己的 skill）
 bash ~/aris_repo/tools/install_aris.sh --from-old       # 从老的 .claude/skills/aris/ 嵌套布局迁移
 
-# Windows（PowerShell，需要管理员权限或开发者模式以创建 junction）：
-.\tools\install_aris.ps1 C:\path\to\your-paper-project
+# Windows（PowerShell，不需要 WSL；创建扁平的逐 skill junction）：
+.\tools\install_aris.ps1 C:\path\to\your-paper-project -Platform claude
+.\tools\install_aris.ps1 C:\path\to\your-codex-project -Platform codex
 ```
 
 **为什么 git pull 不能完全代替重跑安装器：** 扁平布局是每个 skill 一个 symlink，所以上游**新增/删除** skill 时，project 里要新增/移除对应的 symlink——这一步只能由安装器做。这个代价换来了 Claude Code 的自动 slash command 发现（CC 只扫一层目录）。
