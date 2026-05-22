@@ -453,7 +453,7 @@ skipping audits while claiming to have run them.
 
 #### Invoking the three audits
 
-Each sub-audit runs in a **fresh Codex thread** (never `codex-reply`,
+Each sub-audit runs in a **fresh Codex thread** (never a continuation reply,
 never pass prior audit output as context — this preserves reviewer
 independence per `shared-references/reviewer-independence.md`).
 

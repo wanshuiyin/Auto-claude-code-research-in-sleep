@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
+
+from tools.check_skills_inventory import check_inventory
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +19,7 @@ def skill_names(root: Path) -> set[str]:
 
 
 def read(path: Path) -> str:
-    return path.read_text()
+    return path.read_text(encoding="utf-8")
 
 
 def has_spawn_agent_block(text: str) -> bool:
@@ -30,8 +33,23 @@ def has_send_input_block(text: str) -> bool:
 def test_codex_skill_set_matches_mainline() -> None:
     main_names = skill_names(MAIN_SKILLS)
     codex_names = skill_names(CODEX_SKILLS)
-    assert len(main_names) == 67
+    assert len(main_names) == 76
     assert main_names == codex_names
+
+
+def test_skill_inventory_check_passes() -> None:
+    assert check_inventory() == []
+
+
+def test_skill_inventory_check_is_cli_runnable() -> None:
+    result = subprocess.run(
+        ["python", "tools/check_skills_inventory.py"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_codex_reviewer_contract_partition() -> None:
@@ -220,7 +238,7 @@ def test_codex_high_risk_skills_preserve_claude_semantics() -> None:
         "arxiv": [
             "Update Research Wiki",
             "integration-contract.md",
-            "export ARIS_REPO",
+            ".aris/installed-skills-codex.txt",
         ],
         "rebuttal": [
             "Review Tracing",
@@ -291,13 +309,13 @@ def test_codex_medium_risk_skills_preserve_claude_semantics() -> None:
 def test_codex_optional_helpers_are_guarded() -> None:
     checks = {
         "research-lit": [
-            'if [ -n "$DEEPXIV_SCRIPT" ]; then',
-            '[ -n "$EXA_SCRIPT" ] && python3 "$EXA_SCRIPT"',
+            'if [ -n "$DEEPXIV_FETCHER" ]; then',
+            'if [ -n "$EXA_FETCHER" ]; then',
             'echo "DeepXiv unavailable',
             'echo "Exa unavailable',
         ],
         "deepxiv": [
-            '[ -n "$SCRIPT" ] && python3 "$SCRIPT"',
+            '[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER"',
             "fall back to raw `deepxiv` commands",
         ],
     }

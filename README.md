@@ -1441,7 +1441,7 @@ scannable.
 | Patent drafting (CN / US / EP) | [`/patent-pipeline`](skills/patent-pipeline/SKILL.md) |
 | ARIS optimizes itself | [`/meta-optimize`](skills/meta-optimize/SKILL.md) |
 
-→ **[Browse all 74 skills by category in the full catalog →](docs/SKILLS_CATALOG.md)**
+→ **[Browse all 76 skills by category in the full catalog →](docs/SKILLS_CATALOG.md)**
 
 ---
 

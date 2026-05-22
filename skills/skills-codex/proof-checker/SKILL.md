@@ -388,7 +388,7 @@ Write `PROOF_CHECK_STATE.json`:
 - **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
 - **Codex reasoning always xhigh**: Never downgrade.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
-- **Preserve threadId**: Use `codex-reply` for follow-up rounds.
+- **Preserve threadId**: Use `send_input` for follow-up rounds.
 
 ### Fix quality
 - **Minimal fixes**: Fix exactly what's broken, nothing more.

@@ -1,0 +1,23 @@
+name: Skills inventory check
+
+on:
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'docs/SKILLS_CATALOG.md'
+      - 'tools/check_skills_inventory.py'
+      - 'tests/test_codex_skill_mirror.py'
+      - '.github/workflows/check-skills-inventory.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Check skill inventory drift
+        run: python tools/check_skills_inventory.py

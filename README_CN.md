@@ -1102,7 +1102,7 @@ README 可扫读。
 | 专利撰写（CN / US / EP） | [`/patent-pipeline`](skills/patent-pipeline/SKILL.md) |
 | ARIS 自我优化 | [`/meta-optimize`](skills/meta-optimize/SKILL.md) |
 
-→ **[按 category 浏览全部 74 个 skill →](docs/SKILLS_CATALOG.md)**
+→ **[按 category 浏览全部 76 个 skill →](docs/SKILLS_CATALOG.md)**
 
 ---
 

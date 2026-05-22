@@ -236,7 +236,7 @@ Same pattern as `/experiment-audit`:
 
 ## Key Rules
 
-- **Fresh thread EVERY run.** Never use `codex-reply`. Never carry context.
+- **Fresh thread EVERY run.** Never use a continuation reply. Never carry context.
 - **Zero executor interpretation.** Only file paths. No summaries.
 - **Only raw results.** No EXPERIMENT_LOG, no AUTO_REVIEW, no human summaries.
 - **Rounding rule.** Only standard rounding to displayed precision. 84.7% → 84.7% or 85% is OK. 84.7% → 85.3% is NOT OK.

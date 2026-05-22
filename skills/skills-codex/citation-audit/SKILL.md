@@ -39,7 +39,7 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 ## Constants
 
 - **REVIEWER_MODEL = `gpt-5.5`** — Used via Codex MCP. Default for cross-model review with web access.
-- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Never `codex-reply`.
+- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Continue only with `send_input` when explicitly resuming the same audit.
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
 - **STATE = `CITATION_AUDIT.json`** — Machine-readable verdict ledger consumable by downstream tools.
