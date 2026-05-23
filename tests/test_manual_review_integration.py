@@ -245,16 +245,16 @@ def main():
         payload = json.loads(content_text)
 
         assert "threadId" in payload, f"Missing threadId: {payload}"
-        assert "response" in payload, f"Missing response: {payload}"
-        assert payload["response"].strip() == REALISTIC_RESPONSE.strip(), \
-            f"Response mismatch! Lengths: sent={len(REALISTIC_RESPONSE)}, got={len(payload['response'])}"
+        assert "content" in payload, f"Missing content: {payload}"
+        assert payload["content"].strip() == REALISTIC_RESPONSE.strip(), \
+            f"Response mismatch! Lengths: sent={len(REALISTIC_RESPONSE)}, got={len(payload['content'])}"
         thread_id = payload["threadId"]
         print(f"    OK — threadId: {thread_id}")
-        print(f"    OK — response matches (first 80 chars): {payload['response'][:80]}...")
+        print(f"    OK — response matches (first 80 chars): {payload['content'][:80]}...")
 
         # --- Step 5: Verify skill can parse the response ---
         print("\n[5] Verifying skill-compatible parsing...")
-        response_text = payload["response"]
+        response_text = payload["content"]
 
         # Parse score (same regex pattern skills use)
         import re
@@ -313,7 +313,7 @@ Please re-score and re-assess. Has the paper improved?
         assert result2 is not None
         payload2 = json.loads(result2["result"]["content"][0]["text"])
         assert payload2["threadId"] == thread_id, "ThreadId should be preserved across rounds"
-        assert "7/10" in payload2["response"]
+        assert "7/10" in payload2["content"]
         print(f"    OK — Round 2 response received, same threadId preserved")
         print(f"    OK — Score improved: 6/10 → 7/10")
 

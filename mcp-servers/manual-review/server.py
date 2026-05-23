@@ -393,7 +393,7 @@ def handle_review(args: dict, request_id: Any) -> dict[str, Any]:
         return tool_error(request_id, error)
 
     append_exchange(thread_id, "assistant", response)
-    return tool_success(request_id, {"threadId": thread_id, "response": response})
+    return tool_success(request_id, {"threadId": thread_id, "content": response})
 
 
 def handle_review_reply(args: dict, request_id: Any) -> dict[str, Any]:
@@ -418,7 +418,7 @@ def handle_review_reply(args: dict, request_id: Any) -> dict[str, Any]:
         return tool_error(request_id, error)
 
     append_exchange(thread_id, "assistant", response)
-    return tool_success(request_id, {"threadId": thread_id, "response": response})
+    return tool_success(request_id, {"threadId": thread_id, "content": response})
 
 
 # --- MCP request router ---
