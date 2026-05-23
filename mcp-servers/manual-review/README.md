@@ -54,14 +54,17 @@ The server writes the prompt to `.aris/pending_review/prompt.md` and waits for y
 | `MANUAL_REVIEW_TIMEOUT_SEC` | `86400` (24h) | Max wait time for response |
 | `MANUAL_REVIEW_MODE` | `browser` | `browser` or `file` |
 | `MANUAL_REVIEW_AUTO_OPEN` | `true` | Auto-open browser on review |
+| `MANUAL_REVIEW_PORT` | `17900` | Fixed HTTP port (increments if occupied) |
 | `MANUAL_REVIEW_PENDING_DIR` | `.aris/pending_review` | Directory for state/prompt/response files |
 | `MANUAL_REVIEW_DEBUG_LOG` | (empty) | Debug log file path |
 
 ## Recovery
 
-If you accidentally close the browser tab:
-1. Check `.aris/pending_review/pending_review.json` for the URL
-2. Open that URL in any browser — the server is still running
+If you accidentally close the browser tab, simply reopen:
+```
+http://127.0.0.1:17900
+```
+The server uses a fixed port (default `17900`) so you always know where to find it. If that port was occupied, it tries `17901`, `17902`, etc. — check `.aris/pending_review/pending_review.json` for the exact URL in that case.
 
 ## Future Work
 
@@ -120,14 +123,17 @@ export MANUAL_REVIEW_MODE=file
 | `MANUAL_REVIEW_TIMEOUT_SEC` | `86400`（24h） | 最大等待时间 |
 | `MANUAL_REVIEW_MODE` | `browser` | `browser` 或 `file` |
 | `MANUAL_REVIEW_AUTO_OPEN` | `true` | 是否自动打开浏览器 |
+| `MANUAL_REVIEW_PORT` | `17900` | 固定 HTTP 端口（被占用时递增） |
 | `MANUAL_REVIEW_PENDING_DIR` | `.aris/pending_review` | 状态/提示词/回复文件目录 |
 | `MANUAL_REVIEW_DEBUG_LOG` | （空） | 调试日志文件路径 |
 
 ## 恢复
 
-如果不小心关闭了浏览器标签：
-1. 查看 `.aris/pending_review/pending_review.json` 获取 URL
-2. 在任意浏览器中打开该 URL — 服务器仍在运行
+如果不小心关闭了浏览器标签，直接重新打开：
+```
+http://127.0.0.1:17900
+```
+服务器使用固定端口（默认 `17900`），你始终知道在哪里找到它。如果该端口被占用，会尝试 `17901`、`17902` 等——此时查看 `.aris/pending_review/pending_review.json` 获取确切 URL。
 
 ## 后续计划
 

@@ -44,6 +44,8 @@ AUTO_OPEN = os.environ.get("MANUAL_REVIEW_AUTO_OPEN", "true").lower() in {"1", "
 PENDING_DIR = Path(os.environ.get("MANUAL_REVIEW_PENDING_DIR", ".aris/pending_review"))
 DEBUG_LOG_RAW = os.environ.get("MANUAL_REVIEW_DEBUG_LOG", "").strip()
 DEBUG_LOG = Path(DEBUG_LOG_RAW).expanduser() if DEBUG_LOG_RAW else None
+DEFAULT_PORT = int(os.environ.get("MANUAL_REVIEW_PORT", "17900"))
+MAX_PORT_ATTEMPTS = 10
 
 # File-mode stability: require content unchanged across two reads with this gap
 FILE_STABLE_INTERVAL_SEC = 3
@@ -253,9 +255,20 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
     global _current_session
     _current_session = _ReviewSession(prompt, config, thread_id, history)
 
-    server = socketserver.TCPServer(("127.0.0.1", 0), _ReviewHandler)
-    server.allow_reuse_address = True
-    port = server.server_address[1]
+    # Try fixed port, increment on conflict
+    server = None
+    port = DEFAULT_PORT
+    for attempt in range(MAX_PORT_ATTEMPTS):
+        try:
+            server = socketserver.TCPServer(("127.0.0.1", port), _ReviewHandler)
+            server.allow_reuse_address = True
+            break
+        except OSError:
+            port += 1
+    if server is None:
+        _current_session = None
+        return None, f"Could not bind to any port in range {DEFAULT_PORT}-{DEFAULT_PORT + MAX_PORT_ATTEMPTS - 1}"
+
     url = f"http://127.0.0.1:{port}"
 
     write_pending_state(url=url, thread_id=thread_id, prompt_file=None)
