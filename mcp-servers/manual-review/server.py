@@ -265,6 +265,7 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
         if _active_server is not None:
             try:
                 _active_server.shutdown()
+                _active_server.server_close()
             except Exception:
                 pass
             _active_server = None
@@ -311,6 +312,7 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
             break
 
     server.shutdown()
+    server.server_close()
     with _active_server_lock:
         _active_server = None
     clear_pending_state()
@@ -562,6 +564,7 @@ def _cancel_pending_call():
         if _active_server is not None:
             try:
                 _active_server.shutdown()
+                _active_server.server_close()  # actually release the socket/port
             except Exception:
                 pass
             _active_server = None
