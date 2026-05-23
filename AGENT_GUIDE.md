@@ -54,7 +54,7 @@ Controls whether mandatory audits gate the final report. `lite` / `balanced` def
 — venue: ICLR | NeurIPS | ICML | ...         # target venue
 — sources: web, zotero, deepxiv, exa, ...    # literature sources
 — gpu: local | remote | vast | modal         # GPU backend
-— reviewer: codex | oracle-pro               # reviewer routing
+— reviewer: codex | oracle-pro | manual      # reviewer routing
 ```
 
 ### Scoped flags (skill-specific)

@@ -91,3 +91,69 @@ If Oracle is not installed, `— reviewer: oracle-pro` gracefully falls back to 
 ### Upstream development & known issues
 
 Oracle MCP is maintained at [`steipete/oracle`](https://github.com/steipete/oracle). When you invoke `— reviewer: oracle-pro` (and especially the `o3-deep-research` / `gpt-5.5-pro` paths), it's worth checking the **[open PRs](https://github.com/steipete/oracle/pulls)** for in-flight fixes that may affect your run — e.g., model routing changes, browser-mode auth fixes, rate-limit handling, or new model alias support. ARIS does not vendor Oracle MCP; you're running the published version from `npm install -g @steipete/oracle`. If a behavior surprises you, the upstream PR queue is the first place to check before opening an issue here.
+
+## Optional: Manual Review (any model, zero API cost)
+
+When the user explicitly passes `— reviewer: manual`, route the review through the manual-review MCP server. Instead of calling an API, it opens a browser page (or writes a file on headless Linux) where the user copies the prompt to any model and pastes the response back.
+
+**Zero API cost. Works with any text-capable model.**
+
+### Routing Logic
+
+```
+Parse $ARGUMENTS for `— reviewer:` directive.
+
+If `— reviewer: manual`:
+    → Check if mcp__manual_review__review tool is available
+    → If available:
+        Use mcp__manual_review__review with:
+          prompt: [same prompt you would send to Codex]
+          config: {"model_reasoning_effort": "xhigh"}
+        For round 2+ in multi-round skills:
+          Use mcp__manual_review__review_reply with:
+            threadId: [saved from prior call]
+            prompt: [follow-up prompt]
+            config: {"model_reasoning_effort": "xhigh"}
+    → If NOT available:
+        Print: "⚠️ Manual Review MCP not installed. Falling back to Codex xhigh."
+        Use mcp__codex__codex as normal.
+```
+
+### Invariants
+
+- `— reviewer: manual` ONLY takes effect when explicitly passed
+- Prompt fidelity: the user sees the EXACT same prompt text that Codex would receive
+- `config.model_reasoning_effort` is shown as a recommendation badge, not embedded in the prompt
+- Thread continuity: `review_reply` shows previous exchanges so the user can maintain context in their chosen model
+- Reviewer independence protocol still applies
+
+### Thread continuity
+
+For round 2+ in multi-round skills (`/auto-review-loop`, `/proof-checker` Phase 3):
+- Use `mcp__manual_review__review_reply` with the saved `threadId`
+- The browser page displays previous prompt/response exchanges
+- The user should continue the conversation in the same model session for best results
+
+### Installation
+
+```bash
+claude mcp add manual-review -s user -- python3 /path/to/mcp-servers/manual-review/server.py
+```
+
+### Modes
+
+- **Browser mode** (default): opens a local web page on Windows/macOS/Linux desktop
+- **File mode** (`MANUAL_REVIEW_MODE=file`): writes prompt to `.aris/pending_review/prompt.md`, waits for `.aris/pending_review/response.md` — for headless/SSH environments
+
+### Skills That Support `— reviewer: manual`
+
+All skills that support `— reviewer: oracle-pro` also support `— reviewer: manual`.
+
+### NOT installed = ZERO impact
+
+If manual-review MCP is not installed, `— reviewer: manual` gracefully falls back to Codex. No error, no breakage, just a warning.
+
+### Future work
+
+- `mcp__manual_review__generate_image`: manual alternative to `codex-image2` for paper illustrations
+- Image review loop integration
