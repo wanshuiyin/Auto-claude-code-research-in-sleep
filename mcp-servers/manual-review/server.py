@@ -24,9 +24,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# --- stdio setup (must not be buffered, must be binary for MCP) ---
-sys.stdout = os.fdopen(sys.stdout.fileno(), "wb", buffering=0)
-sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
+# --- stdio setup (deferred to main() to allow safe import for testing) ---
+_stdio_initialized = False
+
+
+def _init_stdio():
+    global _stdio_initialized
+    if _stdio_initialized:
+        return
+    sys.stdout = os.fdopen(sys.stdout.fileno(), "wb", buffering=0)
+    sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
+    _stdio_initialized = True
 
 # --- Configuration ---
 SERVER_NAME = os.environ.get("MANUAL_REVIEW_SERVER_NAME", "manual-review")
@@ -499,6 +507,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 # --- Main loop ---
 
 def main() -> int:
+    _init_stdio()
     debug_log(f"Server starting: mode={MODE}, timeout={DEFAULT_TIMEOUT_SEC}s")
     while True:
         request = read_message()
