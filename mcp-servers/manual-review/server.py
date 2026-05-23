@@ -86,16 +86,20 @@ def load_ui_html() -> str:
 
 # --- MCP stdio transport ---
 
+_send_lock = threading.Lock()
+
+
 def send_response(response: dict[str, Any]) -> None:
     global _use_ndjson
     payload = json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     debug_log(f"SEND {payload.decode('utf-8', errors='replace')[:200]}")
-    if _use_ndjson:
-        sys.stdout.write(payload + b"\n")
-    else:
-        header = f"Content-Length: {len(payload)}\r\n\r\n".encode("utf-8")
-        sys.stdout.write(header + payload)
-    sys.stdout.flush()
+    with _send_lock:
+        if _use_ndjson:
+            sys.stdout.write(payload + b"\n")
+        else:
+            header = f"Content-Length: {len(payload)}\r\n\r\n".encode("utf-8")
+            sys.stdout.write(header + payload)
+        sys.stdout.flush()
 
 
 def read_message() -> dict[str, Any] | None:
@@ -190,6 +194,8 @@ class _ReviewSession:
 
 
 _current_session: _ReviewSession | None = None
+_active_server: socketserver.TCPServer | None = None
+_active_server_lock = threading.Lock()
 
 
 class _ReviewHandler(http.server.BaseHTTPRequestHandler):
@@ -252,22 +258,35 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
 
 
 def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history: list) -> tuple[str | None, str | None]:
-    global _current_session
-    _current_session = _ReviewSession(prompt, config, thread_id, history)
+    global _current_session, _active_server
+
+    # Cleanup any leftover server from a previous interrupted call
+    with _active_server_lock:
+        if _active_server is not None:
+            try:
+                _active_server.shutdown()
+            except Exception:
+                pass
+            _active_server = None
+        _current_session = _ReviewSession(prompt, config, thread_id, history)
 
     # Try fixed port, increment on conflict
     server = None
     port = DEFAULT_PORT
     for attempt in range(MAX_PORT_ATTEMPTS):
         try:
-            server = socketserver.TCPServer(("127.0.0.1", port), _ReviewHandler)
-            server.allow_reuse_address = True
+            socketserver.TCPServer.allow_reuse_address = True
+            srv = socketserver.TCPServer(("127.0.0.1", port), _ReviewHandler)
+            server = srv
             break
         except OSError:
             port += 1
     if server is None:
         _current_session = None
         return None, f"Could not bind to any port in range {DEFAULT_PORT}-{DEFAULT_PORT + MAX_PORT_ATTEMPTS - 1}"
+
+    with _active_server_lock:
+        _active_server = server
 
     url = f"http://127.0.0.1:{port}"
 
@@ -283,11 +302,20 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
         except Exception:
             pass
 
-    done = _current_session.done.wait(timeout=DEFAULT_TIMEOUT_SEC)
+    # Poll with short intervals so we can be cancelled if a new request arrives
+    deadline = time.monotonic() + DEFAULT_TIMEOUT_SEC
+    while time.monotonic() < deadline:
+        if _current_session.done.wait(timeout=1.0):
+            break
+        if _pending_call_cancelled.is_set():
+            break
+
     server.shutdown()
+    with _active_server_lock:
+        _active_server = None
     clear_pending_state()
 
-    if not done:
+    if not _current_session.done.is_set():
         _current_session = None
         return None, f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for manual review response"
 
@@ -517,15 +545,78 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-# --- Main loop ---
+# --- Main loop (non-blocking) ---
+
+# Pending blocking tool call state
+_pending_call_thread: threading.Thread | None = None
+_pending_call_cancelled = threading.Event()
+
+
+def _cancel_pending_call():
+    """Cancel any in-progress review call so the port is freed."""
+    global _pending_call_thread, _current_session, _active_server
+    _pending_call_cancelled.set()
+    if _current_session is not None:
+        _current_session.done.set()  # unblock the wait
+    with _active_server_lock:
+        if _active_server is not None:
+            try:
+                _active_server.shutdown()
+            except Exception:
+                pass
+            _active_server = None
+    if _pending_call_thread is not None:
+        _pending_call_thread.join(timeout=3)
+        _pending_call_thread = None
+    _pending_call_cancelled.clear()
+
+
+def _run_blocking_tool(handler, args, request_id):
+    """Run a blocking tool handler in background, send response when done."""
+    global _pending_call_thread
+    response = handler(args, request_id)
+    if not _pending_call_cancelled.is_set():
+        send_response(response)
+    _pending_call_thread = None
+
 
 def main() -> int:
+    global _pending_call_thread
     _init_stdio()
     debug_log(f"Server starting: mode={MODE}, timeout={DEFAULT_TIMEOUT_SEC}s")
     while True:
         request = read_message()
         if request is None:
             return 0
+
+        request_id = request.get("id")
+        method = request.get("method", "")
+        params = request.get("params", {})
+
+        # For tool calls that block (review, review_reply), run in background
+        if method == "tools/call":
+            name = params.get("name", "")
+            if name in ("review", "review_reply"):
+                # Cancel any previous pending call
+                if _pending_call_thread is not None and _pending_call_thread.is_alive():
+                    _cancel_pending_call()
+
+                args = params.get("arguments", {})
+                if not isinstance(args, dict):
+                    send_response(tool_error(request_id, "tool arguments must be an object"))
+                    continue
+
+                handler = handle_review if name == "review" else handle_review_reply
+                _pending_call_cancelled.clear()
+                _pending_call_thread = threading.Thread(
+                    target=_run_blocking_tool,
+                    args=(handler, args, request_id),
+                    daemon=True,
+                )
+                _pending_call_thread.start()
+                continue
+
+        # Non-blocking requests handled synchronously
         response = handle_request(request)
         if response is not None:
             send_response(response)
