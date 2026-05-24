@@ -220,6 +220,13 @@ function Build-Inventory {
             Write-Warning "skipping unsafe upstream name: $name"
             continue
         }
+        if (Test-LinkItem $dir) {
+            $resolved = Get-LinkTarget $dir.FullName
+            if (-not (Test-PathInside $resolved $Config.RepoRoot)) {
+                Write-Warning "skipping upstream link leading outside ARIS repo: $name -> $resolved"
+                continue
+            }
+        }
         $kind = $null
         if ($SupportNames -contains $name) {
             $kind = 'support'
@@ -545,13 +552,23 @@ function Ensure-ToolsJunction {
 }
 
 function Remove-ToolsJunction {
-    param([string]$ArisDir, [string]$RepoRoot)
+    param([string]$ArisDir, [string]$RepoRoot, [string]$CurrentManifestName = '')
     $linkPath = Join-Path $ArisDir 'tools'
     $expectedTarget = Join-Path $RepoRoot 'tools'
     $item = Get-PathItem $linkPath
     if (-not (Test-LinkItem $item)) { return }
     $currentTarget = Get-LinkTarget $linkPath
     if (-not (Same-Path $currentTarget $expectedTarget)) { return }
+    foreach ($manifestName in @('installed-skills.txt', 'installed-skills-codex.txt')) {
+        if ($manifestName -eq $CurrentManifestName) { continue }
+        $otherManifestPath = Join-Path $ArisDir $manifestName
+        if (-not (Test-Path -LiteralPath $otherManifestPath -PathType Leaf)) { continue }
+        $otherManifest = Load-Manifest $otherManifestPath
+        if ($otherManifest.Headers.ContainsKey('repo_root') -and (Same-Path $otherManifest.Headers['repo_root'] $RepoRoot)) {
+            Write-Host "  = .aris\tools (kept; $manifestName still uses this ARIS repo)"
+            return
+        }
+    }
     if ($DryRun) {
         Write-Host "  (dry-run) remove $linkPath"
     } else {
@@ -749,7 +766,7 @@ function Do-Uninstall {
             Write-Warning "skipping $($entry.Name); target changed to $currentTarget"
         }
     }
-    Remove-ToolsJunction (Split-Path -Parent $ManifestPath) $recordedRepo
+    Remove-ToolsJunction (Split-Path -Parent $ManifestPath) $recordedRepo $Config.ManifestName
     if (-not $DryRun) {
         Move-Item -LiteralPath $ManifestPath -Destination $ManifestPrevPath -Force
     }

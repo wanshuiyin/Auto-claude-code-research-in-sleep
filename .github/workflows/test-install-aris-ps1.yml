@@ -12,6 +12,12 @@ jobs:
   test:
     runs-on: windows-latest
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        powershell:
+          - powershell.exe
+          - pwsh
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,5 +25,7 @@ jobs:
           python-version: '3.x'
       - name: Install pytest
         run: python -m pip install pytest
-      - name: Run PowerShell installer tests
+      - name: Run installer tests with ${{ matrix.powershell }}
+        env:
+          ARIS_TEST_POWERSHELL: ${{ matrix.powershell }}
         run: python -m pytest tests/test_install_aris_ps1.py -q

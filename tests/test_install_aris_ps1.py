@@ -10,7 +10,16 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_PS1 = REPO_ROOT / "tools" / "install_aris.ps1"
-PS_EXE = shutil.which("pwsh") or shutil.which("powershell")
+
+
+def resolve_powershell() -> str | None:
+    override = os.environ.get("ARIS_TEST_POWERSHELL")
+    if override:
+        return shutil.which(override) or override
+    return shutil.which("pwsh") or shutil.which("powershell") or shutil.which("powershell.exe")
+
+
+PS_EXE = resolve_powershell()
 
 pytestmark = pytest.mark.skipif(
     os.name != "nt" or PS_EXE is None,
@@ -39,6 +48,11 @@ def ps_value(command: str) -> str:
         check=True,
     )
     return result.stdout.strip()
+
+
+def path_item_exists(path: Path) -> bool:
+    command = f"if (Get-Item -LiteralPath '{path}' -Force -ErrorAction SilentlyContinue) {{ 'true' }} else {{ 'false' }}"
+    return ps_value(command) == "true"
 
 
 def junction_target(path: Path) -> Path:
@@ -126,7 +140,7 @@ def test_install_aris_ps1_codex_apply_reconcile_and_uninstall(tmp_path: Path) ->
 
     run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-Reconcile"])
 
-    assert not (project / ".agents" / "skills" / "alpha").exists()
+    assert not path_item_exists(project / ".agents" / "skills" / "alpha")
     assert junction_target(project / ".agents" / "skills" / "gamma") == repo / "skills" / "skills-codex" / "gamma"
     assert (project / ".agents" / "skills" / "local-only").exists()
 
@@ -159,6 +173,40 @@ def test_install_aris_ps1_claude_uses_mainline_flat_junctions(tmp_path: Path) ->
     claude_text = (project / "CLAUDE.md").read_text(encoding="utf-8")
     assert ".claude/skills/<skill-name>" in claude_text
     assert ".claude/skills/aris" not in claude_text
+
+
+def test_install_aris_ps1_skips_upstream_junctions_outside_repo(tmp_path: Path) -> None:
+    repo = make_minimal_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    external = tmp_path / "external-source" / "escape"
+    make_skill(external, "# external escape\n")
+    make_junction(repo / "skills" / "skills-codex" / "escape", external)
+
+    result = run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo)])
+
+    assert "skipping upstream link leading outside ARIS repo" in result.stderr + result.stdout
+    assert not path_item_exists(project / ".agents" / "skills" / "escape")
+    assert "escape" not in (project / ".aris" / "installed-skills-codex.txt").read_text(encoding="utf-8")
+
+
+def test_install_aris_ps1_uninstall_keeps_tools_for_other_platform_manifest(tmp_path: Path) -> None:
+    repo = make_minimal_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+
+    run_ps([str(project), "-Platform", "claude", "-ArisRepo", str(repo)])
+    run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo)])
+
+    run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-Uninstall"])
+
+    assert junction_target(project / ".aris" / "tools") == repo / "tools"
+    assert (project / ".aris" / "installed-skills.txt").exists()
+    assert not (project / ".aris" / "installed-skills-codex.txt").exists()
+
+    run_ps([str(project), "-Platform", "claude", "-ArisRepo", str(repo), "-Uninstall"])
+
+    assert not path_item_exists(project / ".aris" / "tools")
 
 
 def test_install_aris_ps1_conflicts_stop_and_replace_link_relinks_junction(tmp_path: Path) -> None:
