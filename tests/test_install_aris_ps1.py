@@ -10,16 +10,17 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INSTALL_PS1 = REPO_ROOT / "tools" / "install_aris.ps1"
+PS_EXE = shutil.which("pwsh") or shutil.which("powershell")
 
 pytestmark = pytest.mark.skipif(
-    os.name != "nt" or shutil.which("powershell") is None,
+    os.name != "nt" or PS_EXE is None,
     reason="install_aris.ps1 manages Windows junctions via Windows PowerShell",
 )
 
 
 def run_ps(args: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(INSTALL_PS1), *args],
+        [PS_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(INSTALL_PS1), *args],
         cwd=REPO_ROOT,
         text=True,
         encoding="utf-8",
@@ -30,7 +31,7 @@ def run_ps(args: list[str], *, check: bool = True) -> subprocess.CompletedProces
 
 def ps_value(command: str) -> str:
     result = subprocess.run(
-        ["powershell", "-NoProfile", "-Command", command],
+        [PS_EXE, "-NoProfile", "-Command", command],
         cwd=REPO_ROOT,
         text=True,
         encoding="utf-8",
@@ -47,6 +48,15 @@ def junction_target(path: Path) -> Path:
 
 def junction_type(path: Path) -> str:
     return ps_value(f"(Get-Item -LiteralPath '{path}' -Force).LinkType")
+
+
+def make_junction(path: Path, target: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ps_value(f"New-Item -ItemType Junction -Path '{path}' -Target '{target}' | Out-Null")
+
+
+def remove_link(path: Path) -> None:
+    ps_value(f"[System.IO.Directory]::Delete('{path}', $false)")
 
 
 def make_skill(path: Path, body: str = "# skill\n") -> None:
@@ -67,6 +77,8 @@ def make_minimal_repo(root: Path) -> Path:
     (repo / "skills" / "skills-codex" / "shared-references" / "routing.md").write_text(
         "codex support\n", encoding="utf-8"
     )
+    (repo / "tools").mkdir(parents=True)
+    (repo / "tools" / "helper.py").write_text("# helper\n", encoding="utf-8")
     return repo
 
 
@@ -100,6 +112,8 @@ def test_install_aris_ps1_codex_apply_reconcile_and_uninstall(tmp_path: Path) ->
     assert junction_target(project / ".agents" / "skills" / "shared-references") == (
         repo / "skills" / "skills-codex" / "shared-references"
     )
+    assert junction_type(project / ".aris" / "tools") == "Junction"
+    assert junction_target(project / ".aris" / "tools") == repo / "tools"
     agents_text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "ARIS Codex Skill Scope" in agents_text
     assert ".agents/skills/<skill-name>" in agents_text
@@ -124,6 +138,7 @@ def test_install_aris_ps1_codex_apply_reconcile_and_uninstall(tmp_path: Path) ->
 
     assert (project / ".agents" / "skills" / "local-only").exists()
     assert not (project / ".agents" / "skills" / "beta").exists()
+    assert not (project / ".aris" / "tools").exists()
     assert not (project / ".aris" / "installed-skills-codex.txt").exists()
     assert (project / ".aris" / "installed-skills-codex.txt.prev").exists()
     assert "ARIS Codex Skill Scope" not in (project / "AGENTS.md").read_text(encoding="utf-8")
@@ -162,9 +177,7 @@ def test_install_aris_ps1_conflicts_stop_and_replace_link_relinks_junction(tmp_p
 
     shutil.rmtree(conflicting_real)
     wrong_target = repo / "skills" / "skills-codex" / "beta"
-    ps_value(
-        f"New-Item -ItemType Junction -Path '{conflicting_real}' -Target '{wrong_target}' | Out-Null"
-    )
+    make_junction(conflicting_real, wrong_target)
 
     result = run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo)], check=False)
     assert result.returncode != 0
@@ -172,6 +185,49 @@ def test_install_aris_ps1_conflicts_stop_and_replace_link_relinks_junction(tmp_p
 
     run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-ReplaceLink", "alpha"])
     assert junction_target(conflicting_real) == repo / "skills" / "skills-codex" / "alpha"
+
+
+def test_install_aris_ps1_manifest_retargeted_external_junction_conflicts(tmp_path: Path) -> None:
+    repo = make_minimal_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo)])
+
+    alpha_link = project / ".agents" / "skills" / "alpha"
+    external = tmp_path / "user-fork" / "alpha"
+    make_skill(external, "# user fork alpha\n")
+    remove_link(alpha_link)
+    make_junction(alpha_link, external)
+
+    result = run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-Reconcile"], check=False)
+    assert result.returncode != 0
+    assert "CONFLICT" in result.stderr + result.stdout
+    assert junction_target(alpha_link) == external
+
+    result = run_ps(
+        [str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-Reconcile", "-ReplaceLink", "alpha"],
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "CONFLICT" in result.stderr + result.stdout
+    assert junction_target(alpha_link) == external
+
+
+def test_install_aris_ps1_from_old_removes_nested_legacy_junction(tmp_path: Path) -> None:
+    repo = make_minimal_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    legacy = project / ".agents" / "skills" / "aris"
+    make_junction(legacy, repo / "skills" / "skills-codex")
+
+    result = run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo)], check=False)
+    assert result.returncode != 0
+    assert legacy.exists()
+
+    run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-FromOld"])
+
+    assert not legacy.exists()
+    assert junction_target(project / ".agents" / "skills" / "alpha") == repo / "skills" / "skills-codex" / "alpha"
 
 
 def test_install_aris_ps1_clear_stale_lock(tmp_path: Path) -> None:

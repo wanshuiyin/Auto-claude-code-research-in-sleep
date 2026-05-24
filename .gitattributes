@@ -1,3 +1,5 @@
+* text=auto eol=lf
+
 skills/paper-write/templates/* linguist-vendored
 skills/skills-codex/paper-write/templates/* linguist-vendored
 skills/skills-codex-claude-review/paper-write/templates/* linguist-vendored

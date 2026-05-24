@@ -30,6 +30,9 @@ param(
     [switch]$Reconcile,
     [switch]$Uninstall,
     [string[]]$ReplaceLink = @(),
+    [switch]$FromOld,
+    [ValidateSet('', 'keep-user', 'prefer-upstream')]
+    [string]$MigrateCopy = '',
     [switch]$ClearStaleLock,
 
     # Kept only to preserve CLI recognition. It is intentionally unsafe for
@@ -58,6 +61,17 @@ function Normalize-PathString {
 function Same-Path {
     param([string]$Left, [string]$Right)
     return [System.StringComparer]::OrdinalIgnoreCase.Equals((Normalize-PathString $Left), (Normalize-PathString $Right))
+}
+
+function Test-PathInside {
+    param([string]$Path, [string]$Root)
+    $normalizedPath = Normalize-PathString $Path
+    $normalizedRoot = Normalize-PathString $Root
+    if ([System.StringComparer]::OrdinalIgnoreCase.Equals($normalizedPath, $normalizedRoot)) {
+        return $true
+    }
+    $prefix = $normalizedRoot + [System.IO.Path]::DirectorySeparatorChar
+    return $normalizedPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
 function Read-Text {
@@ -155,10 +169,12 @@ function New-Config {
     if ($SelectedPlatform -eq 'claude') {
         return [pscustomobject]@{
             Platform = 'claude'
+            RepoRoot = $RepoRoot
             SourceRoot = Join-Path $RepoRoot 'skills'
             SourceRelPrefix = 'skills'
             TargetRel = '.claude\skills'
             TargetRelDisplay = '.claude/skills'
+            LegacyNestedRel = '.claude\skills\aris'
             ManifestName = 'installed-skills.txt'
             ManifestPrevName = 'installed-skills.txt.prev'
             LockName = '.install.lock.d'
@@ -170,10 +186,12 @@ function New-Config {
     }
     return [pscustomobject]@{
         Platform = 'codex'
+        RepoRoot = $RepoRoot
         SourceRoot = Join-Path $RepoRoot 'skills\skills-codex'
         SourceRelPrefix = 'skills/skills-codex'
         TargetRel = '.agents\skills'
         TargetRelDisplay = '.agents/skills'
+        LegacyNestedRel = '.agents\skills\aris'
         ManifestName = 'installed-skills-codex.txt'
         ManifestPrevName = 'installed-skills-codex.txt.prev'
         LockName = '.install-codex.lock.d'
@@ -293,7 +311,7 @@ function Compute-Plan {
             if (Same-Path $currentTarget $entry.ExpectedTarget) {
                 $action = $(if ($inManifest) { 'REUSE' } else { 'ADOPT' })
                 $extra = ''
-            } elseif ($inManifest -or (Test-NameInReplaceList $entry.Name)) {
+            } elseif (($inManifest -or (Test-NameInReplaceList $entry.Name)) -and (Test-PathInside $currentTarget $Config.RepoRoot)) {
                 $action = 'UPDATE_TARGET'
                 $extra = $currentTarget
             } else {
@@ -432,8 +450,118 @@ function Remove-LinkPath {
     [System.IO.Directory]::Delete($Path, $false)
 }
 
+function Get-LegacyState {
+    param($Config, [string]$ProjectRoot)
+    $path = Join-Path $ProjectRoot $Config.LegacyNestedRel
+    $item = Get-PathItem $path
+    if ($null -eq $item) {
+        return [pscustomobject]@{ Kind = 'none'; Path = $path; Target = '' }
+    }
+    if (Test-LinkItem $item) {
+        $target = Get-LinkTarget $path
+        if (Same-Path $target $Config.SourceRoot) {
+            return [pscustomobject]@{ Kind = 'link_to_repo'; Path = $path; Target = $target }
+        }
+        return [pscustomobject]@{ Kind = 'link_to_other'; Path = $path; Target = $target }
+    }
+    if ($item.PSIsContainer) {
+        return [pscustomobject]@{ Kind = 'real_dir'; Path = $path; Target = '' }
+    }
+    return [pscustomobject]@{ Kind = 'real_file'; Path = $path; Target = '' }
+}
+
+function Assert-LegacyMigrationAllowed {
+    param($Legacy)
+    if ($Legacy.Kind -eq 'none') { return }
+    if (-not $FromOld) {
+        Die "legacy nested install detected at $($Legacy.Path); rerun with -FromOld to migrate"
+    }
+    switch ($Legacy.Kind) {
+        'link_to_repo' { return }
+        'link_to_other' { Die "legacy nested link points outside expected ARIS source: $($Legacy.Path) -> $($Legacy.Target)" }
+        'real_file' { Die "legacy nested path is a real file; move it manually before installing: $($Legacy.Path)" }
+        'real_dir' {
+            if (-not $MigrateCopy) {
+                Die "legacy nested copy detected at $($Legacy.Path); pass -MigrateCopy keep-user or -MigrateCopy prefer-upstream"
+            }
+            return
+        }
+    }
+}
+
+function Apply-LegacyMigration {
+    param($Legacy, [string]$ArisDir)
+    if ($Legacy.Kind -eq 'none') { return }
+    if ($Legacy.Kind -eq 'link_to_repo') {
+        if ($DryRun) {
+            Write-Host "  (dry-run) remove legacy nested link $($Legacy.Path)"
+        } else {
+            Remove-LinkPath $Legacy.Path
+            Write-Host "  - legacy nested link"
+        }
+    }
+}
+
+function Archive-LegacyCopy {
+    param($Legacy, [string]$ArisDir)
+    if ($Legacy.Kind -ne 'real_dir' -or $MigrateCopy -ne 'prefer-upstream') { return }
+    if ($DryRun) {
+        Write-Host "  (dry-run) archive legacy nested copy $($Legacy.Path)"
+        return
+    }
+    New-Item -ItemType Directory -Force -Path $ArisDir | Out-Null
+    $stamp = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+    $archive = Join-Path $ArisDir "legacy-copy-backup-$stamp"
+    Move-Item -LiteralPath $Legacy.Path -Destination $archive
+    Write-Host "  - archived legacy nested copy to $archive"
+}
+
+function Ensure-ToolsJunction {
+    param([string]$ArisDir, [string]$RepoRoot)
+    $linkPath = Join-Path $ArisDir 'tools'
+    $expectedTarget = Join-Path $RepoRoot 'tools'
+    if (-not (Test-Path -LiteralPath $expectedTarget -PathType Container)) {
+        Write-Warning "ARIS tools directory not found: $expectedTarget"
+        return
+    }
+    $item = Get-PathItem $linkPath
+    if (Test-LinkItem $item) {
+        $currentTarget = Get-LinkTarget $linkPath
+        if (Same-Path $currentTarget $expectedTarget) { return }
+        Write-Warning ".aris\tools already points to $currentTarget; leaving it unchanged"
+        return
+    }
+    if ($null -ne $item) {
+        Write-Warning ".aris\tools already exists as a real path; leaving it unchanged"
+        return
+    }
+    if ($DryRun) {
+        Write-Host "  (dry-run) junction $linkPath -> $expectedTarget"
+        return
+    }
+    New-Item -ItemType Directory -Force -Path $ArisDir | Out-Null
+    New-Junction $linkPath $expectedTarget
+    Write-Host "  + .aris\tools"
+}
+
+function Remove-ToolsJunction {
+    param([string]$ArisDir, [string]$RepoRoot)
+    $linkPath = Join-Path $ArisDir 'tools'
+    $expectedTarget = Join-Path $RepoRoot 'tools'
+    $item = Get-PathItem $linkPath
+    if (-not (Test-LinkItem $item)) { return }
+    $currentTarget = Get-LinkTarget $linkPath
+    if (-not (Same-Path $currentTarget $expectedTarget)) { return }
+    if ($DryRun) {
+        Write-Host "  (dry-run) remove $linkPath"
+    } else {
+        Remove-LinkPath $linkPath
+        Write-Host "  - .aris\tools"
+    }
+}
+
 function Apply-Plan {
-    param($Plan)
+    param($Plan, [string]$RepoRoot)
     foreach ($entry in $Plan) {
         switch ($entry.Action) {
             'REUSE' { continue }
@@ -458,6 +586,9 @@ function Apply-Plan {
                 $currentTarget = Get-LinkTarget $entry.TargetPath
                 if (-not (Same-Path $currentTarget $entry.Extra)) {
                     Die "link target changed during install for $($entry.Name)"
+                }
+                if (-not (Test-PathInside $currentTarget $RepoRoot)) {
+                    Die "refusing to relink $($entry.Name); current target is outside ARIS repo: $currentTarget"
                 }
                 Remove-LinkPath $entry.TargetPath
                 New-Junction $entry.TargetPath $entry.ExpectedTarget
@@ -618,6 +749,7 @@ function Do-Uninstall {
             Write-Warning "skipping $($entry.Name); target changed to $currentTarget"
         }
     }
+    Remove-ToolsJunction (Split-Path -Parent $ManifestPath) $recordedRepo
     if (-not $DryRun) {
         Move-Item -LiteralPath $ManifestPath -Destination $ManifestPrevPath -Force
     }
@@ -665,6 +797,9 @@ function Invoke-Main {
         return
     }
 
+    $legacy = Get-LegacyState $config $projectRoot
+    Assert-LegacyMigrationAllowed $legacy
+
     if ($Reconcile -and -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
         Die "-Reconcile requires existing manifest; none found at $manifestPath"
     }
@@ -680,18 +815,24 @@ function Invoke-Main {
     }
 
     if ($DryRun) {
+        Apply-LegacyMigration $legacy $arisDir
+        Archive-LegacyCopy $legacy $arisDir
+        Ensure-ToolsJunction $arisDir $repoRoot
         Write-Host ''
         Write-Host '(dry-run) no changes made'
         return
     }
 
     Acquire-Lock $arisDir $lockPath
+    Apply-LegacyMigration $legacy $arisDir
     New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
     Write-Host ''
     Write-Host 'Applying:'
-    Apply-Plan $plan
+    Apply-Plan $plan $repoRoot
     $manifestContent = New-ManifestContent $plan $repoRoot $projectRoot $selectedPlatform
     Commit-Manifest $manifestPath $manifestPrevPath $manifestContent
+    Ensure-ToolsJunction $arisDir $repoRoot
+    Archive-LegacyCopy $legacy $arisDir
     $managedCount = @($plan | Where-Object { $_.Action -in @('REUSE', 'ADOPT', 'CREATE', 'UPDATE_TARGET') }).Count
     Update-ManagedDoc $config $docPath $repoRoot $projectRoot $managedCount
     Write-Host ''
