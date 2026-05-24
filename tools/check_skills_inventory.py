@@ -15,6 +15,8 @@ CATALOG = REPO_ROOT / "docs" / "SKILLS_CATALOG.md"
 README = REPO_ROOT / "README.md"
 README_CN = REPO_ROOT / "README_CN.md"
 AGENT_GUIDE = REPO_ROOT / "AGENT_GUIDE.md"
+ARIS_INTRO = REPO_ROOT / "docs" / "ARIS_INTRO.md"
+ARIS_INTRO_HTML = REPO_ROOT / "docs" / "ARIS_INTRO.html"
 CODEX_README = CODEX_ROOT / "README.md"
 CODEX_README_CN = CODEX_ROOT / "README_CN.md"
 BOM = b"\xef\xbb\xbf"
@@ -22,6 +24,8 @@ BOM = b"\xef\xbb\xbf"
 FORBIDDEN_CODEX_REVIEWER_STRINGS = (
     "mcp__codex__codex",
     "codex-reply",
+    "reviewer-continuation",
+    "threadId",
 )
 
 
@@ -74,6 +78,8 @@ def check_inventory() -> list[str]:
     readme = read(README)
     readme_cn = read(README_CN)
     agent_guide = read(AGENT_GUIDE)
+    aris_intro = read(ARIS_INTRO)
+    aris_intro_html = read(ARIS_INTRO_HTML)
     codex_readme = read(CODEX_README)
     codex_readme_cn = read(CODEX_README_CN)
 
@@ -85,6 +91,12 @@ def check_inventory() -> list[str]:
         (README_CN, readme_cn, r"📊\s+\*\*(?P<count>\d+) 个可组合 skill\*\*"),
         (README_CN, readme_cn, r"ARIS 现有 \*\*(?P<count>\d+)\+ 个 skill\*\*"),
         (AGENT_GUIDE, agent_guide, r"Full catalog.*?\*\*(?P<count>\d+) skills\*\*"),
+        (ARIS_INTRO, aris_intro, r"collection of \*\*(?P<count>\d+) composable Claude Code skills\*\*"),
+        (ARIS_INTRO, aris_intro, r"## The (?P<count>\d+) Skills"),
+        (ARIS_INTRO, aris_intro, r"一组 (?P<count>\d+) 个可组合的 Claude Code skills"),
+        (ARIS_INTRO_HTML, aris_intro_html, r"collection of <strong>(?P<count>\d+) composable Claude Code skills</strong>"),
+        (ARIS_INTRO_HTML, aris_intro_html, r'id="the-(?P<count>\d+)-skills"'),
+        (ARIS_INTRO_HTML, aris_intro_html, r"一组 (?P<count>\d+) 个可组合的 Claude Code skills"),
         (CODEX_README, codex_readme, r"all `(?P<count>\d+)` mainline skills"),
         (CODEX_README_CN, codex_readme_cn, r"`(?P<count>\d+)`[^\n]*skill"),
     ]

@@ -222,7 +222,7 @@ spawn_agent:
     [FULL PROOF CONTENT HERE]
 ```
 
-**Save the threadId.** Parse into structured issue list. Write to `PROOF_AUDIT.md`.
+**Save the reviewer `agent_id`.** Parse into structured issue list. Write to `PROOF_AUDIT.md`.
 
 ### Phase 1.5: Counterexample Red Team
 
@@ -360,7 +360,7 @@ Write `PROOF_CHECK_STATE.json`:
 {
   "status": "completed",
   "rounds": 2,
-  "threadId": "...",
+  "review_agent_ids": ["..."],
   "fatal_fixed": 0,
   "critical_fixed": 3,
   "major_fixed": 2,
@@ -388,7 +388,7 @@ Write `PROOF_CHECK_STATE.json`:
 - **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
 - **Codex reasoning always xhigh**: Never downgrade.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
-- **Preserve threadId**: Use `send_input` for follow-up rounds.
+- **Fresh reviewer agents**: Save each returned `agent_id` for traceability, but launch a new `spawn_agent` for each review round. Do not use `send_input` across proof-checker rounds.
 
 ### Fix quality
 - **Minimal fixes**: Fix exactly what's broken, nothing more.

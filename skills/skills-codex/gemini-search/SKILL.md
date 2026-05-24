@@ -27,7 +27,7 @@ Use Gemini when you want AI-driven discovery that goes beyond keyword matching �
 
 - **MAX_RESULTS = 15** — Target number of papers Gemini should find.
 - **MIN_YEAR = 2022** — Default minimum publication year. Override with `— year: 2020-`.
-- **DEFAULT_MODEL = gemini-3-pro-preview** — Strongest available Gemini option (Gemini 3 Pro). Requires `gemini-cli` v0.40+ and `mcp__gemini-cli__ask-gemini` accepting Gemini 3 aliases (verified). Override with `— model: gemini-3-flash-preview` (Gemini 3 Flash, faster, higher quota), `— model: auto-gemini-3` (auto-routes inside the Gemini 3 family by load), or `— model: gemini-2.5-pro` / `gemini-2.5-flash` (legacy, for users on older `gemini-cli` < v0.40). The MCP tool accepts all of these verbatim.
+- **DEFAULT_MODEL = auto-gemini-3** — Auto-routes within the Gemini 3 family (Pro / Flash) by server-side capacity. Required by `mcp__gemini-cli__ask-gemini` and `gemini-cli` v0.40+; explicit `gemini-3-pro-preview` can be silently downgraded to `gemini-2.5-pro` on OAuth-personal / Google One AI Pro accounts when capacity is exhausted. Override with `— model: gemini-3-flash-preview` (Gemini 3 Flash explicit, faster, higher quota), or `— model: gemini-2.5-pro` / `gemini-2.5-flash` (legacy, only for users on older `gemini-cli` < v0.40). The MCP tool accepts all of these verbatim.
 
 > Overrides (append to arguments):
 > - `/gemini-search "topic" — max: 20` — request up to 20 papers
@@ -132,7 +132,7 @@ Find at least MAX_RESULTS papers with good coverage across:
 - closely related variants of the topic
 
 Format as a numbered list with all fields for each paper.',
-  model: 'DEFAULT_MODEL'
+  model: 'auto-gemini-3'
 })
 ```
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import re
 import subprocess
 from pathlib import Path
@@ -50,6 +51,18 @@ def test_skill_inventory_check_is_cli_runnable() -> None:
         check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_codex_render_html_strips_bom_frontmatter() -> None:
+    script = CODEX_SKILLS / "render-html" / "scripts" / "render_html.py"
+    spec = importlib.util.spec_from_file_location("codex_render_html", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    markdown = "\ufeff---\ntitle: Draft\n---\n# Body\n"
+
+    assert module.strip_frontmatter(markdown) == "# Body\n"
 
 
 def test_codex_reviewer_contract_partition() -> None:
@@ -130,6 +143,15 @@ def test_non_degrading_skill_rules_are_documented() -> None:
     for name, needle in checks.items():
         text = read(CODEX_SKILLS / name / "SKILL.md")
         assert needle in text
+
+
+def test_codex_gemini_search_uses_auto_gemini_3_model() -> None:
+    text = read(CODEX_SKILLS / "gemini-search" / "SKILL.md")
+
+    assert "DEFAULT_MODEL = auto-gemini-3" in text
+    assert "model: 'auto-gemini-3'" in text
+    assert "DEFAULT_MODEL = gemini-3-pro-preview" not in text
+    assert "model: 'DEFAULT_MODEL'" not in text
 
 
 def test_codex_skill_helper_commands_use_installed_aris_repo() -> None:
