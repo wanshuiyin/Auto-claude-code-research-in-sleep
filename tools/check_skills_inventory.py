@@ -12,8 +12,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 SKILLS_ROOT = REPO_ROOT / "skills"
 CODEX_ROOT = SKILLS_ROOT / "skills-codex"
 CATALOG = REPO_ROOT / "docs" / "SKILLS_CATALOG.md"
+README = REPO_ROOT / "README.md"
+README_CN = REPO_ROOT / "README_CN.md"
+AGENT_GUIDE = REPO_ROOT / "AGENT_GUIDE.md"
 CODEX_README = CODEX_ROOT / "README.md"
 CODEX_README_CN = CODEX_ROOT / "README_CN.md"
+BOM = b"\xef\xbb\xbf"
 
 FORBIDDEN_CODEX_REVIEWER_STRINGS = (
     "mcp__codex__codex",
@@ -39,6 +43,17 @@ def require(condition: bool, message: str, failures: list[str]) -> None:
         failures.append(message)
 
 
+def require_count(path: Path, text: str, pattern: str, expected_count: int, failures: list[str]) -> None:
+    match = re.search(pattern, text)
+    rel = path.relative_to(REPO_ROOT)
+    if match is None:
+        failures.append(f"{rel} is missing live count pattern: {pattern}")
+        return
+    actual = int(match.group("count"))
+    if actual != expected_count:
+        failures.append(f"{rel} reports {actual} skills; expected {expected_count}")
+
+
 def check_inventory() -> list[str]:
     failures: list[str] = []
     main = skill_names(SKILLS_ROOT)
@@ -56,28 +71,29 @@ def check_inventory() -> list[str]:
     require(not extra_catalog, f"catalog entries without mainline skills: {', '.join(extra_catalog)}", failures)
 
     catalog_text = read(CATALOG)
+    readme = read(README)
+    readme_cn = read(README_CN)
+    agent_guide = read(AGENT_GUIDE)
     codex_readme = read(CODEX_README)
     codex_readme_cn = read(CODEX_README_CN)
-    codex_readme_cn_count = re.search(r"`(?P<count>\d+)`[^\n]*skill", codex_readme_cn)
 
     expected_count = len(main)
-    require(
-        f"**{expected_count} skills**" in catalog_text,
-        f"{CATALOG.relative_to(REPO_ROOT)} does not report {expected_count} skills",
-        failures,
-    )
-    require(
-        f"all `{expected_count}` mainline skills" in codex_readme,
-        f"{CODEX_README.relative_to(REPO_ROOT)} does not report {expected_count} mainline skills",
-        failures,
-    )
-    require(
-        codex_readme_cn_count is not None and int(codex_readme_cn_count.group("count")) == expected_count,
-        f"{CODEX_README_CN.relative_to(REPO_ROOT)} does not report {expected_count} mainline skills",
-        failures,
-    )
+    count_checks = [
+        (CATALOG, catalog_text, r"\*\*(?P<count>\d+) skills\*\*"),
+        (README, readme, r"📊\s+\*\*(?P<count>\d+) composable skills\*\*"),
+        (README, readme, r"ARIS ships \*\*(?P<count>\d+)\+ skills\*\*"),
+        (README_CN, readme_cn, r"📊\s+\*\*(?P<count>\d+) 个可组合 skill\*\*"),
+        (README_CN, readme_cn, r"ARIS 现有 \*\*(?P<count>\d+)\+ 个 skill\*\*"),
+        (AGENT_GUIDE, agent_guide, r"Full catalog.*?\*\*(?P<count>\d+) skills\*\*"),
+        (CODEX_README, codex_readme, r"all `(?P<count>\d+)` mainline skills"),
+        (CODEX_README_CN, codex_readme_cn, r"`(?P<count>\d+)`[^\n]*skill"),
+    ]
+    for path, text, pattern in count_checks:
+        require_count(path, text, pattern, expected_count, failures)
 
     for skill_file in sorted(CODEX_ROOT.glob("*/SKILL.md")):
+        if skill_file.read_bytes().startswith(BOM):
+            failures.append(f"{skill_file.relative_to(REPO_ROOT)} starts with UTF-8 BOM before frontmatter")
         text = read(skill_file)
         for forbidden in FORBIDDEN_CODEX_REVIEWER_STRINGS:
             if forbidden in text:

@@ -447,7 +447,7 @@ See [full setup guide](#setup) for details and [alternative model combinations](
 
 ## 4. ✨ Features
 
-- 📊 **74 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`). See [full catalog →](docs/SKILLS_CATALOG.md)
+- 📊 **76 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`). See [full catalog →](docs/SKILLS_CATALOG.md)
 - 🔍 **Literature & novelty** — multi-source paper search (**[Zotero](docs/integrations/ZOTERO.md)** + **[Obsidian](docs/integrations/OBSIDIAN.md)** + **local PDFs** + arXiv/Scholar) + cross-model novelty verification
 - 💡 **Idea discovery** — literature survey → brainstorm 8-12 ideas → novelty check → GPU pilot experiments → ranked report
 - 🔄 **Auto review loop** — 4-round autonomous review, 5/10 → 7.5/10 overnight with 20+ GPU experiments
@@ -1419,7 +1419,7 @@ export OPENAI_API_KEY="your-key"
 
 ## 9. 🧰 Skills Catalog
 
-ARIS ships **75+ skills** across literature, ideation, experiments, audit,
+ARIS ships **76+ skills** across literature, ideation, experiments, audit,
 writing, talks, patents, and meta-utilities. The full catalog (with role,
 category, and requirements per skill) lives in
 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)** to keep this README

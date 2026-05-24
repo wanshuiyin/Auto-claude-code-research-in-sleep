@@ -352,7 +352,7 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 
 ## ✨ 功能亮点
 
-- 📊 **74 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
+- 📊 **76 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
 - 🔍 **文献 & 查新** — 多源论文搜索（**[Zotero](docs/integrations/ZOTERO_CN.md)** + **[Obsidian](docs/integrations/OBSIDIAN_CN.md)** + **本地 PDF** + arXiv/Scholar）+ 跨模型查新验证
 - 💡 **Idea 发现** — 文献调研 → 头脑风暴 8-12 个 idea → 查新 → GPU pilot 实验 → 排名报告
 - 🔄 **自动 review 循环** — 4 轮自主审稿，一夜从 5/10 提升到 7.5/10，自动跑 20+ 组 GPU 实验
@@ -1080,7 +1080,7 @@ export OPENAI_API_KEY="your-key"         # API 模式（快）
 
 ## 🧰 Skills Catalog
 
-ARIS 现有 **74+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、
+ARIS 现有 **76+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、
 演讲、专利、meta 工具等。完整目录（每个 skill 含 role / category /
 依赖）在
 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)**，独立成文以保持

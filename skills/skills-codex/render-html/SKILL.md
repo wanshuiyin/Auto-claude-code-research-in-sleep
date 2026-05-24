@@ -1,4 +1,4 @@
-﻿---
+---
 name: render-html
 description: "Render an ARIS Markdown / JSON artifact (IDEA_REPORT, AUTO_REVIEW, KILL_ARGUMENT, PAPER_PLAN, research-wiki state, etc.) into a single-file HTML view designed for human reading. Academic template outputs are gated by a fresh cross-model Codex review for render fidelity + safety (the ARIS invariant). Use when the user says \"渲染 HTML\", \"出一份 HTML 报告\", \"render html\", \"make this readable\", \"export to html\", or wants a polished web-rendered view of a Markdown artifact. Markdown/JSON stays the canonical source; HTML is a generated, reviewed view."
 argument-hint: <input.md> [--template academic|dashboard] [--out <path>] [--title ...] [--state <state.json>] [--json <sidecar.json>] [--offline] [--review|--no-review]

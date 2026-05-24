@@ -5,6 +5,9 @@ on:
     paths:
       - 'skills/**'
       - 'docs/SKILLS_CATALOG.md'
+      - 'README.md'
+      - 'README_CN.md'
+      - 'AGENT_GUIDE.md'
       - 'tools/check_skills_inventory.py'
       - 'tests/test_codex_skill_mirror.py'
       - '.github/workflows/check-skills-inventory.yml'

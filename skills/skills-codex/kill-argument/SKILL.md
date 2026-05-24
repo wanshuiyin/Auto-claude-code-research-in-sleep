@@ -1,4 +1,4 @@
-﻿---
+---
 name: kill-argument
 description: "Two-thread adversarial review: a fresh reviewer constructs the strongest 200-word rejection memo, then a second fresh reviewer defends the paper point-by-point and surfaces still-unresolved critical issues. Use when user says \"kill argument\", \"adversarial review\", \"hostile review\", \"rebuttal preparation\", \"reviewer-2 simulation\", or before submitting a theory paper that has already passed standard review rounds."
 argument-hint: [paper-directory]
@@ -75,13 +75,12 @@ If a compiled PDF is missing, the skill should still run on .tex source alone, b
 
 ### Step 2: Attack memo (Thread 1, fresh codex)
 
-Invoke `spawn_agent` (NOT `reviewer-continuation`) with the following prompt structure:
+Invoke `spawn_agent` (NOT `send_input`) with the following prompt structure. Use absolute or paper-directory-relative paths inside the prompt; do not rely on a `cwd` parameter.
 
 ```
 spawn_agent:
   model: gpt-5.5
   reasoning_effort: xhigh
-  cwd: <paper directory>
   message: |
     You are simulating a hostile NeurIPS / ICLR / ICML reviewer for a paper.
     This is a kill-argument adversarial check — your task is NOT to give a
@@ -130,17 +129,16 @@ spawn_agent:
     Output: just the rejection memo, nothing else.
 ```
 
-Save the returned `threadId` for the trace; do NOT pass it to Thread 2.  Save the attack memo verbatim — both Thread 2 and the human-readable report use it.
+Save the returned `agent_id` for the trace; do NOT pass it to Thread 2.  Save the attack memo verbatim — both Thread 2 and the human-readable report use it.
 
 ### Step 3: Adjudication memo (Thread 2, fresh codex with attack + paper)
 
-Invoke a second `spawn_agent` call (still NOT `reviewer-continuation` — Thread 2 is independent of Thread 1's codex history):
+Invoke a second `spawn_agent` call (still NOT `send_input` — Thread 2 is independent of Thread 1's Codex agent history):
 
 ```
 spawn_agent:
   model: gpt-5.5
   reasoning_effort: xhigh
-  cwd: <paper directory>
   message: |
     You are an independent area-chair adjudicator examining whether the
     current paper text answers a hostile reviewer's rejection memo.
@@ -211,7 +209,7 @@ spawn_agent:
       behalf.
 ```
 
-Save the returned `threadId`.
+Save the returned `agent_id`.
 
 ### Step 4: Write KILL_ARGUMENT.md and KILL_ARGUMENT.json
 
@@ -221,9 +219,9 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: gpt-5.5 xhigh, fresh threads (no reviewer-continuation)
-**Attack thread**: <threadId 1>
-**Adjudicator thread**: <threadId 2>
+**Reviewer model**: gpt-5.5 xhigh, fresh agents (no send_input)
+**Attack agent**: <agent_id 1>
+**Adjudicator agent**: <agent_id 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
 
 ## Net assessment
@@ -266,13 +264,13 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
     "main.pdf":                          "sha256:<...>"
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
-  "thread_id": "<defense threadId — primary; attack threadId in details>",
+  "agent_id": "<defense agent_id — primary; attack agent_id in details>",
   "reviewer_model": "gpt-5.5",
   "reviewer_reasoning": "xhigh",
   "generated_at": "<UTC ISO-8601>",
   "details": {
-    "attack_thread_id": "<threadId 1>",
-    "defense_thread_id": "<threadId 2 — same as top-level thread_id>",
+    "attack_agent_id": "<agent_id 1>",
+    "defense_agent_id": "<agent_id 2 — same as top-level agent_id>",
     "attack_memo": "<verbatim>",
     "decomposed_points": [
       {
@@ -360,7 +358,7 @@ To the user:
 
 ## Key Rules
 
-- **Fresh thread per call.**  Both Attack and Adjudication use `spawn_agent`, never `reviewer-continuation`.  Thread 1 and Thread 2 must not share codex context.
+- **Fresh agent per call.**  Both Attack and Adjudication use `spawn_agent`, never `send_input`.  Thread 1 and Thread 2 must not share Codex context.
 - **Zero prior context.**  Neither thread receives prior round reviews, fix lists, executor summaries, or improvement-loop logs.
 - **Attack must commit.**  Single argument, ~200 words.  No "consider also" hedge.  The whole value is in forcing the reviewer to pick the most damaging line.
 - **Adjudicator must classify, not minimize.**  `still_unresolved` is honest if the paper has no effective response.  Don't downgrade to `partially_answered` unless evidence is real.
