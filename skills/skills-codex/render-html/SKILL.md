@@ -140,7 +140,7 @@ So:
 - `--template dashboard` → no review by default. Force with `--review`.
 - Phase 2 workflow auto-emit (planned) follows the same rule.
 
-**If `should_review` is true**, fire a fresh `spawn_agent` thread (NEVER `reviewer-continuation`) with the prompt below. The reviewer reads the source MD + generated HTML directly; it does **not** see this skill's intermediate state.
+**If `should_review` is true**, fire a fresh `spawn_agent` call (NEVER `send_input`) with the prompt below. The reviewer reads the source MD + generated HTML directly; it does **not** see this skill's intermediate state.
 
 **Scope of review (narrow on purpose).** The HTML reviewer audits **render fidelity / safety / structure only** — not claim truthfulness. Claim audit belongs upstream (`/paper-claim-audit`, `/research-review`, `/result-to-claim`). Specifically the reviewer checks:
 
@@ -150,7 +150,7 @@ So:
 4. **Safety / escaping** — no raw `<script>` / `onclick=` / `javascript:` / unreplaced placeholders / template-leak survives
 5. **Expected-difference allowance** — frontmatter strip, generated header/footer/meta, TOC insert, sanitized unsafe HTML are all expected, not flagged
 
-**Codex prompt (mandatory shape).** Send this as a fresh thread (`spawn_agent`, NOT `reviewer-continuation`):
+**Codex prompt (mandatory shape).** Send this as a fresh reviewer call (`spawn_agent`, NOT `send_input`):
 
 ```
 You are an independent ARIS HTML render auditor. This is a fresh review thread.

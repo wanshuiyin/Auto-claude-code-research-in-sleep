@@ -114,7 +114,7 @@ Verdict: PASS = all pass, WARN = at most cosmetic issues (length slight off / co
 
 ### Step 4 — Fix and loop (no hard cap — judge by trajectory)
 
-For each FAIL issue, edit the MD. Then re-invoke codex with a **fresh thread** (never reuse threadId). Stop when verdict = PASS or WARN with no FAIL items.
+For each FAIL issue, edit the MD. Then re-invoke Codex with a **fresh `spawn_agent` call** (never continue with `send_input`). Stop when verdict = PASS or WARN with no FAIL items.
 
 **No hard round cap.** Use these heuristics instead:
 
@@ -210,7 +210,7 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 | Invariant | How it's enforced |
 |---|---|
 | Executor != reviewer family | Claude drafts; gpt-5.5 reviews (math/code stage); gpt-5.5 reviews again (render stage) |
-| Fresh thread per reviewer call | Step 3 + render's own gate both use `spawn_agent` not `reviewer-continuation` |
+| Fresh agent per reviewer call | Step 3 + render's own gate both use fresh `spawn_agent` calls, not `send_input` |
 | Codex reasoning = xhigh | Hardcoded in Step 3 reviewer config |
 | Personal info redaction | Both math/code reviewer and render reviewer check; banlist in style guide |
 | Lessons-learned encoded | Table-pipe + callout-list collision rules in style guide AND review checks 5+6 |

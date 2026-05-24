@@ -38,7 +38,7 @@ manually) — do not run `/slides-polish` for that.
 
 - **REVIEWER_MODEL = `gpt-5.5`** — Codex MCP model for per-page review. xhigh reasoning is non-negotiable (see `../shared-references/effort-contract.md`). `gpt-5.4` is acceptable when the user has no `gpt-5.5` access; `gpt-5.5` is preferred for visual nuance.
 - **REVIEWER_REASONING = `xhigh`** — Hard invariant; the effort knob does **not** change this.
-- **CONTEXT_POLICY = `fresh`** — Each per-page review uses a **fresh** Codex thread (`spawn_agent`, never `reviewer-continuation`). See `../shared-references/reviewer-independence.md`. This prevents the reviewer from anchoring on prior fixes.
+- **CONTEXT_POLICY = `fresh`** — Each per-page review uses a **fresh** Codex reviewer call (`spawn_agent`, never `send_input`). See `../shared-references/reviewer-independence.md`. This prevents the reviewer from anchoring on prior fixes.
 - **REFERENCE_VISUAL** — Path to a PDF the user wants the polished deck to **align with** in visual weight (typography proportion, color discipline, callout density). Required input. If polishing PPTX only, the **Beamer compile of the same talk** is the ideal reference. If no reference exists yet, ask the user; do not silently default to "Why-RF" or any preset.
 - **STYLE_PRESET = `generic`** — Default style anchor. Other options: `why-rf` (academic-minimalist, derived from a 2025 academic talk), `neurips`, `icml`, `iclr`, `cvpr`. Presets influence color discipline + element library; the **reference PDF is the visual ground truth**, not the preset.
 - **PPTX_SCALE_HINT = `1.6×`** — Heuristic multiplier from Beamer point sizes to PPTX point sizes for matched visual weight on 13.33"×7.5" PowerPoint at 16:9. Range 1.5-1.8×. The actual scale is **always** validated by visual review, never blindly applied.
@@ -500,7 +500,7 @@ These are non-negotiable:
 3. **Speaker notes are preserved verbatim.** Every PPTX edit must preserve `slide.notes_slide` content. Phase 4.4 verifies this byte-for-byte against the snapshot.
 4. **No content edits.** No new claims, numbers, citations, URLs, author names, affiliations, or experiment results. No equation or figure-content changes. No paraphrasing of body text — only style/typography/box edits. If a Codex fix proposal would change content, the skill stops and reports it.
 5. **No slide reordering, addition, or deletion** unless the user passes an explicit flag (`— add-slide-K-after-J`, `— drop-slide-K`).
-6. **Cross-model independence**: per-page Codex calls are fresh threads, not `reviewer-continuation`. Reviewer never sees prior fix lists. See `reviewer-independence.md`.
+6. **Cross-model independence**: per-page Codex calls are fresh `spawn_agent` calls, not `send_input`. Reviewer never sees prior fix lists. See `reviewer-independence.md`.
 7. **Anonymity placeholders fail closed.** If a Codex fix proposes filling in a real title, count, or URL where a placeholder was, the skill rejects it and surfaces the proposal for human review. See `experiment-integrity.md`.
 8. **Page numbers stay ≤ 16pt.** Why-RF discipline; never bump them.
 9. **`reasoning_effort: xhigh`** is invariant across all `effort` levels.
@@ -512,7 +512,7 @@ After each per-page Codex call, save the trace following
 `../shared-references/review-tracing.md`. Per-call file under
 `.aris/slides-polish/<stem>/traces/slide_KK.json` with:
 
-- Codex `threadId`
+- Codex `agent_id`
 - prompt (verbatim)
 - response (verbatim)
 - applied diff summary (list of shape edits with before/after sizes/bboxes)
