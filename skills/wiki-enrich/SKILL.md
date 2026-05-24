@@ -11,22 +11,22 @@ Target: **$ARGUMENTS**
 
 ## Why this skill exists
 
-`ingest_paper` (called by `/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) only renders the per-paper scaffold — frontmatter + abstract + 12 `_TODO._` placeholder sections. No downstream skill in ARIS fills those sections; the wiki sits as TODO until someone reads each paper.
+`ingest_paper` (called by `/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) only renders the per-paper scaffold — frontmatter + abstract + **10 fillable** `_TODO._` placeholder sections (plus two protected sections: `## Connections` is graph-summary and `## Abstract (original)` is auto-populated when `--arxiv-id` is given). No downstream skill in ARIS fills those 10 sections; the wiki sits as TODO until someone reads each paper.
 
 This contradicts the Karpathy LLM-wiki design (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
 
 > "You never (or rarely) write the wiki yourself — the LLM writes and maintains all of it. … The tedious part of maintaining a knowledge base is not the reading or the thinking — it's the bookkeeping. … LLMs don't get bored, don't forget to update a cross-reference, and can touch 15 files in one pass."
 
-`/wiki-enrich` is the missing back half of `ingest_paper`: it reads each scaffolded paper page, fetches paper content from external sources (alphaxiv overview → deepxiv brief → arXiv abstract), and rewrites the 12 TODO sections into 1-3 sentence prose summaries.
+`/wiki-enrich` is the missing back half of `ingest_paper`: it reads each scaffolded paper page, fetches paper content from external sources via a graceful fallback chain (see Phase 2.3 for the full 5-source chain), and rewrites the 10 fillable TODO sections into 1-3 sentence prose summaries.
 
 ## Constants
 
 - **WIKI_ROOT = `research-wiki/`** — Resolved relative to git root. Skill hard-fails if not a directory.
 - **TARGET_DEFAULT = `missing`** — When no target is given, enrich only papers with ≥1 TODO section. Other targets: `<slug>` (one paper) or `all` (every paper, even ones already enriched — usually combined with `--force` to overwrite).
-- **SOURCE_DEFAULT = `auto`** — Fetch order: alphaxiv overview → deepxiv brief → arXiv API abstract. First non-empty wins. Override with `--source` to pin one source.
+- **SOURCE_DEFAULT = `auto`** — Fetch order: alphaxiv overview → alphaxiv abs → deepxiv brief → arXiv API abstract → page abstract fallback. First non-empty wins (full chain documented in Phase 2.3 table). Override with `--source` to pin one source.
 - **MAX_PAPERS = 20** — Hard cap per invocation; LLMs touch many files but token budgets are real. Override with `--max N`.
-- **FORCE = false** — When `false` (default), skip sections that already have non-TODO content. When `true`, overwrite every section except `## Connections` (always auto-generated from edges.jsonl, never written by hand).
-- **SECTIONS_TO_FILL** — The 12 sections `ingest_paper` scaffolds:
+- **FORCE = false** — When `false` (default), skip sections that already have non-TODO content. When `true`, overwrite every fillable section, but **never** touch the two protected sections: `## Connections` (auto-generated from `edges.jsonl`) and `## Abstract (original)` (immutable arXiv-fetched source data).
+- **SECTIONS_TO_FILL** — 10 fillable sections + 2 protected. `ingest_paper` (`research_wiki.py:436-473`) scaffolds 11 section headers unconditionally and a 12th — `## Abstract (original)` — only when arXiv returns an abstract for the given `--arxiv-id` (`research_wiki.py:469-473`). Of these, 10 carry a `_TODO._` (or `_TODO: fill in after reading._`) marker and need filling. The other 2 — `## Connections` (position 10 in the enumeration below) and `## Abstract (original)` (position 12, conditional) — are protected by construction: `Connections` is auto-generated from `graph/edges.jsonl`, `Abstract (original)` is immutable source data from the arXiv API. This skill writes to the 10, never the 2.
   1. `One-line thesis` (marker: `_TODO: fill in after reading._`)
   2. `Problem / Gap` (marker: `_TODO._`)
   3. `Method` (marker: `_TODO._`)
@@ -79,7 +79,7 @@ case "$TARGET" in
     ;;
   missing|"")
     # only papers with at least one TODO marker line
-    PAPERS=( $(grep -lE "^_TODO(\._?|: fill in after reading\.)$" research-wiki/papers/*.md 2>/dev/null) )
+    PAPERS=( $(grep -lE "^_TODO(\._?|: fill in after reading\._?)$" research-wiki/papers/*.md 2>/dev/null) )
     ;;
   *)
     P="research-wiki/papers/${TARGET}.md"
@@ -97,11 +97,19 @@ If the candidate list is empty, print `"✓ Nothing to enrich."` and exit 0. Do 
 
 Iterate **one paper at a time**. For each `$PAPER` in `$PAPERS`:
 
-**Step 2.1 — Read the page.** Use the `Read` tool on the full file. Extract from the YAML frontmatter:
+**Step 2.1 — Read the page and project context.** Use the `Read` tool on the full paper file. Extract from the YAML frontmatter:
 - `node_id` (e.g. `paper:vllm`) — slug = part after `paper:`
 - `arxiv` from `external_ids.arxiv` — empty string if absent
 - `title`
 - existing `## Abstract (original)` blockquote (if present) — fallback content source
+
+Additionally, on the FIRST paper of the batch (cache for the rest), read project-context files needed for the `Claims` and `Relevance to This Project` sections:
+- `research-wiki/graph/edges.jsonl` — scan for `claim:` edges pointing to the current paper's `node_id`
+- `RESEARCH_BRIEF.md` (project root) — if present, source for project goals
+- `CLAUDE.md` (project root) — if present, fallback for project context
+- `research-wiki/gap_map.md` — if non-empty, source for gap framing
+
+If none of the project-context files exist, the `Relevance to This Project` section will be filled with the literal "context not yet set" line (see Step 2.4 table).
 
 **Step 2.2 — Identify which sections are TODO.**
 
@@ -123,8 +131,9 @@ The fetch chain runs **in order** until one returns usable content (>200 chars o
 | 1 | **alphaxiv overview** (`auto` default; `--source alphaxiv` to pin) | `WebFetch https://alphaxiv.org/overview/<arxiv_id>.md` — LLM-optimized summary, often best for filling sections |
 | 2 | **alphaxiv abs** (fallback within alphaxiv) | `WebFetch https://alphaxiv.org/abs/<arxiv_id>.md` |
 | 3 | **deepxiv brief** (`--source deepxiv` to pin) | `python3 "$DEEPXIV_FETCHER" paper-brief <arxiv_id>` if helper resolves |
-| 4 | **arXiv API abstract** (`--source arxiv` to pin, also final fallback) | Already in the page body under `## Abstract (original)`; or `curl http://export.arxiv.org/api/query?id_list=<arxiv_id>` |
-| — | **No arxiv id + no abstract** | Skip this paper, log `"skip: <slug> (no arxiv id, no abstract)"`, continue |
+| 4 | **arXiv API abstract — fresh fetch** (`--source arxiv` to pin) | `curl http://export.arxiv.org/api/query?id_list=<arxiv_id>` — log label: `arxiv-api-abstract` |
+| 5 | **Page abstract — fallback** (last resort) | Reuse the existing `## Abstract (original)` blockquote already present in the page body from a prior `ingest_paper` run — log label: `page-abstract-fallback` |
+| — | **No arxiv id + no page abstract** | Skip this paper, log `"skip: <slug> (no arxiv id, no abstract)"`, continue |
 
 When trying alphaxiv: if WebFetch returns 404 / "Paper not found" / a redirect to the homepage, treat as miss and fall through.
 
@@ -151,8 +160,8 @@ Write each TODO section's body following these rules:
 | Limitations / Failure Modes | 1-3 bullets | Honest | What the paper explicitly admits OR what's structurally absent (e.g. "no multi-node evaluation", "assumes uniform request length") |
 | Reusable Ingredients | 1-3 bullets | Concrete | Techniques / datasets / insights from this paper that could be ported elsewhere. **Highest value for `/idea-creator` — write carefully.** |
 | Open Questions | 1-2 bullets | Question form | What the paper does NOT answer but raises |
-| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write `_No claims tracked yet — populate via `/result-to-claim`._`. Else list claim node IDs. |
-| Relevance to This Project | 1-2 sentences | Project-contextual | Use `RESEARCH_BRIEF.md` / `CLAUDE.md` / `gap_map.md` to phrase the connection. If no project context, write `_Project context not yet set — populate `RESEARCH_BRIEF.md` or `gap_map.md` to enable this section._` and report. |
+| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write the literal italic line: `_No claims tracked yet — populate via /result-to-claim._`. Else list claim node IDs. |
+| Relevance to This Project | 1-2 sentences | Project-contextual | Use `RESEARCH_BRIEF.md` / `CLAUDE.md` / `gap_map.md` to phrase the connection. If no project context, write the literal italic line: `_Project context not yet set — populate RESEARCH_BRIEF.md or gap_map.md to enable this section._` and report. |
 
 **Rules** (Karpathy fidelity):
 - **Faithful to source.** If the paper doesn't say it, don't invent it. Prefer `_Not stated in source._` over hallucination.
@@ -185,7 +194,7 @@ _TODO._
 python3 "$WIKI_SCRIPT" log research-wiki/ "wiki-enrich: enriched paper:<slug> from <source> (filled N/M sections)"
 ```
 
-Record which source provided content (`alphaxiv-overview`, `alphaxiv-abs`, `deepxiv-brief`, `arxiv-abstract`, or `page-abstract-fallback`) so the audit trail is honest about provenance.
+Record which source provided content (`alphaxiv-overview`, `alphaxiv-abs`, `deepxiv-brief`, `arxiv-api-abstract`, or `page-abstract-fallback`) so the audit trail is honest about provenance.
 
 ### Phase 3: Final report
 
@@ -203,10 +212,10 @@ Source breakdown:
   alphaxiv-overview: A
   alphaxiv-abs:      B
   deepxiv-brief:     C
-  arxiv-abstract:    D
-  page-fallback:     E
+  arxiv-api-abstract:     D
+  page-abstract-fallback: E
 
-Re-ideation suggestion: <if ≥5 papers were enriched, recommend `/research-wiki query "topic"` to rebuild query_pack, then `/idea-creator` so the freshly-filled `Reusable Ingredients` get used.>
+Re-ideation suggestion: <if ≥5 papers were enriched, recommend `/idea-creator "topic"` so the freshly-filled `Reusable Ingredients` and `Limitations` feed brainstorming. `query_pack.md` is already rebuilt below — the user does NOT need to call `/research-wiki query` manually.>
 ```
 
 Also rebuild `query_pack.md` once at the end (single `python3 "$WIKI_SCRIPT" rebuild_query_pack research-wiki/` call) so `/idea-creator` sees the new bodies on its next run.
@@ -214,7 +223,7 @@ Also rebuild `query_pack.md` once at the end (single `python3 "$WIKI_SCRIPT" reb
 ## Output Protocols
 
 > Follow the shared protocols:
-> - **[Output Manifest Protocol](../shared-references/output-manifest.md)** — `MANIFEST.md` gets one line per enriched paper (stage: `review` is wrong here; use `wiki-enrich`).
+> - **No `MANIFEST.md` entry.** This skill edits existing scaffolded pages in place rather than generating new artifacts. The audit trail lives in `research-wiki/log.md` (Step 2.6), with provenance per paper. Adding a `wiki-enrich` stage to `shared-references/output-manifest.md` is out of scope for this PR.
 > - **[Output Language Protocol](../shared-references/output-language.md)** — respect the project's language setting.
 
 ## Key Rules
