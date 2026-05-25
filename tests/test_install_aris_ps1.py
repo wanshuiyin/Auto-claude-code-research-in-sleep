@@ -190,6 +190,23 @@ def test_install_aris_ps1_skips_upstream_junctions_outside_repo(tmp_path: Path) 
     assert "escape" not in (project / ".aris" / "installed-skills-codex.txt").read_text(encoding="utf-8")
 
 
+def test_install_aris_ps1_skips_upstream_source_root_junction_outside_repo(tmp_path: Path) -> None:
+    repo = make_minimal_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    codex_root = repo / "skills" / "skills-codex"
+    external_root = tmp_path / "external-source"
+    make_skill(external_root / "escape", "# external escape\n")
+    shutil.rmtree(codex_root)
+    make_junction(codex_root, external_root)
+
+    result = run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo)], check=False)
+
+    assert result.returncode != 0
+    assert "skipping upstream link leading outside ARIS repo" in result.stderr + result.stdout
+    assert not path_item_exists(project / ".agents" / "skills" / "escape")
+
+
 def test_install_aris_ps1_replace_link_rejects_indirect_external_target(tmp_path: Path) -> None:
     repo = make_minimal_repo(tmp_path)
     project = tmp_path / "project"
@@ -209,6 +226,28 @@ def test_install_aris_ps1_replace_link_rejects_indirect_external_target(tmp_path
     assert result.returncode != 0
     assert "CONFLICT" in result.stderr + result.stdout
     assert junction_target(alpha_link) == repo / "skills" / "skills-codex" / "beta"
+
+
+def test_install_aris_ps1_manifest_retargeted_external_parent_junction_conflicts(tmp_path: Path) -> None:
+    repo = make_minimal_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo)])
+
+    external_root = tmp_path / "user-fork"
+    make_skill(external_root / "alpha", "# user fork alpha\n")
+    alias = repo / "skills" / "skills-codex" / "alias"
+    make_junction(alias, external_root)
+    apparent_external = alias / "alpha"
+    alpha_link = project / ".agents" / "skills" / "alpha"
+    remove_link(alpha_link)
+    make_junction(alpha_link, apparent_external)
+
+    result = run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-Reconcile"], check=False)
+
+    assert result.returncode != 0
+    assert "CONFLICT" in result.stderr + result.stdout
+    assert junction_target(alpha_link) == apparent_external
 
 
 def test_install_aris_ps1_uninstall_keeps_tools_for_other_platform_manifest(tmp_path: Path) -> None:

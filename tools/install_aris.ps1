@@ -74,25 +74,77 @@ function Test-PathInside {
     return $normalizedPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Join-PathSegments {
+    param([string]$Root, [string[]]$Segments)
+    $path = $Root
+    foreach ($segment in $Segments) {
+        if ([string]::IsNullOrEmpty($path)) {
+            $path = $segment
+        } else {
+            $path = Join-Path $path $segment
+        }
+    }
+    return $path
+}
+
+function Get-PathSegments {
+    param([string]$Path)
+    $full = [System.IO.Path]::GetFullPath($Path)
+    $root = [System.IO.Path]::GetPathRoot($full)
+    if (-not $root) {
+        $root = ''
+    }
+    $rest = $full.Substring($root.Length).TrimEnd([char[]]@('\', '/'))
+    [string[]]$segments = @()
+    if ($rest) {
+        $segments = @($rest -split '[\\/]' | Where-Object { $_ -ne '' })
+    }
+    return [pscustomobject]@{
+        Root = $root
+        Segments = $segments
+    }
+}
+
 function Resolve-ReparseChain {
     param([string]$Path)
-    $current = Normalize-PathString $Path
-    $seen = @{}
+    $current = [System.IO.Path]::GetFullPath($Path)
+    $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
     for ($depth = 0; $depth -lt 40; $depth++) {
-        $key = $current.ToLowerInvariant()
-        if ($seen.ContainsKey($key)) {
+        $normalizedCurrent = Normalize-PathString $current
+        if (-not $seen.Add($normalizedCurrent)) {
             Die "reparse point cycle detected while resolving: $Path"
         }
-        $seen[$key] = $true
-        $item = Get-PathItem $current
-        if (-not (Test-LinkItem $item)) {
-            return $current
+        $parts = Get-PathSegments $current
+        $candidate = $parts.Root
+        $rewrote = $false
+        for ($index = 0; $index -lt $parts.Segments.Count; $index++) {
+            if ([string]::IsNullOrEmpty($candidate)) {
+                $candidate = $parts.Segments[$index]
+            } else {
+                $candidate = Join-Path $candidate $parts.Segments[$index]
+            }
+            $item = Get-PathItem $candidate
+            if ($null -eq $item) {
+                return $normalizedCurrent
+            }
+            if (-not (Test-LinkItem $item)) {
+                continue
+            }
+            $target = Get-LinkTarget $candidate
+            if (-not $target) {
+                return $normalizedCurrent
+            }
+            [string[]]$remaining = @()
+            if (($index + 1) -lt $parts.Segments.Count) {
+                $remaining = @($parts.Segments[($index + 1)..($parts.Segments.Count - 1)])
+            }
+            $current = Join-PathSegments $target $remaining
+            $rewrote = $true
+            break
         }
-        $target = Get-LinkTarget $current
-        if (-not $target) {
-            return $current
+        if (-not $rewrote) {
+            return $normalizedCurrent
         }
-        $current = Normalize-PathString $target
     }
     Die "reparse point chain too deep while resolving: $Path"
 }
@@ -242,18 +294,17 @@ function Build-Inventory {
     }
 
     $entries = New-Object System.Collections.Generic.List[object]
+    $resolvedRepoRoot = Resolve-ReparseChain $Config.RepoRoot
     foreach ($dir in Get-ChildItem -LiteralPath $Config.SourceRoot -Directory | Sort-Object Name) {
         $name = $dir.Name
         if (-not (Test-SafeName $name)) {
             Write-Warning "skipping unsafe upstream name: $name"
             continue
         }
-        if (Test-LinkItem $dir) {
-            $resolved = Resolve-ReparseChain $dir.FullName
-            if (-not (Test-ResolvedPathInside $resolved $Config.RepoRoot)) {
-                Write-Warning "skipping upstream link leading outside ARIS repo: $name -> $resolved"
-                continue
-            }
+        $resolved = Resolve-ReparseChain $dir.FullName
+        if (-not (Test-PathInside $resolved $resolvedRepoRoot)) {
+            Write-Warning "skipping upstream link leading outside ARIS repo: $name -> $resolved"
+            continue
         }
         $kind = $null
         if ($SupportNames -contains $name) {
