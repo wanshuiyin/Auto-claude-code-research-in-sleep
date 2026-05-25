@@ -72,7 +72,7 @@ Scan project directory for:
 
 Based on the selected reviewer backend (see Reviewer Calling Convention), pass ONLY file paths and the audit checklist to the reviewer. The reviewer reads everything directly.
 
-For `codex` backend:
+For `codex` backend (`model`, `sandbox`, `cwd` are Codex-only parameters):
 
 ```
 mcp__codex__codex:
@@ -82,6 +82,11 @@ mcp__codex__codex:
   cwd: [project directory]
   prompt: |
     You are an experiment integrity auditor. Read ALL files listed below
+```
+
+For `manual` backend: use `mcp__manual_review__review` with `config: {"model_reasoning_effort": "xhigh"}`. Embed the same file paths in the prompt — `sandbox` and `cwd` are Codex-only; the user will need to read the listed files manually. Use the exact same prompt text starting from "You are an experiment integrity auditor...":
+
+The audit checklist:
     and check for the following fraud patterns.
 
     Files to read:
@@ -157,7 +162,7 @@ Parse the reviewer's response and write `EXPERIMENT_AUDIT.md`:
 # Experiment Audit Report
 
 **Date**: [today]
-**Auditor**: GPT-5.4 xhigh (cross-model, read-only)
+**Auditor**: External reviewer backend, xhigh reasoning (cross-model, read-only)
 **Project**: [project name]
 
 ## Overall Verdict: [PASS | WARN | FAIL]
