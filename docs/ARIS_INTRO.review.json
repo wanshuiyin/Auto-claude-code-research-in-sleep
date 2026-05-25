@@ -1,7 +1,7 @@
 {
   "skill": "render-html",
   "source": "docs/ARIS_INTRO.md",
-  "source_sha256": "c590a8e8f63dd5b69c511a2c0cc51dc72e5c0a3144beaa85c0cb617796db8820",
+  "source_sha256": "7757b71ab1b1bacc6a4df7c7dc1909d74acd17542bfe815ee6a25522a908d0eb",
   "output": "docs/ARIS_INTRO.html",
   "author": "Ruofeng Yang (杨若峰), Shanghai Jiao Tong University",
   "reviewer": "codex gpt-5.5 xhigh, fresh thread per run (never codex-reply)",
