@@ -1,10 +1,10 @@
 # Manual Review Guide
 
-> **Zero API cost cross-model review.** Copy the prompt to any AI model, paste the response back.
+> **Zero API cost cross-model review.** Copy the prompt to a **different** model family, paste the response back. If the executor is Claude Code, do NOT use Claude products as the reviewer.
 
 ## Overview
 
-The Manual Review MCP server is a human-in-the-loop alternative to the default Codex MCP reviewer. Instead of requiring a GPT Plus/Pro subscription for automated cross-model review, it lets you manually mediate the review using **any** text-capable model — free web ChatGPT, DeepSeek, Kimi, Claude web, local models, or anything else.
+The Manual Review MCP server is a human-in-the-loop alternative to the default Codex MCP reviewer. Instead of requiring a GPT Plus/Pro subscription for automated cross-model review, it lets you manually mediate the review using a **different** model family. If the executor is Claude Code, do NOT use Claude products as the reviewer. Recommended: ChatGPT, DeepSeek, Kimi, Gemini, Qwen, or any non-Claude model.
 
 The trade-off: you lose full automation (you need to copy/paste), but gain complete flexibility in model choice and zero API cost.
 
@@ -52,13 +52,13 @@ Add `— reviewer: manual` to any skill that supports cross-model review:
 Set `MANUAL_REVIEW_MODE=file` in your environment.
 
 1. The pipeline reaches a review step
-2. The prompt is written to `.aris/pending_review/prompt.md`
-3. In another terminal: `cat .aris/pending_review/prompt.md`
-4. Copy to your model, get the response
-5. Write the response to `.aris/pending_review/response.md`
-6. The server detects the file (after confirming it's stable) and continues
+2. Check `.aris/pending_review/pending_review.json` for the `prompt_file` and `response_file` paths.
+3. Open the file at `prompt_file` to read the prompt.
+4. Copy to your model, get the response.
+5. Write the response to the file at `response_file`.
+6. The server detects the file (after confirming it's stable) and continues.
 
-**Important**: The server waits for the response file to be non-empty AND unchanged for 3 seconds. This prevents reading a half-written file. Don't create an empty file first — write the full content in one operation, or use a temporary name and rename.
+**Important**: The server waits for the response file to be non-empty AND stable (unchanged across two reads). Do not hardcode `.aris/pending_review/response.md` — always use the path from `pending_review.json`. Don't create an empty file first — write the full content in one operation, or use a temporary name and rename.
 
 ## Multi-Round Reviews
 
@@ -68,14 +68,14 @@ For skills that use multiple review rounds (e.g., `/auto-review-loop`), the brow
 
 ## Tips for Best Results
 
-1. **Use a reasoning-capable model** — the config badge shows `reasoning_effort = xhigh`, meaning the prompt is designed for deep reasoning. Models like GPT-4o, Claude, DeepSeek-V3, or Kimi work well.
+1. **Use a reasoning-capable model** — the config badge shows `reasoning_effort = xhigh`, meaning the prompt is designed for deep reasoning. Models like GPT-4o, DeepSeek-V3, Kimi, or Gemini work well. Do NOT use any Claude-family model if the executor is Claude Code.
 2. **Paste the FULL response** — don't truncate or summarize. The pipeline parses specific fields (scores, verdicts, action items) from the response.
 3. **Don't modify the prompt** — paste it exactly as shown. The prompt is identical to what Codex would receive.
 4. **For multi-round reviews** — maintain the conversation in your model (don't start a new chat for round 2).
 
 ## Recovery
 
-- **Accidentally closed the tab?** Check `.aris/pending_review/pending_review.json` for the URL. The server is still running — just reopen the URL.
+- **Accidentally closed the tab?** Check `.aris/pending_review/pending_review.json` for the full URL (it includes a one-time token — copy it in full, don't type the bare `http://127.0.0.1:17900`). The server is still running — just reopen the URL.
 - **Server timed out?** Default timeout is 24 hours. If exceeded, the pipeline reports an error. Re-run the skill.
 - **Wrong response pasted?** There's no undo after submit. Re-run the skill if needed.
 

@@ -9,13 +9,17 @@ This test:
 """
 
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
 import urllib.error
 from pathlib import Path
+
+import pytest
 
 SERVER_PATH = Path(__file__).parent.parent / "mcp-servers" / "manual-review" / "server.py"
 
@@ -158,13 +162,7 @@ def find_server_port_and_token(pending_dir, timeout=8):
     return None, None
 
 
-def main():
-    print("=" * 60)
-    print("Integration Test: Manual Review MCP in ARIS Workflow")
-    print("=" * 60)
-
-    import os
-    import tempfile
+def test_manual_review_integration():
     tmpdir = tempfile.mkdtemp(prefix="aris_manual_review_test_")
     pending_dir = os.path.join(tmpdir, "pending_review")
 
@@ -184,20 +182,16 @@ def main():
     )
 
     try:
-        # --- Step 1: Initialize (same as Claude Code does on startup) ---
-        print("\n[1] MCP Initialize...")
+        # --- Step 1: MCP Initialize ---
         send_jsonrpc(proc, "initialize", {}, req_id=1)
         resp = read_response(proc)
         assert resp and resp["result"]["serverInfo"]["name"] == "manual-review"
-        print("    OK — server identified as 'manual-review'")
 
         # Notify initialized
         send_jsonrpc(proc, "notifications/initialized", {}, req_id=2)
         read_response(proc)
 
         # --- Step 2: Simulate /research-review calling review tool ---
-        print("\n[2] Simulating /research-review skill calling mcp__manual_review__review...")
-        print(f"    Prompt length: {len(REALISTIC_PROMPT)} chars")
 
         # We need to find the port after the tool call starts the HTTP server.
         # The tool call will block until user submits, so we send it and then
@@ -216,13 +210,8 @@ def main():
         time.sleep(1.5)
 
         # Find the port by reading the pending state file
-        print("    Searching for HTTP server port...")
         port, token = find_server_port_and_token(pending_dir, timeout=8)
-        if not port:
-            print("    FAIL — could not find HTTP server port")
-            return False
-
-        print(f"    Found server at port {port}")
+        assert port, "Could not find HTTP server port"
 
         # Verify /api/context returns the correct prompt
         ctx_resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/context?token={token}")
@@ -231,18 +220,12 @@ def main():
         assert ctx["prompt"].strip() == REALISTIC_PROMPT.strip(), \
             f"Prompt mismatch! Lengths: sent={len(REALISTIC_PROMPT)}, got={len(ctx['prompt'])}"
         assert ctx["config"]["model_reasoning_effort"] == "xhigh"
-        print("    OK — /api/context returns correct prompt and config")
 
         # --- Step 3: Simulate user submitting the review response ---
-        print("\n[3] Simulating user pasting review response...")
-        print(f"    Response length: {len(REALISTIC_RESPONSE)} chars")
-
         submit_ok = simulate_user_submit(port, REALISTIC_RESPONSE, token=token, delay=0.5)
         assert submit_ok, "Submit failed!"
-        print("    OK — response submitted via HTTP")
 
         # --- Step 4: Read the MCP tool result ---
-        print("\n[4] Reading MCP tool result...")
         result = read_response(proc, timeout=10)
         assert result is not None, "No response from MCP server"
         assert "result" in result, f"Error response: {result}"
@@ -255,11 +238,8 @@ def main():
         assert payload["content"].strip() == REALISTIC_RESPONSE.strip(), \
             f"Response mismatch! Lengths: sent={len(REALISTIC_RESPONSE)}, got={len(payload['content'])}"
         thread_id = payload["threadId"]
-        print(f"    OK — threadId: {thread_id}")
-        print(f"    OK — response matches (first 80 chars): {payload['content'][:80]}...")
 
         # --- Step 5: Verify skill can parse the response ---
-        print("\n[5] Verifying skill-compatible parsing...")
         response_text = payload["content"]
 
         # Parse score (same regex pattern skills use)
@@ -268,16 +248,12 @@ def main():
         assert score_match, "Could not parse score from response"
         score = int(score_match.group(1))
         assert score == 6, f"Wrong score: {score}"
-        print(f"    OK — Parsed score: {score}/10")
 
         # Parse verdict
         verdict_match = re.search(r"Verdict[:\s]*(.*)", response_text)
         assert verdict_match, "Could not parse verdict"
-        verdict = verdict_match.group(1).strip()
-        print(f"    OK — Parsed verdict: {verdict}")
 
         # --- Step 6: Test review_reply (multi-round) ---
-        print("\n[6] Testing review_reply (Round 2 — multi-round continuity)...")
 
         round2_prompt = """Round 2/4 of autonomous review loop.
 
@@ -299,9 +275,7 @@ Please re-score and re-assess. Has the paper improved?
 
         time.sleep(1.5)
         port2, token2 = find_server_port_and_token(pending_dir, timeout=8)
-        if not port2:
-            print("    FAIL — could not find HTTP server for round 2")
-            return False
+        assert port2, "Could not find HTTP server for round 2"
 
         # Verify history is shown
         ctx2_resp = urllib.request.urlopen(f"http://127.0.0.1:{port2}/api/context?token={token2}")
@@ -309,7 +283,6 @@ Please re-score and re-assess. Has the paper improved?
         assert len(ctx2["history"]) >= 2, f"Expected history, got: {len(ctx2['history'])} items"
         assert ctx2["history"][0]["role"] == "user"
         assert ctx2["history"][0]["content"].strip() == REALISTIC_PROMPT.strip()
-        print(f"    OK — Round 2 page shows {len(ctx2['history'])} history entries")
 
         # Submit round 2 response
         round2_response = "## Overall Score: 7/10\n\nThe paper has improved significantly. All three major issues addressed."
@@ -320,30 +293,6 @@ Please re-score and re-assess. Has the paper improved?
         payload2 = json.loads(result2["result"]["content"][0]["text"])
         assert payload2["threadId"] == thread_id, "ThreadId should be preserved across rounds"
         assert "7/10" in payload2["content"]
-        print(f"    OK — Round 2 response received, same threadId preserved")
-        print(f"    OK — Score improved: 6/10 → 7/10")
-
-        # --- Summary ---
-        print("\n" + "=" * 60)
-        print("ALL INTEGRATION TESTS PASSED")
-        print("=" * 60)
-        print("")
-        print("Verified:")
-        print("  [OK] MCP server starts and responds to initialize")
-        print("  [OK] Realistic review prompt (%d chars) delivered correctly" % len(REALISTIC_PROMPT))
-        print("  [OK] User submit via HTTP works")
-        print("  [OK] Return format compatible (threadId + response)")
-        print("  [OK] Skill-level parsing works (score extraction, verdict)")
-        print("  [OK] Multi-round review_reply preserves threadId and shows history")
-        print("  [OK] Full round-trip: skill -> MCP -> browser -> user -> MCP -> skill")
-        print("")
-        return True
-
-    except Exception as e:
-        print(f"\n  FAIL: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
     finally:
         proc.terminate()
         proc.wait(timeout=3)
@@ -352,5 +301,4 @@ Please re-score and re-assess. Has the paper improved?
 
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    sys.exit(pytest.main([__file__, "-v"]))

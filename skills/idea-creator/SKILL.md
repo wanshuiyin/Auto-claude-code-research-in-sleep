@@ -2,7 +2,7 @@
 name: idea-creator
 description: Generate and rank research ideas given a broad direction. Use when user says "找idea", "brainstorm ideas", "generate research ideas", "what can we work on", or wants to explore a research area for publishable directions.
 argument-hint: [research-direction]
-allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
 # Research Idea Creator
@@ -20,10 +20,31 @@ Given a broad research direction from the user, systematically generate, validat
 - **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
 - **REVIEWER_MODEL = `gpt-5.5`** — Model used via Codex MCP for brainstorming and review. Must be an OpenAI model (e.g., `gpt-5.5`, `o3`, `gpt-4o`).
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for GPT-5.4 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 
 > 💡 Override via argument, e.g., `/idea-creator "topic" — pilot budget: 4h per idea, 20h total`.
+
+## Reviewer Calling Convention
+
+When calling the reviewer for idea evaluation, branch on REVIEWER_BACKEND:
+
+**If REVIEWER_BACKEND = `codex`:**
+  Use `mcp__codex__codex` for new review threads.
+  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+
+**If REVIEWER_BACKEND = `manual`:**
+  Use `mcp__manual_review__review` for new review threads with:
+    prompt: [exact same prompt that would go to Codex]
+    config: {"model_reasoning_effort": "xhigh"}
+  Save the returned `threadId`.
+  Use `mcp__manual_review__review_reply` for follow-up rounds with:
+    threadId: [saved manual-review threadId]
+    prompt: [follow-up prompt]
+    config: {"model_reasoning_effort": "xhigh"}
+
+Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
+Review tracing applies equally to both backends.
 
 ## Workflow
 

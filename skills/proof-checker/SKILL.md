@@ -2,7 +2,7 @@
 name: proof-checker
 description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (Codex GPT-5.4 xhigh), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
 argument-hint: "[path-to-tex-file or proof-description] [--deep-fix] [--restatement-check]"
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
@@ -15,7 +15,29 @@ Systematically verify a mathematical proof via cross-model adversarial review, f
 
 - MAX_REVIEW_ROUNDS = 3
 - REVIEWER_MODEL = `gpt-5.5` via Codex MCP, reasoning effort always `xhigh`
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for GPT-5.4 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+
+## Reviewer Calling Convention
+
+When calling the reviewer, branch on REVIEWER_BACKEND:
+
+**If REVIEWER_BACKEND = `codex`:**
+  Use `mcp__codex__codex` for new review threads.
+  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+
+**If REVIEWER_BACKEND = `manual`:**
+  Use `mcp__manual_review__review` for new review threads with:
+    prompt: [exact same prompt that would go to Codex]
+    config: {"model_reasoning_effort": "xhigh"}
+  Save the returned `threadId`.
+  Use `mcp__manual_review__review_reply` for follow-up rounds with:
+    threadId: [saved manual-review threadId]
+    prompt: [follow-up prompt]
+    config: {"model_reasoning_effort": "xhigh"}
+
+Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
+Review tracing applies equally to both backends.
+
 - AUDIT_DOC: `PROOF_AUDIT.md` at the paper directory root, alongside `main.tex` (cumulative log; when invoked via `/paper-writing`, this is `paper/PROOF_AUDIT.md`)
 - REPORT_TEX: `proof_audit_report.tex` (formal before/after PDF)
 - STATE_FILE: `PROOF_CHECK_STATE.json` (for recovery)

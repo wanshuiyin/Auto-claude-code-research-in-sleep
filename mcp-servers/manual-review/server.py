@@ -218,18 +218,30 @@ def _generate_token() -> str:
 
 def _check_token(handler) -> bool:
     """Validate auth token from query string or header. Returns True if valid."""
-    # Check query string: ?token=xxx
     from urllib.parse import urlparse, parse_qs
     parsed = urlparse(handler.path)
     params = parse_qs(parsed.query)
     token_values = params.get("token", [])
     if token_values and token_values[0] == _auth_token:
         return True
-    # Check header: X-Review-Token
     header_token = handler.headers.get("X-Review-Token", "")
     if header_token == _auth_token:
         return True
     return False
+
+
+def _check_origin(handler) -> bool:
+    """Defense-in-depth: reject browser requests with suspicious cross-site headers.
+    Token auth is still required; this is an additional layer."""
+    origin = handler.headers.get("Origin", "")
+    if origin:
+        expected = f"http://127.0.0.1:{handler.server.server_address[1]}"
+        if origin != expected:
+            return False
+    sec_fetch_site = handler.headers.get("Sec-Fetch-Site", "")
+    if sec_fetch_site and sec_fetch_site not in {"same-origin", "none"}:
+        return False
+    return True
 
 
 class _ReviewHandler(http.server.BaseHTTPRequestHandler):
@@ -246,6 +258,9 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
             if not _check_token(self):
                 self.send_error(403, "Invalid or missing token")
                 return
+            if not _check_origin(self):
+                self.send_error(403, "Cross-origin request blocked")
+                return
             html = load_ui_html()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -255,13 +270,15 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
             if not _check_token(self):
                 self.send_error(403, "Invalid or missing token")
                 return
+            if not _check_origin(self):
+                self.send_error(403, "Cross-origin request blocked")
+                return
             session = _current_session
             ctx = {
                 "prompt": session.prompt if session else "",
                 "config": session.config if session else {},
                 "threadId": session.thread_id if session else "",
                 "history": session.history if session else [],
-                "token": _auth_token or "",
             }
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -275,6 +292,9 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
         if path == "/api/submit":
             if not _check_token(self):
                 self.send_error(403, "Invalid or missing token")
+                return
+            if not _check_origin(self):
+                self.send_error(403, "Cross-origin request blocked")
                 return
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8")
@@ -402,7 +422,16 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
     prev_content: str | None = None
 
     while time.monotonic() < deadline:
+        if _pending_call_cancelled.is_set():
+            clear_pending_state(thread_id)
+            return None, "Manual review request was cancelled"
+
         time.sleep(FILE_POLL_INTERVAL_SEC)
+
+        if _pending_call_cancelled.is_set():
+            clear_pending_state(thread_id)
+            return None, "Manual review request was cancelled"
+
         if not response_path.exists():
             prev_content = None
             continue
@@ -420,6 +449,11 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
             return content, None
         prev_content = content
         time.sleep(FILE_STABLE_INTERVAL_SEC)
+
+        if _pending_call_cancelled.is_set():
+            clear_pending_state(thread_id)
+            return None, "Manual review request was cancelled"
+
         # Re-read after stability interval
         try:
             content2 = response_path.read_text(encoding="utf-8").strip()
@@ -618,7 +652,9 @@ def _cancel_pending_call():
     if _pending_call_thread is not None:
         _pending_call_thread.join(timeout=3)
         _pending_call_thread = None
-    _pending_call_cancelled.clear()
+    # Note: do NOT clear _pending_call_cancelled here.
+    # The main loop clears it right before starting the next worker thread.
+    # Clearing too early would let the old worker miss the cancel signal.
 
 
 def _run_blocking_tool(handler, args, request_id):

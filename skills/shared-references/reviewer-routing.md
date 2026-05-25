@@ -143,7 +143,7 @@ claude mcp add manual-review -s user -- python3 /path/to/mcp-servers/manual-revi
 ### Modes
 
 - **Browser mode** (default): opens a local web page on Windows/macOS/Linux desktop
-- **File mode** (`MANUAL_REVIEW_MODE=file`): writes prompt to `.aris/pending_review/prompt.md`, waits for `.aris/pending_review/response.md` — for headless/SSH environments
+- **File mode** (`MANUAL_REVIEW_MODE=file`): writes prompt to a per-thread subdirectory. Read `.aris/pending_review/pending_review.json` for the `prompt_file` and `response_file` paths — for headless/SSH environments
 
 ### Skills That Support `— reviewer: manual`
 

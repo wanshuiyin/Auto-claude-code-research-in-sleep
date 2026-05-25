@@ -159,7 +159,6 @@ let token = new URLSearchParams(window.location.search).get("token") || "";
 async function init() {
   const res = await fetch("/api/context?token=" + token);
   ctx = await res.json();
-  if (ctx.token) token = ctx.token;
   document.getElementById("promptArea").value = ctx.prompt || "";
   const effort = (ctx.config || {}).model_reasoning_effort || "xhigh";
   document.getElementById("configHint").textContent = i18n[lang].configHint + effort;

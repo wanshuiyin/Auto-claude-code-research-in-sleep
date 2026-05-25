@@ -8,14 +8,14 @@
 
 ## What it does
 
-A human-in-the-loop MCP server for ARIS cross-model review. Instead of calling Codex/GPT API automatically, it opens a browser page where you copy the review prompt to **any** AI model and paste the response back.
+A human-in-the-loop MCP server for ARIS cross-model review. Instead of calling Codex/GPT API automatically, it opens a browser page where you copy the review prompt to a **different** model family and paste the response back.
 
 **Zero API cost. Works with any text model.**
 
 ## When to use
 
 - You don't have a Codex/GPT Plus subscription
-- You want to use free models (ChatGPT free tier, DeepSeek, Kimi, etc.)
+- You want to use free models (ChatGPT free tier, DeepSeek, Kimi, Gemini, etc.)
 - You prefer to choose which model reviews each time
 - You're on a budget but still want cross-model review quality
 
@@ -44,7 +44,7 @@ For SSH/headless environments without a browser:
 export MANUAL_REVIEW_MODE=file
 ```
 
-The server writes the prompt to `.aris/pending_review/prompt.md` and waits for you to create `.aris/pending_review/response.md` with the model's response. The file must be non-empty and stable (unchanged for 3 seconds) before it's accepted.
+The server writes the prompt to a per-thread directory. Read `.aris/pending_review/pending_review.json` — the `prompt_file` field tells you where to read the prompt, the `response_file` field tells you where to write the model's response. The file must be non-empty and stable (unchanged across two reads) before it's accepted.
 
 ## Environment Variables
 
@@ -60,11 +60,7 @@ The server writes the prompt to `.aris/pending_review/prompt.md` and waits for y
 
 ## Recovery
 
-If you accidentally close the browser tab, simply reopen:
-```
-http://127.0.0.1:17900
-```
-The server uses a fixed port (default `17900`) so you always know where to find it. If that port was occupied, it tries `17901`, `17902`, etc. — check `.aris/pending_review/pending_review.json` for the exact URL in that case.
+If you accidentally close the browser tab, open `.aris/pending_review/pending_review.json` and reopen the exact `url` value. It includes a one-session token — copy it in full (e.g., `http://127.0.0.1:17900?token=abc123`). Do not type the bare `http://127.0.0.1:17900` as it will return 403.
 
 ## Future Work
 
@@ -77,14 +73,14 @@ The server uses a fixed port (default `17900`) so you always know where to find 
 
 ## 功能说明
 
-ARIS 跨模型评审的人工中转 MCP 服务器。不自动调用 Codex/GPT API，而是打开浏览器页面，让你将评审提示词复制到**任意** AI 模型，再将回复粘贴回来。
+ARIS 跨模型评审的人工中转 MCP 服务器。不自动调用 Codex/GPT API，而是打开浏览器页面，让你将评审提示词复制到**不同**模型家族，再将回复粘贴回来。
 
 **零 API 成本。支持任何文本模型。**
 
 ## 适用场景
 
 - 没有 Codex/GPT Plus 订阅
-- 想使用免费模型（ChatGPT 免费版、DeepSeek、Kimi 等）
+- 想使用免费模型（ChatGPT 免费版、DeepSeek、Kimi、Gemini 等）
 - 希望每次自行选择评审模型
 - 预算有限但仍想获得跨模型评审质量
 
@@ -113,7 +109,7 @@ claude mcp add manual-review -s user -- python3 /path/to/mcp-servers/manual-revi
 export MANUAL_REVIEW_MODE=file
 ```
 
-服务器将提示词写入 `.aris/pending_review/prompt.md`，等待你创建 `.aris/pending_review/response.md` 并写入模型回复。文件必须非空且稳定（3 秒内无变化）才会被接受。
+服务器将提示词写入按线程隔离的子目录。读取 `.aris/pending_review/pending_review.json` — `prompt_file` 字段指向提示词文件，`response_file` 字段指向你应写入回复的位置。文件必须非空且稳定（两次读取内容不变）才会被接受。
 
 ## 环境变量
 
@@ -129,11 +125,7 @@ export MANUAL_REVIEW_MODE=file
 
 ## 恢复
 
-如果不小心关闭了浏览器标签，直接重新打开：
-```
-http://127.0.0.1:17900
-```
-服务器使用固定端口（默认 `17900`），你始终知道在哪里找到它。如果该端口被占用，会尝试 `17901`、`17902` 等——此时查看 `.aris/pending_review/pending_review.json` 获取确切 URL。
+如果不小心关闭了浏览器标签，打开 `.aris/pending_review/pending_review.json`，复制完整的 `url` 值（包含一次性 token，如 `http://127.0.0.1:17900?token=abc123`）重新打开。不要手动输入裸地址 `http://127.0.0.1:17900`，会返回 403。
 
 ## 后续计划
 
