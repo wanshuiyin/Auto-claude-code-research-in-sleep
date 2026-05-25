@@ -22,9 +22,9 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
 - **COMPACT = false** — When `true`, (1) read `EXPERIMENT_LOG.md` and `findings.md` instead of parsing full logs on session recovery, (2) append key findings to `findings.md` after each round.
 - **REVIEWER_DIFFICULTY = medium** — Controls how adversarial the reviewer is. Three levels:
-  - `medium` (default): Current behavior — MCP-based review, Claude controls what context GPT sees.
-  - `hard`: Adds **Reviewer Memory** (GPT tracks its own suspicions across rounds) + **Debate Protocol** (Claude can rebut, GPT rules).
-  - `nightmare`: Everything in `hard` + **GPT reads the repo directly** via `codex exec` (Claude cannot filter what GPT sees) + **Adversarial Verification** (GPT independently checks if code matches claims).
+  - `medium` (default): Current behavior — MCP-based review, the executor controls what context the reviewer sees.
+  - `hard`: Adds **Reviewer Memory** (the reviewer tracks its own suspicions across rounds) + **Debate Protocol** (the executor can rebut, the reviewer rules).
+  - `nightmare`: Everything in `hard` + **Codex exec reviewer reads the repo directly** via `codex exec` (the executor cannot filter what the reviewer sees) + **Adversarial Verification** (the reviewer independently checks if code matches claims).
 
 > 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true, difficulty: hard`
 
@@ -244,11 +244,11 @@ After parsing the assessment, update `REVIEWER_MEMORY.md` in the project root:
 
 **Skip entirely if `REVIEWER_DIFFICULTY = medium`.**
 
-After parsing the review, Claude (the author) gets a chance to **rebut**:
+After parsing the review, the executor gets a chance to **rebut**:
 
-**Step 1 — Claude's Rebuttal:**
+**Step 1 — Executor Rebuttal:**
 
-For each weakness the reviewer identified, Claude writes a structured response:
+For each weakness the reviewer identified, the executor writes a structured response:
 
 ```markdown
 ### Rebuttal to Weakness #1: [title]
@@ -257,13 +257,13 @@ For each weakness the reviewer identified, Claude writes a structured response:
 - **Evidence**: [point to specific code, results, or prior round fixes]
 ```
 
-Rules for Claude's rebuttal:
+Rules for the executor's rebuttal:
 - Must be honest — do NOT fabricate evidence or misrepresent results
 - Can point out factual errors in the review (reviewer misread code, wrong metric, etc.)
 - Can argue a weakness is out of scope or would require unreasonable effort
 - Maximum 3 rebuttals per round (pick the most impactful to contest)
 
-**Step 2 — GPT Rules on Rebuttal:**
+**Step 2 — Reviewer Rules on Rebuttal:**
 
 Send the executor's rebuttal back to the reviewer for a ruling:
 
@@ -285,7 +285,7 @@ The prompt content:
 ```
     The author rebuts your review:
 
-    [paste Claude's rebuttal]
+    [paste executor's rebuttal]
 
     For each rebuttal, rule:
     - SUSTAINED (author's argument is valid, withdraw this weakness)
@@ -300,7 +300,7 @@ The prompt content:
 codex exec "$(cat <<'PROMPT'
 You are the same adversarial reviewer. The author rebuts your review:
 
-[paste Claude's rebuttal]
+[paste executor's rebuttal]
 
 VERIFY the author's evidence claims yourself — read the files they reference.
 Do NOT take their word for it.
@@ -411,10 +411,10 @@ This is the authoritative record. Do NOT truncate or paraphrase.]
 <details>
 <summary>Click to expand debate</summary>
 
-**Claude's Rebuttal:**
+**Executor Rebuttal:**
 [paste rebuttal]
 
-**GPT's Ruling:**
+**Reviewer Ruling:**
 [paste ruling — SUSTAINED / OVERRULED / PARTIALLY SUSTAINED for each]
 
 **Score adjustment**: X/10 → Y/10

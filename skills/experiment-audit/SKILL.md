@@ -1,6 +1,6 @@
 ---
 name: experiment-audit
-description: "Audit experiment integrity before claiming results. Uses cross-model review (GPT-5.4) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
+description: "Audit experiment integrity before claiming results. Uses cross-model review (external reviewer backend) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
 argument-hint: [experiment-dir-or-results-path]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
@@ -21,7 +21,7 @@ These are NOT intentional deception — they are failure modes of optimizing age
 
 ## Core Principle
 
-**The executor (Claude) collects file paths. The reviewer (GPT-5.4) reads code and judges integrity. The executor does NOT participate in integrity judgment.**
+**The executor collects file paths. The external reviewer backend reads code and judges integrity. The executor does NOT participate in integrity judgment.**
 
 This follows `shared-references/reviewer-independence.md` and `shared-references/experiment-integrity.md`.
 
@@ -72,9 +72,18 @@ Scan project directory for:
 
 Based on the selected reviewer backend (see Reviewer Calling Convention), pass ONLY file paths and the audit checklist to the reviewer. The reviewer reads everything directly.
 
-For `codex`, call `mcp__codex__codex` with `model`, `sandbox`, and `cwd` as Codex-only parameters.
+For `codex`, call `mcp__codex__codex` with:
+- `model: gpt-5.5`
+- `config: {"model_reasoning_effort": "xhigh"}`
+- `sandbox: read-only`
+- `cwd: [project directory]`
+- `prompt: [the exact full prompt below]`
 
-For `manual`, call `mcp__manual_review__review` with `config: {"model_reasoning_effort": "xhigh"}`. Manual review cannot use Codex-only `sandbox` or `cwd`; include the same file paths in the prompt so the user can inspect them.
+For `manual`, call `mcp__manual_review__review` with:
+- `config: {"model_reasoning_effort": "xhigh"}`
+- `prompt: [the exact full prompt below]`
+
+Manual review cannot use Codex-only `model`, `sandbox`, or `cwd`; include the same file paths in the prompt so the user can inspect them.
 
 Use this exact prompt for both backends:
 
@@ -195,7 +204,7 @@ Also write `EXPERIMENT_AUDIT.json` for machine consumption:
 ```json
 {
   "date": "2026-04-10",
-  "auditor": "gpt-5.5-xhigh",
+  "auditor": "external-reviewer-xhigh",
   "overall_verdict": "warn",
   "integrity_status": "warn",
   "checks": {
