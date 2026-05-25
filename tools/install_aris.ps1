@@ -74,6 +74,34 @@ function Test-PathInside {
     return $normalizedPath.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)
 }
 
+function Resolve-ReparseChain {
+    param([string]$Path)
+    $current = Normalize-PathString $Path
+    $seen = @{}
+    for ($depth = 0; $depth -lt 40; $depth++) {
+        $key = $current.ToLowerInvariant()
+        if ($seen.ContainsKey($key)) {
+            Die "reparse point cycle detected while resolving: $Path"
+        }
+        $seen[$key] = $true
+        $item = Get-PathItem $current
+        if (-not (Test-LinkItem $item)) {
+            return $current
+        }
+        $target = Get-LinkTarget $current
+        if (-not $target) {
+            return $current
+        }
+        $current = Normalize-PathString $target
+    }
+    Die "reparse point chain too deep while resolving: $Path"
+}
+
+function Test-ResolvedPathInside {
+    param([string]$Path, [string]$Root)
+    return Test-PathInside (Resolve-ReparseChain $Path) (Resolve-ReparseChain $Root)
+}
+
 function Read-Text {
     param([string]$Path)
     return [System.IO.File]::ReadAllText($Path, [System.Text.Encoding]::UTF8)
@@ -221,8 +249,8 @@ function Build-Inventory {
             continue
         }
         if (Test-LinkItem $dir) {
-            $resolved = Get-LinkTarget $dir.FullName
-            if (-not (Test-PathInside $resolved $Config.RepoRoot)) {
+            $resolved = Resolve-ReparseChain $dir.FullName
+            if (-not (Test-ResolvedPathInside $resolved $Config.RepoRoot)) {
                 Write-Warning "skipping upstream link leading outside ARIS repo: $name -> $resolved"
                 continue
             }
@@ -318,7 +346,7 @@ function Compute-Plan {
             if (Same-Path $currentTarget $entry.ExpectedTarget) {
                 $action = $(if ($inManifest) { 'REUSE' } else { 'ADOPT' })
                 $extra = ''
-            } elseif (($inManifest -or (Test-NameInReplaceList $entry.Name)) -and (Test-PathInside $currentTarget $Config.RepoRoot)) {
+            } elseif (($inManifest -or (Test-NameInReplaceList $entry.Name)) -and (Test-ResolvedPathInside $currentTarget $Config.RepoRoot)) {
                 $action = 'UPDATE_TARGET'
                 $extra = $currentTarget
             } else {
@@ -604,7 +632,7 @@ function Apply-Plan {
                 if (-not (Same-Path $currentTarget $entry.Extra)) {
                     Die "link target changed during install for $($entry.Name)"
                 }
-                if (-not (Test-PathInside $currentTarget $RepoRoot)) {
+                if (-not (Test-ResolvedPathInside $currentTarget $RepoRoot)) {
                     Die "refusing to relink $($entry.Name); current target is outside ARIS repo: $currentTarget"
                 }
                 Remove-LinkPath $entry.TargetPath

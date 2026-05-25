@@ -190,6 +190,27 @@ def test_install_aris_ps1_skips_upstream_junctions_outside_repo(tmp_path: Path) 
     assert "escape" not in (project / ".aris" / "installed-skills-codex.txt").read_text(encoding="utf-8")
 
 
+def test_install_aris_ps1_replace_link_rejects_indirect_external_target(tmp_path: Path) -> None:
+    repo = make_minimal_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    external = tmp_path / "external-source" / "beta"
+    make_skill(external, "# external beta\n")
+    shutil.rmtree(repo / "skills" / "skills-codex" / "beta")
+    make_junction(repo / "skills" / "skills-codex" / "beta", external)
+    alpha_link = project / ".agents" / "skills" / "alpha"
+    make_junction(alpha_link, repo / "skills" / "skills-codex" / "beta")
+
+    result = run_ps(
+        [str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-ReplaceLink", "alpha"],
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "CONFLICT" in result.stderr + result.stdout
+    assert junction_target(alpha_link) == repo / "skills" / "skills-codex" / "beta"
+
+
 def test_install_aris_ps1_uninstall_keeps_tools_for_other_platform_manifest(tmp_path: Path) -> None:
     repo = make_minimal_repo(tmp_path)
     project = tmp_path / "project"
