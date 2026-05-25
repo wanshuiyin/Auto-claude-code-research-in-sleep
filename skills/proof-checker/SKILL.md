@@ -197,7 +197,7 @@ h_act = Θ(κ^α)  [as κ→0, uniform in π on compact subsets of Π_K, for fix
 ```
 Flag any statement where limit order is ambiguous or uniformity is unclear.
 
-### Phase 1: First Review (Codex GPT-5.4 xhigh)
+### Phase 1: First Review (reviewer backend, xhigh reasoning)
 
 Submit the **complete proof content** with the following **mandatory reviewer checklist** in the prompt:
 
@@ -369,7 +369,7 @@ Log this choice — it is a scope-changing decision when it alters theorem state
 pdflatex -interaction=nonstopmode <file>.tex 2>&1 | grep -E "Error|Warning|undefined"
 ```
 
-### Phase 3: Re-Review (Codex GPT-5.4 xhigh)
+### Phase 3: Re-Review (reviewer backend, xhigh reasoning)
 
 Use `codex-reply` with saved threadId. Include fix summaries. Request the same mandatory checklist.
 

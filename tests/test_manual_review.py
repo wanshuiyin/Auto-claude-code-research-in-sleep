@@ -395,7 +395,7 @@ def test_pending_state():
 
 
 # ============================================================
-# Test 11: File mode cancellation
+# Test 11: File mode cancellation (real _cancel_pending_call path)
 # ============================================================
 def test_file_mode_cancelled():
     import server as srv
@@ -410,32 +410,32 @@ def test_file_mode_cancelled():
 
         try:
             thread_id = srv.create_thread()
-            result_holder = [None, None]
+            done = threading.Event()
 
             def run():
-                r, e = srv.wait_for_file_response("cancel test", {}, thread_id, [])
-                result_holder[0] = r
-                result_holder[1] = e
+                srv.wait_for_file_response("cancel test", {}, thread_id, [])
+                done.set()
 
             t = threading.Thread(target=run, daemon=True)
+            srv._pending_call_thread = t
             t.start()
 
             # Give the thread time to write prompt.md and start polling
             time.sleep(1.0)
 
-            # Cancel the pending call
-            srv._pending_call_cancelled.set()
+            # Use the real _cancel_pending_call path (not just setting the event)
+            success = srv._cancel_pending_call()
 
-            t.join(timeout=5)
-            assert not t.is_alive(), "thread should have exited after cancellation"
-            assert result_holder[0] is None, f"expected None response, got: {result_holder[0]}"
-            assert "cancelled" in (result_holder[1] or "").lower(), \
-                f"expected cancellation error, got: {result_holder[1]}"
+            # Thread should exit quickly after cancellation
+            assert done.wait(timeout=5), "old file-mode call did not exit after _cancel_pending_call()"
+            assert not t.is_alive()
+            assert success
 
         finally:
             srv.PENDING_DIR = original_dir
             srv.MODE = original_mode
             srv.DEFAULT_TIMEOUT_SEC = original_timeout
+            srv._pending_call_thread = None
             srv._pending_call_cancelled.clear()
 
 

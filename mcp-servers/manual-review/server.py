@@ -635,8 +635,9 @@ _pending_call_thread: threading.Thread | None = None
 _pending_call_cancelled = threading.Event()
 
 
-def _cancel_pending_call():
-    """Cancel any in-progress review call so the port is freed."""
+def _cancel_pending_call() -> bool:
+    """Cancel any in-progress review call so the port is freed.
+    Returns True if the old thread exited; False if it's still alive after the join timeout."""
     global _pending_call_thread, _current_session, _active_server
     _pending_call_cancelled.set()
     if _current_session is not None:
@@ -645,16 +646,19 @@ def _cancel_pending_call():
         if _active_server is not None:
             try:
                 _active_server.shutdown()
-                _active_server.server_close()  # actually release the socket/port
+                _active_server.server_close()
             except Exception:
                 pass
             _active_server = None
+    success = True
     if _pending_call_thread is not None:
         _pending_call_thread.join(timeout=3)
-        _pending_call_thread = None
-    # Note: do NOT clear _pending_call_cancelled here.
-    # The main loop clears it right before starting the next worker thread.
-    # Clearing too early would let the old worker miss the cancel signal.
+        if _pending_call_thread.is_alive():
+            debug_log("Previous manual-review call did not exit within 3s; leaving it cancelled")
+            success = False
+        else:
+            _pending_call_thread = None
+    return success
 
 
 def _run_blocking_tool(handler, args, request_id):
@@ -685,7 +689,12 @@ def main() -> int:
             if name in ("review", "review_reply"):
                 # Cancel any previous pending call
                 if _pending_call_thread is not None and _pending_call_thread.is_alive():
-                    _cancel_pending_call()
+                    if not _cancel_pending_call():
+                        send_response(tool_error(
+                            request_id,
+                            "Previous manual review call is still cancelling; retry shortly",
+                        ))
+                        continue
 
                 args = params.get("arguments", {})
                 if not isinstance(args, dict):

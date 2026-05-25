@@ -147,7 +147,19 @@ claude mcp add manual-review -s user -- python3 /path/to/mcp-servers/manual-revi
 
 ### Skills That Support `— reviewer: manual`
 
-All skills that support `— reviewer: oracle-pro` also support `— reviewer: manual`.
+The following skills are wired for manual review (Claude Code only):
+
+| Skill | Manual support |
+|-------|----------------|
+| `/research-review` | Yes |
+| `/auto-review-loop` | Yes |
+| `/experiment-audit` | Yes |
+| `/proof-checker` | Yes |
+| `/rebuttal` | Yes |
+| `/idea-creator` | Yes |
+| `/research-lit` | Yes |
+
+> **Platform note**: Manual review requires MCP tools (available only in Claude Code). Mirrored skill packs under `skills/skills-codex/` and `skills/skills-codex-*-review/` do NOT include manual-review wiring — they target Codex CLI and other platforms that lack MCP support. Oracle-pro support in those mirrors is unaffected.
 
 ### NOT installed = explicit error (not silent fallback)
 

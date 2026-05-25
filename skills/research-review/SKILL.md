@@ -70,7 +70,9 @@ mcp__codex__codex:
 ```
 
 ### Step 3: Iterative Dialogue (Rounds 2-N)
-Use `mcp__codex__codex-reply` with the returned `threadId` to continue the conversation:
+For `codex` backend: use `mcp__codex__codex-reply` with the returned `threadId`.
+For `manual` backend: use `mcp__manual_review__review_reply` with the same `threadId`.
+Use the appropriate tool to continue the conversation:
 
 For each round:
 1. **Respond** to criticisms with evidence/counterarguments
@@ -129,4 +131,4 @@ Update project memory/notes with key review conclusions.
 
 ## Review Tracing
 
-After each `mcp__codex__codex` or `mcp__codex__codex-reply` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
