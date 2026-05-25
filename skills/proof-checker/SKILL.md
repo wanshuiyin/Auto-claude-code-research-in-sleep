@@ -199,20 +199,11 @@ Flag any statement where limit order is ambiguous or uniformity is unclear.
 
 ### Phase 1: First Review (reviewer backend, xhigh reasoning)
 
-Submit the **complete proof content** with the following **mandatory reviewer checklist** in the prompt. Use the selected backend.
+Submit the **complete proof content** with the checklist below, using the selected backend.
 
-*For codex backend:*
+For `codex`, call `mcp__codex__codex`. For `manual`, call `mcp__manual_review__review`. Always use `config: {"model_reasoning_effort": "xhigh"}`.
 
-```
-mcp__codex__codex:
-  config: {"model_reasoning_effort": "xhigh"}
-  prompt: |
-    You are performing a rigorous mathematical proof review. For EVERY theorem,
-```
-
-*For manual backend:* use `mcp__manual_review__review` with the same prompt text and `config: {"model_reasoning_effort": "xhigh"}`.
-
-The review checklist:
+Use this exact prompt for both backends:
 
 ```
     You are performing a rigorous mathematical proof review. For EVERY theorem,

@@ -238,7 +238,7 @@ After parsing the assessment, update `REVIEWER_MEMORY.md` in the project root:
 **Rules**:
 - Append each round, never delete prior rounds (audit trail)
 - If the reviewer's response includes a "Memory update" section, copy it verbatim
-- This file is passed back to GPT in the next round's Phase A — it is GPT's persistent brain
+- This file is passed back to the reviewer in the next round's Phase A — it is the reviewer's persistent memory
 
 #### Phase B.6: Debate Protocol (hard + nightmare only)
 
@@ -265,7 +265,7 @@ Rules for Claude's rebuttal:
 
 **Step 2 — GPT Rules on Rebuttal:**
 
-Send Claude's rebuttal back to GPT for a ruling:
+Send the executor's rebuttal back to the reviewer for a ruling:
 
 *Hard mode — use the selected backend for the rebuttal step:*
 
