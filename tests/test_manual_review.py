@@ -200,22 +200,36 @@ def test_browser_mode_http(results):
 
     # Start the HTTP server in background (same as wait_for_browser_response but manual)
     srv._current_session = srv._ReviewSession(prompt, config, thread_id, [])
+    srv._auth_token = "test_token_123"
     server = socketserver.TCPServer(("127.0.0.1", 0), srv._ReviewHandler)
     port = server.server_address[1]
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
     server_thread.start()
+    token = srv._auth_token
 
     try:
         # Test GET / returns HTML
-        resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/")
+        resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/?token={token}")
         html = resp.read().decode("utf-8")
         if "Manual Review" not in html:
             results.fail("HTTP serves UI", f"unexpected HTML content")
             return
         results.ok("HTTP GET / serves ui.html")
 
+        # Test GET / without token is rejected
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/")
+            results.fail("HTTP rejects no-token GET", "should have returned 403")
+            return
+        except urllib.error.HTTPError as e:
+            if e.code == 403:
+                results.ok("HTTP GET / rejects requests without token")
+            else:
+                results.fail("HTTP rejects no-token GET", f"wrong status: {e.code}")
+                return
+
         # Test GET /api/context returns correct JSON
-        resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/context")
+        resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/context?token={token}")
         ctx = json.loads(resp.read().decode("utf-8"))
         if ctx.get("prompt") != prompt:
             results.fail("HTTP /api/context", f"wrong prompt: {ctx.get('prompt')[:50]}")
@@ -228,7 +242,7 @@ def test_browser_mode_http(results):
         # Test POST /api/submit
         submit_data = json.dumps({"response": "This is the review response"}).encode("utf-8")
         req = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/submit",
+            f"http://127.0.0.1:{port}/api/submit?token={token}",
             data=submit_data,
             headers={"Content-Type": "application/json"},
         )
@@ -246,7 +260,7 @@ def test_browser_mode_http(results):
         # Test POST with empty response is rejected
         submit_empty = json.dumps({"response": ""}).encode("utf-8")
         req2 = urllib.request.Request(
-            f"http://127.0.0.1:{port}/api/submit",
+            f"http://127.0.0.1:{port}/api/submit?token={token}",
             data=submit_empty,
             headers={"Content-Type": "application/json"},
         )
@@ -302,13 +316,19 @@ def test_file_mode(results):
             t = threading.Thread(target=run_file_review, daemon=True)
             t.start()
 
-            # Wait for prompt file to appear
-            prompt_path = Path(tmpdir) / "prompt.md"
+            # Wait for prompt file to appear (now in per-thread subdir)
             deadline = time.monotonic() + 5
-            while time.monotonic() < deadline and not prompt_path.exists():
+            prompt_path = None
+            while time.monotonic() < deadline:
+                # Search for prompt.md in any subdirectory
+                for p in Path(tmpdir).rglob("prompt.md"):
+                    prompt_path = p
+                    break
+                if prompt_path:
+                    break
                 time.sleep(0.2)
 
-            if not prompt_path.exists():
+            if not prompt_path:
                 results.fail("file mode writes prompt", "prompt.md not created")
                 return
 
@@ -319,7 +339,7 @@ def test_file_mode(results):
             results.ok("file mode writes prompt.md correctly")
 
             # Simulate user writing response (with stability requirement)
-            response_path = Path(tmpdir) / "response.md"
+            response_path = prompt_path.parent / "response.md"
             response_path.write_text("This is the file mode response", encoding="utf-8")
 
             # Wait for the thread to complete
@@ -374,11 +394,23 @@ def test_file_mode_empty_rejected(results):
             t = threading.Thread(target=run, daemon=True)
             t.start()
 
-            # Wait for prompt to be written
-            time.sleep(1.5)
+            # Wait for prompt file to appear (now in per-thread subdir)
+            deadline = time.monotonic() + 5
+            prompt_path = None
+            while time.monotonic() < deadline:
+                for p in Path(tmpdir).rglob("prompt.md"):
+                    prompt_path = p
+                    break
+                if prompt_path:
+                    break
+                time.sleep(0.2)
+
+            if not prompt_path:
+                results.fail("file mode rejects empty", "prompt.md not created")
+                return
 
             # Create empty response file (simulating user creating file first)
-            response_path = Path(tmpdir) / "response.md"
+            response_path = prompt_path.parent / "response.md"
             response_path.write_text("", encoding="utf-8")
 
             # Wait a bit — server should NOT accept empty file

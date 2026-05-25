@@ -37,6 +37,9 @@ footer { padding: 10px 24px; border-top: 1px solid var(--border); background: va
 .success-box { background: var(--panel); padding: 32px; border-radius: 12px; text-align: center; }
 .success-box h2 { color: var(--success); margin-bottom: 8px; }
 .hidden { display: none; }
+.warning-banner { padding: 12px 24px; background: #fff3cd; border-bottom: 2px solid #ffc107; color: #856404; font-size: 0.9rem; line-height: 1.5; }
+@media (prefers-color-scheme: dark) { .warning-banner { background: #4a3800; border-color: #ffc107; color: #ffe08a; } }
+.warning-banner strong { display: block; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -48,11 +51,16 @@ footer { padding: 10px 24px; border-top: 1px solid var(--border); background: va
   </select>
 </header>
 
+<div class="warning-banner" id="warningBanner">
+  <strong id="warningTitle">Cross-Model Review Required</strong>
+  <span id="warningText">If you are running this from Claude Code, do NOT paste the prompt into any Claude product (claude.ai, Claude API, Claude App). Using the same model family as executor defeats the purpose of cross-model review. Use ChatGPT, DeepSeek, Kimi, Gemini, or any non-Claude model.</span>
+</div>
+
 <details class="tutorial" id="tutorial">
   <summary id="tutorialTitle">How to use</summary>
   <ol>
     <li id="step1">Copy the prompt from the left panel</li>
-    <li id="step2">Paste it into any AI model (ChatGPT, DeepSeek, Kimi, Claude, etc.)</li>
+    <li id="step2">Paste it into a DIFFERENT model family (ChatGPT, DeepSeek, Kimi, Gemini, etc.)</li>
     <li id="step3">Copy the model's full response</li>
     <li id="step4">Paste it into the right panel and click Submit</li>
   </ol>
@@ -98,15 +106,17 @@ footer { padding: 10px 24px; border-top: 1px solid var(--border); background: va
 const i18n = {
   en: {
     title: "Manual Review — ARIS",
+    warningTitle: "Cross-Model Review Required",
+    warningText: "If you are running this from Claude Code, do NOT paste the prompt into any Claude product (claude.ai, Claude API, Claude App). Using the same model family as executor defeats the purpose of cross-model review. Use ChatGPT, DeepSeek, Kimi, Gemini, or any non-Claude model.",
     tutorialTitle: "How to use",
     step1: "Copy the prompt from the left panel",
-    step2: "Paste it into any AI model (ChatGPT, DeepSeek, Kimi, Claude, etc.)",
+    step2: "Paste it into a DIFFERENT model family (ChatGPT, DeepSeek, Kimi, Gemini, etc.)",
     step3: "Copy the model's full response",
     step4: "Paste it into the right panel and click Submit",
     promptLabel: "Review Prompt",
     responseLabel: "Paste Response",
-    copyBtn: "📋 Copy Prompt",
-    submitBtn: "✓ Submit",
+    copyBtn: "Copy Prompt",
+    submitBtn: "Submit",
     placeholder: "Paste the model's response here...",
     configHint: "Recommended: reasoning_effort = ",
     threadInfo: "Thread: ",
@@ -119,15 +129,17 @@ const i18n = {
   },
   zh: {
     title: "手动评审 — ARIS",
+    warningTitle: "必须使用不同模型家族",
+    warningText: "如果你从 Claude Code 运行此流程，请勿将提示词粘贴到任何 Claude 产品（claude.ai、Claude API、Claude App）。使用与执行器相同的模型家族会使跨模型评审失去意义。请使用 ChatGPT、DeepSeek、Kimi、Gemini 或其他非 Claude 模型。",
     tutorialTitle: "使用方法",
     step1: "从左侧面板复制提示词",
-    step2: "粘贴到任意 AI 模型（ChatGPT、DeepSeek、Kimi、Claude 等）",
+    step2: "粘贴到不同模型家族（ChatGPT、DeepSeek、Kimi、Gemini 等）",
     step3: "复制模型的完整回复",
     step4: "粘贴到右侧面板并点击提交",
     promptLabel: "评审提示词",
     responseLabel: "粘贴回复",
-    copyBtn: "📋 复制提示词",
-    submitBtn: "✓ 提交",
+    copyBtn: "复制提示词",
+    submitBtn: "提交",
     placeholder: "在此粘贴模型的回复...",
     configHint: "建议推理强度: reasoning_effort = ",
     threadInfo: "线程: ",
@@ -142,10 +154,12 @@ const i18n = {
 
 let lang = navigator.language.startsWith("zh") ? "zh" : "en";
 let ctx = {};
+let token = new URLSearchParams(window.location.search).get("token") || "";
 
 async function init() {
-  const res = await fetch("/api/context");
+  const res = await fetch("/api/context?token=" + token);
   ctx = await res.json();
+  if (ctx.token) token = ctx.token;
   document.getElementById("promptArea").value = ctx.prompt || "";
   const effort = (ctx.config || {}).model_reasoning_effort || "xhigh";
   document.getElementById("configHint").textContent = i18n[lang].configHint + effort;
@@ -185,6 +199,8 @@ function switchLang(newLang) {
 function applyLang() {
   const t = i18n[lang];
   document.getElementById("title").textContent = t.title;
+  document.getElementById("warningTitle").textContent = t.warningTitle;
+  document.getElementById("warningText").textContent = t.warningText;
   document.getElementById("tutorialTitle").textContent = t.tutorialTitle;
   document.getElementById("step1").textContent = t.step1;
   document.getElementById("step2").textContent = t.step2;
@@ -217,7 +233,7 @@ async function submitResponse() {
   const text = document.getElementById("responseArea").value.trim();
   if (!text) return;
   document.getElementById("submitBtn").disabled = true;
-  const res = await fetch("/api/submit", {
+  const res = await fetch("/api/submit?token=" + token, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({response: text}),

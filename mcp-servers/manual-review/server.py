@@ -153,30 +153,42 @@ def get_history(thread_id: str) -> list[dict[str, str]]:
 
 # --- Pending state file ---
 
+def _pending_dir_for(thread_id: str) -> Path:
+    """Per-thread pending directory to avoid clobbering in concurrent calls."""
+    return PENDING_DIR / thread_id
+
+
 def write_pending_state(url: str | None, thread_id: str, prompt_file: str | None) -> None:
+    pdir = _pending_dir_for(thread_id)
     state = {
         "status": "waiting",
         "url": url,
         "prompt_file": prompt_file,
-        "response_file": str(PENDING_DIR / "response.md") if prompt_file else None,
+        "response_file": str(pdir / "response.md") if prompt_file else None,
         "thread_id": thread_id,
         "created_at": utc_now(),
     }
-    PENDING_DIR.mkdir(parents=True, exist_ok=True)
-    state_path = PENDING_DIR / "pending_review.json"
+    pdir.mkdir(parents=True, exist_ok=True)
+    state_path = pdir / "pending_review.json"
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+    # Also write a top-level pointer for easy discovery
+    PENDING_DIR.mkdir(parents=True, exist_ok=True)
+    (PENDING_DIR / "pending_review.json").write_text(
+        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
 
-def clear_pending_state() -> None:
-    state_path = PENDING_DIR / "pending_review.json"
-    if state_path.exists():
-        state_path.unlink()
-    prompt_path = PENDING_DIR / "prompt.md"
-    if prompt_path.exists():
-        prompt_path.unlink()
-    response_path = PENDING_DIR / "response.md"
-    if response_path.exists():
-        response_path.unlink()
+def clear_pending_state(thread_id: str | None = None) -> None:
+    # Clear per-thread dir
+    if thread_id:
+        pdir = _pending_dir_for(thread_id)
+        if pdir.exists():
+            import shutil
+            shutil.rmtree(pdir, ignore_errors=True)
+    # Clear top-level pointer
+    top_state = PENDING_DIR / "pending_review.json"
+    if top_state.exists():
+        top_state.unlink()
 
 
 
@@ -196,37 +208,74 @@ class _ReviewSession:
 _current_session: _ReviewSession | None = None
 _active_server: socketserver.TCPServer | None = None
 _active_server_lock = threading.Lock()
+_auth_token: str | None = None
+
+
+def _generate_token() -> str:
+    """Generate a one-shot auth token for this review session."""
+    return uuid.uuid4().hex[:16]
+
+
+def _check_token(handler) -> bool:
+    """Validate auth token from query string or header. Returns True if valid."""
+    # Check query string: ?token=xxx
+    from urllib.parse import urlparse, parse_qs
+    parsed = urlparse(handler.path)
+    params = parse_qs(parsed.query)
+    token_values = params.get("token", [])
+    if token_values and token_values[0] == _auth_token:
+        return True
+    # Check header: X-Review-Token
+    header_token = handler.headers.get("X-Review-Token", "")
+    if header_token == _auth_token:
+        return True
+    return False
 
 
 class _ReviewHandler(http.server.BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         debug_log(f"HTTP {format % args}")
 
+    def _get_clean_path(self) -> str:
+        from urllib.parse import urlparse
+        return urlparse(self.path).path
+
     def do_GET(self):
-        if self.path == "/":
+        path = self._get_clean_path()
+        if path == "/":
+            if not _check_token(self):
+                self.send_error(403, "Invalid or missing token")
+                return
             html = load_ui_html()
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
-        elif self.path == "/api/context":
+        elif path == "/api/context":
+            if not _check_token(self):
+                self.send_error(403, "Invalid or missing token")
+                return
             session = _current_session
             ctx = {
                 "prompt": session.prompt if session else "",
                 "config": session.config if session else {},
                 "threadId": session.thread_id if session else "",
                 "history": session.history if session else [],
+                "token": _auth_token or "",
             }
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(json.dumps(ctx, ensure_ascii=False).encode("utf-8"))
         else:
             self.send_error(404)
 
     def do_POST(self):
-        if self.path == "/api/submit":
+        path = self._get_clean_path()
+        if path == "/api/submit":
+            if not _check_token(self):
+                self.send_error(403, "Invalid or missing token")
+                return
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length).decode("utf-8")
             try:
@@ -250,15 +299,11 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
-        self.end_headers()
+        self.send_error(403, "CORS not allowed")
 
 
 def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history: list) -> tuple[str | None, str | None]:
-    global _current_session, _active_server
+    global _current_session, _active_server, _auth_token
 
     # Cleanup any leftover server from a previous interrupted call
     with _active_server_lock:
@@ -270,6 +315,7 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
                 pass
             _active_server = None
         _current_session = _ReviewSession(prompt, config, thread_id, history)
+        _auth_token = _generate_token()
 
     # Try fixed port, increment on conflict
     server = None
@@ -289,7 +335,7 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
     with _active_server_lock:
         _active_server = server
 
-    url = f"http://127.0.0.1:{port}"
+    url = f"http://127.0.0.1:{port}?token={_auth_token}"
 
     write_pending_state(url=url, thread_id=thread_id, prompt_file=None)
     debug_log(f"HTTP server started on {url}")
@@ -315,7 +361,7 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
     server.server_close()
     with _active_server_lock:
         _active_server = None
-    clear_pending_state()
+    clear_pending_state(thread_id)
 
     if not _current_session.done.is_set():
         _current_session = None
@@ -329,9 +375,10 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
 # --- File mode: prompt.md / response.md ---
 
 def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: list) -> tuple[str | None, str | None]:
-    PENDING_DIR.mkdir(parents=True, exist_ok=True)
-    prompt_path = PENDING_DIR / "prompt.md"
-    response_path = PENDING_DIR / "response.md"
+    pdir = _pending_dir_for(thread_id)
+    pdir.mkdir(parents=True, exist_ok=True)
+    prompt_path = pdir / "prompt.md"
+    response_path = pdir / "response.md"
 
     # Clean up any stale response file
     if response_path.exists():
@@ -369,7 +416,7 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
             continue
         # Stability check: content must be non-empty and unchanged across two reads
         if content == prev_content:
-            clear_pending_state()
+            clear_pending_state(thread_id)
             return content, None
         prev_content = content
         time.sleep(FILE_STABLE_INTERVAL_SEC)
@@ -380,11 +427,11 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
             prev_content = None
             continue
         if content2 == content and content2:
-            clear_pending_state()
+            clear_pending_state(thread_id)
             return content2, None
         prev_content = content2
 
-    clear_pending_state()
+    clear_pending_state(thread_id)
     return None, f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for {response_path}"
 
 

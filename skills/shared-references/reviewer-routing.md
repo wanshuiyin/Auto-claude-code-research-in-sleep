@@ -115,8 +115,8 @@ If `— reviewer: manual`:
             prompt: [follow-up prompt]
             config: {"model_reasoning_effort": "xhigh"}
     → If NOT available:
-        Print: "⚠️ Manual Review MCP not installed. Falling back to Codex xhigh."
-        Use mcp__codex__codex as normal.
+        Print: "⚠️ Manual Review MCP not installed. Install with: claude mcp add manual-review -s user -- python3 /path/to/mcp-servers/manual-review/server.py"
+        STOP. Do NOT fall back to Codex (the target user likely has no Codex subscription).
 ```
 
 ### Invariants
@@ -149,9 +149,9 @@ claude mcp add manual-review -s user -- python3 /path/to/mcp-servers/manual-revi
 
 All skills that support `— reviewer: oracle-pro` also support `— reviewer: manual`.
 
-### NOT installed = ZERO impact
+### NOT installed = explicit error (not silent fallback)
 
-If manual-review MCP is not installed, `— reviewer: manual` gracefully falls back to Codex. No error, no breakage, just a warning.
+If manual-review MCP is not installed, `— reviewer: manual` prints install instructions and stops. It does NOT fall back to Codex — the target user likely has no Codex subscription, so a silent fallback would fail anyway.
 
 ### Future work
 

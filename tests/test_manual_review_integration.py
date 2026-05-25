@@ -112,12 +112,12 @@ def read_response(proc, timeout=15):
     return json.loads(body.decode("utf-8"))
 
 
-def simulate_user_submit(port, response_text, delay=1.0):
+def simulate_user_submit(port, response_text, token="", delay=1.0):
     """Simulate a user pasting a response after a short delay."""
     time.sleep(delay)
     data = json.dumps({"response": response_text}).encode("utf-8")
     req = urllib.request.Request(
-        f"http://127.0.0.1:{port}/api/submit",
+        f"http://127.0.0.1:{port}/api/submit?token={token}",
         data=data,
         headers={"Content-Type": "application/json"},
     )
@@ -129,8 +129,8 @@ def simulate_user_submit(port, response_text, delay=1.0):
         return False
 
 
-def find_server_port(pending_dir, timeout=8):
-    """Read the port from the pending state file written by the server."""
+def find_server_port_and_token(pending_dir, timeout=8):
+    """Read the port and token from the pending state file written by the server."""
     state_path = Path(pending_dir) / "pending_review.json"
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -139,17 +139,23 @@ def find_server_port(pending_dir, timeout=8):
                 data = json.loads(state_path.read_text(encoding="utf-8"))
                 url = data.get("url", "")
                 if url and ":" in url:
-                    port = int(url.rsplit(":", 1)[1])
+                    # URL format: http://127.0.0.1:PORT?token=TOKEN
+                    from urllib.parse import urlparse, parse_qs
+                    parsed = urlparse(url)
+                    port = parsed.port
+                    token = parse_qs(parsed.query).get("token", [""])[0]
                     # Verify it's actually responding
                     try:
-                        urllib.request.urlopen(f"http://127.0.0.1:{port}/api/context", timeout=1)
-                        return port
+                        urllib.request.urlopen(
+                            f"http://127.0.0.1:{port}/api/context?token={token}", timeout=1
+                        )
+                        return port, token
                     except:
                         pass
             except (json.JSONDecodeError, ValueError, OSError):
                 pass
         time.sleep(0.3)
-    return None
+    return None, None
 
 
 def main():
@@ -211,7 +217,7 @@ def main():
 
         # Find the port by reading the pending state file
         print("    Searching for HTTP server port...")
-        port = find_server_port(pending_dir, timeout=8)
+        port, token = find_server_port_and_token(pending_dir, timeout=8)
         if not port:
             print("    FAIL — could not find HTTP server port")
             return False
@@ -219,7 +225,7 @@ def main():
         print(f"    Found server at port {port}")
 
         # Verify /api/context returns the correct prompt
-        ctx_resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/context")
+        ctx_resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/context?token={token}")
         ctx = json.loads(ctx_resp.read().decode("utf-8"))
         # Compare stripped to handle platform line-ending differences
         assert ctx["prompt"].strip() == REALISTIC_PROMPT.strip(), \
@@ -231,7 +237,7 @@ def main():
         print("\n[3] Simulating user pasting review response...")
         print(f"    Response length: {len(REALISTIC_RESPONSE)} chars")
 
-        submit_ok = simulate_user_submit(port, REALISTIC_RESPONSE, delay=0.5)
+        submit_ok = simulate_user_submit(port, REALISTIC_RESPONSE, token=token, delay=0.5)
         assert submit_ok, "Submit failed!"
         print("    OK — response submitted via HTTP")
 
@@ -292,13 +298,13 @@ Please re-score and re-assess. Has the paper improved?
         }, req_id=4)
 
         time.sleep(1.5)
-        port2 = find_server_port(pending_dir, timeout=8)
+        port2, token2 = find_server_port_and_token(pending_dir, timeout=8)
         if not port2:
             print("    FAIL — could not find HTTP server for round 2")
             return False
 
         # Verify history is shown
-        ctx2_resp = urllib.request.urlopen(f"http://127.0.0.1:{port2}/api/context")
+        ctx2_resp = urllib.request.urlopen(f"http://127.0.0.1:{port2}/api/context?token={token2}")
         ctx2 = json.loads(ctx2_resp.read().decode("utf-8"))
         assert len(ctx2["history"]) >= 2, f"Expected history, got: {len(ctx2['history'])} items"
         assert ctx2["history"][0]["role"] == "user"
@@ -307,7 +313,7 @@ Please re-score and re-assess. Has the paper improved?
 
         # Submit round 2 response
         round2_response = "## Overall Score: 7/10\n\nThe paper has improved significantly. All three major issues addressed."
-        simulate_user_submit(port2, round2_response, delay=0.5)
+        simulate_user_submit(port2, round2_response, token=token2, delay=0.5)
 
         result2 = read_response(proc, timeout=10)
         assert result2 is not None
