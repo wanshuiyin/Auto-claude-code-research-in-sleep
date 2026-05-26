@@ -26,14 +26,14 @@ claude mcp add manual-review -s user -- python3 /path/to/Auto-claude-code-resear
 
 ## 使用方法
 
-在任何支持跨模型评审的技能后添加 `— reviewer: manual`：
+在已接线的技能后添加 `— reviewer: manual`（见下方支持的技能）：
 
 ```
 /auto-review-loop "your topic" — reviewer: manual
 /research-review "paper/" — reviewer: manual
-/experiment-bridge — reviewer: manual, code review: true
+/experiment-audit "results/" — reviewer: manual
 /proof-checker "paper/" — reviewer: manual
-/citation-audit "paper/" — reviewer: manual
+/rebuttal "paper/" — reviewer: manual
 /idea-creator "direction" — reviewer: manual
 ```
 

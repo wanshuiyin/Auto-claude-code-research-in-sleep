@@ -26,14 +26,14 @@ No additional dependencies required — the server uses only Python standard lib
 
 ## Usage
 
-Add `— reviewer: manual` to any skill that supports cross-model review:
+Add `— reviewer: manual` to any wired skill (see Supported Skills below):
 
 ```
 /auto-review-loop "your topic" — reviewer: manual
 /research-review "paper/" — reviewer: manual
-/experiment-bridge — reviewer: manual, code review: true
+/experiment-audit "results/" — reviewer: manual
 /proof-checker "paper/" — reviewer: manual
-/citation-audit "paper/" — reviewer: manual
+/rebuttal "paper/" — reviewer: manual
 /idea-creator "direction" — reviewer: manual
 ```
 
