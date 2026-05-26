@@ -157,9 +157,14 @@ The following skills are wired for manual review (Claude Code only):
 | `/proof-checker` | Yes |
 | `/rebuttal` | Yes |
 | `/idea-creator` | Yes |
-| `/research-lit` | Yes |
+
+> `/research-lit` supports `oracle-pro` only; manual review is not wired because the skill has no reviewer call blocks.
 
 > **Platform note**: Manual review requires MCP tools (available only in Claude Code). Mirrored skill packs under `skills/skills-codex/` and `skills/skills-codex-*-review/` do NOT include manual-review wiring — they target Codex CLI and other platforms that lack MCP support. Oracle-pro support in those mirrors is unaffected.
+
+### Nightmare mode (Codex-only)
+
+Manual review supports medium/hard MCP-style review. Codex-exec nightmare mode is Codex-only and must fail closed when reviewer is manual.
 
 ### NOT installed = explicit error (not silent fallback)
 

@@ -3,9 +3,11 @@
 Covers:
 1. MCP protocol (initialize, tools/list, tool call format)
 2. Browser mode (HTTP server + submit flow)
-3. File mode (prompt.md / response.md exchange with stability check)
+3. File mode (prompt.md / response.md exchange with stability check + cross-model warning)
 4. Thread management (review + review_reply continuity)
 5. Error handling (empty response, missing threadId, timeout)
+6. Cancellation (notifications/cancelled, per-call state)
+7. Concurrency (fail-fast on second review)
 """
 
 import json
@@ -41,6 +43,17 @@ def _send_jsonrpc(proc, method, params=None, req_id=1):
     proc.stdin.flush()
 
 
+def _send_notification(proc, method, params=None):
+    """Send a JSON-RPC notification (no id field) to the server process."""
+    msg = {"jsonrpc": "2.0", "method": method}
+    if params:
+        msg["params"] = params
+    payload = json.dumps(msg).encode("utf-8")
+    header = f"Content-Length: {len(payload)}\r\n\r\n".encode("utf-8")
+    proc.stdin.write(header + payload)
+    proc.stdin.flush()
+
+
 def _read_response(proc, timeout=5):
     """Read a JSON-RPC response from the server process stdout."""
     deadline = time.monotonic() + timeout
@@ -62,14 +75,20 @@ def _read_response(proc, timeout=5):
     return json.loads(body.decode("utf-8"))
 
 
-def _start_server():
+def _start_server(**extra_env):
     """Start the MCP server as a subprocess."""
+    env = {
+        **os.environ,
+        "MANUAL_REVIEW_AUTO_OPEN": "false",
+        "MANUAL_REVIEW_TIMEOUT_SEC": "10",
+        **extra_env,
+    }
     proc = subprocess.Popen(
         [sys.executable, str(SERVER_DIR / "server.py")],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env={**os.environ, "MANUAL_REVIEW_AUTO_OPEN": "false", "MANUAL_REVIEW_TIMEOUT_SEC": "10"},
+        env=env,
     )
     return proc
 
@@ -82,6 +101,8 @@ def test_import():
     assert hasattr(srv, "handle_request")
     assert hasattr(srv, "create_thread")
     assert hasattr(srv, "do_review")
+    assert hasattr(srv, "_PendingCall")
+    assert hasattr(srv, "_cancel_active_call")
 
 
 # ============================================================
@@ -94,8 +115,8 @@ def test_initialize():
         resp = _read_response(proc)
         assert resp is not None, "no response"
         r = resp.get("result", {})
-        assert r.get("protocolVersion") == "2024-11-05", f"wrong protocol: {r.get('protocolVersion')}"
-        assert r.get("serverInfo", {}).get("name") == "manual-review", f"wrong server name: {r.get('serverInfo')}"
+        assert r.get("protocolVersion") == "2024-11-05"
+        assert r.get("serverInfo", {}).get("name") == "manual-review"
     finally:
         proc.terminate()
         proc.wait(timeout=3)
@@ -114,12 +135,11 @@ def test_tools_list():
         assert resp is not None, "no response"
         tools = resp.get("result", {}).get("tools", [])
         names = [t["name"] for t in tools]
-        assert "review" in names, f"missing 'review' tool: {names}"
-        assert "review_reply" in names, f"missing 'review_reply' tool: {names}"
-        # Verify schemas
+        assert "review" in names, f"missing 'review': {names}"
+        assert "review_reply" in names, f"missing 'review_reply': {names}"
         review_tool = next(t for t in tools if t["name"] == "review")
         required = review_tool["inputSchema"].get("required", [])
-        assert "prompt" in required, "'prompt' not required in review schema"
+        assert "prompt" in required, "'prompt' not required"
     finally:
         proc.terminate()
         proc.wait(timeout=3)
@@ -136,15 +156,15 @@ def test_thread_management():
     srv.append_exchange(tid, "assistant", "world")
     history = srv.get_history(tid)
     assert len(history) == 2, f"expected 2 entries, got {len(history)}"
-    assert history[0]["role"] == "user", f"wrong role: {history[0]}"
-    assert history[1]["content"] == "world", f"wrong content: {history[1]}"
+    assert history[0]["role"] == "user"
+    assert history[1]["content"] == "world"
 
 
 import socketserver
 
 
 # ============================================================
-# Test 5: Browser mode — HTTP server serves UI and accepts submit
+# Test 5: Browser mode — HTTP server + submit flow
 # ============================================================
 def test_browser_mode_http():
     import server as srv
@@ -154,7 +174,7 @@ def test_browser_mode_http():
     thread_id = srv.create_thread()
 
     srv._current_session = srv._ReviewSession(prompt, config, thread_id, [])
-    srv._auth_token = "test_token_123"
+    srv._auth_token = "test_token_123_test_token_123"  # full uuid hex
     server = socketserver.TCPServer(("127.0.0.1", 0), srv._ReviewHandler)
     port = server.server_address[1]
     server_thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -162,23 +182,53 @@ def test_browser_mode_http():
     token = srv._auth_token
 
     try:
-        # Test GET / returns HTML
+        # GET / returns HTML
         resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/?token={token}")
         html = resp.read().decode("utf-8")
-        assert "Manual Review" in html, f"unexpected HTML content"
+        assert "Manual Review" in html
 
-        # Test GET / without token is rejected (403)
-        with pytest.raises(urllib.error.HTTPError) as exc_info:
+        # GET / without token → 403
+        with pytest.raises(urllib.error.HTTPError) as exc:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/")
-        assert exc_info.value.code == 403, f"wrong status: {exc_info.value.code}"
+        assert exc.value.code == 403
 
-        # Test GET /api/context returns correct JSON
-        resp = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/context?token={token}")
+        # GET / with bad Origin → 403
+        req_origin = urllib.request.Request(
+            f"http://127.0.0.1:{port}/?token={token}",
+            headers={"Origin": "http://evil.com"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc2:
+            urllib.request.urlopen(req_origin)
+        assert exc2.value.code == 403
+
+        # GET / with cross-site Sec-Fetch-Site → 403
+        req_fetch = urllib.request.Request(
+            f"http://127.0.0.1:{port}/?token={token}",
+            headers={"Sec-Fetch-Site": "cross-site"},
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc3:
+            urllib.request.urlopen(req_fetch)
+        assert exc3.value.code == 403
+
+        # OPTIONS → 403
+        req_options = urllib.request.Request(
+            f"http://127.0.0.1:{port}/?token={token}", method="OPTIONS",
+        )
+        with pytest.raises(urllib.error.HTTPError) as exc4:
+            urllib.request.urlopen(req_options)
+        assert exc4.value.code == 403
+
+        # GET /api/context with valid token + same-origin → 200
+        resp = urllib.request.urlopen(
+            f"http://127.0.0.1:{port}/api/context?token={token}",
+        )
         ctx = json.loads(resp.read().decode("utf-8"))
-        assert ctx.get("prompt") == prompt, f"wrong prompt: {ctx.get('prompt')[:50]}"
-        assert ctx.get("config", {}).get("model_reasoning_effort") == "xhigh", f"wrong config: {ctx.get('config')}"
+        assert ctx.get("prompt") == prompt
+        assert ctx.get("config", {}).get("model_reasoning_effort") == "xhigh"
+        # Response headers must NOT contain Access-Control-Allow-Origin
+        assert "Access-Control-Allow-Origin" not in str(resp.headers)
 
-        # Test POST /api/submit
+        # POST /api/submit with valid token → 200
         submit_data = json.dumps({"response": "This is the review response"}).encode("utf-8")
         req = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/submit?token={token}",
@@ -187,19 +237,19 @@ def test_browser_mode_http():
         )
         resp = urllib.request.urlopen(req)
         result = json.loads(resp.read().decode("utf-8"))
-        assert result.get("ok"), f"not ok: {result}"
-        assert srv._current_session.response == "This is the review response", "response not captured in session"
+        assert result.get("ok")
+        assert srv._current_session.response == "This is the review response"
 
-        # Test POST with empty response is rejected (400)
+        # POST empty → 400
         submit_empty = json.dumps({"response": ""}).encode("utf-8")
         req2 = urllib.request.Request(
             f"http://127.0.0.1:{port}/api/submit?token={token}",
             data=submit_empty,
             headers={"Content-Type": "application/json"},
         )
-        with pytest.raises(urllib.error.HTTPError) as exc_info2:
+        with pytest.raises(urllib.error.HTTPError) as exc5:
             urllib.request.urlopen(req2)
-        assert exc_info2.value.code == 400, f"wrong status: {exc_info2.value.code}"
+        assert exc5.value.code == 400
 
     finally:
         server.shutdown()
@@ -207,7 +257,7 @@ def test_browser_mode_http():
 
 
 # ============================================================
-# Test 6: File mode — prompt write + response read with stability
+# Test 6: File mode — prompt + response + cross-model warning
 # ============================================================
 def test_file_mode():
     import server as srv
@@ -228,18 +278,21 @@ def test_file_mode():
             prompt = "File mode test prompt"
             config = {"model_reasoning_effort": "xhigh"}
             thread_id = srv.create_thread()
+            cancel_evt = threading.Event()
 
             result_holder = [None, None]
 
             def run_file_review():
-                r, e = srv.wait_for_file_response(prompt, config, thread_id, [])
+                r, e = srv.wait_for_file_response(
+                    prompt, config, thread_id, [], cancel_evt, "test cancel",
+                )
                 result_holder[0] = r
                 result_holder[1] = e
 
             t = threading.Thread(target=run_file_review, daemon=True)
             t.start()
 
-            # Wait for prompt file to appear (now in per-thread subdir)
+            # Wait for prompt.md
             deadline = time.monotonic() + 5
             prompt_path = None
             while time.monotonic() < deadline:
@@ -253,16 +306,19 @@ def test_file_mode():
             assert prompt_path is not None, "prompt.md not created"
 
             content = prompt_path.read_text(encoding="utf-8")
-            assert "File mode test prompt" in content, f"wrong content: {content[:100]}"
+            assert "Cross-Model Warning" in content, "missing cross-model warning"
+            assert "do NOT paste this prompt into any Claude product" in content, \
+                "missing Claude-specific warning"
+            assert "File mode test prompt" in content, f"wrong content: {content[:200]}"
 
             # Simulate user writing response
             response_path = prompt_path.parent / "response.md"
             response_path.write_text("This is the file mode response", encoding="utf-8")
 
             t.join(timeout=6)
-            assert not t.is_alive(), "timed out waiting for file read"
+            assert not t.is_alive(), "timed out"
             assert result_holder[1] is None, f"error: {result_holder[1]}"
-            assert result_holder[0] == "This is the file mode response", f"wrong: {result_holder[0]}"
+            assert result_holder[0] == "This is the file mode response"
 
         finally:
             srv.PENDING_DIR = original_dir
@@ -273,7 +329,7 @@ def test_file_mode():
 
 
 # ============================================================
-# Test 7: File mode — empty file is NOT accepted
+# Test 7: File mode — empty file rejected
 # ============================================================
 def test_file_mode_empty_rejected():
     import server as srv
@@ -292,17 +348,19 @@ def test_file_mode_empty_rejected():
 
         try:
             thread_id = srv.create_thread()
+            cancel_evt = threading.Event()
             result_holder = [None, None]
 
             def run():
-                r, e = srv.wait_for_file_response("test", {}, thread_id, [])
+                r, e = srv.wait_for_file_response(
+                    "test", {}, thread_id, [], cancel_evt, "test cancel",
+                )
                 result_holder[0] = r
                 result_holder[1] = e
 
             t = threading.Thread(target=run, daemon=True)
             t.start()
 
-            # Wait for prompt file to appear (now in per-thread subdir)
             deadline = time.monotonic() + 5
             prompt_path = None
             while time.monotonic() < deadline:
@@ -315,20 +373,18 @@ def test_file_mode_empty_rejected():
 
             assert prompt_path is not None, "prompt.md not created"
 
-            # Create empty response file
+            # Empty file first
             response_path = prompt_path.parent / "response.md"
             response_path.write_text("", encoding="utf-8")
-
-            # Wait a bit — server should NOT accept empty file
             time.sleep(3)
 
-            # Now write actual content
+            # Then real content
             response_path.write_text("Real response after empty", encoding="utf-8")
 
             t.join(timeout=5)
             assert not t.is_alive(), "thread still alive"
             assert result_holder[0] == "Real response after empty", \
-                f"expected 'Real response after empty', got: {result_holder}"
+                f"unexpected: {result_holder}"
 
         finally:
             srv.PENDING_DIR = original_dir
@@ -339,39 +395,27 @@ def test_file_mode_empty_rejected():
 
 
 # ============================================================
-# Test 8: handle_request — review tool call with missing prompt
+# Test 8: review rejects empty prompt
 # ============================================================
 def test_review_missing_prompt():
     import server as srv
-    resp = srv.handle_request({
-        "jsonrpc": "2.0",
-        "id": 99,
-        "method": "tools/call",
-        "params": {"name": "review", "arguments": {"prompt": ""}},
-    })
-    content = resp["result"]["content"][0]["text"]
-    data = json.loads(content)
-    assert "error" in data and "required" in data["error"], f"unexpected: {data}"
+    resp = srv.handle_review({"prompt": ""}, 99, threading.Event(), "")
+    assert resp["result"].get("isError") is True, f"unexpected: {resp}"
 
 
 # ============================================================
-# Test 9: handle_request — review_reply with unknown threadId
+# Test 9: review_reply rejects unknown threadId
 # ============================================================
 def test_review_reply_unknown_thread():
     import server as srv
-    resp = srv.handle_request({
-        "jsonrpc": "2.0",
-        "id": 100,
-        "method": "tools/call",
-        "params": {"name": "review_reply", "arguments": {"threadId": "nonexistent", "prompt": "hi"}},
-    })
-    content = resp["result"]["content"][0]["text"]
-    data = json.loads(content)
-    assert "error" in data and "Unknown" in data["error"], f"unexpected: {data}"
+    resp = srv.handle_review_reply(
+        {"threadId": "nonexistent", "prompt": "hi"}, 100, threading.Event(), "",
+    )
+    assert resp["result"].get("isError") is True, f"unexpected: {resp}"
 
 
 # ============================================================
-# Test 10: Pending state file creation and cleanup
+# Test 10: Pending state file
 # ============================================================
 def test_pending_state():
     import server as srv
@@ -381,21 +425,20 @@ def test_pending_state():
         srv.PENDING_DIR = Path(tmpdir)
         try:
             srv.write_pending_state("http://127.0.0.1:9999", "test123", None)
-            # Top-level pointer is written besides per-thread dir
             state_path = Path(tmpdir) / "pending_review.json"
-            assert state_path.exists(), "pending_review.json not created"
+            assert state_path.exists()
             state = json.loads(state_path.read_text(encoding="utf-8"))
-            assert state["url"] == "http://127.0.0.1:9999", f"wrong url: {state}"
-            assert state["thread_id"] == "test123", f"wrong thread_id: {state}"
+            assert state["url"] == "http://127.0.0.1:9999"
+            assert state["thread_id"] == "test123"
 
             srv.clear_pending_state(thread_id="test123")
-            assert not state_path.exists(), "pending_review.json not removed"
+            assert not state_path.exists()
         finally:
             srv.PENDING_DIR = original_dir
 
 
 # ============================================================
-# Test 11: File mode cancellation (real _cancel_pending_call path)
+# Test 11: File mode cancellation via _PendingCall
 # ============================================================
 def test_file_mode_cancelled():
     import server as srv
@@ -406,37 +449,240 @@ def test_file_mode_cancelled():
         original_mode = srv.MODE
         srv.MODE = "file"
         original_timeout = srv.DEFAULT_TIMEOUT_SEC
-        srv.DEFAULT_TIMEOUT_SEC = 60  # Long timeout, but should be cancelled quickly
+        srv.DEFAULT_TIMEOUT_SEC = 60
 
         try:
             thread_id = srv.create_thread()
             done = threading.Event()
 
+            pending = srv._PendingCall(99)
+            srv._pending_call = pending
+
             def run():
-                srv.wait_for_file_response("cancel test", {}, thread_id, [])
+                srv.wait_for_file_response(
+                    "cancel test", {}, thread_id, [],
+                    pending.cancel_event, pending.cancel_reason,
+                )
                 done.set()
 
             t = threading.Thread(target=run, daemon=True)
-            srv._pending_call_thread = t
+            pending.thread = t
             t.start()
 
-            # Give the thread time to write prompt.md and start polling
+            # Give time to write prompt.md
             time.sleep(1.0)
 
-            # Use the real _cancel_pending_call path (not just setting the event)
-            success = srv._cancel_pending_call()
+            # Cancel via the real _cancel_active_call path
+            srv._cancel_active_call(99, "test cancellation")
 
-            # Thread should exit quickly after cancellation
-            assert done.wait(timeout=5), "old file-mode call did not exit after _cancel_pending_call()"
+            assert done.wait(timeout=5), "file-mode call did not exit after cancel"
             assert not t.is_alive()
-            assert success
 
         finally:
             srv.PENDING_DIR = original_dir
             srv.MODE = original_mode
             srv.DEFAULT_TIMEOUT_SEC = original_timeout
-            srv._pending_call_thread = None
-            srv._pending_call_cancelled.clear()
+            srv._pending_call = None
+
+
+# ============================================================
+# Test 12: MCP cancellation notification cleans up (subprocess)
+# ============================================================
+def test_mcp_cancel_notification_cleans_browser_state():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pending_dir = Path(tmpdir) / "pending_review"
+        proc = _start_server(
+            MANUAL_REVIEW_TIMEOUT_SEC="30",
+            MANUAL_REVIEW_PENDING_DIR=str(pending_dir),
+        )
+        try:
+            _send_jsonrpc(proc, "initialize", {}, req_id=1)
+            _read_response(proc)
+
+            # Start a review call (request id=2)
+            _send_jsonrpc(proc, "tools/call", {
+                "name": "review",
+                "arguments": {"prompt": "test cancel notification", "config": {}},
+            }, req_id=2)
+
+            # Wait for pending state to appear
+            deadline = time.monotonic() + 5
+            top_state = pending_dir / "pending_review.json"
+            while time.monotonic() < deadline:
+                if top_state.exists():
+                    break
+                time.sleep(0.2)
+            assert top_state.exists(), "pending_review.json not created"
+
+            # Send cancellation notification
+            _send_notification(proc, "notifications/cancelled", {
+                "requestId": 2,
+                "reason": "test cancel",
+            })
+
+            # Pending state should be cleaned up promptly
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if not top_state.exists():
+                    break
+                time.sleep(0.2)
+            assert not top_state.exists(), "pending state not cleaned after cancel"
+
+            # Server should still be alive and accept a new request
+            _send_jsonrpc(proc, "tools/call", {
+                "name": "review",
+                "arguments": {"prompt": "second call after cancel", "config": {}},
+            }, req_id=3)
+
+            # New pending state should appear
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if top_state.exists():
+                    break
+                time.sleep(0.2)
+            assert top_state.exists(), "pending state not created for new request"
+            new_state = json.loads(top_state.read_text(encoding="utf-8"))
+            assert new_state.get("status") == "waiting"
+
+        finally:
+            proc.terminate()
+            proc.wait(timeout=3)
+
+
+# ============================================================
+# Test 13: Second review rejected while first is pending
+# ============================================================
+def test_second_review_rejected_while_first_pending():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pending_dir = Path(tmpdir) / "pending_review"
+        proc = _start_server(
+            MANUAL_REVIEW_TIMEOUT_SEC="30",
+            MANUAL_REVIEW_PENDING_DIR=str(pending_dir),
+        )
+        try:
+            _send_jsonrpc(proc, "initialize", {}, req_id=1)
+            _read_response(proc)
+
+            # First review (id=2)
+            _send_jsonrpc(proc, "tools/call", {
+                "name": "review",
+                "arguments": {"prompt": "first review", "config": {}},
+            }, req_id=2)
+
+            # Wait for pending state
+            top_state = pending_dir / "pending_review.json"
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if top_state.exists():
+                    break
+                time.sleep(0.2)
+            assert top_state.exists()
+            state_data = json.loads(top_state.read_text(encoding="utf-8"))
+            url = state_data["url"]
+            assert url, "no URL in pending state"
+
+            # Extract token
+            from urllib.parse import urlparse, parse_qs
+            token = parse_qs(urlparse(url).query).get("token", [""])[0]
+            port = urlparse(url).port
+
+            # Second review (id=3) — should be rejected
+            _send_jsonrpc(proc, "tools/call", {
+                "name": "review",
+                "arguments": {"prompt": "second review", "config": {}},
+            }, req_id=3)
+
+            resp2 = _read_response(proc, timeout=5)
+            assert resp2 is not None, "no response for second review"
+            result2_text = resp2["result"]["content"][0]["text"]
+            result2 = json.loads(result2_text)
+            assert "error" in result2, f"expected error, got: {result2}"
+            assert "already in progress" in result2["error"].lower(), \
+                f"wrong error: {result2['error']}"
+
+            # First review should still be alive — submit via HTTP
+            resp = urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/api/context?token={token}",
+            )
+            ctx = json.loads(resp.read().decode("utf-8"))
+            assert ctx.get("prompt") == "first review"
+
+            # Submit response for first review
+            submit_data = json.dumps({"response": "First review done"}).encode("utf-8")
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/submit?token={token}",
+                data=submit_data,
+                headers={"Content-Type": "application/json"},
+            )
+            urllib.request.urlopen(req)
+
+            # First review should complete normally
+            resp1 = _read_response(proc, timeout=5)
+            assert resp1 is not None, "no response for first review"
+            content1 = json.loads(resp1["result"]["content"][0]["text"])
+            assert content1.get("threadId")
+            assert content1.get("content") == "First review done"
+
+        finally:
+            proc.terminate()
+            proc.wait(timeout=3)
+
+
+# ============================================================
+# Test 14: Cancellation with mismatched requestId is ignored
+# ============================================================
+def test_cancel_wrong_request_id_ignored():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        pending_dir = Path(tmpdir) / "pending_review"
+        proc = _start_server(
+            MANUAL_REVIEW_TIMEOUT_SEC="30",
+            MANUAL_REVIEW_PENDING_DIR=str(pending_dir),
+        )
+        try:
+            _send_jsonrpc(proc, "initialize", {}, req_id=1)
+            _read_response(proc)
+
+            # Start review (id=2)
+            _send_jsonrpc(proc, "tools/call", {
+                "name": "review",
+                "arguments": {"prompt": "test wrong id cancel", "config": {}},
+            }, req_id=2)
+
+            # Wait for pending state
+            top_state = pending_dir / "pending_review.json"
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if top_state.exists():
+                    break
+                time.sleep(0.2)
+            assert top_state.exists()
+
+            # Cancel with wrong requestId (999 ≠ 2) — should be ignored
+            _send_notification(proc, "notifications/cancelled", {
+                "requestId": 999,
+                "reason": "wrong id",
+            })
+
+            # Pending state should still exist (cancel ignored)
+            time.sleep(1.0)
+            assert top_state.exists(), "pending state wrongly removed"
+
+            # Proper cancel
+            _send_notification(proc, "notifications/cancelled", {
+                "requestId": 2,
+                "reason": "correct id",
+            })
+
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if not top_state.exists():
+                    break
+                time.sleep(0.2)
+            assert not top_state.exists(), "pending state not cleaned"
+
+        finally:
+            proc.terminate()
+            proc.wait(timeout=3)
 
 
 # ============================================================

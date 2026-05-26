@@ -205,15 +205,28 @@ class _ReviewSession:
         self.done = threading.Event()
 
 
+class _PendingCall:
+    """Per-call state for the active blocking review call. Replaces global
+    _pending_call_cancelled with per-call cancellation that cannot be
+    cleared by a new call."""
+    def __init__(self, request_id: Any):
+        self.request_id = request_id
+        self.thread: threading.Thread | None = None
+        self.cancel_event = threading.Event()
+        self.suppress_response = False
+        self.cancel_reason = "Manual review request was cancelled"
+
+
 _current_session: _ReviewSession | None = None
 _active_server: socketserver.TCPServer | None = None
 _active_server_lock = threading.Lock()
 _auth_token: str | None = None
+_pending_call: _PendingCall | None = None
 
 
 def _generate_token() -> str:
     """Generate a one-shot auth token for this review session."""
-    return uuid.uuid4().hex[:16]
+    return uuid.uuid4().hex
 
 
 def _check_token(handler) -> bool:
@@ -322,7 +335,20 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
         self.send_error(403, "CORS not allowed")
 
 
-def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history: list) -> tuple[str | None, str | None]:
+FILE_MODE_WARNING = """# ARIS Manual Review - Cross-Model Warning
+
+If this workflow is running from Claude Code, do NOT paste this prompt into any Claude product (claude.ai, Claude API, Claude App). Using the same model family as executor defeats the purpose of ARIS cross-model review.
+
+如果此流程由 Claude Code 执行，请勿将此提示词粘贴到任何 Claude 产品。请使用 ChatGPT、DeepSeek、Kimi、Gemini、Qwen、本地模型或其他非 Claude 模型。
+
+---
+
+"""
+
+
+def wait_for_browser_response(prompt: str, config: dict, thread_id: str,
+                              history: list, cancel_event: threading.Event,
+                              cancel_reason: str) -> tuple[str | None, str | None]:
     global _current_session, _active_server, _auth_token
 
     # Cleanup any leftover server from a previous interrupted call
@@ -369,12 +395,13 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
         except Exception:
             pass
 
-    # Poll with short intervals so we can be cancelled if a new request arrives
+    # Poll with short intervals; check cancel BEFORE success
     deadline = time.monotonic() + DEFAULT_TIMEOUT_SEC
     while time.monotonic() < deadline:
+        if cancel_event.is_set():
+            _current_session = None
+            return None, cancel_reason
         if _current_session.done.wait(timeout=1.0):
-            break
-        if _pending_call_cancelled.is_set():
             break
 
     server.shutdown()
@@ -382,6 +409,11 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
     with _active_server_lock:
         _active_server = None
     clear_pending_state(thread_id)
+
+    # Check cancel before returning
+    if cancel_event.is_set():
+        _current_session = None
+        return None, cancel_reason
 
     if not _current_session.done.is_set():
         _current_session = None
@@ -394,7 +426,9 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str, history
 
 # --- File mode: prompt.md / response.md ---
 
-def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: list) -> tuple[str | None, str | None]:
+def wait_for_file_response(prompt: str, config: dict, thread_id: str,
+                            history: list, cancel_event: threading.Event,
+                            cancel_reason: str) -> tuple[str | None, str | None]:
     pdir = _pending_dir_for(thread_id)
     pdir.mkdir(parents=True, exist_ok=True)
     prompt_path = pdir / "prompt.md"
@@ -404,8 +438,9 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
     if response_path.exists():
         response_path.unlink()
 
-    # Write prompt
-    header = f"<!-- thread: {thread_id} | config: {json.dumps(config)} -->\n\n"
+    # Write prompt with cross-model warning
+    header = FILE_MODE_WARNING
+    header += f"<!-- thread: {thread_id} | config: {json.dumps(config)} -->\n\n"
     if history:
         header += "## Previous Exchanges\n\n"
         for i, ex in enumerate(history):
@@ -422,15 +457,16 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
     prev_content: str | None = None
 
     while time.monotonic() < deadline:
-        if _pending_call_cancelled.is_set():
+        # Check cancel BEFORE anything else
+        if cancel_event.is_set():
             clear_pending_state(thread_id)
-            return None, "Manual review request was cancelled"
+            return None, cancel_reason
 
         time.sleep(FILE_POLL_INTERVAL_SEC)
 
-        if _pending_call_cancelled.is_set():
+        if cancel_event.is_set():
             clear_pending_state(thread_id)
-            return None, "Manual review request was cancelled"
+            return None, cancel_reason
 
         if not response_path.exists():
             prev_content = None
@@ -450,9 +486,9 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
         prev_content = content
         time.sleep(FILE_STABLE_INTERVAL_SEC)
 
-        if _pending_call_cancelled.is_set():
+        if cancel_event.is_set():
             clear_pending_state(thread_id)
-            return None, "Manual review request was cancelled"
+            return None, cancel_reason
 
         # Re-read after stability interval
         try:
@@ -472,10 +508,11 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str, history: l
 
 # --- Unified dispatch ---
 
-def do_review(prompt: str, config: dict, thread_id: str, history: list) -> tuple[str | None, str | None]:
+def do_review(prompt: str, config: dict, thread_id: str, history: list,
+              cancel_event: threading.Event, cancel_reason: str) -> tuple[str | None, str | None]:
     if MODE == "file":
-        return wait_for_file_response(prompt, config, thread_id, history)
-    return wait_for_browser_response(prompt, config, thread_id, history)
+        return wait_for_file_response(prompt, config, thread_id, history, cancel_event, cancel_reason)
+    return wait_for_browser_response(prompt, config, thread_id, history, cancel_event, cancel_reason)
 
 
 # --- MCP tool handlers ---
@@ -501,7 +538,8 @@ def tool_error(request_id: Any, message: str) -> dict[str, Any]:
     }
 
 
-def handle_review(args: dict, request_id: Any) -> dict[str, Any]:
+def handle_review(args: dict, request_id: Any, cancel_event: threading.Event,
+                   cancel_reason: str) -> dict[str, Any]:
     prompt = str(args.get("prompt", "")).strip()
     if not prompt:
         return tool_error(request_id, "prompt is required")
@@ -512,7 +550,7 @@ def handle_review(args: dict, request_id: Any) -> dict[str, Any]:
     thread_id = create_thread()
     append_exchange(thread_id, "user", prompt)
 
-    response, error = do_review(prompt, config, thread_id, [])
+    response, error = do_review(prompt, config, thread_id, [], cancel_event, cancel_reason)
     if error:
         return tool_error(request_id, error)
 
@@ -520,7 +558,8 @@ def handle_review(args: dict, request_id: Any) -> dict[str, Any]:
     return tool_success(request_id, {"threadId": thread_id, "content": response})
 
 
-def handle_review_reply(args: dict, request_id: Any) -> dict[str, Any]:
+def handle_review_reply(args: dict, request_id: Any, cancel_event: threading.Event,
+                         cancel_reason: str) -> dict[str, Any]:
     thread_id = str(args.get("threadId", "")).strip()
     if not thread_id:
         return tool_error(request_id, "threadId is required")
@@ -537,7 +576,7 @@ def handle_review_reply(args: dict, request_id: Any) -> dict[str, Any]:
     history = get_history(thread_id)
     append_exchange(thread_id, "user", prompt)
 
-    response, error = do_review(prompt, config, thread_id, history)
+    response, error = do_review(prompt, config, thread_id, history, cancel_event, cancel_reason)
     if error:
         return tool_error(request_id, error)
 
@@ -616,9 +655,9 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
         if not isinstance(args, dict):
             return tool_error(request_id, "tool arguments must be an object")
         if name == "review":
-            return handle_review(args, request_id)
+            return handle_review(args, request_id, threading.Event(), "")
         if name == "review_reply":
-            return handle_review_reply(args, request_id)
+            return handle_review_reply(args, request_id, threading.Event(), "")
         return tool_error(request_id, f"unknown tool: {name}")
 
     return {
@@ -628,20 +667,35 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-# --- Main loop (non-blocking) ---
+# --- Main loop (non-blocking, fail-fast for concurrent calls) ---
 
-# Pending blocking tool call state
-_pending_call_thread: threading.Thread | None = None
-_pending_call_cancelled = threading.Event()
+def _run_blocking_tool(handler, args, request_id, pending: _PendingCall):
+    """Run a blocking tool handler in background, send response when done."""
+    global _pending_call
+    response = handler(args, request_id, pending.cancel_event, pending.cancel_reason)
+    if not pending.suppress_response and not pending.cancel_event.is_set():
+        send_response(response)
+    # Only clear _pending_call if it's still us
+    if _pending_call is pending:
+        _pending_call = None
 
 
-def _cancel_pending_call() -> bool:
-    """Cancel any in-progress review call so the port is freed.
-    Returns True if the old thread exited; False if it's still alive after the join timeout."""
-    global _pending_call_thread, _current_session, _active_server
-    _pending_call_cancelled.set()
-    if _current_session is not None:
-        _current_session.done.set()  # unblock the wait
+def _cancel_active_call(request_id: Any, reason: str) -> None:
+    """Cancel the active pending call and clean up resources."""
+    global _pending_call, _current_session, _active_server
+    if _pending_call is None:
+        return
+    if _pending_call.request_id != request_id:
+        debug_log(f"Ignoring cancel for request {request_id}; active is {_pending_call.request_id}")
+        return
+    _pending_call.cancel_reason = reason
+    _pending_call.suppress_response = True
+    _pending_call.cancel_event.set()
+    # Unblock browser wait
+    session = _current_session
+    if session is not None:
+        session.done.set()
+    # Shut down HTTP server
     with _active_server_lock:
         if _active_server is not None:
             try:
@@ -650,28 +704,14 @@ def _cancel_pending_call() -> bool:
             except Exception:
                 pass
             _active_server = None
-    success = True
-    if _pending_call_thread is not None:
-        _pending_call_thread.join(timeout=3)
-        if _pending_call_thread.is_alive():
-            debug_log("Previous manual-review call did not exit within 3s; leaving it cancelled")
-            success = False
-        else:
-            _pending_call_thread = None
-    return success
-
-
-def _run_blocking_tool(handler, args, request_id):
-    """Run a blocking tool handler in background, send response when done."""
-    global _pending_call_thread
-    response = handler(args, request_id)
-    if not _pending_call_cancelled.is_set():
-        send_response(response)
-    _pending_call_thread = None
+    # Clear state
+    if session is not None:
+        clear_pending_state(session.thread_id)
+    # Don't join the thread — let it finish naturally after cancel detection
 
 
 def main() -> int:
-    global _pending_call_thread
+    global _pending_call
     _init_stdio()
     debug_log(f"Server starting: mode={MODE}, timeout={DEFAULT_TIMEOUT_SEC}s")
     while True:
@@ -683,32 +723,45 @@ def main() -> int:
         method = request.get("method", "")
         params = request.get("params", {})
 
+        # Handle cancellation notification (MCP spec)
+        if method == "notifications/cancelled":
+            cancelled_request_id = params.get("requestId")
+            reason = params.get("reason", "Client cancelled request")
+            _cancel_active_call(cancelled_request_id, reason)
+            continue  # notification — no response
+
         # For tool calls that block (review, review_reply), run in background
         if method == "tools/call":
             name = params.get("name", "")
             if name in ("review", "review_reply"):
-                # Cancel any previous pending call
-                if _pending_call_thread is not None and _pending_call_thread.is_alive():
-                    if not _cancel_pending_call():
+                # Fail-fast: if another review is already active, reject
+                if _pending_call is not None:
+                    if _pending_call.thread is not None and _pending_call.thread.is_alive():
                         send_response(tool_error(
                             request_id,
-                            "Previous manual review call is still cancelling; retry shortly",
+                            "Another manual review is already in progress. "
+                            "Finish it in the browser/file response path, "
+                            "or cancel the previous tool call before starting a new one.",
                         ))
                         continue
+                    else:
+                        # Stale reference — clean up
+                        _pending_call = None
 
                 args = params.get("arguments", {})
                 if not isinstance(args, dict):
                     send_response(tool_error(request_id, "tool arguments must be an object"))
                     continue
 
+                pending = _PendingCall(request_id)
+                _pending_call = pending
                 handler = handle_review if name == "review" else handle_review_reply
-                _pending_call_cancelled.clear()
-                _pending_call_thread = threading.Thread(
+                pending.thread = threading.Thread(
                     target=_run_blocking_tool,
-                    args=(handler, args, request_id),
+                    args=(handler, args, request_id, pending),
                     daemon=True,
                 )
-                _pending_call_thread.start()
+                pending.thread.start()
                 continue
 
         # Non-blocking requests handled synchronously

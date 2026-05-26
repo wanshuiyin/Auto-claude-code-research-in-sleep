@@ -44,7 +44,7 @@ For SSH/headless environments without a browser:
 export MANUAL_REVIEW_MODE=file
 ```
 
-The server writes the prompt to a per-thread directory. Read `.aris/pending_review/pending_review.json` — the `prompt_file` field tells you where to read the prompt, the `response_file` field tells you where to write the model's response. The file must be non-empty and stable (unchanged across two reads) before it's accepted.
+The server writes the prompt to a per-thread directory with a **cross-model warning** at the top of `prompt.md`. Read `.aris/pending_review/pending_review.json` — the `prompt_file` field tells you where to read the prompt, the `response_file` field tells you where to write the model's response. The file must be non-empty and stable (unchanged across two reads) before it's accepted.
 
 ## Environment Variables
 
@@ -109,7 +109,7 @@ claude mcp add manual-review -s user -- python3 /path/to/mcp-servers/manual-revi
 export MANUAL_REVIEW_MODE=file
 ```
 
-服务器将提示词写入按线程隔离的子目录。读取 `.aris/pending_review/pending_review.json` — `prompt_file` 字段指向提示词文件，`response_file` 字段指向你应写入回复的位置。文件必须非空且稳定（两次读取内容不变）才会被接受。
+服务器将提示词写入按线程隔离的子目录，`prompt.md` 顶部包含**跨模型警告**。读取 `.aris/pending_review/pending_review.json` — `prompt_file` 字段指向提示词文件，`response_file` 字段指向你应写入回复的位置。文件必须非空且稳定（两次读取内容不变）才会被接受。
 
 ## 环境变量
 
