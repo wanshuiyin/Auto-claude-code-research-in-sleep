@@ -123,31 +123,25 @@ Temporary source artifacts live under `/tmp`. Do not rely on persistence.
 
 If the user only asks for one specific detail, answer it directly — skip the full template.
 
-#### Suggest Follow-Up Skills
+**After presenting the summary, you MUST proceed to Step 6 before ending the turn.**
 
-```text
-/arxiv "PAPER_ID" - download          - download the PDF to local library
-/deepxiv "PAPER_ID" - section: Methods  - read a specific section progressively
-/research-lit "related topic"        - multi-source literature survey
-/novelty-check "idea from paper"     - verify novelty against this paper's area
-```
+### Step 6: Research Wiki Ingest
 
-## Update Research Wiki (if active)
+**You MUST always run the bash block below — it checks for `research-wiki/` internally and exits silently when absent.** Do NOT skip this step based on your own directory check; the bash block handles that for you.
 
-**Required when `research-wiki/` exists in the project**; skip silently
-otherwise. After presenting the paper summary, ingest the single paper
-that was read:
+Substitute only `<paper_arxiv_id>` and `<thesis>`; keep `${ARIS_REPO:-...}` as-is so an already-set env var is preserved.
 
-```
-if [ -d research-wiki/ ]:
-    ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
-    WIKI_SCRIPT=""
-    [ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
-    [ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
-    [ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
-    [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
-        --arxiv-id "<paper_arxiv_id>" \
-        [--thesis "<one-line thesis from the Tier 1 overview>"]
+```bash
+if [ -d research-wiki/ ]; then
+  ARIS_REPO="${ARIS_REPO:-$(awk -F'	' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+  WIKI_SCRIPT=""
+  [ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
+  [ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
+  [ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
+  [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
+      --arxiv-id "<paper_arxiv_id>" \
+      [--thesis "<one-line thesis from the Tier 1 overview>"]
+fi
 ```
 
 The helper handles metadata fetch, slug, dedup, page creation, index
@@ -156,6 +150,14 @@ rebuild, and log append — **do not handwrite `papers/<slug>.md`**. See
 If wiki was not present at read time, the user can backfill via
 `python3 "$WIKI_SCRIPT" sync research-wiki/ --arxiv-ids <id>` after resolving `WIKI_SCRIPT` as above.
 
+#### Suggest Follow-Up Skills (after Step 6 completes)
+
+```text
+/arxiv "PAPER_ID" - download          - download the PDF to local library
+/deepxiv "PAPER_ID" - section: Methods  - read a specific section progressively
+/research-lit "related topic"        - multi-source literature survey
+/novelty-check "idea from paper"     - verify novelty against this paper's area
+```
 ## Key Rules
 
 - **Overview first**: `overview` is the fastest path and must always be tried before deeper tiers. Only escalate when needed.

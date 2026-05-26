@@ -42,13 +42,14 @@ import json
 import os
 import re
 import sys
+import time
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
-_ARXIV_API = "http://export.arxiv.org/api/query?id_list={ids}"
+_ARXIV_API = "https://export.arxiv.org/api/query?id_list={ids}"
 _ARXIV_NS = {"atom": "http://www.w3.org/2005/Atom",
              "arxiv": "http://arxiv.org/schemas/atom"}
 
@@ -308,16 +309,35 @@ def _yaml_quote(s: str) -> str:
 def fetch_arxiv_metadata(arxiv_id: str, timeout: float = 15.0) -> dict:
     """Query arXiv Atom API for one paper. Returns a metadata dict.
 
-    Raises RuntimeError on network failure or malformed response — callers
-    decide whether to abort the ingest or fall back to manual metadata.
+    Retries up to 3 times on arXiv rate limits (HTTP 429 or the plain-text
+    "Rate exceeded." body the API sometimes returns with 200 OK) and on
+    transient network errors. Raises RuntimeError when all retries are
+    exhausted — callers decide whether to abort the ingest or fall back
+    to manual metadata.
     """
     aid = _normalize_arxiv_id(arxiv_id)
     url = _ARXIV_API.format(ids=aid)
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
-            body = resp.read()
-    except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise RuntimeError(f"arXiv API fetch failed for {aid}: {e}")
+    body = b""
+    for attempt in (1, 2, 3):
+        try:
+            with urllib.request.urlopen(url, timeout=timeout) as resp:
+                body = resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < 3:
+                time.sleep(5 * attempt)
+                continue
+            raise RuntimeError(f"arXiv API fetch failed for {aid}: {e}")
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            if attempt < 3:
+                time.sleep(2 * attempt)
+                continue
+            raise RuntimeError(f"arXiv API fetch failed for {aid}: {e}")
+        if body.strip() == b"Rate exceeded.":
+            if attempt < 3:
+                time.sleep(5 * attempt)
+                continue
+            raise RuntimeError(f"arXiv API rate-limited for {aid} after 3 attempts")
+        break
 
     try:
         root = ET.fromstring(body)
