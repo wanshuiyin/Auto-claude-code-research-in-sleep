@@ -158,6 +158,9 @@ def _pending_dir_for(thread_id: str) -> Path:
     return PENDING_DIR / thread_id
 
 
+_pending_state_lock = threading.Lock()
+
+
 def write_pending_state(url: str | None, thread_id: str, prompt_file: str | None) -> None:
     pdir = _pending_dir_for(thread_id)
     state = {
@@ -171,24 +174,27 @@ def write_pending_state(url: str | None, thread_id: str, prompt_file: str | None
     pdir.mkdir(parents=True, exist_ok=True)
     state_path = pdir / "pending_review.json"
     state_path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-    # Also write a top-level pointer for easy discovery
-    PENDING_DIR.mkdir(parents=True, exist_ok=True)
-    (PENDING_DIR / "pending_review.json").write_text(
-        json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    with _pending_state_lock:
+        PENDING_DIR.mkdir(parents=True, exist_ok=True)
+        (PENDING_DIR / "pending_review.json").write_text(
+            json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
 
 def clear_pending_state(thread_id: str | None = None) -> None:
+    """Idempotent, thread-safe pending state cleanup."""
     # Clear per-thread dir
     if thread_id:
         pdir = _pending_dir_for(thread_id)
         if pdir.exists():
             import shutil
             shutil.rmtree(pdir, ignore_errors=True)
-    # Clear top-level pointer
-    top_state = PENDING_DIR / "pending_review.json"
-    if top_state.exists():
-        top_state.unlink()
+    # Clear top-level pointer — tolerate already-deleted
+    with _pending_state_lock:
+        try:
+            (PENDING_DIR / "pending_review.json").unlink()
+        except FileNotFoundError:
+            pass
 
 
 
@@ -360,7 +366,8 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str,
             except Exception:
                 pass
             _active_server = None
-        _current_session = _ReviewSession(prompt, config, thread_id, history)
+        session = _ReviewSession(prompt, config, thread_id, history)
+        _current_session = session
         _auth_token = _generate_token()
 
     # Try fixed port, increment on conflict
@@ -395,33 +402,43 @@ def wait_for_browser_response(prompt: str, config: dict, thread_id: str,
         except Exception:
             pass
 
-    # Poll with short intervals; check cancel BEFORE success
-    deadline = time.monotonic() + DEFAULT_TIMEOUT_SEC
-    while time.monotonic() < deadline:
-        if cancel_event.is_set():
-            _current_session = None
-            return None, cancel_reason
-        if _current_session.done.wait(timeout=1.0):
-            break
+    response: str | None = None
+    error: str | None = None
 
-    server.shutdown()
-    server.server_close()
-    with _active_server_lock:
-        _active_server = None
-    clear_pending_state(thread_id)
+    try:
+        # Poll with short intervals; check cancel BEFORE success
+        deadline = time.monotonic() + DEFAULT_TIMEOUT_SEC
+        while time.monotonic() < deadline:
+            if cancel_event.is_set():
+                error = cancel_reason
+                break
+            if session.done.wait(timeout=1.0):
+                response = session.response
+                break
 
-    # Check cancel before returning
-    if cancel_event.is_set():
-        _current_session = None
-        return None, cancel_reason
+        if error is None and response is None:
+            if cancel_event.is_set():
+                error = cancel_reason
+            elif not session.done.is_set():
+                error = f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for manual review response"
+    finally:
+        # Worker thread owns cleanup: server, session, pending state
+        try:
+            server.shutdown()
+        except Exception:
+            pass
+        try:
+            server.server_close()
+        except Exception:
+            pass
+        with _active_server_lock:
+            if _active_server is server:
+                _active_server = None
+            if _current_session is session:
+                _current_session = None
+        clear_pending_state(thread_id)
 
-    if not _current_session.done.is_set():
-        _current_session = None
-        return None, f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for manual review response"
-
-    response = _current_session.response
-    _current_session = None
-    return response, None
+    return response, error
 
 
 # --- File mode: prompt.md / response.md ---
@@ -455,54 +472,58 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
     # Poll for response file with stability check
     deadline = time.monotonic() + DEFAULT_TIMEOUT_SEC
     prev_content: str | None = None
+    response: str | None = None
+    error: str | None = None
 
-    while time.monotonic() < deadline:
-        # Check cancel BEFORE anything else
-        if cancel_event.is_set():
-            clear_pending_state(thread_id)
-            return None, cancel_reason
+    try:
+        while time.monotonic() < deadline:
+            if cancel_event.is_set():
+                error = cancel_reason
+                break
 
-        time.sleep(FILE_POLL_INTERVAL_SEC)
+            time.sleep(FILE_POLL_INTERVAL_SEC)
 
-        if cancel_event.is_set():
-            clear_pending_state(thread_id)
-            return None, cancel_reason
+            if cancel_event.is_set():
+                error = cancel_reason
+                break
 
-        if not response_path.exists():
-            prev_content = None
-            continue
-        try:
-            content = response_path.read_text(encoding="utf-8").strip()
-        except OSError:
-            prev_content = None
-            continue
-        if not content:
-            prev_content = None
-            continue
-        # Stability check: content must be non-empty and unchanged across two reads
-        if content == prev_content:
-            clear_pending_state(thread_id)
-            return content, None
-        prev_content = content
-        time.sleep(FILE_STABLE_INTERVAL_SEC)
+            if not response_path.exists():
+                prev_content = None
+                continue
+            try:
+                content = response_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                prev_content = None
+                continue
+            if not content:
+                prev_content = None
+                continue
+            if content == prev_content:
+                response = content
+                break
+            prev_content = content
+            time.sleep(FILE_STABLE_INTERVAL_SEC)
 
-        if cancel_event.is_set():
-            clear_pending_state(thread_id)
-            return None, cancel_reason
+            if cancel_event.is_set():
+                error = cancel_reason
+                break
 
-        # Re-read after stability interval
-        try:
-            content2 = response_path.read_text(encoding="utf-8").strip()
-        except OSError:
-            prev_content = None
-            continue
-        if content2 == content and content2:
-            clear_pending_state(thread_id)
-            return content2, None
-        prev_content = content2
+            try:
+                content2 = response_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                prev_content = None
+                continue
+            if content2 == content and content2:
+                response = content2
+                break
+            prev_content = content2
 
-    clear_pending_state(thread_id)
-    return None, f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for {response_path}"
+        if error is None and response is None and not cancel_event.is_set():
+            error = f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for {response_path}"
+    finally:
+        clear_pending_state(thread_id)
+
+    return response, error
 
 
 
@@ -672,16 +693,28 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 def _run_blocking_tool(handler, args, request_id, pending: _PendingCall):
     """Run a blocking tool handler in background, send response when done."""
     global _pending_call
-    response = handler(args, request_id, pending.cancel_event, pending.cancel_reason)
-    if not pending.suppress_response and not pending.cancel_event.is_set():
-        send_response(response)
-    # Only clear _pending_call if it's still us
-    if _pending_call is pending:
-        _pending_call = None
+    try:
+        response = handler(args, request_id, pending.cancel_event, pending.cancel_reason)
+        if not pending.suppress_response and not pending.cancel_event.is_set():
+            # Clear _pending_call BEFORE sending so the next request doesn't
+            # fail-fast on a thread that's about to exit
+            if _pending_call is pending:
+                _pending_call = None
+            send_response(response)
+    except Exception:
+        debug_log(f"Unhandled exception in tool handler for request {request_id}")
+        if _pending_call is pending:
+            _pending_call = None
+        if not pending.suppress_response and not pending.cancel_event.is_set():
+            send_response(tool_error(request_id, "Internal error in manual review handler"))
+    finally:
+        if _pending_call is pending:
+            _pending_call = None
 
 
 def _cancel_active_call(request_id: Any, reason: str) -> None:
-    """Cancel the active pending call and clean up resources."""
+    """Cancel the active pending call. Only sets signals — the worker thread's
+    finally block handles server shutdown, port release, and pending state cleanup."""
     global _pending_call, _current_session, _active_server
     if _pending_call is None:
         return
@@ -691,23 +724,17 @@ def _cancel_active_call(request_id: Any, reason: str) -> None:
     _pending_call.cancel_reason = reason
     _pending_call.suppress_response = True
     _pending_call.cancel_event.set()
-    # Unblock browser wait
-    session = _current_session
-    if session is not None:
-        session.done.set()
-    # Shut down HTTP server
+    # Unblock browser wait loop
+    if _current_session is not None:
+        _current_session.done.set()
+    # Shut down HTTP server to unblock serve_forever (worker handles server_close)
     with _active_server_lock:
         if _active_server is not None:
             try:
                 _active_server.shutdown()
-                _active_server.server_close()
             except Exception:
                 pass
-            _active_server = None
-    # Clear state
-    if session is not None:
-        clear_pending_state(session.thread_id)
-    # Don't join the thread — let it finish naturally after cancel detection
+    # Worker thread owns cleanup; do not call clear_pending_state or server_close here
 
 
 def main() -> int:
@@ -725,9 +752,12 @@ def main() -> int:
 
         # Handle cancellation notification (MCP spec)
         if method == "notifications/cancelled":
-            cancelled_request_id = params.get("requestId")
-            reason = params.get("reason", "Client cancelled request")
-            _cancel_active_call(cancelled_request_id, reason)
+            try:
+                cancelled_request_id = params.get("requestId")
+                reason = params.get("reason", "Client cancelled request")
+                _cancel_active_call(cancelled_request_id, reason)
+            except Exception:
+                debug_log("Exception during cancel notification (ignored)")
             continue  # notification — no response
 
         # For tool calls that block (review, review_reply), run in background

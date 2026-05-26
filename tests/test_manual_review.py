@@ -75,12 +75,19 @@ def _read_response(proc, timeout=5):
     return json.loads(body.decode("utf-8"))
 
 
+_next_test_port = 27900
+
+
 def _start_server(**extra_env):
-    """Start the MCP server as a subprocess."""
+    """Start the MCP server as a subprocess with a unique port."""
+    global _next_test_port
+    port = _next_test_port
+    _next_test_port += 1
     env = {
         **os.environ,
         "MANUAL_REVIEW_AUTO_OPEN": "false",
         "MANUAL_REVIEW_TIMEOUT_SEC": "10",
+        "MANUAL_REVIEW_PORT": str(port),
         **extra_env,
     }
     proc = subprocess.Popen(
@@ -683,6 +690,68 @@ def test_cancel_wrong_request_id_ignored():
         finally:
             proc.terminate()
             proc.wait(timeout=3)
+
+
+# ============================================================
+# Test 15: Cancellation stress test (repeat to expose races)
+# ============================================================
+def test_cancel_stress_10_iterations():
+    """Repeatedly start review, cancel, start new review — exposes races."""
+    for i in range(10):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pending_dir = Path(tmpdir) / "pending_review"
+            proc = _start_server(
+                MANUAL_REVIEW_TIMEOUT_SEC="30",
+                MANUAL_REVIEW_PENDING_DIR=str(pending_dir),
+            )
+            try:
+                _send_jsonrpc(proc, "initialize", {}, req_id=1)
+                _read_response(proc)
+
+                # Start review (id=2)
+                _send_jsonrpc(proc, "tools/call", {
+                    "name": "review",
+                    "arguments": {"prompt": f"stress test {i}", "config": {}},
+                }, req_id=2)
+
+                # Wait for pending state
+                top_state = pending_dir / "pending_review.json"
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if top_state.exists():
+                        break
+                    time.sleep(0.2)
+                assert top_state.exists(), f"stress iter {i}: pending not created"
+
+                # Cancel
+                _send_notification(proc, "notifications/cancelled", {
+                    "requestId": 2, "reason": "stress",
+                })
+
+                # Wait for cleanup
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if not top_state.exists():
+                        break
+                    time.sleep(0.2)
+                assert not top_state.exists(), f"stress iter {i}: pending not cleaned"
+
+                # Second review must work (server still alive)
+                _send_jsonrpc(proc, "tools/call", {
+                    "name": "review",
+                    "arguments": {"prompt": f"after cancel {i}", "config": {}},
+                }, req_id=3)
+
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    if top_state.exists():
+                        break
+                    time.sleep(0.2)
+                assert top_state.exists(), f"stress iter {i}: second review failed"
+
+            finally:
+                proc.terminate()
+                proc.wait(timeout=3)
 
 
 # ============================================================

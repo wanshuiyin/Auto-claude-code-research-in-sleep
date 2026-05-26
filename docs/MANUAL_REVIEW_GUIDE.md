@@ -81,20 +81,18 @@ For skills that use multiple review rounds (e.g., `/auto-review-loop`), the brow
 
 ## Supported Skills
 
-All skills that support `— reviewer: oracle-pro` also support `— reviewer: manual`:
+The following skills have manual-review wired (Claude Code only):
 
 | Skill | Review Purpose |
 |-------|---------------|
 | `/research-review` | Paper critique |
 | `/auto-review-loop` | Iterative improvement |
-| `/auto-paper-improvement-loop` | Paper polish |
 | `/experiment-audit` | Eval code integrity |
 | `/proof-checker` | Math verification |
 | `/rebuttal` | Rebuttal stress test |
 | `/idea-creator` | Idea evaluation |
-| `/research-lit` | Literature analysis |
-| `/citation-audit` | Bibliography verification |
-| `/kill-argument` | Adversarial review |
+
+> `/research-lit` currently has no manual-review call block; use `— reviewer: oracle-pro` where supported, or run a separate review skill manually.
 
 ## Future Work
 

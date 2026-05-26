@@ -81,20 +81,18 @@ claude mcp add manual-review -s user -- python3 /path/to/Auto-claude-code-resear
 
 ## 支持的技能
 
-所有支持 `— reviewer: oracle-pro` 的技能同样支持 `— reviewer: manual`：
+以下技能已接线 manual-review（仅限 Claude Code）：
 
 | 技能 | 评审用途 |
 |------|----------|
 | `/research-review` | 论文评审 |
 | `/auto-review-loop` | 迭代改进 |
-| `/auto-paper-improvement-loop` | 论文打磨 |
 | `/experiment-audit` | 实验代码审计 |
 | `/proof-checker` | 数学证明验证 |
 | `/rebuttal` | 反驳压力测试 |
 | `/idea-creator` | 想法评估 |
-| `/research-lit` | 文献分析 |
-| `/citation-audit` | 参考文献验证 |
-| `/kill-argument` | 对抗性评审 |
+
+> `/research-lit` 当前没有 manual-review 调用块；如需文献分析深度评审，请使用已支持的 `oracle-pro` 路由或单独运行评审 skill。
 
 ## 后续计划
 

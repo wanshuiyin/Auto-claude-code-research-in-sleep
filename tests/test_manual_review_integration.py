@@ -171,6 +171,7 @@ def test_manual_review_integration():
         "MANUAL_REVIEW_AUTO_OPEN": "false",
         "MANUAL_REVIEW_TIMEOUT_SEC": "30",
         "MANUAL_REVIEW_PENDING_DIR": pending_dir,
+        "MANUAL_REVIEW_PORT": "28900",
     }
 
     proc = subprocess.Popen(
