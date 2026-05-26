@@ -234,6 +234,20 @@ Same pattern as `/experiment-audit`:
 - `WARN` → print warning, continue, flag draft as "check numbers before submission"
 - `FAIL` → print alert, continue, but do NOT mark as submission-ready
 
+## Render HTML view (auto, when `RENDER_HTML = true`, default)
+
+After writing `paper/PAPER_CLAIM_AUDIT.md` and `paper/PAPER_CLAIM_AUDIT.json`, invoke `/render-html` on the audit report so the user has a readable HTML view of the verdict + per-claim breakdown:
+
+```
+/render-html "paper/PAPER_CLAIM_AUDIT.md" --json "paper/PAPER_CLAIM_AUDIT.json"
+```
+
+Uses **full Codex review gate** (audit-class artifact — render-fidelity check matches the skill's existing zero-context cross-model audit invariant). Output lands at `paper/PAPER_CLAIM_AUDIT.html` with embedded source SHA256 and a `.review.json` sidecar carrying the render verdict.
+
+**Non-blocking**: if `/render-html` fails (helper missing, Codex MCP unavailable, file write error), log the failure and treat the skill as complete — the JSON + MD verdict files are the canonical outputs; the HTML view is a convenience for human readers.
+
+Skip if `RENDER_HTML = false` is set in the project's `CLAUDE.md` or passed as `— render html: false`.
+
 ## Key Rules
 
 - **Fresh thread EVERY run.** Never use `codex-reply`. Never carry context.

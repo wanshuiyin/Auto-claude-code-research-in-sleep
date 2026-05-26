@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TITLE}}</title>
+
+<meta name="generator" content="ARIS render-html (dashboard, v1)">
+<meta name="aris:source-path" content="{{SOURCE_PATH}}">
+<meta name="aris:source-sha256" content="{{SOURCE_SHA256}}">
+<meta name="aris:generated-at" content="{{GENERATED_AT}}">
+
+{{HEAD_CDN}}
+
+<style>
+:root {
+  --bg: #fdfcf7;
+  --bg-soft: #f4f1ea;
+  --bg-card: #ffffff;
+  --bg-code: #f8f5ec;
+  --ink: #1a1a1a;
+  --ink-soft: #4a4a4a;
+  --ink-muted: #6b6b6b;
+  --primary: #1a4a8c;
+  --primary-soft: #2d6cb8;
+  --accent: #b8390e;
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+  --info-bg: #dbeafe;
+  --good-bg: #d1fae5;
+  --good: #065f46;
+  --bad-bg: #fee2e2;
+  --bad: #991b1b;
+  --border: #d6d0c0;
+  --border-soft: #e8e3d5;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: "Source Serif Pro", "Source Serif 4", "Crimson Pro", "Georgia", "Songti SC", "STSong", serif;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--bg);
+  margin: 0;
+  padding: 0;
+  font-size: 15px;
+}
+
+.shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px 32px 48px;
+}
+
+header.hero {
+  border-bottom: 3px double var(--primary);
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+}
+header.hero .eyebrow {
+  color: var(--accent);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+header.hero h1 {
+  font-size: 28px;
+  line-height: 1.2;
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+header.hero .subtitle {
+  font-size: 15px;
+  color: var(--ink-soft);
+  margin: 0 0 6px;
+  font-style: italic;
+}
+header.hero .byline {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 16px;
+}
+header.hero .byline strong { color: var(--ink); font-weight: 600; }
+header.hero .meta {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--ink-muted);
+  border-top: 1px solid var(--border-soft);
+  padding-top: 12px;
+}
+header.hero .meta span strong { color: var(--ink-soft); }
+header.hero .meta code {
+  font-family: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 11px;
+  background: var(--bg-soft);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-soft);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin: 16px 0 28px;
+}
+.grid.metrics { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+.card .card-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.card .card-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  line-height: 1.1;
+  font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace;
+  letter-spacing: -0.01em;
+}
+.card .card-sub {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 6px;
+}
+.card.accent .card-value { color: var(--accent); }
+.card.good .card-value { color: var(--good); }
+.card.warn .card-value { color: var(--warn); }
+.card.bad .card-value { color: var(--bad); }
+
+h2 {
+  font-size: 20px;
+  margin: 32px 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--ink);
+  font-weight: 700;
+}
+h3 { font-size: 16px; margin: 22px 0 8px; color: var(--primary); font-weight: 600; }
+h4 { font-size: 14px; margin: 16px 0 6px; color: var(--ink); font-weight: 600; }
+
+p { margin: 8px 0; }
+ul, ol { padding-left: 20px; margin: 8px 0; }
+ul li, ol li { margin: 3px 0; }
+ul li::marker { color: var(--primary); }
+
+strong { color: var(--accent); font-weight: 600; }
+em { color: var(--ink-soft); }
+
+a { color: var(--primary); }
+a:hover { color: var(--accent); }
+
+code:not(.hljs) {
+  font-family: "JetBrains Mono", "SF Mono", "Menlo", "Consolas", monospace;
+  font-size: 0.86em;
+  background: var(--bg-code);
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--border-soft);
+  color: var(--accent);
+}
+
+pre {
+  background: #fafaf6;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  padding: 0;
+  overflow-x: auto;
+  border-radius: 4px;
+  margin: 12px 0;
+}
+pre code, pre code.hljs {
+  background: transparent !important;
+  display: block;
+  padding: 12px 16px !important;
+  font-size: 12.5px;
+  line-height: 1.5;
+  font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace;
+  color: var(--ink);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+thead { background: var(--primary); color: white; }
+th, td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-soft);
+  vertical-align: top;
+}
+th { font-weight: 600; font-size: 12px; }
+tr:last-child td { border-bottom: none; }
+tbody tr:nth-child(even) { background: var(--bg-soft); }
+
+.badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: "JetBrains Mono", "SF Mono", monospace;
+  letter-spacing: 0.02em;
+}
+.badge-good { background: var(--good-bg); color: var(--good); }
+.badge-warn { background: var(--warn-bg); color: var(--warn); }
+.badge-bad { background: var(--bad-bg); color: var(--bad); }
+.badge-info { background: var(--info-bg); color: var(--primary); }
+
+.callout {
+  margin: 14px 0;
+  padding: 10px 14px;
+  border-radius: 4px;
+  border-left: 4px solid;
+  font-size: 14px;
+}
+.callout-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.callout-info { background: var(--info-bg); border-left-color: var(--primary); }
+.callout-info .callout-title { color: var(--primary); }
+.callout-warn { background: var(--warn-bg); border-left-color: var(--warn); }
+.callout-warn .callout-title { color: var(--warn); }
+.callout-good { background: var(--good-bg); border-left-color: var(--good); }
+.callout-good .callout-title { color: var(--good); }
+.callout-bad { background: var(--bad-bg); border-left-color: var(--bad); }
+.callout-bad .callout-title { color: var(--bad); }
+
+details {
+  background: white;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  margin: 10px 0;
+}
+details summary {
+  cursor: pointer;
+  padding: 9px 13px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--primary);
+  list-style: none;
+  user-select: none;
+}
+details summary::-webkit-details-marker { display: none; }
+details summary::before {
+  content: "▸ ";
+  margin-right: 4px;
+  display: inline-block;
+  transition: transform 0.15s;
+}
+details[open] summary::before { transform: rotate(90deg); }
+details[open] summary { border-bottom: 1px solid var(--border-soft); }
+details > :not(summary) { padding: 8px 13px; }
+
+footer.aris-footer {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+footer.aris-footer a { color: var(--ink-muted); border-bottom: 1px dotted var(--border); }
+
+@media (max-width: 600px) {
+  .shell { padding: 20px 16px; }
+  header.hero h1 { font-size: 22px; }
+  .card .card-value { font-size: 24px; }
+}
+@media print {
+  .shell { padding: 0; }
+  body { background: white; }
+  .card { box-shadow: none; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<header class="hero">
+  {{EYEBROW_BLOCK}}
+  <h1>{{TITLE}}</h1>
+  {{SUBTITLE_BLOCK}}
+  {{BYLINE_BLOCK}}
+  <div class="meta">
+    <span><strong>Source:</strong> <code>{{SOURCE_PATH}}</code></span>
+    <span><strong>SHA256:</strong> <code>{{SOURCE_SHA256_SHORT}}</code></span>
+    <span><strong>Rendered:</strong> {{GENERATED_AT}}</span>
+    {{EXTRA_META}}
+  </div>
+</header>
+
+{{BODY_HTML}}
+
+<footer class="aris-footer">
+  Generated by <a href="https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/render-html/SKILL.md">ARIS <code>/render-html</code></a> ·
+  source <code>{{SOURCE_PATH}}</code> ·
+  SHA256 <code>{{SOURCE_SHA256_SHORT}}</code> ·
+  generated at {{GENERATED_AT}}.
+  Edit the source Markdown / JSON, then re-render.
+</footer>
+
+</div>
+</body>
+</html>

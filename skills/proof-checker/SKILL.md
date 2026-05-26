@@ -42,6 +42,7 @@ Review tracing applies equally to both backends.
 - REPORT_TEX: `proof_audit_report.tex` (formal before/after PDF)
 - STATE_FILE: `PROOF_CHECK_STATE.json` (for recovery)
 - SKELETON_DOC: `PROOF_SKELETON.md` (micro-claim inventory)
+- **RENDER_HTML = true** — When `true` (default), auto-render `PROOF_AUDIT.md` to HTML at workflow end via `/render-html`. Uses **full Codex review gate** (audit-class artifact — math-heavy content; render-fidelity check protects against MathJax breakage and matches the skill's cross-model audit invariant). Set `false` to skip, or pass `— render html: false`.
 
 ### Acceptance Gate (objective, replaces subjective scoring)
 
@@ -579,6 +580,7 @@ If the augmented Phase 1 call fails so badly that the normal proof review cannot
 | `PROOF_AUDIT.json` | Machine-readable submission verdict (see below) | Always emitted |
 | `proof_audit_report.tex/.pdf` | Formal before/after report | Phase 4 |
 | `PROOF_CHECK_STATE.json` | State for recovery | Phase 5 |
+| `PROOF_AUDIT.html` (+ `.review.json` sidecar) | Single-file HTML view of `PROOF_AUDIT.md` auto-rendered via `/render-html "PROOF_AUDIT.md" --json "PROOF_AUDIT.json"`. **Non-blocking** — if `/render-html` fails the audit still counts as complete; `PROOF_AUDIT.{md,json}` are the canonical outputs. | Workflow end (when `RENDER_HTML = true`, default) |
 
 When `--restatement-check` is set, `PROOF_AUDIT.json` additionally carries `details.restatement_drift` and `details.restatement_check_status`; both fields are omitted when the flag is unset. See "Submission Artifact Emission" below.
 

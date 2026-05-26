@@ -145,7 +145,7 @@ So:
 
 - `--template academic` (default) → **review by default**. Skip with `--no-review`.
 - `--template dashboard` → no review by default. Force with `--review`.
-- Phase 2 workflow auto-emit (planned) follows the same rule.
+- Phase 2 workflow auto-emit (activated 2026-05) selects per-skill via the RENDER_HTML hooks documented below — interim views default to `--no-review`, final / audit-class deliverables default to full gate.
 
 **If `should_review` is true**, fire a fresh `mcp__codex__codex` thread (NEVER `codex-reply`) with the prompt below. The reviewer reads the source MD + generated HTML directly; it does **not** see this skill's intermediate state.
 
@@ -265,20 +265,30 @@ Verdict rules:
 
 **Frontmatter (`--- ... ---`) at the very top of the file is stripped before rendering** (SKILL.md frontmatter style); the body that follows is what gets converted.
 
-## Two-phase integration plan (Phase 1 is this skill; Phase 2 is workflow hooks)
+## Two-phase integration plan (Phase 1 was this skill; Phase 2 is workflow hooks, **activated 2026-05**)
 
-**Phase 1 (this skill, currently shipped):** Opt-in only. Users explicitly call `/render-html <artifact.md>` after a workflow completes. No existing skill changes. Lets us validate which HTML views are actually useful before automating.
+**Phase 1 (originally shipped):** Opt-in only. Users explicitly called `/render-html <artifact.md>` after a workflow completes.
 
-**Phase 2 (later, planned):** Selectively auto-emit HTML at workflow termination:
+**Phase 2 (activated 2026-05):** Eight key skills now auto-emit HTML at workflow termination, each guarded by a `RENDER_HTML = true` constant that the user can flip off per skill (or pass `— render html: false` at invocation).
 
-- `/idea-discovery` completes → also writes `idea-stage/IDEA_REPORT.html` (academic)
-- `/auto-review-loop` terminates → also writes `review-stage/AUTO_REVIEW.html` (academic, with `--state`)
-- `/kill-argument` already writes `.md + .json` → naturally extends to `+ .html`
-- `/research-pipeline` final report links to the HTML files above (doesn't re-render)
-- `/research-wiki render` subcommand generates `research-wiki/index.html` dashboard
-- `/paper-writing` **does not** auto-emit HTML (the final reader artifact is PDF)
+**Cost-tiered review gate** (per artifact type):
 
-Phase 2 will be guarded by a `— html: true` flag in each affected skill, defaulting to `false` until we have empirical evidence the HTML views are read.
+| Skill | Artifact | Review tier | Why |
+|---|---|---|---|
+| `/idea-discovery` | `idea-stage/IDEA_REPORT.md` | `--no-review` | Interim; source went through novelty + cross-model review already |
+| `/auto-review-loop` | `review-stage/AUTO_REVIEW.md` | `--no-review` | Per-round log; the loop itself is the cross-model review |
+| `/research-pipeline` | `NARRATIVE_REPORT.md` | `--no-review` | Internal Stage 5 handoff to `/paper-writing`; not reviewer-facing — upstream Stage 4 auto-review-loop already gated the claims |
+| `/kill-argument` | `<paper-dir>/KILL_ARGUMENT.md` | full gate | Audit-class artifact; matches skill's own cross-model invariant |
+| `/paper-claim-audit` | `paper/PAPER_CLAIM_AUDIT.md` | full gate | Audit-class artifact |
+| `/citation-audit` | `paper/CITATION_AUDIT.md` | full gate | Audit-class artifact |
+| `/proof-checker` | `PROOF_AUDIT.md` | full gate | Audit-class artifact |
+| `/rebuttal` | `REBUTTAL_DRAFT_rich.md` | full gate | Pre-submission deliverable |
+| `/paper-writing` | (no auto-HTML) | n/a | The final reader artifact is PDF |
+| `/research-wiki` | `research-wiki/index.html` dashboard | future | Phase 2.1 — dashboard template work, not in this round |
+
+`--no-review` for interim reports is intentional: the source MD has already been reviewed by the producing skill's own cross-model gate, and the HTML render only converts structure — it doesn't add new claims. Full review at every checkpoint would multiply Codex calls per pipeline by 4-6×.
+
+To disable HTML output for a specific skill: set `RENDER_HTML = false` in the skill's constants block or pass `— render html: false`. To globally disable: skip with environment variable `ARIS_RENDER_HTML=0` (planned, not yet implemented; flag per skill in the meantime).
 
 ## Customizing the templates
 
@@ -299,7 +309,7 @@ For deck / poster / Xiaohongshu card / tweet card / data report style outputs, p
 
 - **Do not auto-render every Markdown file.** Only artifacts on the whitelist above. File proliferation is the main anti-pattern.
 - **Do not hand-edit the generated HTML.** Edit the source, then re-render. The embedded SHA256 in the HTML meta tells you if the source has changed since render.
-- **academic-template HTML is a reviewed artifact**, not raw output. Cross-model Codex review (fresh thread) gates the academic deliverables — the same way `/proof-checker`, `/paper-claim-audit`, `/citation-audit`, `/kill-argument` gate their respective products. `--no-review` exists for fast iteration but should not be the way you ship.
+- **academic-template HTML is a reviewed artifact by default**, not raw output. Cross-model Codex review (fresh thread) gates the academic deliverables — the same way `/proof-checker`, `/paper-claim-audit`, `/citation-audit`, `/kill-argument` gate their respective products. `--no-review` is appropriate for **interim auto-emits** (e.g., `idea-stage/IDEA_REPORT.html`, per-round `review-stage/AUTO_REVIEW.html`) where the source MD has already passed an upstream cross-model gate — the HTML render is then a structural conversion, not a new claim audit. For **shipped / reviewer-facing / audit-class** outputs, keep the full gate.
 - **The reviewer audits rendering, not research.** Claim truthfulness is owned upstream by `/paper-claim-audit`, `/result-to-claim`, `/research-review`. The HTML reviewer asks: "did the renderer faithfully + safely convert this source?" — nothing more.
 - **CDN dependency is opt-out, not opt-in.** Most users have internet; `--offline` is for air-gapped runs / archival.
 - **The default style is academic-newspaper, not marketing-flashy.** Match the existing ARIS tonal voice. If you want decks/posters/social cards, point users to html-anything.

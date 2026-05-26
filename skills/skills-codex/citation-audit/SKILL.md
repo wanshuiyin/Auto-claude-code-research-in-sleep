@@ -39,11 +39,12 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 ## Constants
 
 - **REVIEWER_MODEL = `gpt-5.5`** — Used via Codex MCP. Default for cross-model review with web access.
-- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Never `codex-reply`.
+- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Continue only with `send_input` when explicitly resuming the same audit.
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
 - **STATE = `CITATION_AUDIT.json`** — Machine-readable verdict ledger consumable by downstream tools.
 - **SOFT_ONLY = `false`** — When true (set via `— soft-only` / `— soft_only` flag), the audit runs all three layers normally but **forbids any `.bib` file mutation**. Findings that would otherwise mutate the bib (FIX / REPLACE / REMOVE) are translated into per-occurrence sentence-rewrite proposals against the citing `*.tex` files. Used by `/resubmit-pipeline` Phase 1 to honor the user's hard "freeze the bib" constraint.
+- **RENDER_HTML = true** — When `true` (default), auto-render `CITATION_AUDIT.md` to HTML after writing the report. Uses **full review gate** (audit-class artifact). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures don't invalidate the audit verdict.
 
 ## Workflow
 
@@ -306,6 +307,7 @@ After each reviewer agent call, save the trace following `shared-references/revi
 - `.aris/traces/citation-audit/<date>_runNN/` (per-entry review traces)
 - Optional: applied fixes to `references.bib` + `sec/*.tex` (with `--apply` flag)
 - Optional: `details.uncited_entries` field in JSON + `## Uncited Entries (opt-in)` MD section (with `--uncited` flag; field absent and section omitted when flag is unset)
+- `CITATION_AUDIT.html` (when `RENDER_HTML = true`, default) — auto-rendered single-file HTML view via `/render-html "CITATION_AUDIT.md" --json "CITATION_AUDIT.json"`. Full review gate. Sidecar `.review.json` carries render-fidelity verdict. **Non-blocking**: failures are logged and the audit MD + JSON remain the canonical outputs.
 
 ## Optional: Soft-Only Mode (— soft-only)
 

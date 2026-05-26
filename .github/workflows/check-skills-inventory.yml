@@ -1,0 +1,32 @@
+name: Skills inventory check
+
+on:
+  pull_request:
+    paths:
+      - 'skills/**'
+      - 'docs/SKILLS_CATALOG.md'
+      - 'README.md'
+      - 'README_CN.md'
+      - 'AGENT_GUIDE.md'
+      - 'docs/ARIS_INTRO.md'
+      - 'docs/ARIS_INTRO.html'
+      - 'tools/check_skills_inventory.py'
+      - 'tests/test_codex_skill_mirror.py'
+      - '.github/workflows/check-skills-inventory.yml'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install pytest
+        run: python -m pip install pytest
+      - name: Check skill inventory drift
+        run: python tools/check_skills_inventory.py
+      - name: Check Codex skill mirror semantics
+        run: python -m pytest tests/test_codex_skill_mirror.py -q

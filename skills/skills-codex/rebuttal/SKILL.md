@@ -48,6 +48,7 @@ Workflow 4:   rebuttal (post-submission external reviews)
 - **AUTO_EXPERIMENT = false** — When `true`, automatically invoke `/experiment-bridge` to run supplementary experiments when the strategy plan identifies reviewer concerns that require new empirical evidence. When `false` (default), pause and present the evidence gap to the user for manual handling.
 - **QUICK_MODE = false** — When `true`, only run Phase 0-3 (parse reviews, atomize concerns, build strategy). Outputs `ISSUE_BOARD.md` + `STRATEGY_PLAN.md` and stops — no drafting, no stress test. Useful for quickly understanding what reviewers want before deciding how to respond.
 - **REBUTTAL_DIR = `rebuttal/`**
+- **RENDER_HTML = true** — When `true` (default), auto-render `rebuttal/REBUTTAL_DRAFT_rich.md` to HTML after Phase 6 / Phase 8 finalization via `/render-html`. Uses **full review gate** (reviewer-facing pre-submission deliverable). The plain-text `PASTE_READY.txt` is NOT rendered (it's character-counted plain text by design). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures don't invalidate the rebuttal.
 
 > Override: `/rebuttal "paper/" — venue: NeurIPS, character limit: 5000`
 
@@ -266,6 +267,20 @@ When new reviewer comments arrive:
 5. Re-run safety lints
 6. Use Codex MCP reply for continuity if useful
 7. Rules: escalate technically not rhetorically; concede if reviewer is correct; stop arguing if reviewer is immovable and no new evidence exists
+
+### Phase 9: Render HTML view (auto, when `RENDER_HTML = true`, default)
+
+After Phase 6 (initial rebuttal) or Phase 8 (follow-up rounds) finalize `rebuttal/REBUTTAL_DRAFT_rich.md`, invoke:
+
+```
+/render-html "rebuttal/REBUTTAL_DRAFT_rich.md"
+```
+
+Full review gate (reviewer-facing pre-submission deliverable). Do NOT render `rebuttal/PASTE_READY.txt` (it's exact-character-count plain text by design).
+
+**Non-blocking**: if `/render-html` fails, log the failure and treat the rebuttal phase as complete — the `PASTE_READY.txt` and `REBUTTAL_DRAFT_rich.md` are the canonical outputs.
+
+Skip if `RENDER_HTML = false`.
 
 ## Key Rules
 

@@ -49,6 +49,7 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
 - **CLASSIFICATION** = `answered_by_current_text` / `partially_answered` / `still_unresolved`.  (Names chosen so the adjudicator does not assume "fixed" implies prior history of patching — they read the paper as a fresh reviewer would.)
 - **OUTPUT** = `KILL_ARGUMENT.md` (human-readable) + `KILL_ARGUMENT.json` (machine-readable) in the paper directory.
+- **RENDER_HTML = true** — When `true` (default), auto-render `KILL_ARGUMENT.md` to HTML after writing the report. Uses **full Codex review gate** (audit-class artifact — full render-fidelity check matches the skill's cross-model audit invariant; the sidecar `KILL_ARGUMENT.json` is also passed to the renderer). Set `false` to skip, or pass `— render html: false`.
 
 ## Workflow
 
@@ -359,6 +360,7 @@ To the user:
 - `<paper-dir>/KILL_ARGUMENT.json` — machine-readable ledger
 - `.aris/traces/kill-argument/<date>_runNN/` — per-thread codex traces (Attack memo + Adjudication memo)
 - Optional: applied fixes if user explicitly requests; default is **detect-only, do not auto-modify**.
+- `<paper-dir>/KILL_ARGUMENT.html` (when `RENDER_HTML = true`, default) — single-file HTML view auto-rendered via `/render-html "<paper-dir>/KILL_ARGUMENT.md" --json "<paper-dir>/KILL_ARGUMENT.json"`. Full review gate applies. The `.review.json` sidecar carries the render-fidelity verdict. **Non-blocking**: if `/render-html` fails (helper missing, Codex MCP unavailable, file write error), log the failure and treat the skill as complete — the HTML view is a convenience, not a prerequisite for the kill-argument verdict.
 
 ## Key Rules
 

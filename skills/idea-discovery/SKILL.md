@@ -31,6 +31,7 @@ Each phase builds on the previous one's output. The final deliverables are a val
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 - **ARXIV_DOWNLOAD = false** — When `true`, `/research-lit` downloads the top relevant arXiv PDFs during Phase 1. When `false` (default), only fetches metadata. Passed through to `/research-lit`.
 - **COMPACT = false** — When `true`, generate compact summary files for short-context models and session recovery. Writes `idea-stage/IDEA_CANDIDATES.md` (top 3-5 ideas only) at the end of this workflow. Downstream skills read this instead of the full `idea-stage/IDEA_REPORT.md`.
+- **RENDER_HTML = true** — When `true` (default), auto-render `idea-stage/IDEA_REPORT.md` to HTML at workflow end via `/render-html`. Uses `--no-review` (the source MD already went through novelty + cross-model review during Phase 3). Set `false` to skip, or pass `— render html: false`.
 - **REF_PAPER = false** — Reference paper to base ideas on. Accepts: local PDF path, arXiv URL, or any paper URL. When set, the paper is summarized first (`idea-stage/REF_PAPER_SUMMARY.md`), then idea generation uses it as context. Combine with `base repo` for "improve this paper with this codebase" workflows.
 
 > 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — ref paper: https://arxiv.org/abs/2406.04329` or `/idea-discovery "topic" — compact: true`.
@@ -313,6 +314,20 @@ This file is intentionally small (~30 lines) so downstream skills and session re
 > - **[Output Versioning Protocol](../shared-references/output-versioning.md)** — write timestamped file first, then copy to fixed name
 > - **[Output Manifest Protocol](../shared-references/output-manifest.md)** — log every output to MANIFEST.md
 > - **[Output Language Protocol](../shared-references/output-language.md)** — respect the project's language setting
+
+## Render HTML view (auto, when `RENDER_HTML = true`)
+
+After Phase 4 finalizes `idea-stage/IDEA_REPORT.md` (and the optional `IDEA_CANDIDATES.md`), invoke `/render-html` on the report so the user has a single-file HTML view for tablet / phone reading:
+
+```
+/render-html "idea-stage/IDEA_REPORT.md" --no-review
+```
+
+`--no-review` is intentional: source MD already passed this skill's own novelty + cross-model review. HTML render is a structural conversion, not a new claim-audit gate. Output lands at `idea-stage/IDEA_REPORT.html` with embedded source SHA256 + render timestamp.
+
+**Non-blocking**: if `/render-html` fails (helper missing, Codex MCP unavailable, file write error), log the failure and continue — the HTML view is a convenience artifact, not a Phase 4 prerequisite.
+
+Skip this step if `RENDER_HTML = false`.
 
 ## Key Rules
 

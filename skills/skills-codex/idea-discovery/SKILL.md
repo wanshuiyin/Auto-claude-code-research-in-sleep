@@ -30,6 +30,7 @@ Each phase builds on the previous one's output. The final deliverables are a val
 - **COMPACT = false** — When `true`, generate compact summary files for short-context sessions and downstream skills. Writes `idea-stage/IDEA_CANDIDATES.md`.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 - **REF_PAPER = false** — Reference paper to base ideas on. Accepts a local PDF path, arXiv URL, or paper URL. When set, summarize it first and use it as idea-generation context.
+- **RENDER_HTML = true** — When `true` (default), auto-render `idea-stage/IDEA_REPORT.md` to HTML at workflow end via `/render-html`. Uses `--no-review` (source already passed novelty + cross-model review during Phase 3). Set `false` to skip, or pass `— render html: false`.
 
 > 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — ref paper: https://arxiv.org/abs/2406.04329` or `/idea-discovery "topic" — compact: true`.
 
@@ -301,6 +302,18 @@ Write `idea-stage/IDEA_CANDIDATES.md` — a lean summary of the top 3-5 survivin
 > - **[Output Versioning Protocol](../../shared-references/output-versioning.md)** — write timestamped file first, then copy to fixed name
 > - **[Output Manifest Protocol](../../shared-references/output-manifest.md)** — log every output to MANIFEST.md
 > - **[Output Language Protocol](../../shared-references/output-language.md)** — respect the project's language setting
+
+## Render HTML view (auto, when `RENDER_HTML = true`)
+
+After finalizing `idea-stage/IDEA_REPORT.md` (and the optional `IDEA_CANDIDATES.md`), invoke `/render-html` on the report so the user has a single-file HTML view for tablet / phone reading:
+
+```
+/render-html "idea-stage/IDEA_REPORT.md" --no-review
+```
+
+`--no-review` is intentional: source MD already passed this skill's own novelty + cross-model review. HTML render is a structural conversion, not a new claim-audit gate.
+
+**Non-blocking**: if `/render-html` fails (helper missing, secondary Codex agent unavailable, file write error), log the failure and continue. Skip entirely if `RENDER_HTML = false`.
 
 ## Key Rules
 

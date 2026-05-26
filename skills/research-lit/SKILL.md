@@ -357,7 +357,7 @@ For EACH paper found, provide ALL of the following:
 - Summary: [one-sentence core contribution]
 
 Find at least 15 papers.',
-  model: 'gemini-2.5-pro'
+  model: 'auto-gemini-3'
 })
 ```
 

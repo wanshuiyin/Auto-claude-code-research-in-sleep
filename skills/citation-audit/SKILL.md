@@ -44,6 +44,7 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
 - **STATE = `CITATION_AUDIT.json`** — Machine-readable verdict ledger consumable by downstream tools.
 - **SOFT_ONLY = `false`** — When true (set via `— soft-only` / `— soft_only` flag), the audit runs all three layers normally but **forbids any `.bib` file mutation**. Findings that would otherwise mutate the bib (FIX / REPLACE / REMOVE) are translated into per-occurrence sentence-rewrite proposals against the citing `*.tex` files. Used by `/resubmit-pipeline` Phase 1 to honor the user's hard "freeze the bib" constraint.
+- **RENDER_HTML = true** — When `true` (default), auto-render `CITATION_AUDIT.md` to HTML after writing the report. Uses **full Codex review gate** (audit-class artifact — render-fidelity check matches the skill's cross-model audit invariant). Set `false` to skip, or pass `— render html: false`.
 
 ## Workflow
 
@@ -307,6 +308,7 @@ After each `mcp__codex__codex` reviewer call, save the trace following `shared-r
 - `.aris/traces/citation-audit/<date>_runNN/` (per-entry review traces)
 - Optional: applied fixes to `references.bib` + `sec/*.tex` (with `--apply` flag)
 - Optional: `details.uncited_entries` field in JSON + `## Uncited Entries (opt-in)` MD section (with `--uncited` flag; field absent and section omitted when flag is unset)
+- `CITATION_AUDIT.html` (when `RENDER_HTML = true`, default) — auto-rendered single-file HTML view via `/render-html "CITATION_AUDIT.md" --json "CITATION_AUDIT.json"`. Full review gate. Sidecar `.review.json` carries render-fidelity verdict. **Non-blocking**: if `/render-html` fails (helper missing, Codex MCP unavailable, file write error), log the failure and treat the audit as complete — the JSON + MD ledger are the canonical outputs.
 
 ## Optional: Soft-Only Mode (— soft-only)
 
