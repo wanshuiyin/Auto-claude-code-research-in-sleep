@@ -249,6 +249,7 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 </details>
 
 <a id="quick-start"></a>
+<a id="-quick-start"></a>
 
 ## 3. 🚀 快速开始
 
@@ -521,6 +522,7 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**这里不宣
 </details>
 
 <a id="workflows"></a>
+<a id="-workflows"></a>
 
 ## 8. 🔄 工作流
 
@@ -1014,6 +1016,8 @@ NARRATIVE_REPORT.md ──► /paper-plan ──► /paper-figure ──► /pap
 
 ---
 
+<a id="workflow-m-meta-optimize--aris-optimizes-itself"></a>
+
 ### 工作流 M：Meta-Optimize 🧬（ARIS 优化自己）
 
 > **"分析我的使用模式，改进你自己的技能。"**
@@ -1140,6 +1144,7 @@ export OPENAI_API_KEY="your-key"         # API 模式（快）
 ---
 
 <a id="skills-catalog"></a>
+<a id="-skills-catalog"></a>
 
 ## 9. 🧰 Skills Catalog
 
@@ -1170,6 +1175,7 @@ README 可扫读。
 ---
 
 <a id="setup"></a>
+<a id="-setup"></a>
 
 ## 10. ⚙️ 安装
 
@@ -1435,6 +1441,7 @@ Claude Code 读到这些就知道怎么 SSH、激活环境、启动实验。GPT-
 </details>
 
 <a id="customization"></a>
+<a id="-customization"></a>
 
 ## 11. 🎛️ 自定义
 
