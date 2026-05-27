@@ -1274,6 +1274,35 @@ cp -r ~/aris_repo/skills/* ~/.claude/skills/
 
 </details>
 
+<a id="optional-codex-plugin-for-code-review"></a>
+
+<details>
+<summary><b>可选：用于代码审查的 Codex Plugin</b></summary>
+
+[codex-plugin-cc](https://github.com/openai/codex-plugin-cc) 会提供额外的 Codex 能力；安装后 ARIS 会自动检测并使用：
+
+```bash
+# 在 Claude Code 中：
+/plugin marketplace add openai/codex-plugin-cc
+/plugin install codex@openai-codex
+/reload-plugins
+/codex:setup
+```
+
+**ARIS 会在这些地方使用 plugin：**
+
+| Skill | 所属流程 | 作用 |
+|-------|---------|------|
+| `/codex:review` | Workflow 1.5 | GPU 部署前审查实验代码 |
+| `/codex:adversarial-review` | Workflow 1.5 | 对抗式代码审查（寻找边界情况和 bug） |
+| `/codex:rescue` | Workflow 1.5 + 3 | **自动调试救援**：当实验或 LaTeX 编译连续失败 2 次后，Codex 会在下一次重试前独立诊断根因 |
+
+所有 plugin 功能都是**可选的**；如果没有安装，ARIS 会回退到 Claude 自己的诊断。这个 plugin 只是多加一双眼睛。
+
+> 注意：ARIS 的核心跨模型审稿（论文评分、idea 评估、rebuttal 压力测试）仍然使用 Codex MCP，因为它支持自定义 prompt。plugin 不能替代这部分能力。
+
+</details>
+
 ### 更新 Skills
 
 ```bash
