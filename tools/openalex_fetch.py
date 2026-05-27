@@ -151,13 +151,13 @@ class OpenAlexClient:
             author_name = author.get("display_name", "Unknown")
             authors.append(author_name)
 
-        # Extract venue/source
-        primary_location = work.get("primary_location", {})
-        source = primary_location.get("source", {})
+        # Extract venue/source — `or {}` because OpenAlex returns explicit null (not missing key) for some works
+        primary_location = work.get("primary_location") or {}
+        source = primary_location.get("source") or {}
         venue = source.get("display_name", "Unknown")
 
         # Extract open access info
-        oa_info = work.get("open_access", {})
+        oa_info = work.get("open_access") or {}
         oa_status = oa_info.get("oa_status", "closed")
         oa_url = oa_info.get("oa_url")
 
