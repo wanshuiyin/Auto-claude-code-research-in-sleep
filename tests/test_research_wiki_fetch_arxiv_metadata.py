@@ -226,6 +226,8 @@ def test_batch_fetch_one_request_many_entries(monkeypatch):
     assert len(seen["requests"]) == 1
     # id_list carried both ids, comma-joined
     assert "2510.23672,2402.14992" in seen["requests"][0].full_url
+    # max_results set to the id count so >10 ids are not silently truncated
+    assert "max_results=2" in seen["requests"][0].full_url
     # keyed by normalized id, version stripped
     assert set(out) == {"2510.23672", "2402.14992"}
     assert out["2510.23672"]["title"] == "First Paper"

@@ -432,9 +432,11 @@ def fetch_arxiv_metadata_batch(arxiv_ids: list[str], timeout: float = 30.0) -> d
     norm = [_normalize_arxiv_id(a.strip()) for a in arxiv_ids if a and a.strip()]
     if not norm:
         return {}
-    body = _arxiv_api_get(
-        _ARXIV_API.format(ids=",".join(norm)), f"id_list[{len(norm)}]", timeout=timeout
-    )
+    # arXiv defaults max_results to 10, so an id_list of >10 silently returns
+    # only the first 10 entries — set max_results to the full count so all
+    # requested papers come back in the single request.
+    url = _ARXIV_API.format(ids=",".join(norm)) + f"&max_results={len(norm)}"
+    body = _arxiv_api_get(url, f"id_list[{len(norm)}]", timeout=timeout)
     try:
         root = ET.fromstring(body)
     except ET.ParseError as e:
