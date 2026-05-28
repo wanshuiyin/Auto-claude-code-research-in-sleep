@@ -35,6 +35,7 @@ Prepare the direct Gemini API path before use:
 Optional fallback only:
 
 - **Gemini CLI**: install `gemini` and complete CLI login/auth if you explicitly want `GEMINI_REVIEW_BACKEND=cli`
+- **Antigravity CLI**: install/authenticate `agy` if you explicitly want `GEMINI_REVIEW_BACKEND=agy`
 
 The server also auto-loads `~/.gemini/.env` if it exists, so a local file such as:
 
@@ -47,11 +48,15 @@ is enough for API mode without exporting the variable in every shell.
 ## Environment Variables
 
 - `GEMINI_BIN`: Gemini CLI path, defaults to `gemini`
-- `GEMINI_REVIEW_MODEL`: optional reviewer model override used by both backends
+- `AGY_BIN`: Antigravity CLI path, defaults to `agy`
+- `GEMINI_REVIEW_MODEL`: optional reviewer model override used by API/Gemini CLI backends; recorded for `agy`, whose model is controlled by Antigravity settings
 - `GEMINI_REVIEW_API_MODEL`: API-only default when `GEMINI_REVIEW_MODEL` is unset, defaults to `gemini-2.5-flash`
 - `GEMINI_REVIEW_SYSTEM`: optional default system prompt
-- `GEMINI_REVIEW_BACKEND`: reviewer backend override, one of `api`, `auto`, or `cli`; defaults to `api`
+- `GEMINI_REVIEW_BACKEND`: reviewer backend override, one of `api`, `auto`, `cli`, or `agy`; defaults to `api`
 - `GEMINI_REVIEW_TIMEOUT_SEC`: HTTP / subprocess timeout, defaults to `600`
+- `GEMINI_REVIEW_AGY_PRINT_TIMEOUT`: Antigravity `--print-timeout` value, defaults to `${GEMINI_REVIEW_TIMEOUT_SEC}s`
+- `GEMINI_REVIEW_AGY_APP_DATA_DIR`: Antigravity CLI app data directory, defaults to `~/.gemini/antigravity-cli`
+- `GEMINI_REVIEW_AGY_ARTIFACT_MAX_CHARS`: max characters read from an AGY-generated text artifact, defaults to `200000`
 - `GEMINI_REVIEW_STATE_DIR`: bridge state directory, defaults to `~/.codex/state/gemini-review`
 - `GEMINI_REVIEW_DEBUG_LOG`: debug log path, defaults to `/tmp/gemini-review-mcp-debug.log`
 - `GEMINI_API_KEY`: Gemini API key
@@ -60,10 +65,11 @@ is enough for API mode without exporting the variable in every shell.
 ## Notes
 
 - The bridge defaults to the direct Gemini API path. This is the intended reviewer backend for the ARIS skill overlay.
-- `GEMINI_REVIEW_BACKEND=auto` is still supported if you want API-first auto-selection, and `GEMINI_REVIEW_BACKEND=cli` is available as an explicit fallback.
+- `GEMINI_REVIEW_BACKEND=auto` is still supported if you want API-first auto-selection; it falls back to `agy` when no API key is configured and Antigravity is installed, then to `cli`. `GEMINI_REVIEW_BACKEND=cli` remains available as an explicit fallback.
+- `GEMINI_REVIEW_BACKEND=agy` routes review prompts through `agy --print`, which is useful when you want Codex to keep the MCP contract but use Antigravity CLI authentication/model routing. Because `agy --print` can exit successfully after writing a conversation transcript or generated artifact without printing the final text to stdout, the bridge passes a per-call `--log-file` and falls back to Antigravity's transcript/artifact files under `GEMINI_REVIEW_AGY_APP_DATA_DIR`.
 - If the default API model is temporarily rate-limited on your current free-tier window, keep the same bridge and set `GEMINI_REVIEW_MODEL=gemini-flash-latest` as a model override.
 - The `tools` argument is accepted for compatibility with existing skills, but is ignored. This matches the original pattern where the external reviewer only sees the prompt context prepared by Codex.
-- `imagePaths` / `image_paths` are supported only by the direct Gemini API backend in this bridge. CLI fallback remains text-only.
+- `imagePaths` / `image_paths` are supported only by the direct Gemini API backend in this bridge. CLI and `agy` fallback paths remain text-only.
 - `threadId` is a bridge-local conversation id persisted under `~/.codex/state/gemini-review/threads/` by default and can be passed to `review_reply`.
 - `jobId` is a bridge-local background task id stored under `~/.codex/state/gemini-review/jobs/` by default, so status can be resumed across MCP server restarts.
 - This is intentionally a narrow, repo-local adapter. We did not directly vendor a generic Gemini MCP server, because the ARIS reviewer-aware skills expect the specific `review` / `review_reply` / `review_start` / `review_reply_start` / `review_status` interface and resumable review-thread semantics.

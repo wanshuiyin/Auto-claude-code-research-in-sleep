@@ -15,12 +15,14 @@ import base64
 import json
 import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
 import time
 import traceback
 import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 from datetime import datetime, timezone
@@ -33,11 +35,20 @@ sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
 
 SERVER_NAME = os.environ.get("GEMINI_REVIEW_SERVER_NAME", "gemini-review")
 GEMINI_BIN = os.environ.get("GEMINI_BIN", "gemini")
+AGY_BIN = os.environ.get("AGY_BIN", "agy")
 DEFAULT_MODEL = os.environ.get("GEMINI_REVIEW_MODEL", "")
 DEFAULT_SYSTEM = os.environ.get("GEMINI_REVIEW_SYSTEM", "")
 DEFAULT_BACKEND = os.environ.get("GEMINI_REVIEW_BACKEND", "api")
 DEFAULT_TIMEOUT_SEC = int(os.environ.get("GEMINI_REVIEW_TIMEOUT_SEC", "600"))
 DEFAULT_API_MODEL = os.environ.get("GEMINI_REVIEW_API_MODEL", "gemini-2.5-flash")
+DEFAULT_AGY_PRINT_TIMEOUT = os.environ.get("GEMINI_REVIEW_AGY_PRINT_TIMEOUT", f"{DEFAULT_TIMEOUT_SEC}s")
+AGY_APP_DATA_DIR = Path(
+    os.environ.get(
+        "GEMINI_REVIEW_AGY_APP_DATA_DIR",
+        str(Path.home() / ".gemini" / "antigravity-cli"),
+    )
+).expanduser()
+AGY_ARTIFACT_MAX_CHARS = int(os.environ.get("GEMINI_REVIEW_AGY_ARTIFACT_MAX_CHARS", "200000"))
 DEBUG_LOG = Path(os.environ.get("GEMINI_REVIEW_DEBUG_LOG", f"/tmp/{SERVER_NAME}-mcp-debug.log"))
 STATE_DIR = Path(
     os.environ.get(
@@ -195,12 +206,22 @@ def find_gemini_bin() -> str | None:
     return shutil.which(GEMINI_BIN)
 
 
+def find_agy_bin() -> str | None:
+    if Path(AGY_BIN).is_file():
+        return AGY_BIN
+    return shutil.which(AGY_BIN)
+
+
 def resolve_backend(preferred_backend: str | None) -> str:
     backend = preferred_backend or DEFAULT_BACKEND
-    if backend not in {"auto", "api", "cli"}:
+    if backend not in {"auto", "api", "cli", "agy"}:
         raise ValueError(f"unsupported Gemini backend: {backend}")
     if backend == "auto":
-        return "api" if get_api_key() else "cli"
+        if get_api_key():
+            return "api"
+        if find_agy_bin():
+            return "agy"
+        return "cli"
     return backend
 
 
@@ -245,6 +266,128 @@ def extract_cli_error_message(raw_stdout: str, raw_stderr: str) -> str:
             return response.strip()
         return stripped
     return "unknown error"
+
+
+def agy_output_is_error(text: str) -> bool:
+    stripped = text.strip()
+    return stripped == "Error: timed out waiting for response" or stripped.startswith("Error: timed out waiting for response")
+
+
+def extract_agy_conversation_id_from_log(log_path: Path) -> str | None:
+    try:
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    matches = re.findall(r"Print mode: conversation=([0-9A-Za-z_-]+)", text)
+    return matches[-1] if matches else None
+
+
+def latest_agy_conversation_id_for_cwd() -> str | None:
+    last_conversations_path = AGY_APP_DATA_DIR / "cache" / "last_conversations.json"
+    try:
+        payload = json.loads(last_conversations_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    try:
+        cwd = Path.cwd().resolve()
+    except OSError:
+        cwd = Path.cwd().absolute()
+
+    best: tuple[int, str] | None = None
+    for raw_path, raw_conversation_id in payload.items():
+        if not isinstance(raw_path, str) or not isinstance(raw_conversation_id, str):
+            continue
+        try:
+            candidate_path = Path(raw_path).expanduser().resolve()
+        except OSError:
+            continue
+        if cwd == candidate_path or candidate_path in cwd.parents:
+            depth = len(candidate_path.parts)
+            if best is None or depth > best[0]:
+                best = (depth, raw_conversation_id)
+    return best[1] if best else None
+
+
+def agy_transcript_paths(conversation_id: str) -> list[Path]:
+    logs_dir = AGY_APP_DATA_DIR / "brain" / conversation_id / ".system_generated" / "logs"
+    return [logs_dir / "transcript_full.jsonl", logs_dir / "transcript.jsonl"]
+
+
+def agy_artifact_text(path: Path) -> str | None:
+    if path.suffix.lower() not in {".md", ".markdown", ".txt", ".json", ".yaml", ".yml"}:
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return None
+    if not text:
+        return None
+    if len(text) > AGY_ARTIFACT_MAX_CHARS:
+        return text[:AGY_ARTIFACT_MAX_CHARS] + "\n\n[truncated by gemini-review agy artifact fallback]"
+    return text
+
+
+def extract_file_uri_paths(text: str) -> list[Path]:
+    paths: list[Path] = []
+    for match in re.finditer(r"file://[^\s)>\]]+", text):
+        parsed = urllib.parse.urlparse(match.group(0))
+        if parsed.scheme != "file" or not parsed.path:
+            continue
+        paths.append(Path(urllib.parse.unquote(parsed.path)))
+    return paths
+
+
+def extract_agy_response_from_transcript(conversation_id: str) -> str | None:
+    for transcript_path in agy_transcript_paths(conversation_id):
+        if not transcript_path.is_file():
+            continue
+        final_response: str | None = None
+        artifact_paths: list[Path] = []
+        try:
+            lines = transcript_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                step = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if step.get("source") != "MODEL":
+                continue
+            step_type = step.get("type")
+            content = step.get("content")
+            if isinstance(content, str):
+                artifact_paths.extend(extract_file_uri_paths(content))
+            if step_type == "PLANNER_RESPONSE" and isinstance(content, str) and content.strip():
+                final_response = content.strip()
+
+        for path in reversed(artifact_paths):
+            artifact = agy_artifact_text(path)
+            if artifact:
+                return artifact
+        if final_response:
+            return final_response
+    return None
+
+
+def extract_agy_response_from_state(
+    log_path: Path,
+    *,
+    allow_last_conversation: bool = True,
+) -> tuple[str | None, str | None]:
+    conversation_id = extract_agy_conversation_id_from_log(log_path)
+    if not conversation_id and allow_last_conversation:
+        conversation_id = latest_agy_conversation_id_for_cwd()
+    if not conversation_id:
+        return None, "could not locate Antigravity conversation id"
+    response = extract_agy_response_from_transcript(conversation_id)
+    if response:
+        debug_log(f"AGY_TRANSCRIPT_RECOVERED conversation={conversation_id}")
+        return response, None
+    return None, f"Antigravity transcript has no final response yet: {conversation_id}"
 
 
 def extract_api_response_text(payload: dict[str, Any]) -> str:
@@ -445,6 +588,88 @@ def run_gemini_cli_review(
     }, None
 
 
+def run_agy_cli_review(
+    prompt: str,
+    *,
+    history: list[dict[str, str]],
+    model: str | None,
+    system: str | None,
+    image_paths: list[str],
+) -> tuple[dict[str, Any] | None, str | None]:
+    if image_paths:
+        return None, "Antigravity CLI backend in this bridge does not support imagePaths; use backend=api"
+
+    bin_path = find_agy_bin()
+    if not bin_path:
+        return None, f"Antigravity CLI not found: {AGY_BIN}"
+
+    effective_prompt = build_cli_prompt(prompt, history=history, system=system)
+    agy_log_dir = STATE_DIR / "agy-logs"
+    try:
+        agy_log_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        agy_log_dir = Path("/tmp")
+    agy_log_path = agy_log_dir / f"agy-{uuid.uuid4().hex}.log"
+    cmd = [
+        bin_path,
+        "--log-file",
+        str(agy_log_path),
+        "--print",
+        effective_prompt,
+        "--print-timeout",
+        DEFAULT_AGY_PRINT_TIMEOUT,
+    ]
+
+    debug_log(f"RUN agy-cli timeout={DEFAULT_AGY_PRINT_TIMEOUT} log={agy_log_path}")
+    try:
+        started = time.monotonic()
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=DEFAULT_TIMEOUT_SEC + 15,
+            check=False,
+        )
+        duration_ms = int((time.monotonic() - started) * 1000)
+    except subprocess.TimeoutExpired:
+        return None, f"Antigravity review timed out after {DEFAULT_TIMEOUT_SEC} seconds"
+
+    response_text = result.stdout.strip()
+    if result.returncode != 0:
+        message = result.stderr.strip() or response_text or "unknown error"
+        return None, f"Antigravity review failed: {message}"
+    if not response_text or agy_output_is_error(response_text):
+        recovered_text, recovered_error = extract_agy_response_from_state(agy_log_path)
+        if recovered_text:
+            response_text = recovered_text
+        elif response_text:
+            suffix = f"; {recovered_error}" if recovered_error else ""
+            return None, f"Antigravity CLI did not print a final response: {response_text}{suffix}"
+    if not response_text:
+        stderr = result.stderr.strip()
+        recovered_text, recovered_error = extract_agy_response_from_state(agy_log_path)
+        if recovered_text:
+            response_text = recovered_text
+        else:
+            message = "Antigravity CLI returned empty output" if not stderr else f"Antigravity CLI returned empty output. stderr: {stderr}"
+            if recovered_error:
+                message = f"{message}; {recovered_error}"
+            return None, message
+
+    transcript_text, _ = extract_agy_response_from_state(agy_log_path, allow_last_conversation=False)
+    if transcript_text and len(transcript_text) > len(response_text):
+        response_text = transcript_text
+
+    return {
+        "response": response_text,
+        "model": model or DEFAULT_MODEL or "agy-cli",
+        "duration_ms": duration_ms,
+        "stop_reason": None,
+        "backend": "agy",
+    }, None
+
+
 def run_gemini_api_review(
     prompt: str,
     *,
@@ -567,6 +792,14 @@ def run_gemini_review(
             system=system,
             image_paths=normalized_image_paths,
         )
+    elif selected_backend == "agy":
+        payload, error = run_agy_cli_review(
+            prompt,
+            history=history,
+            model=model,
+            system=system,
+            image_paths=normalized_image_paths,
+        )
     else:
         payload, error = run_gemini_cli_review(
             prompt,
@@ -579,7 +812,7 @@ def run_gemini_review(
         return None, error
 
     if payload is None:
-        return None, "Failed to parse Gemini CLI output"
+        return None, "Failed to parse reviewer output"
     updated_history = list(history)
     updated_history.append({"role": "user", "text": prompt})
     updated_history.append({"role": "model", "text": str(payload["response"])})
@@ -788,7 +1021,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
             "prompt": {"type": "string", "description": "Reviewer prompt"},
             "system": {"type": "string", "description": "Optional system prompt"},
             "model": {"type": "string", "description": "Optional Gemini model override"},
-            "backend": {"type": "string", "description": "Optional Gemini backend override: auto, api, or cli"},
+            "backend": {"type": "string", "description": "Optional Gemini backend override: auto, api, cli, or agy"},
             "tools": {"type": "string", "description": "Accepted for compatibility but ignored by Gemini review"},
             "imagePaths": {
                 "type": "array",
