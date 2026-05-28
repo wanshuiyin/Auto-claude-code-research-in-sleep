@@ -1,113 +1,170 @@
 ---
 name: strategy-loop-review
-description: Reviews one round bundle from the AutoTrader strategy-optimization-loop study against the spec's 4-criterion rubric via Codex MCP. Reads result.json + bootstrap_diff.json + regime_breakdown.json + round_summary.json + cfg.json from a round-NN/variant-MM/ directory; writes codex_verdict.md + digest.md to the same directory. Use when user says "review round N", "score the round", "/strategy-loop-review", or wants Codex to gate an in-flight candidate before committing the round.
+description: Reviews one round bundle from any AutoTrader strategy-optimization study against the 4-criterion rubric via Codex MCP. Reads result.json + bootstrap_diff.json + regime_breakdown.json + round_summary.json + cfg.json from a round-NN/variant-MM/ directory; writes codex_verdict.md + digest.md to the same directory. Use when user says "review round N", "score the round", "/strategy-loop-review", or wants Codex to gate an in-flight candidate before committing the round.
 argument-hint: [round-bundle-directory-path]
-allowed-tools: Bash(*), Read, Write, Grep, Glob, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, mcp__codex__codex
 ---
 
-# Strategy Loop Review (single-round, MVS)
+# Strategy Loop Review (single-round)
 
-Review one candidate round of the AutoTrader strategy-optimization-loop study against the spec's 4-criterion rubric. Calls Codex via MCP.
+Review one candidate round bundle against the 4-criterion rubric. Codex reads the bundle files itself via its read-only sandbox; this skill just validates the bundle is complete, dispatches Codex with a short prompt, and persists Codex's response.
+
+The skill is **idempotent**: re-invoking it on the same bundle (e.g. retry after a Codex MCP outage) overwrites `codex_verdict.md` and `digest.md`. No special retry mode is needed.
 
 ## Bundle directory: $ARGUMENTS
 
 ## Constants
 
 - **REVIEWER_MODEL**: `gpt-5.5`
-- **SPEC_PATH**: `/Users/zongfan/Projects/AutoTrader/docs/studies/2026-05-26-strategy-optimization-loop.md`
+- **PROJECT_ROOT**: parent of the `study_runs/` ancestor in `$ARGUMENTS` (auto-detected by walking up the path until a `study_runs/` segment is found). Passed to Codex as `cwd` so it can `Read` bundle files.
 - **REQUIRED_FILES**: `cfg.json`, `result.json`, `bootstrap_diff.json`, `regime_breakdown.json`, `round_summary.json`
-- **OUTPUT_FILES**: `codex_verdict.md` (raw Codex response), `digest.md` (structured carry-forward)
-- **PER_ROUND_DATE_RANGE_EXPECTED**: `2022-01-01:2025-11-30` (per spec §5.3.4; the wrapper enforces, this is the cross-check)
+- **OUTPUT_FILES**: `codex_verdict.md` (raw Codex response + header), `digest.md` (structured carry-forward parsed from Codex's JSON block)
+
+The 4-criterion rubric is inlined in the Codex prompt below — no external spec excerpt needed. Study-specific overrides (e.g. delta-vs-baseline concentration semantics) are picked up from the study brief if one is auto-discovered for the bundle.
 
 ## Workflow
 
-### Phase A — Validate bundle
+### Phase A — Validate bundle (one Bash call)
 
-1. `cd $ARGUMENTS` — verify directory exists.
-2. For each `REQUIRED_FILES`: assert exists. If any missing, **STOP** and report which files are missing — the upstream pipeline (proposer + wrapper + evaluators) didn't complete; reviewer refuses to score per spec §3.1 line 61.
-3. Read `result.json`. Pre-check: `date_range == PER_ROUND_DATE_RANGE_EXPECTED` (this is the proxy for "wrapper emitted seal tokens" — the wrapper validates and emits in one block; date_range matching the seal is sufficient evidence). If mismatch, **STOP** and report.
-4. Read `round_summary.json`. Note which automated criteria pre-failed (criteria.*.passed=false). Codex will still review, but with this context.
+Run one Bash check that asserts the bundle directory exists and every REQUIRED_FILE is present. If anything is missing, **STOP** and report — the upstream pipeline (proposer + wrapper + evaluators) didn't complete; reviewer refuses to score a partial bundle.
 
-### Phase B — Format the Codex prompt
+```bash
+BUNDLE="$ARGUMENTS"
+test -d "$BUNDLE" || { echo "MISSING dir: $BUNDLE"; exit 1; }
+for f in cfg.json result.json bootstrap_diff.json regime_breakdown.json round_summary.json; do
+  test -f "$BUNDLE/$f" || { echo "MISSING: $BUNDLE/$f"; exit 1; }
+done
+echo "BUNDLE OK"
+```
 
-Construct a single Codex input including:
+### Phase B — Invoke Codex via MCP (one mcp__codex__codex call)
 
-- **Header**: "You are reviewing one round of the AutoTrader strategy-optimization-loop study. Score against the 4-criterion rubric verbatim from spec §3.1."
-- **Spec excerpt**: copy lines 32-63 of `SPEC_PATH` (the Methodology / Loop structure section that defines the rubric, Phase A search space, and per-round rubric items 1-4). Use `Read` with offset=32, limit=32 to grab them.
-- **Bundle dump**: include verbatim the contents of `cfg.json`, `bootstrap_diff.json`, `regime_breakdown.json`, `round_summary.json`. Also include the summary fields from `result.json` (final_equity, trade_count, date_range, purpose, composite_key).
-- **Note about trade-integrity sub-checks**: round_summary.json may show `insufficient_data: true` for max_single_trade_pct_pnl, sector_concentration_pct, turnover_ratio_vs_baseline, and median_holding_days_vs_baseline — these are pending a future wrapper enhancement (per-trade trades.csv emission). Codex should: (a) score trade_integrity as PASS if trade_count_ok is true AND no obvious red flag from final_equity/trade_count ratio; (b) note in the response which sub-checks were inconclusive due to insufficient_data.
-- **Output schema instruction**: Codex must respond in two parts:
-  1. A free-form verdict section (<= 500 words) discussing each of the 4 criteria with quantitative evidence from the bundle.
-  2. A machine-parseable JSON block at the end with fields:
-     ```json
-     {
-       "accept": true | false,
-       "criteria": {
-         "statistical_lift": {"passed": true|false, "rationale": "..."},
-         "regime_robust": {"passed": true|false, "rationale": "..."},
-         "trade_integrity": {"passed": true|false, "rationale": "..."},
-         "clean_diff_pit": {"passed": true|false, "rationale": "..."}
-       },
-       "next_round_recommendations": ["...", "...", ...],
-       "rejection_digest": "Brief carryover for next round's proposer if accept=false"
-     }
-     ```
+Resolve two values before the call:
 
-### Phase C — Invoke Codex via MCP
+- **PROJECT_ROOT**: the prefix of `$ARGUMENTS` ending immediately before the first `study_runs/` segment.
+- **STUDY_BRIEF_PATH**: if `$ARGUMENTS` matches `study_runs/<slug>/round-NN/variant-MM/`, glob `<PROJECT_ROOT>/docs/studies/*<slug>*.md` and `<PROJECT_ROOT>/docs/briefs/*<slug>*.md`. If exactly one match, use it; otherwise `none`.
 
-Call `mcp__codex__codex` with the formatted prompt. Use the model from REVIEWER_MODEL. Capture the full response text.
+Call `mcp__codex__codex` with:
 
-### Phase D — Persist outputs
+- `model`: `gpt-5.5`
+- `sandbox`: `read-only`
+- `approval-policy`: `never`
+- `cwd`: PROJECT_ROOT
+- `prompt`: the template below, with `<BUNDLE_PATH>` and `<STUDY_BRIEF_PATH_OR_NONE>` filled in.
 
-1. Write `codex_verdict.md` to the round bundle directory — full raw Codex response, with a header containing: skill version, REVIEWER_MODEL, timestamp.
-2. Extract the JSON block from Codex's response. If extraction fails (malformed JSON / missing block), fall back to a structured-by-hand `digest.md` based on the free-form text; flag this in the digest with a `parse_warning` field.
-3. Write `digest.md` to the round bundle directory — a structured carryover for the next round, formatted as:
+**Prompt template:**
+
+```
+You are reviewing one round bundle of an AutoTrader strategy-optimization study. Read the bundle files yourself; do not assume any context beyond what is on disk.
+
+BUNDLE_PATH: <BUNDLE_PATH>
+STUDY_BRIEF (optional, for study-specific overrides): <STUDY_BRIEF_PATH_OR_NONE>
+
+READ these files from BUNDLE_PATH (use the Read tool):
+- cfg.json
+- result.json
+- bootstrap_diff.json
+- regime_breakdown.json
+- round_summary.json
+- proposer_brief.md (optional — if present, surfaces the hypothesis + falsifier)
+- deviations.md (optional — if present, lists methodology deviations the implementer recorded)
+
+If STUDY_BRIEF is provided, read it too — its "Success criteria" section may override the default rubric (e.g. delta-vs-baseline concentration semantics, study-specific windows, additional gates, or a primary Pareto cell question).
+
+RUBRIC (default — 4 criteria, all must pass for accept=true):
+
+1. **Statistical lift** — 95% CI of paired-day Sharpe-difference bootstrap (>=10,000 resamples) excludes zero on the POSITIVE side. Read bootstrap_diff.json:lift_ci_95.
+2. **Regime-robust** — Better on >=2 of {Greed, Fear, Neutral}, not worse in any by > 0.10 Sharpe. PIT-verified labels. Read regime_breakdown.json:verdict and :per_regime.
+3. **Trade integrity** — >=20 trades; max single-trade <=25% of total |pnl|; sector concentration <=30% (strict-absolute Tech |pnl| cap unless the study brief overrides); turnover within [1/1.5, 1.5] vs baseline; median holding within [0.5, 1.5] vs baseline. Read round_summary.json:criteria.trade_integrity.
+4. **Clean diff + PIT** — One logical change vs baseline; hypothesis falsifiable; any new data sources honor observed_ts <= bar.event_date; ATR uses only prior bars; momentum decay uses only prior signal history. Read cfg.json + proposer_brief.md (if present).
+
+OUTPUT — respond in two parts:
+
+PART 1: Free-form verdict (<=500 words) discussing each of the 4 criteria with quantitative evidence from the bundle files. If the study brief defines a primary success cell (e.g. a specific Pareto question), answer it explicitly and identify which brief-defined falsifier (if any) triggered.
+
+PART 2: A machine-parseable JSON block at the very end of your reply:
+{
+  "accept": true | false,
+  "criteria": {
+    "statistical_lift": {"passed": true|false, "rationale": "..."},
+    "regime_robust": {"passed": true|false, "rationale": "..."},
+    "trade_integrity": {"passed": true|false, "rationale": "..."},
+    "clean_diff_pit": {"passed": true|false, "rationale": "..."}
+  },
+  "primary_pareto_cell_landed": true | false | null,
+  "falsifier_triggered": "<brief-defined falsifier ID or 'none'>",
+  "next_round_recommendations": ["...", "...", ...],
+  "rejection_digest": "Brief carryover for next round's proposer if accept=false; '(accepted)' if accept=true"
+}
+```
+
+### Phase C — Persist outputs (two Write calls)
+
+1. **`codex_verdict.md`** — Codex's full raw response, prefixed by a header:
+
+   ```markdown
+   # Codex Strategy-Loop Review
+
+   **Skill**: strategy-loop-review (simplified)
+   **Reviewer model**: gpt-5.5 via mcp__codex__codex
+   **Timestamp**: <iso UTC>
+   **Bundle**: <BUNDLE_PATH>
+
+   ---
+
+   <Codex response, verbatim>
+   ```
+
+2. **`digest.md`** — structured carry-forward parsed from the JSON block in Codex's response. Schema:
+
    ```markdown
    # Round Review Digest
 
    **Round bundle**: <path>
-   **Reviewer**: Codex (REVIEWER_MODEL)
+   **Reviewer**: Codex (gpt-5.5)
    **Accept**: <true|false>
-   **Timestamp**: <iso>
+   **Primary Pareto cell landed**: <true|false|n/a>
+   **Falsifier triggered**: <id or none>
+   **Timestamp**: <iso UTC>
 
    ## Per-criterion verdicts
 
-   - **Statistical lift**: PASS | FAIL — <rationale>
-   - **Regime robust**: PASS | FAIL — <rationale>
-   - **Trade integrity**: PASS | FAIL — <rationale>
-   - **Clean diff + PIT**: PASS | FAIL — <rationale>
+   - **Statistical lift**: PASS|FAIL — <rationale>
+   - **Regime robust**: PASS|FAIL — <rationale>
+   - **Trade integrity**: PASS|FAIL — <rationale>
+   - **Clean diff + PIT**: PASS|FAIL — <rationale>
 
    ## Carry-forward for next round
 
-   <next_round_recommendations bulleted>
+   - <each next_round_recommendation as bullet>
 
-   ## Rejection digest (if rejected)
+   ## Rejection digest
 
-   <rejection_digest>
+   <rejection_digest, or "(accepted)" if accept=true>
    ```
 
-### Phase E — Report
+   If the JSON block fails to parse (malformed / missing), write `digest.md` with a `parse_warning` line at the top and best-effort fields extracted from the free-form text. Do not abort — downstream `/strategy-loop-feature` orchestrators depend on `digest.md` existing.
 
-Report to the user:
-- Path to round bundle reviewed
-- Accept / reject verdict
-- Per-criterion pass/fail (one line each)
-- Path to `codex_verdict.md` and `digest.md`
-- If rejected: top-3 issues + rejection_digest for next round's proposer
+### Phase D — Report
+
+One concise message:
+- Path to bundle reviewed
+- `accept`: true|false
+- 4 one-liners (one per criterion)
+- Paths to `codex_verdict.md` + `digest.md`
+- If `accept=false`: the `rejection_digest`
 
 ## What this skill does NOT do
 
-- **Does NOT propose configs.** Proposer step is upstream (manual for round 1; future Phase 3 orchestrator skill).
-- **Does NOT run the wrapper or evaluators.** Bundle must already exist on disk.
-- **Does NOT commit to git.** User commits the verdict + digest as part of round-NN bundle.
-- **Does NOT iterate.** Single-round, single-bundle review. The multi-round loop is the future Phase 4 driver.
+- **Does NOT propose configs.** Upstream's job (`/strategy-loop-feature`, `/strategy-loop-round`, or manual).
+- **Does NOT run the wrapper or evaluators.** Bundle must exist on disk.
+- **Does NOT commit to git.** The caller commits the verdict + digest.
+- **Does NOT iterate.** Single-round, single-bundle review.
 
-## Errors -> STOP, do not invoke Codex
+## Errors → STOP, do not write outputs
 
-- Bundle directory doesn't exist
-- Any REQUIRED_FILES missing
-- result.json.date_range mismatch with PER_ROUND_DATE_RANGE_EXPECTED
-- bootstrap_diff.json malformed (KeyError on required keys)
-- Codex MCP unreachable / errors
+- Bundle directory doesn't exist.
+- Any REQUIRED_FILE missing (partial bundle — upstream pipeline didn't complete).
+- Codex MCP unreachable / errors (e.g. usage-limit). Report the failure; re-invoke the skill later when MCP is available — the skill is idempotent.
 
-Each of these -> report the specific failure mode and refuse to write codex_verdict.md (avoid polluting the bundle with a bad review).
+In all stop cases, refuse to write `codex_verdict.md` or `digest.md` (avoid polluting the bundle with a partial review). Downstream `/strategy-loop-feature` checks for `digest.md` existence after invoking this skill; missing digest = reviewer didn't complete.
