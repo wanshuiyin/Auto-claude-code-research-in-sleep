@@ -2,7 +2,7 @@
 name: slides-polish
 description: "Per-page Codex review + targeted python-pptx / Beamer fixes for academic talk slides. Use AFTER /paper-slides (or any externally generated PPTX/Beamer) when the deck looks 'mostly OK' but the user wants a final pass that aligns visual weight with a reference, bumps PPTX fonts to projector-readable size, kills italic style leaks, fixes text-frame overflow, and catches per-slide layout drift. Trigger phrases: \"polish slides\", \"slides 排版不对\", \"PPTX 字体太小\", \"和 Beamer 比一下\", \"per-page review\", \"和 codex 一页一页过\"."
 argument-hint: "[slides-dir-or-pptx] — reference: <ref-pdf> [— style: generic | why-rf | neurips | icml | iclr | cvpr] [— effort: lite | balanced | max | beast] [— interactive]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, spawn_agent
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, spawn_agent
 ---
 
 # Slides Polish: Per-Page Codex Review + Targeted Layout Fixes
@@ -526,7 +526,7 @@ Both the triage pass and the per-slide passes are traced.
 - Compatible with `/paper-poster` workflow (same color discipline) but
   different output cadence.
 - Uses the same `spawn_agent` MCP infrastructure as
-  `/auto-paper-improvement-loop`, `/peer-review`, etc.
+  `/auto-paper-improvement-loop`, `/research-review`, etc.
 - Does **not** call or compose with `/paper-slides` content phases — strict
   separation.
 

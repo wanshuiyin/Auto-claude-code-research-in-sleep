@@ -7,11 +7,19 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex
 
 # Kill Argument Exercise: Adversarial Attack-Defense Review
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it produces an adversarial accept/reject verdict (attack →
+> adjudication). Re-firing it on a wall-clock timer adds no new signal (the
+> attack changes only when the *paper* changes). Schedule the *external wait
+> that precedes it* — draft stable → then run this **once** before submission.
+> See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Stress-test the headline claims of a paper against the strongest possible rejection argument: **$ARGUMENTS**
 
 ## Why This Exists
 
-Standard score-based reviews (`/peer-review`, `/research-review`, `/auto-paper-improvement-loop`) tend to produce **balanced** weakness lists.  Each weakness gets ~equal attention, ranked CRITICAL > MAJOR > MINOR.  Empirically, this misses one specific failure mode: the **single most damaging argument** a reviewer would write in a rejection paragraph — the one sentence that, if a senior area chair reads it, kills the paper.
+Standard score-based reviews (`/research-review`, `/auto-paper-improvement-loop`) tend to produce **balanced** weakness lists.  Each weakness gets ~equal attention, ranked CRITICAL > MAJOR > MINOR.  Empirically, this misses one specific failure mode: the **single most damaging argument** a reviewer would write in a rejection paragraph — the one sentence that, if a senior area chair reads it, kills the paper.
 
 A balanced reviewer might list "scope-overclaim risk" as MAJOR alongside 3-5 other MAJORs, never quite committing.  An adversarial reviewer **must commit**: their entire job is to convince the area chair to reject in 200 words.
 
@@ -23,7 +31,7 @@ This skill runs that adversarial pass deliberately, then forces a second fresh r
 
 | Skill | What it asks the reviewer | Output |
 |-------|---------------------------|--------|
-| `/peer-review` | "Score this paper, list weaknesses by severity" | balanced weakness list |
+| Standard peer review | "Score this paper, list weaknesses by severity" | balanced weakness list |
 | `/research-review` | "Deep technical review of methods + claims" | structured deep critique |
 | `/proof-checker` | "Is this theorem actually proved?" | per-step proof obligation audit |
 | `/paper-claim-audit` | "Does the paper report numbers truthfully?" | per-claim evidence verification |
@@ -39,7 +47,7 @@ This skill is **complementary**, not a replacement.  Run after standard reviews 
 - For theory papers with a high-level title that may oversimplify the actual theorem (the most common reject-attack pattern).
 - For papers where a reviewer might attack scope, assumption-vs-claim mismatch, missing proof obligations, or evidence-vs-headline gaps.
 
-This skill is most valuable for **theory papers** with ≥5 theorem-class environments (so the headline depends on real proof obligations).  For empirical papers without theorems, use `/peer-review` instead.
+This skill is most valuable for **theory papers** with ≥5 theorem-class environments (so the headline depends on real proof obligations).  For empirical papers without theorems, use `/research-review` instead.
 
 ## Constants
 
@@ -133,6 +141,44 @@ mcp__codex__codex:
 ```
 
 Save the returned `threadId` for the trace; do NOT pass it to Thread 2.  Save the attack memo verbatim — both Thread 2 and the human-readable report use it.
+
+### Step 2.5 (optional, `beast` effort): multi-axis attack fan-out
+
+**Default OFF.** The deliverable of this skill *is* a verdict — the single
+strongest rejection paragraph — and
+[`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md)
+is explicit: **do not fan out the verdict; fan out only the evidence that
+feeds it.** The default single-commitment attack (Step 2) is deliberate —
+forcing one paragraph produces sharper feedback than a balanced list (see *Why
+This Exists*). Do **not** replace it with a list.
+
+Under `beast` effort you may widen the *evidence* the commitment draws on
+without diluting the commitment:
+
+1. **Axis probes (evidence breadth).** Run the six attack axes (theorem
+   validity / assumption-vs-claim / missing obligation / limit-order /
+   claim-vs-evidence / scope-overclaim) as **separate fresh-codex probes**,
+   each asked for the strongest ~120-word thrust *on that axis alone*. These
+   are evidence-gathering, not the verdict.
+   - **These are NOT Claude subagents, and there is deliberately NO `Agent`
+     grant.** Each probe is a fresh `mcp__codex__codex` call — the adversary
+     must be cross-model (non-Claude). Codex MCP is **serial** (concurrent
+     codex calls hang), so the probes run **sequentially** — Tier-3 in the
+     fan-out ladder. This is exactly why `kill-argument` lists no `Agent` in
+     `allowed-tools`: it spawns nothing; it threads codex calls.
+2. **Commit (the verdict, still single).** A final fresh-codex synthesis reads
+   the six probes plus the paper and must **commit to the single most damaging
+   ~200-word rejection paragraph** — selecting and fusing at most two axes, NOT
+   listing all six. The Step-2 commitment requirement is unchanged; the probes
+   only ensure no axis was overlooked before committing.
+
+The adjudication (Step 3) then runs against this committed attack exactly as in
+the default flow. Cost: `beast` adds ~6 extra serial codex calls — use it for
+the final pre-submission pass on a high-stakes paper, not routinely.
+
+Tracing: record each probe's `threadId` (`axis_probe_thread_ids[]`) and the
+synthesis `threadId` in the trace, the same way Steps 2–3 save their thread
+ids. The committed attack memo, not the six probes, is what Step 3 consumes.
 
 ### Step 3: Adjudication memo (Thread 2, fresh codex with attack + paper)
 
@@ -374,7 +420,7 @@ To the user:
 
 ## When NOT to Use
 
-- Empirical papers without theorems / scope claims — `/peer-review` is more useful.  The skill emits `NOT_APPLICABLE` with `reason_code: not_theory_or_scope_paper` in this case.
+- Empirical papers without theorems / scope claims — `/research-review` is more useful.  The skill emits `NOT_APPLICABLE` with `reason_code: not_theory_or_scope_paper` in this case.
 - Very early drafts where the headline isn't stable yet — fix the headline first.  The skill emits `NOT_APPLICABLE` with `reason_code: headline_unstable` if the title or abstract changed within the last 2 commits.
 - Papers with ongoing experiments — wait until results stabilize, then run.
 - (`/auto-paper-improvement-loop` Step 5.5 used to run this protocol inline; as of May 2026 it now invokes `/kill-argument` and reads `KILL_ARGUMENT.json` instead, so there is no longer a "do not invoke from inside auto-loop" exclusion.)

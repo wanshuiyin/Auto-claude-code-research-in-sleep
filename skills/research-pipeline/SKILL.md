@@ -2,10 +2,20 @@
 name: research-pipeline
 description: "Full research pipeline: Workflow 1 (idea discovery) → Workflow 1.5 (experiment bridge) → Workflow 2 (auto review loop) → Workflow 3 (paper writing, optional). Goes from a broad research direction all the way to a polished PDF. Use when user says \"全流程\", \"full pipeline\", \"从找idea到投稿\", \"end-to-end research\", or wants the complete autonomous research lifecycle."
 argument-hint: [research-direction]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skill, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
 # Full Research Pipeline: Idea → Experiments → Submission
+
+> ⏱ **External cadence: non-judgmental heartbeat only.** An overnight `/loop` /
+> `CronCreate` heartbeat may wake, detect a **stalled** phase (no progress, dead
+> process, blocked on a freed resource) and **nudge** it forward — it may NEVER
+> decide the work is good (paper good enough, proof holds, claim supported).
+> Every such verdict stays on its own skill's internal cadence and terminates in
+> the cross-model jury. A heartbeat may say "keep going," never "good enough."
+> See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md)
+> (overnight-pipeline rule).
 
 End-to-end autonomous research workflow for: **$ARGUMENTS**
 
@@ -119,7 +129,7 @@ Once initial results are in, start the autonomous improvement loop:
 1. GPT-5.4 xhigh reviews the work (score, weaknesses, minimum fixes)
 2. Claude Code implements fixes (code changes, new experiments, reframing)
 3. Deploy fixes, collect new results
-4. Re-review → repeat until score ≥ 6/10 or 4 rounds reached
+4. Re-review → repeat until (score ≥ 6/10 AND verdict ∈ {ready, almost}) or 4 rounds reached
 
 **Output:** `review-stage/AUTO_REVIEW.md` with full review history and final assessment.
 

@@ -58,7 +58,10 @@ def call_llm(messages, model=None):
                     return None, error_msg
 
                 data = response.json()
-                content = data["choices"][0]["message"]["content"]
+                try:
+                    content = data["choices"][0]["message"]["content"]
+                except (KeyError, IndexError, TypeError) as e:
+                    return None, f"Unexpected API response structure: {e}"
                 if current_model != use_model:
                     fallback_note = f"\n\n[Note: Used fallback model {current_model} after 504 timeout with {use_model}]"
                     content = fallback_note + "\n" + content

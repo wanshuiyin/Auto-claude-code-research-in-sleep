@@ -2,10 +2,17 @@
 name: experiment-audit
 description: "Audit experiment integrity before claiming results. Uses cross-model review (external reviewer backend) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
 argument-hint: [experiment-dir-or-results-path]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
 # Experiment Audit: Cross-Model Integrity Verification
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges experiment integrity. Re-running that verdict on a
+> timer adds no new signal, and a loop that accepts its own output to decide
+> when to stop crosses into self-acquittal (`acceptance-gate.md`). Schedule the
+> *external wait that precedes it* — experiments done → then audit **once**. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Audit experiment integrity for: **$ARGUMENTS**
 

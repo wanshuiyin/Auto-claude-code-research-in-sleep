@@ -12,7 +12,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 ## Constants
 
 - MAX_ROUNDS = 4
-- POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
+- POSITIVE_THRESHOLD: score >= 6/10 AND verdict ∈ {"ready", "almost"} — both must hold, matching the operative STOP CONDITION below. Verdict vocabulary is {"ready", "almost", "not ready"}. (Earlier wording used "or" + a stale verdict set; the AND form is authoritative.)
 - REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 
 ## LLM Configuration
@@ -151,7 +151,7 @@ curl -s "${LLM_BASE_URL}/chat/completions" \
 - **Verdict** ("ready" / "almost" / "not ready")
 - **Action items** (ranked list of fixes)
 
-**STOP**: If score >= 6 AND verdict contains "ready/almost"
+**STOP**: If score >= 6 AND verdict ∈ {"ready", "almost"} (exact — "not ready" does NOT qualify)
 
 #### Phase C: Implement Fixes
 

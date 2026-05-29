@@ -2,7 +2,7 @@
 name: paper-slides
 description: "Generate conference presentation slides (beamer LaTeX → PDF + editable PPTX) from a compiled paper, with speaker notes and full talk script. Use when user says \"做PPT\", \"做幻灯片\", \"make slides\", \"conference talk\", \"presentation slides\", \"生成slides\", \"写演讲稿\", or wants beamer slides for a conference talk."
 argument-hint: [paper-directory-or-talk-length]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__gemini-review__review, mcp__gemini-review__review_start, mcp__gemini-review__review_reply_start, mcp__gemini-review__review_status
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__gemini-review__review, mcp__gemini-review__review_start, mcp__gemini-review__review_reply_start, mcp__gemini-review__review_status
 ---
 
 > Override for Codex users who want **Gemini**, not a Codex-MCP reviewer, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.

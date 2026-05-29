@@ -88,23 +88,34 @@ mcp__gemini-review__review_start:
 
 After this start call, immediately save the returned `jobId` and poll `mcp__gemini-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the brainstorm output, and save the completed `threadId` for follow-up critique in Phase 4.
 
-### Phase 3: First-Pass Filtering
+### Phase 3: Mechanical consolidation + objective feasibility gate
 
-For each generated idea, quickly evaluate:
+> This phase does NOT judge idea quality, novelty, or impact — those are the
+> job of the Phase-4 cross-model reviewer (a different model family). Dropping
+> ideas here on a same-family novelty or impact call would pre-filter the
+> reviewer's input with same-family judgment — the opposite of why ARIS uses a
+> cross-model reviewer at all. Phase 3 only (a) clusters near-duplicate ideas
+> and (b) drops ideas that are OBJECTIVELY out of budget; everything else
+> passes through ANNOTATED, not eliminated.
 
-1. **Feasibility check**: Can we actually run this experiment with available resources?
-   - Compute requirements (estimate GPU-hours)
-   - Data availability
-   - Implementation complexity
-   - Skip ideas requiring > 1 week of GPU time or unavailable datasets
+1. **Objective feasibility gate (safe to gate here)**: drop an idea ONLY on a
+   mechanical, budget-based fact — estimated compute > 1 week of available GPU
+   time, OR a dataset that is provably unavailable. Do NOT drop on
+   "implementation looks complex" — annotate complexity instead.
 
-2. **Novelty quick-check**: For each idea, do 2-3 targeted searches to see if it's already been done. Full `/novelty-check` comes later for survivors.
+2. **Novelty signal — ANNOTATE, do not eliminate**: do 2-3 targeted searches
+   and attach a `prior_work` note (what looks related, with links). This is
+   input for the Phase-4 reviewer, not a filter; full `/novelty-check` runs in
+   Phase 4. Do NOT drop an idea here because it "might already be done."
 
-3. **Impact estimation**: Would a reviewer care about the result?
-   - "So what?" test: if the experiment succeeds, does it change how people think?
-   - Is the finding actionable or just interesting?
+3. **Impact signal — ANNOTATE, do not eliminate**: attach a one-line `so_what`
+   note (why the result would matter either way). Do NOT drop on a same-family
+   "a reviewer wouldn't care" call — that is exactly what the Phase-4
+   cross-model reviewer is for.
 
-Eliminate ideas that fail any of these. Typically 8-12 ideas reduce to 4-6.
+Every feasible, non-duplicate idea — with its `prior_work` and `so_what`
+annotations — proceeds to Phase 4, where the cross-model reviewer does the
+quality/novelty narrowing.
 
 ### Phase 4: Deep Validation (for top ideas)
 

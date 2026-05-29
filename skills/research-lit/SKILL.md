@@ -17,16 +17,15 @@ Research topic: $ARGUMENTS
   2. `literature/` in the current project directory
   3. Custom path specified by user in `CLAUDE.md` under `## Paper Library`
 - **MAX_LOCAL_PAPERS = 20** — Maximum number of local PDFs to scan (read first 3 pages each). If more are found, prioritize by filename relevance to the topic.
+- **SOURCES = `all`** — Which literature sources to search. Options: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`, `all`. Full source table and selection rules: see `## Data Sources` below.
 - **ARXIV_DOWNLOAD = false** — When `true`, download top 3-5 most relevant arXiv PDFs to PAPER_LIBRARY after search. When `false` (default), only fetch metadata (title, abstract, authors) via arXiv API — no files are downloaded.
 - **ARXIV_MAX_DOWNLOAD = 5** — Maximum number of PDFs to download when `ARXIV_DOWNLOAD = true`.
 
 > 💡 Overrides:
 > - `/research-lit "topic" — paper library: ~/my_papers/` — custom local PDF path
 > - `/research-lit "topic" — sources: zotero, local` — only search Zotero + local PDFs
-> - `/research-lit "topic" — sources: zotero` — only search Zotero
 > - `/research-lit "topic" — sources: web` — only search the web (skip all local)
 > - `/research-lit "topic" — sources: web, semantic-scholar` — also search Semantic Scholar for published venue papers (IEEE, ACM, etc.)
-> - `/research-lit "topic" — sources: deepxiv` — only search via DeepXiv progressive retrieval
 > - `/research-lit "topic" — sources: all, deepxiv` — use default sources plus DeepXiv
 > - `/research-lit "topic" — arxiv download: true` — download top relevant arXiv PDFs
 > - `/research-lit "topic" — arxiv download: true, max download: 10` — download up to 10 PDFs
@@ -576,6 +575,35 @@ Optional: set `ARIS_VERIFY_EMAIL=you@institution.edu` in your shell to lift
 CrossRef rate limits to the polite pool.
 
 ### Step 2: Analyze Each Paper
+
+> **Fan-out (Tier-aware).** Per-paper extraction is pure breadth — each paper
+> is independent — so it parallelizes cleanly. **Tier 1** (Workflow): spawn
+> one Claude subagent per paper (or per small batch) to extract the fields
+> below. **Tier 2** (Agent tool, no Workflow): the same per-paper subagents
+> via the Agent tool. **Tier 3**: iterate sequentially. This follows the
+> *extraction* shard schema from
+> [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md)
+> — `{shard_id: "<paper-or-batch id>", entries: [{dedup_key: "<canonical
+> arXiv-id / DOI / title-hash, already assigned upstream in Step 1.5>",
+> problem, method, results, relevance, source, verification_status}]}`.
+>
+> The "jury" here is **not a model** — it is the **deterministic**
+> `verify_papers.py` gate already run in Step 1.5 (3-layer arXiv / CrossRef /
+> Semantic Scholar cross-check). Because the acceptance gate is a deterministic
+> verifier, not a model verdict, the cross-model-family rule is automatically
+> satisfied (a process is not a model family — see
+> [`acceptance-gate.md`](../shared-references/acceptance-gate.md)), so this is
+> the **near-zero-risk** corner of the fan-out design space. The per-paper work
+> is **extraction, not adjudication**: shards report what each paper says and
+> its verification status verbatim; they do **not** decide which papers
+> "count" (Step 1.5 already did, mechanically) and they do **not** drop a paper
+> for any status other than `verified`. Synthesis (Step 3) is *interpretive*
+> aggregation — grouping by theme, spotting gaps our work could fill — over an
+> already-admitted set; it is the executor's normal job, NOT an accept/reject
+> verdict on whether a paper *counts*. The cross-model-family rule governs
+> admission verdicts, and here admission is the deterministic Step-1.5 gate, so
+> the invariant is satisfied without a model jury.
+
 For **every** paper in `.aris/verify-papers/verified_papers.json`
 (verified, unverified, `verify_pending`, and `error` alike — see
 Retention rule above), extract:

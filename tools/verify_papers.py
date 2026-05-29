@@ -110,6 +110,12 @@ DEFAULT_FUZZY_THRESHOLD = 0.6
 DEFAULT_CACHE_TTL_DAYS = 30
 DEFAULT_HALLUCINATION_WARN_THRESHOLD = 0.2
 
+def _arxiv_user_agent() -> str:
+    contact = os.environ.get("ARIS_VERIFY_EMAIL", "").strip()
+    base = "verify-papers/1.0 (+https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep)"
+    return f"{base} (mailto:{contact})" if contact else base
+
+
 ARXIV_VERSION_RE = re.compile(r"v\d+$")
 TITLE_NORMALIZE_RE = re.compile(r"[^\w\s]", re.UNICODE)
 WHITESPACE_RE = re.compile(r"\s+")
@@ -256,7 +262,7 @@ def _verify_arxiv_batch_with_retry(batch: list[str]) -> dict[str, str]:
     base_ids = [normalize_arxiv_id(x)[0] for x in batch]
     url = f"{ARXIV_API}?id_list={','.join(base_ids)}&max_results={len(base_ids)}"
     for attempt in range(3):
-        status, body = http_get(url, timeout=30)
+        status, body = http_get(url, headers={"User-Agent": _arxiv_user_agent()}, timeout=30)
         if status == 200 and body is not None:
             found = set()
             for bid in base_ids:

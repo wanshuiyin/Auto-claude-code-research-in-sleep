@@ -26,7 +26,10 @@ def clamp_temperature(temp):
     """Clamp temperature to MiniMax's allowed range (0.0, 1.0]."""
     if temp is None:
         return None
-    temp = float(temp)
+    try:
+        temp = float(temp)
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid temperature: {temp!r} ({e})")
     if temp <= 0.0:
         return 0.01
     if temp > 1.0:
@@ -59,7 +62,10 @@ def call_minimax(messages, model=None, temperature=0.7):
                 error_msg = f"API error {response.status_code}: {response.text[:500]}"
                 return None, error_msg
             data = response.json()
-            content = data["choices"][0]["message"]["content"]
+            try:
+                content = data["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError) as e:
+                return None, f"Unexpected API response structure: {e}"
             return content, None
     except Exception as e:
         return None, str(e)

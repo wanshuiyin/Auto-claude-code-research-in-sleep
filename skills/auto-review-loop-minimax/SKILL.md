@@ -2,10 +2,20 @@
 name: auto-review-loop-minimax
 description: Autonomous multi-round research review loop using MiniMax API. Use when you want to use MiniMax instead of Codex MCP for external review. Trigger with "auto review loop minimax" or "minimax review".
 argument-hint: [topic-or-scope]
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, Skill
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Skill
 ---
 
 # Auto Review Loop (MiniMax Version): Autonomous Research Improvement
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** Like
+> `/auto-review-loop`, it already loops internally (review → fix → re-review),
+> feeding each round's prior-round summary into the next review prompt (the
+> backend is a stateless per-round API call, not a shared thread). An external
+> timer re-enters from the top each tick, dropping that accumulated context and
+> firing the verdict on wall-clock time instead of on artifact change — zero
+> new signal, full token cost. Schedule the *external wait that precedes it*,
+> not the verdict. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
@@ -14,7 +24,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 ## Constants
 
 - MAX_ROUNDS = 4
-- POSITIVE_THRESHOLD: score >= 6/10, or verdict contains "accept", "sufficient", "ready for submission"
+- POSITIVE_THRESHOLD: score >= 6/10 **AND** verdict ∈ {"ready", "almost"} — **both** must hold, matching the operative STOP CONDITION below. Verdict vocabulary is {"ready", "almost", "not ready"}. (Earlier wording used `or` and a stale verdict set; the `AND` form is authoritative.)
 - REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 - REVIEWER_MODEL = `MiniMax-M2.7` — Model used via MiniMax API
 
@@ -143,7 +153,7 @@ Then extract structured fields:
 - **Verdict** ("ready" / "almost" / "not ready")
 - **Action items** (ranked list of fixes)
 
-**STOP CONDITION**: If score >= 6 AND verdict contains "ready" or "almost" → stop loop, document final state.
+**STOP CONDITION**: If score >= 6 AND verdict ∈ {"ready", "almost"} (exact match — "not ready" does NOT qualify) → stop loop, document final state.
 
 #### Phase C: Implement Fixes (if not stopping)
 

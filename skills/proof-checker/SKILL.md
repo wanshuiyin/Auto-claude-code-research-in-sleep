@@ -7,6 +7,14 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex,
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges proof validity across rounds, threading the
+> reviewer's memory from Phase 1 → Phase 3 via `codex-reply` so the reviewer can
+> check whether a fix actually closed the gap it flagged. An external timer
+> re-enters from the top each tick, starting a fresh thread and losing that
+> memory. Schedule the *external wait that precedes it*, not the verdict. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Systematically verify a mathematical proof via cross-model adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
 
 ## Context: $ARGUMENTS
@@ -14,7 +22,7 @@ Systematically verify a mathematical proof via cross-model adversarial review, f
 ## Constants
 
 - MAX_REVIEW_ROUNDS = 3
-- REVIEWER_MODEL = `gpt-5.5` — Default model for the Codex backend, reasoning effort always `xhigh`. Manual backend uses whatever model the user chooses.
+- REVIEWER_MODEL = `gpt-5.5` — Default model for the Codex backend, reasoning effort always `xhigh`. Manual backend uses whatever model the user chooses, **but it must be a non-Claude model** — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 
 ## Reviewer Calling Convention
@@ -154,13 +162,55 @@ When the proof invokes any of the following, require explicit verification of AL
 
 ### Phase 0.5: Proof-Obligation Ledger
 
+> **Fan-out (Tier-aware) — build the ledger in parallel; never judge in
+> parallel.** For a large multi-theorem paper, ledger *construction* is breadth
+> over independent sections. **Tier 1** (Workflow): spawn one Claude subagent
+> per section/theorem to extract that unit's symbols, assumptions, micro-claims,
+> and local quantified statements, each returning a structured ledger fragment.
+> **Tier 2**: the same subagents via the Agent tool. **Tier 3**: walk the
+> sections sequentially. This follows
+> [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
+>
+> Two hard rules:
+> 1. **The shards EXTRACT, they do not ADJUDICATE.** Building the ledger
+>    (inventorying obligations, typing symbols, restating with explicit
+>    quantifiers) is structural extraction. Whether a proof step is *valid* —
+>    whether an obligation is actually discharged — is a Type-B correctness
+>    verdict reserved for the cross-model jury in Phase 1 / Phase 3 (codex or
+>    manual, `xhigh`). A Claude shard MUST NOT mark a micro-claim "proved" or
+>    "sound"; it only records the obligation and where the paper claims to
+>    discharge it. See [`acceptance-gate.md`](../shared-references/acceptance-gate.md)
+>    — the loop may self-verify *that the ledger is complete*, never *that the
+>    proofs are correct*.
+>    - **This governs the ledger spec wording below.** Where the artifacts say
+>      "WHERE each is verified", "or mark UNVERIFIED", or "where conditions are
+>      proven", a shard records a **location pointer** (`file:line` the paper
+>      claims discharge) — never its own judgment that the discharge is
+>      mathematically valid. A shard's `UNVERIFIED` means *"the paper cites no
+>      discharge location"*, NOT *"the shard checked the math and it fails"*.
+>      Soundness is the jury's verdict, not the shard's.
+>
+> **Shard output** (extraction schema, per
+> [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md)): each shard
+> returns `{shard_id: "<section/theorem id>", entries: [...]}` — the typed
+> ledger items (symbols, assumptions, micro-claims, canonical statements,
+> limit-order facts) for that unit, each carrying its canonical id (e.g.
+> `MC-17`, the symbol name) as `dedup_key`. Never prose-only; never a validity
+> verdict field.
+> 2. **Global artifacts are a barrier, computed on the merged ledger, not
+>    per-shard.** The Dependency DAG and its cycle detection (incl. semantic
+>    circularity), and cross-section symbol-type consistency, require the whole
+>    paper in view. Merge all shard fragments first, then compute these on the
+>    union — a per-shard DAG would miss exactly the cross-section cycles this
+>    phase exists to catch.
+
 Build formal accounting artifacts. Save to `PROOF_SKELETON.md`:
 
 #### 1. Dependency DAG
 Nodes = Definitions / Assumptions / Lemmas / Theorems. Edges = "uses". **Detect cycles** (including semantic circularity where Lemma A uses a corollary that quietly depends on A).
 
 #### 2. Assumption Ledger
-For each theorem/lemma, list every hypothesis with WHERE each is verified (or mark "UNVERIFIED"). Track **usage-minimal assumption sets** — which assumptions were actually used vs merely stated.
+For each theorem/lemma, list every hypothesis with WHERE each is verified — i.e. the **location pointer** the paper claims discharges it (`file:line`), not a judgment that the discharge is valid; mark "UNVERIFIED" when the paper cites no discharge location (not when you believe the math fails — that is the jury's call). Track **usage-minimal assumption sets** — which assumptions were actually used vs merely stated.
 
 #### 3. Typed Symbol Table
 Each symbol must have a **type signature**:
@@ -186,9 +236,9 @@ Every nontrivial step becomes a numbered micro-claim in **sequent form**:
 MC-17: Context: [Lemma 3.1, κ < κ_0, Z_κ has bounded moments up to order 2m+2]
        ⊢ Goal: P̂_0 is positive definite
        Rule: monomials linearly independent on support of continuous distribution
-       Side-conditions: positive density near origin ✓ (by GMM weak convergence)
+       Side-conditions: positive density near origin — claimed discharge: §B.2 (paper argues via GMM weak convergence; validity is the jury's call, not the shard's)
 ```
-Each micro-claim has: justification rule name + required conditions + where conditions are proven.
+Each micro-claim has: justification rule name + required conditions + where conditions are proven (a location pointer to where the paper claims to discharge them, not a validity judgment).
 
 #### 6. Limit-Order Map
 Track every asymptotic statement's **limit order and uniformity scope**:

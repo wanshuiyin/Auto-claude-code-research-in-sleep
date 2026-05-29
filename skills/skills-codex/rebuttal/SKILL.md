@@ -2,7 +2,7 @@
 name: rebuttal
 description: "Workflow 4: Submission rebuttal pipeline. Parses external reviews, enforces coverage and grounding, drafts a safe text-only rebuttal under venue limits, and manages follow-up rounds. Use when user says \"rebuttal\", \"reply to reviewers\", \"ICML rebuttal\", \"OpenReview response\", or wants to answer external reviews safely."
 argument-hint: [paper-path-or-review-bundle]
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, Skill
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Skill
 ---
 
 # Workflow 4: Rebuttal

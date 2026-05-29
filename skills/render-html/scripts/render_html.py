@@ -58,6 +58,11 @@ _RE_BOLD = re.compile(r"\*\*([^\*\n]+)\*\*")
 _RE_ITALIC = re.compile(r"(?<!\*)\*([^\*\n]+)\*(?!\*)")
 _RE_ITALIC_UNDERSCORE = re.compile(r"(?<!\w)_([^_\n]+)_(?!\w)")
 _RE_STRIKE = re.compile(r"~~([^~\n]+)~~")
+# Wikilink paper reference: [[key]] or [[key|display]]. Backslash-escaped form
+# `\[[...]]` is left alone so authors can opt out.
+_RE_PAPER_REF = re.compile(
+    r"(?<!\\)\[\[([A-Za-z0-9][A-Za-z0-9_.:-]*)(?:\|([^\]\n]+))?\]\]"
+)
 
 # Inline HTML tags that should pass through inline (commonly used in ARIS docs).
 _INLINE_HTML_TAGS = ("br", "img", "a", "span", "sub", "sup", "code", "kbd", "b", "i", "u", "strong", "em")
@@ -156,7 +161,20 @@ def render_inline(text: str) -> str:
 
     text = _RE_MATH_INLINE.sub(_mi_sub, text)
 
-    # 1d. Inline HTML spans (very limited allowlist + sanitize before stash).
+    # 1d. Wikilink paper refs [[key]] or [[key|display]] — stash as a clickable
+    # span with data-ref="key". The template JS wires up the popover from
+    # window.PAPER_REGISTRY (sidecar JSON loaded via --papers). Default display
+    # is the key uppercased; explicit display via |label form.
+    def _ref_sub(m: re.Match[str]) -> str:
+        key = m.group(1)
+        display = m.group(2) if m.group(2) is not None else key.upper()
+        return store(
+            f'<span data-ref="{html_lib.escape(key, quote=True)}">{html_lib.escape(display)}</span>'
+        )
+
+    text = _RE_PAPER_REF.sub(_ref_sub, text)
+
+    # 1e. Inline HTML spans (very limited allowlist + sanitize before stash).
     _re_tag = re.compile(
         r"<(/?)(" + "|".join(_INLINE_HTML_TAGS) + r")(\s[^<>]*)?>",
         re.IGNORECASE,
@@ -208,7 +226,9 @@ def render_inline(text: str) -> str:
 
 _RE_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _RE_HR = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$")
-_RE_CODE_FENCE = re.compile(r"^```(\w+)?\s*$")
+_RE_CODE_FENCE = re.compile(
+    r"^```\s*(?:(?P<lang>[A-Za-z0-9_+.#-]+)\s*)?(?:\{(?P<flags>[^}\n]+)\}\s*)?$"
+)
 _RE_TABLE_DIVIDER = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)+\|?\s*$")
 _RE_ORDERED = re.compile(r"^(\s*)(\d+)[.)]\s+(.*)$")
 _RE_UNORDERED = re.compile(r"^(\s*)[-*+]\s+(.*)$")
@@ -261,7 +281,14 @@ def parse_blocks(lines: list[str]) -> list[dict]:
         # Code fence.
         m = _RE_CODE_FENCE.match(stripped)
         if m:
-            lang = (m.group(1) or "").strip()
+            lang = (m.group("lang") or "").strip()
+            flags_raw = (m.group("flags") or "").strip()
+            flags: set[str] = set()
+            if flags_raw:
+                for tok in flags_raw.split(","):
+                    tok = tok.strip()
+                    if tok:
+                        flags.add(tok)
             body: list[str] = []
             i += 1
             while i < n and not _RE_CODE_FENCE.match(lines[i].rstrip()):
@@ -269,7 +296,12 @@ def parse_blocks(lines: list[str]) -> list[dict]:
                 i += 1
             if i < n:  # consume closing fence
                 i += 1
-            blocks.append({"type": "code", "lang": lang, "content": "\n".join(body)})
+            blocks.append({
+                "type": "code",
+                "lang": lang,
+                "content": "\n".join(body),
+                "flags": flags,
+            })
             continue
 
         # ATX heading.
@@ -535,17 +567,27 @@ def render_list(ordered: bool, items: list[str]) -> str:
     return "".join(out)
 
 
-def render_code(lang: str, content: str) -> str:
+def render_code(lang: str, content: str, flags: set | None = None) -> str:
     escaped = html_lib.escape(content)
+    # Per-block override for the auto-collapse JS in the template:
+    #   ```python {collapsed}  → force fold
+    #   ```python {open}       → force expanded
+    # Anything else leaves the decision to the auto-threshold (default 30 lines).
+    attr = ""
+    if flags:
+        if "collapsed" in flags:
+            attr = ' data-collapse="collapsed"'
+        elif "open" in flags:
+            attr = ' data-collapse="open"'
     if lang:
-        return f'<pre><code class="language-{html_lib.escape(lang, quote=True)}">{escaped}</code></pre>'
+        return f'<pre{attr}><code class="language-{html_lib.escape(lang, quote=True)}">{escaped}</code></pre>'
     # Heuristic: if content looks like an ASCII art diagram (mostly box-drawing
     # chars and pipes), tag the surrounding <pre> with class="diagram".
     diagram_chars = set("│─┌┐└┘├┤┬┴┼▲▼◀▶━┃┏┓┗┛╭╮╰╯═║╔╗╚╝╠╣╦╩╬║▶▼─")
     sample = content[:200]
     if sample and sum(1 for c in sample if c in diagram_chars) >= 4:
-        return f'<pre class="diagram"><code>{escaped}</code></pre>'
-    return f"<pre><code>{escaped}</code></pre>"
+        return f'<pre{attr} class="diagram"><code>{escaped}</code></pre>'
+    return f"<pre{attr}><code>{escaped}</code></pre>"
 
 
 def _render_blocks(
@@ -577,7 +619,7 @@ def _render_blocks(
         elif t == "hr":
             out.append("<hr />")
         elif t == "code":
-            out.append(render_code(b.get("lang", ""), b["content"]))
+            out.append(render_code(b.get("lang", ""), b["content"], b.get("flags")))
         elif t == "blockquote":
             out.append(render_blockquote(b["lines"]))
         elif t == "list":
@@ -675,8 +717,12 @@ def render_toc(toc: list[dict]) -> str:
 
 
 def strip_frontmatter(md: str) -> str:
-    """Strip leading YAML frontmatter (--- ... ---) if present at start."""
-    md = md.lstrip("\ufeff")
+    """Strip leading YAML frontmatter (--- ... ---) if present at start.
+
+    Also strips a leading UTF-8 BOM so frontmatter detection still fires
+    on files saved by editors that prepend it.
+    """
+    md = md.lstrip("﻿")
     lines = md.split("\n", 1)
     if not lines or lines[0].strip() != "---":
         return md
@@ -749,6 +795,23 @@ def substitute(template: str, vars: dict) -> str:
     return out
 
 
+def json_for_script(obj: object) -> str:
+    """Serialize JSON for direct embedding inside a classic <script> block.
+
+    json.dumps() alone is unsafe because a string value containing '</script>'
+    will break out of the host <script> tag. Escape <, >, & and line/paragraph
+    separators as \\uXXXX so the result is always safe inside a <script>.
+    """
+    return (
+        json.dumps(obj, ensure_ascii=False)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace(" ", "\\u2028")
+        .replace(" ", "\\u2029")
+    )
+
+
 def _repo_relative(input_path: Path) -> str:
     """Return a display-friendly repo-relative path. Avoids leaking absolute
     /Users/<name>/... in the generated HTML meta + footer.
@@ -797,6 +860,22 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--json", dest="json_sidecar", help="Optional sidecar JSON to append (e.g., KILL_ARGUMENT.json)")
     ap.add_argument("--offline", action="store_true", help="Skip MathJax / highlight.js CDN blocks")
     ap.add_argument("--no-toc", action="store_true", help="Skip TOC sidebar (forces TOC_LABEL/TOC_HTML to empty)")
+    ap.add_argument(
+        "--papers",
+        help="Sidecar JSON file with paper registry for [[key]] popovers. "
+             "Schema: {key: {title, authors, date, inst, key, arxiv}, ...}",
+    )
+    ap.add_argument(
+        "--blog-mode",
+        action="store_true",
+        help="Enable blog/talk mode (adds .aris-blog body class, opt-in active-H2 highlighting)",
+    )
+    ap.add_argument(
+        "--collapse-code-min",
+        type=int,
+        default=30,
+        help="Auto-collapse code blocks with >= N lines (default 30). Override per-block with ```lang {open}/{collapsed}.",
+    )
     args = ap.parse_args(argv)
 
     input_path = Path(args.input).resolve()
@@ -868,6 +947,21 @@ def main(argv: list[str] | None = None) -> int:
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    # Paper registry sidecar (for [[key]] popovers). Validate as JSON before
+    # embedding; on parse error, log a warning and emit "{}" so the template
+    # still works (popover JS just no-ops when key is missing).
+    papers_json = "{}"
+    if args.papers:
+        p = Path(args.papers).resolve()
+        if p.exists():
+            try:
+                obj = json.loads(p.read_text(encoding="utf-8"))
+                papers_json = json_for_script(obj)
+            except json.JSONDecodeError as e:
+                print(f"warning: --papers JSON parse error: {e}", file=sys.stderr)
+        else:
+            print(f"warning: --papers file not found: {p}", file=sys.stderr)
+
     vars_ = {
         "LANG": html_lib.escape(args.lang, quote=True),
         "TITLE": html_lib.escape(title),
@@ -883,6 +977,9 @@ def main(argv: list[str] | None = None) -> int:
         "TOC_LABEL": toc_label,
         "BODY_HTML": body_html,
         "EXTRA_META": "",
+        "PAPER_REGISTRY_JSON": papers_json,
+        "COLLAPSE_CODE_MIN": str(args.collapse_code_min),
+        "BODY_CLASS": "aris-blog" if args.blog_mode else "",
     }
 
     rendered = substitute(template_str, vars_)

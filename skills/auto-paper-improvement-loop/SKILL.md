@@ -2,10 +2,21 @@
 name: auto-paper-improvement-loop
 description: "Autonomously improve a generated paper via GPT-5.4 xhigh review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
 argument-hint: "[paper-directory] [— style-ref: <source>] [— edit-whitelist <path>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It
+> already loops internally (review → fix → recompile) with its own round
+> structure and a deliberate fresh-reviewer bias guard each round (no
+> `codex-reply`). Re-asking it to "improve the paper" on a
+> wall-clock timer produces no new signal — quality changes when the *review*
+> changes, not when the clock ticks — and a timed re-run that also accepts its
+> own output to decide when to stop crosses into self-acquittal
+> (`acceptance-gate.md`). Schedule the *external wait that precedes it*, not the
+> improvement loop. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Autonomously improve the paper at: **$ARGUMENTS**
 

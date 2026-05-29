@@ -2,7 +2,7 @@
 name: paper-talk
 description: "End-to-end conference talk pipeline: paper → slide outline → Beamer + PPTX → per-page polish → assurance checks (claim / citation / anonymity) → final export and report. Default-good for academic conference talks (NeurIPS / ICML / ICLR / VALSE / 投稿 talks). Trigger phrases: \"做 talk\", \"做 PPT 全流程\", \"talk pipeline\", \"end-to-end slides\", \"做演讲\", \"conference talk full workflow\". Use when the user wants the complete talk artifact, not just a slide deck."
 argument-hint: "[paper-dir] [— talk_type: oral | spotlight | poster-talk | invited] [— minutes: N] [— assurance: draft | polished | conference-ready] [— reference: <pdf>] [— style: generic | why-rf | <venue>] [— style-ref: <paper-source>] [— effort: lite | balanced | max | beast] [— anonymous]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, Skill, spawn_agent
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, spawn_agent
 ---
 
 # Paper Talk: End-to-End Conference Talk Pipeline

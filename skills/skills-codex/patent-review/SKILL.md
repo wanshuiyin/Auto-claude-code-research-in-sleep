@@ -2,7 +2,7 @@
 name: patent-review
 description: "Get an external patent examiner review of a patent application. Use when user says \"专利审查\", \"patent review\", \"审查意见\", \"examiner review\", or wants critical feedback on patent claims and specification."
 argument-hint: [patent-directory-or-scope]
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
 ---
 
 # Patent Examiner Review via Codex MCP (xhigh reasoning)

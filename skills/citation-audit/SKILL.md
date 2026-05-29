@@ -2,10 +2,17 @@
 name: citation-audit
 description: "Zero-context verification that every bibliographic entry in the paper is real, correctly attributed, and used in a context the cited paper actually supports. Uses a fresh cross-model reviewer with web/DBLP/arXiv lookup to catch hallucinated authors, wrong years, fabricated venues, version mismatches, and wrong-context citations (cite present but the cited paper does not establish the claim). Use when user says \"审查引用\", \"check citations\", \"citation audit\", \"verify references\", \"引用核对\", or before submission to ensure bibliography integrity."
 argument-hint: "[paper-directory-or-bib-file] [--uncited] [— soft-only]"
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent, mcp__codex__codex, WebSearch, WebFetch
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, mcp__codex__codex, WebSearch, WebFetch
 ---
 
 # Citation Audit
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges bibliographic correctness. Re-running that verdict
+> on a timer adds no new signal (it changes only when the *bibliography*
+> changes). Schedule the *external wait that precedes it* — bibliography
+> finalized → then audit **once**. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Verify every `\cite{...}` in a paper against three independent layers:
 

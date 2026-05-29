@@ -71,6 +71,19 @@ class TestClampTemperature(unittest.TestCase):
         from tests._minimax_helpers import clamp_temperature
         self.assertAlmostEqual(clamp_temperature(0.001), 0.001)
 
+    def test_clamp_non_numeric_raises_valueerror(self):
+        """Non-numeric input should raise ValueError with a clear message
+        (caller surfaces it as 'Invalid temperature: ...' instead of letting
+        a raw float() error bubble through JSON-RPC)."""
+        from tests._minimax_helpers import clamp_temperature
+        with self.assertRaises(ValueError) as ctx:
+            clamp_temperature("not a number")
+        self.assertIn("Invalid temperature", str(ctx.exception))
+        with self.assertRaises(ValueError):
+            clamp_temperature([])
+        with self.assertRaises(ValueError):
+            clamp_temperature({"oops": True})
+
 
 class TestDefaultConfig(unittest.TestCase):
     """Test default configuration values."""
@@ -280,6 +293,33 @@ class TestCallMinimax(unittest.TestCase):
         content, error = call_minimax([{"role": "user", "content": "test"}])
         self.assertIsNone(content)
         self.assertIn("401", error)
+
+    @patch('tests._minimax_helpers.MINIMAX_API_KEY', 'test-key')
+    @patch('httpx.Client')
+    def test_malformed_response_returns_clear_error(self, mock_client_cls):
+        """Missing or empty choices in API response should return a clear
+        error message instead of crashing with KeyError/IndexError."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        # Various malformed shapes
+        for bad_body, expected_in_error in [
+            ({"choices": []}, "Unexpected API response structure"),
+            ({"choices": [{}]}, "Unexpected API response structure"),
+            ({"choices": [{"message": {}}]}, "Unexpected API response structure"),
+            ({}, "Unexpected API response structure"),
+        ]:
+            mock_response.json.return_value = bad_body
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = mock_response
+            mock_client_cls.return_value = mock_client
+
+            from tests._minimax_helpers import call_minimax
+            content, error = call_minimax([{"role": "user", "content": "test"}])
+            self.assertIsNone(content, f"Expected None content for {bad_body!r}, got {content!r}")
+            self.assertIsNotNone(error)
+            self.assertIn(expected_in_error, error)
 
     @patch('tests._minimax_helpers.MINIMAX_API_KEY', 'test-key')
     @patch('httpx.Client')

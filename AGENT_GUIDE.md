@@ -182,6 +182,9 @@ Read these before invoking review-related or audit-class skills:
 |------|------------------|
 | [`reviewer-independence.md`](skills/shared-references/reviewer-independence.md) | Any cross-model review |
 | [`experiment-integrity.md`](skills/shared-references/experiment-integrity.md) | Writing eval / audit code |
+| [`fan-out-pattern.md`](skills/shared-references/fan-out-pattern.md) | Fanning out subagents for breadth (any runtime tier) |
+| [`acceptance-gate.md`](skills/shared-references/acceptance-gate.md) | Autonomous loops / goal mode — who may ACCEPT a result |
+| [`external-cadence.md`](skills/shared-references/external-cadence.md) | Before wrapping a skill in `/loop`, `/schedule`, or `CronCreate` |
 | [`assurance-contract.md`](skills/shared-references/assurance-contract.md) | 6-state verdict schema, audit gating |
 | [`integration-contract.md`](skills/shared-references/integration-contract.md) | Helper resolution + failure policies (writing new SKILL.md) |
 | [`review-tracing.md`](skills/shared-references/review-tracing.md) | Where to save reviewer traces |

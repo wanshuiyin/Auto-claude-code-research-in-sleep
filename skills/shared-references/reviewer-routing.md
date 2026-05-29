@@ -122,6 +122,7 @@ If `— reviewer: manual`:
 ### Invariants
 
 - `— reviewer: manual` ONLY takes effect when explicitly passed
+- **Cross-model family is mandatory, not optional.** "any model" above means any *non-executor-family* model. When the executor is Claude (the normal case), the user MUST paste the prompt into a non-Claude model (ChatGPT / DeepSeek / Kimi / Gemini / a local model) — never any Claude product. Pasting into Claude makes Claude judge Claude, which silently voids the cross-model invariant and the verdict is worthless. The manual-review UI surfaces this as a banner; the routing contract requires it. A Type-B acceptance gate (`acceptance-gate.md`) is satisfied by `manual` only when the routed model is verifiably non-Claude.
 - Prompt fidelity: the user sees the EXACT same prompt text that Codex would receive
 - `config.model_reasoning_effort` is shown as a recommendation badge, not embedded in the prompt
 - Thread continuity: `review_reply` shows previous exchanges so the user can maintain context in their chosen model

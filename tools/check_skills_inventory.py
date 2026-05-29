@@ -64,6 +64,23 @@ def skill_names(root: Path) -> set[str]:
     return {path.parent.name for path in root.glob("*/SKILL.md")}
 
 
+def allowed_tools(text: str) -> list[str]:
+    """Tokens on the frontmatter `allowed-tools:` line (empty if absent)."""
+    match = re.search(r"^allowed-tools:\s*(.+)$", text, flags=re.MULTILINE)
+    if not match:
+        return []
+    return [tok.strip() for tok in match.group(1).split(",") if tok.strip()]
+
+
+def frontmatter_split(text: str) -> str:
+    """Return the body after a leading YAML frontmatter block (whole text if
+    no frontmatter). Anchors on the opening `---` fence and the first closing
+    `---` fence, so `---` horizontal rules later in the body are not mistaken
+    for the frontmatter boundary."""
+    match = re.match(r"^---\n.*?\n---\n", text, flags=re.DOTALL)
+    return text[match.end():] if match else text
+
+
 def readme_anchors(text: str) -> set[str]:
     return set(re.findall(r'<a id="([^"]+)"></a>', text))
 
@@ -163,6 +180,23 @@ def check_inventory() -> list[str]:
     cn_h2 = numbered_h2_count(readme_cn)
     require(en_h2 == 17, f"README.md has {en_h2} numbered H2 sections; expected 17 (Phase A)", failures)
     require(cn_h2 == 17, f"README_CN.md has {cn_h2} numbered H2 sections; expected 17 (Phase A)", failures)
+
+    # Agent-grant hygiene (WB2): `Agent` in allowed-tools is the Tier-2
+    # fan-out capability gate. Per shared-references/fan-out-pattern.md it is
+    # granted ONLY to skills that actually fan out, and such skills MUST cite
+    # the convention doc in their body. A grant without that citation is a
+    # vestigial/boilerplate grant and fails the drift check.
+    for skill_file in sorted(SKILLS_ROOT.glob("*/SKILL.md")):
+        text = read(skill_file)
+        if "Agent" not in allowed_tools(text):
+            continue
+        if "fan-out-pattern.md" not in frontmatter_split(text):
+            rel = skill_file.relative_to(REPO_ROOT)
+            failures.append(
+                f"{rel} grants `Agent` in allowed-tools but its body does not "
+                f"cite fan-out-pattern.md — vestigial grant or undocumented "
+                f"fan-out (see shared-references/fan-out-pattern.md)"
+            )
 
     return failures
 

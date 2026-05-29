@@ -7,6 +7,14 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__c
 
 # Result-to-Claim Gate
 
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges whether results support a claim. Re-running that
+> verdict on a wall-clock timer adds no new signal (the verdict changes only
+> when the *results* change, not when the clock ticks). What you actually want
+> to schedule is the *external wait that precedes it* — experiments done → then
+> run this gate **once**. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
 Experiments produce numbers; this gate decides what those numbers *mean*. Collect results from available sources, get a Codex judgment, then auto-route based on the verdict.
 
 ## Context: $ARGUMENTS

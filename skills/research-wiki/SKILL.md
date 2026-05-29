@@ -2,7 +2,7 @@
 name: research-wiki
 description: "Persistent research knowledge base that accumulates papers, ideas, experiments, claims, and their relationships across the entire research lifecycle. Inspired by Karpathy's LLM Wiki pattern. Use when user says \"知识库\", \"research wiki\", \"add paper\", \"wiki query\", \"查知识库\", or wants to build/query a persistent field map."
 argument-hint: [subcommand: init|ingest|sync|query|update|lint|stats]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
 # Research Wiki: Persistent Research Knowledge Base
@@ -246,7 +246,7 @@ Generate `query_pack.md` — a compressed, context-window-friendly summary:
 
 | Section | Budget | Content |
 |---------|--------|---------|
-| Project direction | 300 chars | From CLAUDE.md or RESEARCH_BRIEF.md |
+| Project direction | full sections | Structured extraction from `RESEARCH_BRIEF.md` by `## ` heading (Problem / Constraints / Direction / Background / Non-Goals / Domain Knowledge / Existing Results), in priority order. No per-field char cap — the 8000-char assembly loop is the only safety net. Falls back to a flat 600-char slice if the brief uses no known headings. |
 | Top 5 gaps | 1200 chars | From gap_map.md, ranked by: unresolved + linked ideas + failed experiments |
 | Paper clusters | 1600 chars | 3-5 clusters by tag overlap, 2-3 sentences each |
 | Failed ideas | 1400 chars | **Always included** — highest anti-repetition value |

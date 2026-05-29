@@ -2,10 +2,19 @@
 name: experiment-queue
 description: SSH job queue for multi-seed/multi-config ML experiments with OOM-aware retry, stale-screen cleanup, and wave-transition race prevention. Use when user says "batch experiments", "队列实验", "run grid", "multi-seed sweep", "auto-chain experiments", or when /run-experiment is insufficient for 10+ jobs that need orchestration.
 argument-hint: [manifest-or-grid-spec]
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent, Skill(run-experiment), Skill(monitor-experiment)
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Skill(run-experiment), Skill(monitor-experiment)
 ---
 
 # Experiment Queue
+
+> ⏱ **External cadence: visibility only.** This skill already runs its own
+> detached server-side scheduler (60s poll + `depends_on` + wave transitions).
+> Use its status output for overnight visibility (N done / N running / N
+> pending); do **not** wrap it in a second `/loop` / `CronCreate` poll — that
+> duplicates the scheduler on an uncoordinated clock and races the
+> wave-transition logic it was built to prevent. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md)
+> ("don't duplicate an existing scheduler").
 
 Orchestrate large batches of ML experiments on SSH remote GPU servers with proper state tracking, OOM retry, stale cleanup, and wave transitions.
 

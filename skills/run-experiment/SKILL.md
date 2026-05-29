@@ -2,7 +2,7 @@
 name: run-experiment
 description: Deploy and run ML experiments on local, remote, Vast.ai, or Modal serverless GPU. Use when user says "run experiment", "deploy to server", "跑实验", or needs to launch training jobs.
 argument-hint: [experiment-description]
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent, Skill(serverless-modal)
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Skill(serverless-modal)
 ---
 
 # Run Experiment

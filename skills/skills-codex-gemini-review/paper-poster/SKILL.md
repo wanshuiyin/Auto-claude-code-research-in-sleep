@@ -2,7 +2,7 @@
 name: paper-poster
 description: "Generate a conference poster (article + tcbposter LaTeX → A0/A1 PDF + editable PPTX + SVG) from a compiled paper. Use when user says \"做海报\", \"制作海报\", \"conference poster\", \"make poster\", \"生成poster\", \"poster session\", or wants to create a poster for a conference presentation."
 argument-hint: [paper-directory-or-venue]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__gemini-review__review, mcp__gemini-review__review_start, mcp__gemini-review__review_reply_start, mcp__gemini-review__review_status
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__gemini-review__review, mcp__gemini-review__review_start, mcp__gemini-review__review_reply_start, mcp__gemini-review__review_status
 ---
 
 > Override for Codex users who want **Gemini**, not a second Codex/Codex-MCP reviewer, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.

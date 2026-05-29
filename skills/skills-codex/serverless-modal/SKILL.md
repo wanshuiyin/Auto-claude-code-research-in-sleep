@@ -2,7 +2,7 @@
 name: serverless-modal
 description: "Run GPU workloads on Modal — training, fine-tuning, inference, batch processing. Zero-config serverless: no SSH, no Docker, auto scale-to-zero. Use when user says \"modal run\", \"modal training\", \"modal inference\", \"deploy to modal\", \"need a GPU\", \"run on modal\", \"serverless GPU\", or needs remote GPU compute."
 argument-hint: [task-description]
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write
 ---
 
 # Modal Cloud GPU — Training & Inference

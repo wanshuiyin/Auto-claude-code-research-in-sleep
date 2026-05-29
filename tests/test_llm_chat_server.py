@@ -161,6 +161,32 @@ class TestCallLlmSuccess(unittest.TestCase):
         self.assertIsNone(content)
         self.assertIn("401", error)
 
+    @patch("tests._llm_chat_helpers.LLM_API_KEY", "test-key")
+    @patch("httpx.Client")
+    def test_malformed_response_returns_clear_error(self, mock_client_cls):
+        """Missing or empty choices in API response should return a clear
+        error message instead of crashing with KeyError/IndexError."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        for bad_body in [
+            {"choices": []},
+            {"choices": [{}]},
+            {"choices": [{"message": {}}]},
+            {},
+        ]:
+            mock_response.json.return_value = bad_body
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = mock_response
+            mock_client_cls.return_value = mock_client
+
+            from tests._llm_chat_helpers import call_llm
+            content, error = call_llm([{"role": "user", "content": "test"}])
+            self.assertIsNone(content, f"Expected None content for {bad_body!r}, got {content!r}")
+            self.assertIsNotNone(error)
+            self.assertIn("Unexpected API response structure", error)
+
     @patch("tests._llm_chat_helpers.LLM_API_KEY", "")
     def test_missing_api_key_returns_error(self):
         """call_llm without API key should return error immediately."""

@@ -123,22 +123,13 @@ Temporary source artifacts live under `/tmp`. Do not rely on persistence.
 
 If the user only asks for one specific detail, answer it directly — skip the full template.
 
-#### Suggest Follow-Up Skills
+**After presenting the summary, you MUST proceed to Step 6 before ending the turn.**
 
-```text
-/arxiv "PAPER_ID" - download          - download the PDF to local library
-/deepxiv "PAPER_ID" - section: Methods  - read a specific section progressively
-/research-lit "related topic"        - multi-source literature survey
-/novelty-check "idea from paper"     - verify novelty against this paper's area
-```
+### Step 6: Research Wiki Ingest
 
-## Update Research Wiki (if active)
+**You MUST always run the bash block below — it checks for `research-wiki/` internally and exits silently when absent.** Do NOT skip this step based on your own directory check; the bash block handles that for you.
 
-**Required when `research-wiki/` exists in the project**; skip silently
-otherwise. When the wiki dir exists, resolve `$WIKI_SCRIPT` per the
-canonical chain at
-[`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)
-(Variant B — warn-and-skip), then ingest the single paper that was read:
+Substitute only `<paper_arxiv_id>` and `<thesis>`; keep `${ARIS_REPO:-...}` as-is so an already-set env var is preserved.
 
 ```bash
 if [ -d research-wiki/ ]; then
@@ -164,6 +155,15 @@ If wiki was not present at read time (or the helper was unreachable),
 the user can backfill via
 `python3 "$WIKI_SCRIPT" sync research-wiki/ --arxiv-ids <id>` after
 resolving `$WIKI_SCRIPT` as above.
+
+#### Suggest Follow-Up Skills (after Step 6 completes)
+
+```text
+/arxiv "PAPER_ID" - download          - download the PDF to local library
+/deepxiv "PAPER_ID" - section: Methods  - read a specific section progressively
+/research-lit "related topic"        - multi-source literature survey
+/novelty-check "idea from paper"     - verify novelty against this paper's area
+```
 
 ## Key Rules
 

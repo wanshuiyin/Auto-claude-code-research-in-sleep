@@ -11,11 +11,12 @@ Search topic or paper ID: $ARGUMENTS
 
 DeepXiv is the progressive-reading literature source:
 
-| Skill | Best for |
-|------|----------|
-| `/arxiv` | Direct preprint search and PDF download |
-| `/semantic-scholar` | Published venue metadata, citation counts, DOI links |
-| `/deepxiv` | Layered reading: search → brief → head → section, plus trending and web search |
+| Skill | Source | Best for |
+|-------|--------|----------|
+| `/arxiv` | arXiv API | Batch search, PDF download, metadata |
+| **`/deepxiv`** | **DeepXiv SDK** | **Progressive section-level reading** |
+| `/semantic-scholar` | S2 API | Published venue metadata, citation counts |
+| `/alphaxiv` | alphaxiv.org | Instant LLM-optimized summary of one paper, with LaTeX source fallback |
 
 Use DeepXiv when you want to inspect papers incrementally instead of loading the full text immediately.
 
