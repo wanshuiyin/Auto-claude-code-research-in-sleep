@@ -16,9 +16,11 @@ import json
 import mimetypes
 import os
 import re
+import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import traceback
 import urllib.error
@@ -42,6 +44,7 @@ DEFAULT_BACKEND = os.environ.get("GEMINI_REVIEW_BACKEND", "api")
 DEFAULT_TIMEOUT_SEC = int(os.environ.get("GEMINI_REVIEW_TIMEOUT_SEC", "600"))
 DEFAULT_API_MODEL = os.environ.get("GEMINI_REVIEW_API_MODEL", "gemini-2.5-flash")
 DEFAULT_AGY_PRINT_TIMEOUT = os.environ.get("GEMINI_REVIEW_AGY_PRINT_TIMEOUT", f"{DEFAULT_TIMEOUT_SEC}s")
+MAX_STATUS_WAIT_SECONDS = int(os.environ.get("GEMINI_REVIEW_MAX_STATUS_WAIT_SECONDS", "30"))
 AGY_APP_DATA_DIR = Path(
     os.environ.get(
         "GEMINI_REVIEW_AGY_APP_DATA_DIR",
@@ -49,34 +52,115 @@ AGY_APP_DATA_DIR = Path(
     )
 ).expanduser()
 AGY_ARTIFACT_MAX_CHARS = int(os.environ.get("GEMINI_REVIEW_AGY_ARTIFACT_MAX_CHARS", "200000"))
-DEBUG_LOG = Path(os.environ.get("GEMINI_REVIEW_DEBUG_LOG", f"/tmp/{SERVER_NAME}-mcp-debug.log"))
 STATE_DIR = Path(
     os.environ.get(
         "GEMINI_REVIEW_STATE_DIR",
         str(Path.home() / ".codex" / "state" / SERVER_NAME),
     )
-)
+).expanduser()
+DEBUG_LOG = Path(os.environ.get("GEMINI_REVIEW_DEBUG_LOG", str(STATE_DIR / "debug.log"))).expanduser()
 JOBS_DIR = STATE_DIR / "jobs"
 THREADS_DIR = STATE_DIR / "threads"
 
 _use_ndjson = False
 TERMINAL_JOB_STATES = {"completed", "failed"}
+SHARED_TEMP_DIRS = {Path("/tmp"), Path("/var/tmp")}
+SAFE_ID_RE = re.compile(r"^[0-9A-Za-z_-]+$")
+GEMINI_MODEL_RE = re.compile(
+    r"^(?:gemini-[A-Za-z0-9][A-Za-z0-9_.:+-]*|models/gemini-[A-Za-z0-9][A-Za-z0-9_.:+-]*|publishers/google/models/gemini-[A-Za-z0-9][A-Za-z0-9_.:+-]*)$",
+    re.IGNORECASE,
+)
+GEMINI_LABEL_RE = re.compile(
+    r"^Gemini\s+[0-9][A-Za-z0-9 ._-]*(?:\s+\([A-Za-z0-9 ._-]+\))?$",
+    re.IGNORECASE,
+)
+MODEL_KEY_RE = re.compile(r"[^a-z0-9]+")
+MODEL_KEY_NAMES = {
+    "model",
+    "modelid",
+    "modelname",
+    "selectedmodel",
+    "currentmodel",
+    "reviewermodel",
+}
+DEBUG_REDACT_KEYS = {"prompt", "system", "content", "text", "history", "imagePaths", "image_paths"}
+MODEL_UNTRUSTED_CONTAINER_KEYS = {
+    "content",
+    "contents",
+    "history",
+    "message",
+    "messages",
+    "parts",
+    "prompt",
+    "response",
+    "result",
+    "stderr",
+    "stdout",
+    "text",
+    "transcript",
+}
+AGY_CONVERSATION_RE = re.compile(
+    r"(?m)^[IWEF]\d{4}\s+\S+\s+\d+\s+printmode\.go:\d+\] "
+    r"Print mode: conversation=([0-9A-Za-z_-]+), sending message$"
+)
+AGY_MODEL_LABEL_RE = re.compile(
+    r'(?m)^[IWEF]\d{4}\s+\S+\s+\d+\s+model_config_manager\.go:\d+\] '
+    r'Propagating selected model override to backend: label="([^"]+)"$'
+)
 
 
 def debug_log(message: str) -> None:
     try:
-        DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
-        with DEBUG_LOG.open("a", encoding="utf-8") as fh:
-            fh.write(f"{message}\n")
+        state_root = resolve_path(STATE_DIR)
+        debug_parent = resolve_path(DEBUG_LOG.parent)
+        if path_is_relative_to(debug_parent, state_root):
+            ensure_private_dir(debug_parent)
+        else:
+            DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                if debug_parent.stat().st_mode & 0o002:
+                    return
+            except OSError:
+                return
+        append_private_text(DEBUG_LOG, f"{message}\n")
     except OSError:
         pass
+
+
+def append_private_text(path: Path, text: str) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.write(fd, text.encode("utf-8"))
+        try:
+            os.fchmod(fd, 0o600)
+        except OSError:
+            pass
+    finally:
+        os.close(fd)
+
+
+def redact_for_debug(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, item in value.items():
+            if str(key) in DEBUG_REDACT_KEYS:
+                redacted[str(key)] = "[redacted]"
+            else:
+                redacted[str(key)] = redact_for_debug(item)
+        return redacted
+    if isinstance(value, list):
+        return [redact_for_debug(item) for item in value]
+    return value
 
 
 def send_response(response: dict[str, Any]) -> None:
     global _use_ndjson
 
     payload = json.dumps(response, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    debug_log(f"SEND {payload.decode('utf-8', errors='replace')}")
+    debug_log(f"SEND id={response.get('id')!r} has_error={bool(response.get('error') or response.get('result', {}).get('isError'))}")
     if _use_ndjson:
         sys.stdout.write(payload + b"\n")
     else:
@@ -126,10 +210,112 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def path_is_relative_to(path: Path, parent: Path) -> bool:
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
+
+
+def resolve_path(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def ensure_private_dir(path: Path) -> None:
+    resolved = resolve_path(path)
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if resolved in SHARED_TEMP_DIRS or resolved == resolved.parent:
+        return
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+
+
+def normalize_safe_id(raw_value: Any, field_name: str) -> tuple[str | None, str | None]:
+    value = str(raw_value or "").strip()
+    if not value:
+        return None, f"{field_name} is required"
+    if not SAFE_ID_RE.fullmatch(value):
+        return None, f"{field_name} must match ^[0-9A-Za-z_-]+$"
+    return value, None
+
+
+def confined_state_file(base_dir: Path, identifier: str, field_name: str) -> Path:
+    safe_id, error = normalize_safe_id(identifier, field_name)
+    if error or safe_id is None:
+        raise ValueError(error or f"invalid {field_name}")
+
+    base = resolve_path(base_dir)
+    path = resolve_path(base / f"{safe_id}.json")
+    if not path_is_relative_to(path, base):
+        raise ValueError(f"{field_name} escapes the state directory")
+    return path
+
+
+def read_text_confined(path: Path, root: Path) -> str | None:
+    resolved_root = resolve_path(root)
+    resolved_path = resolve_path(path)
+    if not path_is_relative_to(resolved_path, resolved_root):
+        return None
+    try:
+        return resolved_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+
+def normalize_model_name(raw_value: Any, field_name: str = "model") -> tuple[str | None, str | None]:
+    if raw_value is None:
+        return None, None
+    value = str(raw_value).strip()
+    if not value:
+        return None, None
+    if "\x00" in value:
+        return None, f"{field_name} must not contain NUL bytes"
+    if value.startswith("-"):
+        return None, f"{field_name} must not start with '-'"
+    return value, None
+
+
+def ensure_no_nul(value: str, field_name: str) -> str | None:
+    if "\x00" in value:
+        return f"{field_name} must not contain NUL bytes"
+    return None
+
+
+def select_model_name(*values: Any) -> tuple[str | None, str | None]:
+    for value in values:
+        selected, error = normalize_model_name(value)
+        if error:
+            return None, error
+        if selected:
+            return selected, None
+    return None, None
+
+
+def is_gemini_model_name(model_name: str | None) -> bool:
+    if not model_name:
+        return False
+    normalized = model_name.strip()
+    return bool(GEMINI_MODEL_RE.fullmatch(normalized) or GEMINI_LABEL_RE.fullmatch(normalized))
+
+
+def require_gemini_model(model_name: str | None, backend_name: str) -> str | None:
+    if not is_gemini_model_name(model_name):
+        shown = model_name or "unknown"
+        return f"{backend_name} reviewer model must be a Gemini family model, got: {shown}"
+    return None
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(path.parent)
     temp_path = path.with_suffix(path.suffix + ".tmp")
     temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    try:
+        os.chmod(temp_path, 0o600)
+    except OSError:
+        pass
     temp_path.replace(path)
 
 
@@ -217,11 +403,7 @@ def resolve_backend(preferred_backend: str | None) -> str:
     if backend not in {"auto", "api", "cli", "agy"}:
         raise ValueError(f"unsupported Gemini backend: {backend}")
     if backend == "auto":
-        if get_api_key():
-            return "api"
-        if find_agy_bin():
-            return "agy"
-        return "cli"
+        return "api" if get_api_key() else "cli"
     return backend
 
 
@@ -274,55 +456,58 @@ def agy_output_is_error(text: str) -> bool:
 
 
 def extract_agy_conversation_id_from_log(log_path: Path) -> str | None:
+    conversation_ids = extract_agy_conversation_ids_from_log(log_path)
+    return conversation_ids[-1] if conversation_ids else None
+
+
+def extract_agy_conversation_ids_from_log(log_path: Path) -> list[str]:
     try:
         text = log_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
+        return []
+    matches = [match.group(1) for match in AGY_CONVERSATION_RE.finditer(text)]
+    conversation_ids: list[str] = []
+    for match in matches:
+        conversation_id, error = normalize_safe_id(match, "conversationId")
+        if not error and conversation_id and conversation_id not in conversation_ids:
+            conversation_ids.append(conversation_id)
+    return conversation_ids
+
+
+def agy_conversation_position(log_text: str, conversation_id: str) -> int | None:
+    position: int | None = None
+    for match in AGY_CONVERSATION_RE.finditer(log_text):
+        if match.group(1) == conversation_id:
+            position = match.start()
+    return position
+
+
+def agy_conversation_root(conversation_id: str) -> Path | None:
+    safe_id, error = normalize_safe_id(conversation_id, "conversationId")
+    if error or safe_id is None:
         return None
-    matches = re.findall(r"Print mode: conversation=([0-9A-Za-z_-]+)", text)
-    return matches[-1] if matches else None
-
-
-def latest_agy_conversation_id_for_cwd() -> str | None:
-    last_conversations_path = AGY_APP_DATA_DIR / "cache" / "last_conversations.json"
-    try:
-        payload = json.loads(last_conversations_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    brain_root = resolve_path(AGY_APP_DATA_DIR / "brain")
+    conversation_root = resolve_path(brain_root / safe_id)
+    if not path_is_relative_to(conversation_root, brain_root):
         return None
-    if not isinstance(payload, dict):
-        return None
-
-    try:
-        cwd = Path.cwd().resolve()
-    except OSError:
-        cwd = Path.cwd().absolute()
-
-    best: tuple[int, str] | None = None
-    for raw_path, raw_conversation_id in payload.items():
-        if not isinstance(raw_path, str) or not isinstance(raw_conversation_id, str):
-            continue
-        try:
-            candidate_path = Path(raw_path).expanduser().resolve()
-        except OSError:
-            continue
-        if cwd == candidate_path or candidate_path in cwd.parents:
-            depth = len(candidate_path.parts)
-            if best is None or depth > best[0]:
-                best = (depth, raw_conversation_id)
-    return best[1] if best else None
+    return conversation_root
 
 
 def agy_transcript_paths(conversation_id: str) -> list[Path]:
-    logs_dir = AGY_APP_DATA_DIR / "brain" / conversation_id / ".system_generated" / "logs"
+    conversation_root = agy_conversation_root(conversation_id)
+    if conversation_root is None:
+        return []
+    logs_dir = conversation_root / ".system_generated" / "logs"
     return [logs_dir / "transcript_full.jsonl", logs_dir / "transcript.jsonl"]
 
 
-def agy_artifact_text(path: Path) -> str | None:
+def agy_artifact_text(path: Path, *, conversation_root: Path) -> str | None:
     if path.suffix.lower() not in {".md", ".markdown", ".txt", ".json", ".yaml", ".yml"}:
         return None
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace").strip()
-    except OSError:
+    text = read_text_confined(path, conversation_root)
+    if text is None:
         return None
+    text = text.strip()
     if not text:
         return None
     if len(text) > AGY_ARTIFACT_MAX_CHARS:
@@ -340,17 +525,120 @@ def extract_file_uri_paths(text: str) -> list[Path]:
     return paths
 
 
-def extract_agy_response_from_transcript(conversation_id: str) -> str | None:
+def collect_model_candidates(value: Any, candidates: list[str], *, under_untrusted_text: bool = False) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            normalized_key = MODEL_KEY_RE.sub("", str(key).lower())
+            next_under_untrusted = under_untrusted_text or normalized_key in MODEL_UNTRUSTED_CONTAINER_KEYS
+            if (
+                not under_untrusted_text
+                and normalized_key in MODEL_KEY_NAMES
+                and isinstance(item, str)
+                and item.strip()
+            ):
+                candidates.append(item.strip())
+            collect_model_candidates(item, candidates, under_untrusted_text=next_under_untrusted)
+    elif isinstance(value, list):
+        for item in value:
+            collect_model_candidates(item, candidates, under_untrusted_text=under_untrusted_text)
+
+
+def select_model_candidate(candidates: list[str]) -> tuple[str | None, str | None]:
+    cleaned = [candidate.strip().strip('",') for candidate in candidates if candidate.strip()]
+    if not cleaned:
+        return None, None
+    normalized = {candidate.lower() for candidate in cleaned}
+    if len(normalized) > 1:
+        return None, f"conflicting Antigravity model candidates: {', '.join(cleaned)}"
+    return cleaned[-1], None
+
+
+def collect_model_candidates_from_agy_log(text: str, candidates: list[str]) -> None:
+    matches = [match.group(1) for match in AGY_MODEL_LABEL_RE.finditer(text)]
+    candidates.extend(match.strip() for match in matches if match.strip())
+
+
+def transcript_contains_nonce(transcript_text: str, invocation_nonce: str) -> bool:
+    return invocation_nonce in transcript_text
+
+
+def agy_conversation_has_nonce(conversation_id: str, invocation_nonce: str) -> bool:
+    conversation_root = agy_conversation_root(conversation_id)
+    if conversation_root is None:
+        return False
     for transcript_path in agy_transcript_paths(conversation_id):
-        if not transcript_path.is_file():
+        transcript_text = read_text_confined(transcript_path, conversation_root)
+        if transcript_text is not None and transcript_contains_nonce(transcript_text, invocation_nonce):
+            return True
+    return False
+
+
+def select_agy_conversation_id_from_state(
+    log_path: Path,
+    *,
+    invocation_nonce: str | None = None,
+) -> tuple[str | None, str | None]:
+    conversation_ids = extract_agy_conversation_ids_from_log(log_path)
+    if not conversation_ids:
+        return None, "could not locate Antigravity conversation id in this invocation's log"
+    if invocation_nonce is None:
+        return conversation_ids[-1], None
+    for conversation_id in reversed(conversation_ids):
+        if agy_conversation_has_nonce(conversation_id, invocation_nonce):
+            return conversation_id, None
+    return None, f"Antigravity transcript is not bound to this invocation: {conversation_ids[-1]}"
+
+
+def extract_agy_model_from_state(
+    log_path: Path,
+    *,
+    conversation_id: str,
+    invocation_nonce: str | None = None,
+) -> tuple[str | None, str | None]:
+    candidates: list[str] = []
+    try:
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        log_text = ""
+    conversation_position = agy_conversation_position(log_text, conversation_id)
+    if conversation_position is not None:
+        collect_model_candidates_from_agy_log(log_text[:conversation_position], candidates)
+
+    conversation_root = agy_conversation_root(conversation_id)
+    if conversation_root is not None:
+        for transcript_path in agy_transcript_paths(conversation_id):
+            transcript_text = read_text_confined(transcript_path, conversation_root)
+            if transcript_text is None:
+                continue
+            if invocation_nonce is not None and not transcript_contains_nonce(transcript_text, invocation_nonce):
+                continue
+            for line in transcript_text.splitlines():
+                try:
+                    step = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                collect_model_candidates(step, candidates)
+
+    return select_model_candidate(candidates)
+
+
+def extract_agy_response_from_transcript(
+    conversation_id: str,
+    *,
+    invocation_nonce: str | None = None,
+) -> str | None:
+    conversation_root = agy_conversation_root(conversation_id)
+    if conversation_root is None:
+        return None
+    for transcript_path in agy_transcript_paths(conversation_id):
+        transcript_text = read_text_confined(transcript_path, conversation_root)
+        if transcript_text is None:
+            continue
+        if invocation_nonce is not None and not transcript_contains_nonce(transcript_text, invocation_nonce):
             continue
         final_response: str | None = None
         artifact_paths: list[Path] = []
-        try:
-            lines = transcript_path.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            continue
-        for line in lines:
+        for line in transcript_text.splitlines():
             try:
                 step = json.loads(line)
             except json.JSONDecodeError:
@@ -365,7 +653,7 @@ def extract_agy_response_from_transcript(conversation_id: str) -> str | None:
                 final_response = content.strip()
 
         for path in reversed(artifact_paths):
-            artifact = agy_artifact_text(path)
+            artifact = agy_artifact_text(path, conversation_root=conversation_root)
             if artifact:
                 return artifact
         if final_response:
@@ -376,18 +664,22 @@ def extract_agy_response_from_transcript(conversation_id: str) -> str | None:
 def extract_agy_response_from_state(
     log_path: Path,
     *,
-    allow_last_conversation: bool = True,
-) -> tuple[str | None, str | None]:
-    conversation_id = extract_agy_conversation_id_from_log(log_path)
-    if not conversation_id and allow_last_conversation:
-        conversation_id = latest_agy_conversation_id_for_cwd()
-    if not conversation_id:
-        return None, "could not locate Antigravity conversation id"
-    response = extract_agy_response_from_transcript(conversation_id)
+    invocation_nonce: str | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    conversation_id, conversation_error = select_agy_conversation_id_from_state(
+        log_path,
+        invocation_nonce=invocation_nonce,
+    )
+    if conversation_error or conversation_id is None:
+        return None, conversation_error or "could not locate Antigravity conversation id", None
+    response = extract_agy_response_from_transcript(
+        conversation_id,
+        invocation_nonce=invocation_nonce,
+    )
     if response:
         debug_log(f"AGY_TRANSCRIPT_RECOVERED conversation={conversation_id}")
-        return response, None
-    return None, f"Antigravity transcript has no final response yet: {conversation_id}"
+        return response, None, conversation_id
+    return None, f"Antigravity transcript has no final response yet: {conversation_id}", None
 
 
 def extract_api_response_text(payload: dict[str, Any]) -> str:
@@ -421,11 +713,11 @@ def extract_api_response_text(payload: dict[str, Any]) -> str:
 
 
 def job_state_path(job_id: str) -> Path:
-    return JOBS_DIR / f"{job_id}.json"
+    return confined_state_file(JOBS_DIR, job_id, "jobId")
 
 
 def thread_state_path(thread_id: str) -> Path:
-    return THREADS_DIR / f"{thread_id}.json"
+    return confined_state_file(THREADS_DIR, thread_id, "threadId")
 
 
 def is_pid_alive(pid: int | None) -> bool:
@@ -438,9 +730,67 @@ def is_pid_alive(pid: int | None) -> bool:
     return True
 
 
+def kill_process_tree(process: subprocess.Popen[str]) -> None:
+    try:
+        if os.name == "nt":
+            subprocess.run(
+                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+                check=False,
+            )
+            if process.poll() is None:
+                process.kill()
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+    except OSError:
+        try:
+            process.kill()
+        except OSError:
+            pass
+
+
+def run_process_tree(
+    cmd: list[str],
+    *,
+    timeout_sec: int,
+) -> tuple[subprocess.CompletedProcess[str] | None, str | None, int]:
+    started = time.monotonic()
+    popen_kwargs: dict[str, Any] = {
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+        "stdin": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    process = subprocess.Popen(cmd, **popen_kwargs)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_sec)
+    except subprocess.TimeoutExpired:
+        kill_process_tree(process)
+        try:
+            stdout, stderr = process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            return None, f"process tree did not exit after timeout ({timeout_sec} seconds)", int(
+                (time.monotonic() - started) * 1000
+            )
+        return None, f"timed out after {timeout_sec} seconds", int((time.monotonic() - started) * 1000)
+
+    return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr), None, int(
+        (time.monotonic() - started) * 1000
+    )
+
+
 def serialize_job(job: dict[str, Any]) -> dict[str, Any]:
     result = job.get("result") or {}
-    return {
+    payload = {
         "jobId": job.get("jobId"),
         "status": job.get("status"),
         "done": job.get("status") in TERMINAL_JOB_STATES,
@@ -457,6 +807,10 @@ def serialize_job(job: dict[str, Any]) -> dict[str, Any]:
         "updatedAt": job.get("updatedAt"),
         "resumeHint": "Call review_status with this jobId until done=true.",
     }
+    for optional_key in ("model_provenance", "requested_model", "warning"):
+        if optional_key in result:
+            payload[optional_key] = result.get(optional_key)
+    return payload
 
 
 def load_thread_history(thread_id: str) -> list[dict[str, str]]:
@@ -544,25 +898,28 @@ def run_gemini_cli_review(
         return None, f"Gemini CLI not found: {GEMINI_BIN}"
 
     effective_prompt = build_cli_prompt(prompt, history=history, system=system)
+    nul_error = ensure_no_nul(effective_prompt, "prompt")
+    if nul_error:
+        return None, nul_error
     cmd = [bin_path, "-p", effective_prompt, "--output-format", "json"]
-    selected_model = model or DEFAULT_MODEL
+    selected_model, model_error = select_model_name(model, DEFAULT_MODEL)
+    if model_error:
+        return None, model_error
     if selected_model:
         cmd.extend(["-m", selected_model])
 
-    debug_log(f"RUN {' '.join(cmd)}")
+    debug_log(f"RUN gemini-cli model={selected_model or 'default'} output_format=json")
     try:
-        started = time.monotonic()
-        result = subprocess.run(
+        result, process_error, duration_ms = run_process_tree(
             cmd,
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=DEFAULT_TIMEOUT_SEC,
-            check=False,
+            timeout_sec=DEFAULT_TIMEOUT_SEC,
         )
-        duration_ms = int((time.monotonic() - started) * 1000)
-    except subprocess.TimeoutExpired:
-        return None, f"Gemini review timed out after {DEFAULT_TIMEOUT_SEC} seconds"
+    except (OSError, ValueError) as exc:
+        return None, f"failed to launch Gemini CLI: {exc}"
+    if process_error:
+        return None, f"Gemini review {process_error}"
+    if result is None:
+        return None, "Gemini review failed without process details"
 
     payload, parse_error = parse_gemini_json(result.stdout)
     if parse_error:
@@ -579,9 +936,14 @@ def run_gemini_cli_review(
     if not response_text:
         return None, "Gemini CLI JSON payload does not contain a non-empty response field"
 
+    reported_model = str(payload.get("model", "") or selected_model or "gemini-cli")
+    model_family_error = require_gemini_model(reported_model, "Gemini CLI")
+    if model_family_error:
+        return None, model_family_error
+
     return {
         "response": response_text,
-        "model": payload.get("model", "") or selected_model or "gemini-cli",
+        "model": reported_model,
         "duration_ms": duration_ms,
         "stop_reason": payload.get("stop_reason"),
         "backend": "cli",
@@ -602,72 +964,133 @@ def run_agy_cli_review(
     bin_path = find_agy_bin()
     if not bin_path:
         return None, f"Antigravity CLI not found: {AGY_BIN}"
+    requested_model, model_error = select_model_name(model)
+    if model_error:
+        return None, model_error
 
+    invocation_nonce = uuid.uuid4().hex
     effective_prompt = build_cli_prompt(prompt, history=history, system=system)
+    effective_prompt = (
+        f"{effective_prompt}\n\n"
+        f"## Invocation Binding\n"
+        f"gemini-review nonce: {invocation_nonce}"
+    )
+    nul_error = ensure_no_nul(effective_prompt, "prompt") or ensure_no_nul(DEFAULT_AGY_PRINT_TIMEOUT, "GEMINI_REVIEW_AGY_PRINT_TIMEOUT")
+    if nul_error:
+        return None, nul_error
     agy_log_dir = STATE_DIR / "agy-logs"
     try:
-        agy_log_dir.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        agy_log_dir = Path("/tmp")
-    agy_log_path = agy_log_dir / f"agy-{uuid.uuid4().hex}.log"
-    cmd = [
-        bin_path,
-        "--log-file",
-        str(agy_log_path),
-        "--print",
-        effective_prompt,
-        "--print-timeout",
-        DEFAULT_AGY_PRINT_TIMEOUT,
-    ]
+        ensure_private_dir(agy_log_dir)
+    except OSError as exc:
+        return None, f"failed to create private Antigravity log directory: {exc}"
 
-    debug_log(f"RUN agy-cli timeout={DEFAULT_AGY_PRINT_TIMEOUT} log={agy_log_path}")
-    try:
-        started = time.monotonic()
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            stdin=subprocess.DEVNULL,
-            timeout=DEFAULT_TIMEOUT_SEC + 15,
-            check=False,
+    with tempfile.TemporaryDirectory(prefix="agy-", dir=str(agy_log_dir)) as temp_dir:
+        temp_path = Path(temp_dir)
+        try:
+            os.chmod(temp_path, 0o700)
+        except OSError:
+            pass
+        agy_log_path = temp_path / "agy.log"
+        cmd = [
+            bin_path,
+            "--log-file",
+            str(agy_log_path),
+            "--print",
+            effective_prompt,
+            "--print-timeout",
+            DEFAULT_AGY_PRINT_TIMEOUT,
+        ]
+
+        debug_log(f"RUN agy-cli timeout={DEFAULT_AGY_PRINT_TIMEOUT} log={agy_log_path}")
+        try:
+            result, process_error, duration_ms = run_process_tree(
+                cmd,
+                timeout_sec=DEFAULT_TIMEOUT_SEC + 15,
+            )
+        except (OSError, ValueError) as exc:
+            return None, f"failed to launch Antigravity CLI: {exc}"
+        if process_error:
+            return None, f"Antigravity review {process_error}"
+        if result is None:
+            return None, "Antigravity review failed without process details"
+
+        response_text = result.stdout.strip()
+        if result.returncode != 0:
+            message = result.stderr.strip() or response_text or "unknown error"
+            return None, f"Antigravity review failed: {message}"
+        if not response_text or agy_output_is_error(response_text):
+            recovered_text, recovered_error, recovered_conversation_id = extract_agy_response_from_state(
+                agy_log_path,
+                invocation_nonce=invocation_nonce,
+            )
+            if recovered_text:
+                response_text = recovered_text
+            elif response_text:
+                suffix = f"; {recovered_error}" if recovered_error else ""
+                return None, f"Antigravity CLI did not print a final response: {response_text}{suffix}"
+        if not response_text:
+            stderr = result.stderr.strip()
+            recovered_text, recovered_error, recovered_conversation_id = extract_agy_response_from_state(
+                agy_log_path,
+                invocation_nonce=invocation_nonce,
+            )
+            if recovered_text:
+                response_text = recovered_text
+            else:
+                message = "Antigravity CLI returned empty output" if not stderr else f"Antigravity CLI returned empty output. stderr: {stderr}"
+                if recovered_error:
+                    message = f"{message}; {recovered_error}"
+                return None, message
+
+        transcript_text, _, transcript_conversation_id = extract_agy_response_from_state(
+            agy_log_path,
+            invocation_nonce=invocation_nonce,
         )
-        duration_ms = int((time.monotonic() - started) * 1000)
-    except subprocess.TimeoutExpired:
-        return None, f"Antigravity review timed out after {DEFAULT_TIMEOUT_SEC} seconds"
+        if transcript_text and len(transcript_text) > len(response_text):
+            response_text = transcript_text
 
-    response_text = result.stdout.strip()
-    if result.returncode != 0:
-        message = result.stderr.strip() or response_text or "unknown error"
-        return None, f"Antigravity review failed: {message}"
-    if not response_text or agy_output_is_error(response_text):
-        recovered_text, recovered_error = extract_agy_response_from_state(agy_log_path)
-        if recovered_text:
-            response_text = recovered_text
-        elif response_text:
-            suffix = f"; {recovered_error}" if recovered_error else ""
-            return None, f"Antigravity CLI did not print a final response: {response_text}{suffix}"
-    if not response_text:
-        stderr = result.stderr.strip()
-        recovered_text, recovered_error = extract_agy_response_from_state(agy_log_path)
-        if recovered_text:
-            response_text = recovered_text
-        else:
-            message = "Antigravity CLI returned empty output" if not stderr else f"Antigravity CLI returned empty output. stderr: {stderr}"
-            if recovered_error:
-                message = f"{message}; {recovered_error}"
-            return None, message
+        conversation_id = (
+            recovered_conversation_id
+            if "recovered_conversation_id" in locals() and recovered_conversation_id
+            else transcript_conversation_id
+        )
+        if not conversation_id:
+            conversation_id, conversation_error = select_agy_conversation_id_from_state(
+                agy_log_path,
+                invocation_nonce=invocation_nonce,
+            )
+            if conversation_error or not conversation_id:
+                return None, conversation_error or "could not bind Antigravity transcript to this invocation"
+        agy_model, agy_model_error = extract_agy_model_from_state(
+            agy_log_path,
+            conversation_id=conversation_id,
+            invocation_nonce=invocation_nonce,
+        )
+        if agy_model_error:
+            return None, agy_model_error
+        model_family_error = require_gemini_model(agy_model, "Antigravity CLI")
+        if model_family_error:
+            return None, (
+                f"{model_family_error}. The agy backend must expose the actual reviewer model "
+                "in this invocation's log/transcript so ARIS can audit the cross-model invariant."
+            )
 
-    transcript_text, _ = extract_agy_response_from_state(agy_log_path, allow_last_conversation=False)
-    if transcript_text and len(transcript_text) > len(response_text):
-        response_text = transcript_text
-
-    return {
-        "response": response_text,
-        "model": model or DEFAULT_MODEL or "agy-cli",
-        "duration_ms": duration_ms,
-        "stop_reason": None,
-        "backend": "agy",
-    }, None
+        payload: dict[str, Any] = {
+            "response": response_text,
+            "model": agy_model,
+            "model_provenance": "agy-log-or-transcript",
+            "duration_ms": duration_ms,
+            "stop_reason": None,
+            "backend": "agy",
+        }
+        if requested_model:
+            payload["requested_model"] = requested_model
+            payload["warning"] = (
+                "Antigravity CLI does not support per-call model selection in this bridge; "
+                "requested_model is recorded for provenance only. "
+                f"Actual model was recovered as {agy_model!r}."
+            )
+        return payload, None
 
 
 def run_gemini_api_review(
@@ -682,7 +1105,12 @@ def run_gemini_api_review(
     if not api_key:
         return None, "Gemini API backend requires GEMINI_API_KEY or GOOGLE_API_KEY"
 
-    selected_model = model or DEFAULT_MODEL or DEFAULT_API_MODEL
+    selected_model, model_error = select_model_name(model, DEFAULT_MODEL, DEFAULT_API_MODEL)
+    if model_error:
+        return None, model_error
+    model_family_error = require_gemini_model(selected_model, "Gemini API")
+    if model_family_error:
+        return None, model_family_error
     request_payload: dict[str, Any] = {
         "contents": [],
         "generationConfig": {"temperature": 0.2},
@@ -777,7 +1205,12 @@ def run_gemini_review(
     if image_error:
         return None, image_error
 
-    thread_id = session_id or uuid.uuid4().hex
+    if session_id:
+        thread_id, thread_error = normalize_safe_id(session_id, "threadId")
+        if thread_error or thread_id is None:
+            return None, thread_error or "invalid threadId"
+    else:
+        thread_id = uuid.uuid4().hex
     history = load_thread_history(thread_id) if session_id else []
     try:
         selected_backend = resolve_backend(backend)
@@ -839,6 +1272,14 @@ def start_async_review(
     normalized_image_paths, image_error = normalize_image_paths(image_paths)
     if image_error:
         return None, image_error
+    if session_id:
+        safe_session_id, thread_error = normalize_safe_id(session_id, "threadId")
+        if thread_error or safe_session_id is None:
+            return None, thread_error or "invalid threadId"
+        session_id = safe_session_id
+    _, model_error = normalize_model_name(model)
+    if model_error:
+        return None, model_error
 
     job_id = uuid.uuid4().hex
     created_at = utc_now()
@@ -891,11 +1332,16 @@ def start_async_review(
 
 
 def get_review_status(job_id: str, *, wait_seconds: int = 0) -> tuple[dict[str, Any] | None, str | None]:
-    job_path = job_state_path(job_id)
+    safe_job_id, job_error = normalize_safe_id(job_id, "jobId")
+    if job_error or safe_job_id is None:
+        return None, job_error or "invalid jobId"
+    if wait_seconds < 0 or wait_seconds > MAX_STATUS_WAIT_SECONDS:
+        return None, f"waitSeconds must be between 0 and {MAX_STATUS_WAIT_SECONDS}"
+    job_path = job_state_path(safe_job_id)
     if not job_path.exists():
-        return None, f"Unknown jobId: {job_id}"
+        return None, f"Unknown jobId: {safe_job_id}"
 
-    deadline = time.monotonic() + max(wait_seconds, 0)
+    deadline = time.monotonic() + wait_seconds
     while True:
         job = read_json(job_path)
         if job.get("status") in {"queued", "running"} and not is_pid_alive(job.get("workerPid")):
@@ -912,6 +1358,11 @@ def get_review_status(job_id: str, *, wait_seconds: int = 0) -> tuple[dict[str, 
 
 
 def run_async_job(job_id: str) -> int:
+    safe_job_id, job_error = normalize_safe_id(job_id, "jobId")
+    if job_error or safe_job_id is None:
+        debug_log(f"JOB_INVALID job_id={job_id!r} error={job_error}")
+        return 1
+    job_id = safe_job_id
     job_path = job_state_path(job_id)
     if not job_path.exists():
         debug_log(f"JOB_MISSING job_id={job_id}")
@@ -986,7 +1437,10 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
     request_id = request.get("id")
     method = request.get("method", "")
     params = request.get("params", {})
-    debug_log(f"REQUEST id={request_id!r} method={method} params={json.dumps(params, ensure_ascii=False)}")
+    debug_log(
+        f"REQUEST id={request_id!r} method={method} "
+        f"params={json.dumps(redact_for_debug(params), ensure_ascii=False)}"
+    )
 
     if request_id is None:
         if method in {"notifications/initialized", "initialized"}:
@@ -1060,6 +1514,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                             "type": "object",
                             "properties": reply_properties,
                             "required": ["prompt"],
+                            "anyOf": [{"required": ["threadId"]}, {"required": ["thread_id"]}],
                         },
                     },
                     {
@@ -1078,6 +1533,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                             "type": "object",
                             "properties": reply_properties,
                             "required": ["prompt"],
+                            "anyOf": [{"required": ["threadId"]}, {"required": ["thread_id"]}],
                         },
                     },
                     {
@@ -1088,9 +1544,14 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                             "properties": {
                                 "jobId": {"type": "string", "description": "Background review job id"},
                                 "job_id": {"type": "string", "description": "Alias of jobId"},
-                                "waitSeconds": {"type": "integer", "description": "Optional bounded wait before returning status"},
+                                "waitSeconds": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": MAX_STATUS_WAIT_SECONDS,
+                                    "description": "Optional bounded wait before returning status",
+                                },
                             },
-                            "required": ["jobId"],
+                            "anyOf": [{"required": ["jobId"]}, {"required": ["job_id"]}],
                         },
                     },
                 ]
@@ -1162,7 +1623,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                 wait_seconds = int(wait_seconds_raw)
             except (TypeError, ValueError):
                 return tool_error(request_id, "waitSeconds must be an integer")
-            payload, error = get_review_status(str(job_id), wait_seconds=max(wait_seconds, 0))
+            payload, error = get_review_status(str(job_id), wait_seconds=wait_seconds)
             return tool_error(request_id, error) if error else tool_success(request_id, payload or {})
 
         return {
