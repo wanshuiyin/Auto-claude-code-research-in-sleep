@@ -1622,7 +1622,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                         "inputSchema": {
                             "type": "object",
                             "properties": reply_properties,
-                            "required": ["prompt"],
+                            "required": ["prompt", "threadId"],
                         },
                     },
                     {
@@ -1640,7 +1640,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                         "inputSchema": {
                             "type": "object",
                             "properties": reply_properties,
-                            "required": ["prompt"],
+                            "required": ["prompt", "threadId"],
                         },
                     },
                     {
@@ -1658,6 +1658,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
                                     "description": "Optional bounded wait before returning status",
                                 },
                             },
+                            "required": ["jobId"],
                         },
                     },
                 ]
