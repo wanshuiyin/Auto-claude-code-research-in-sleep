@@ -271,16 +271,40 @@ def open_confined_read_fd(path: Path, root: Path) -> int | None:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             os.close(fd)
             return None
-        proc_fd_path = Path(f"/proc/self/fd/{fd}")
-        if proc_fd_path.exists():
-            fd_path = resolve_path(Path(os.readlink(proc_fd_path)))
-            if not path_is_relative_to(fd_path, resolved_root):
-                os.close(fd)
-                return None
+        fd_path = resolved_fd_path(fd)
+        if fd_path is None or not path_is_relative_to(fd_path, resolved_root):
+            os.close(fd)
+            return None
         return fd
     except OSError:
         os.close(fd)
         return None
+
+
+def resolved_fd_path(fd: int) -> Path | None:
+    for fd_root in (Path("/proc/self/fd"), Path("/dev/fd")):
+        fd_link = fd_root / str(fd)
+        if fd_link.exists():
+            try:
+                return resolve_path(Path(os.readlink(fd_link)))
+            except OSError:
+                return None
+    try:
+        import fcntl  # type: ignore[import-not-found]
+    except ImportError:
+        return None
+    f_getpath = getattr(fcntl, "F_GETPATH", None)
+    if f_getpath is None:
+        return None
+    try:
+        raw_path = fcntl.fcntl(fd, f_getpath, b"\0" * 4096)
+    except OSError:
+        return None
+    if isinstance(raw_path, bytes):
+        path_text = raw_path.split(b"\0", 1)[0].decode("utf-8", errors="replace")
+    else:
+        path_text = str(raw_path).split("\0", 1)[0]
+    return resolve_path(Path(path_text)) if path_text else None
 
 
 def read_text_confined(path: Path, root: Path) -> str | None:
@@ -340,6 +364,12 @@ def require_gemini_model(model_name: str | None, backend_name: str) -> str | Non
         shown = model_name or "unknown"
         return f"{backend_name} reviewer model must be a Gemini family model, got: {shown}"
     return None
+
+
+def gemini_api_model_path(model_name: str) -> str:
+    if model_name.startswith(("models/", "publishers/")):
+        return model_name
+    return f"models/{model_name}"
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -563,6 +593,10 @@ def extract_file_uri_paths(text: str) -> list[Path]:
     return paths
 
 
+def strip_file_uri_refs(text: str) -> str:
+    return re.sub(r"file://[^\s)>\]]+", "", text).strip(" \t\r\n.,:;()[]<>")
+
+
 def collect_model_candidates(value: Any, candidates: list[str], *, under_untrusted_text: bool = False) -> None:
     if isinstance(value, dict):
         for key, item in value.items():
@@ -701,11 +735,12 @@ def extract_agy_response_from_transcript(
                 continue
             step_type = step.get("type")
             content = step.get("content")
-            if isinstance(content, str):
-                artifact_paths.extend(extract_file_uri_paths(content))
             if step_type == "PLANNER_RESPONSE" and isinstance(content, str) and content.strip():
                 final_response = content.strip()
+                artifact_paths = extract_file_uri_paths(content)
 
+        if final_response and strip_file_uri_refs(final_response):
+            return final_response
         for path in reversed(artifact_paths):
             artifact = agy_artifact_text(path, conversation_root=conversation_root)
             if artifact:
@@ -1181,7 +1216,8 @@ def run_gemini_api_review(
     user_parts.extend(inline_parts)
     request_payload["contents"].append({"role": "user", "parts": user_parts})
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{selected_model}:generateContent"
+    model_path = gemini_api_model_path(selected_model)
+    url = f"https://generativelanguage.googleapis.com/v1beta/{model_path}:generateContent"
     request = urllib.request.Request(
         url,
         data=json.dumps(request_payload, ensure_ascii=False).encode("utf-8"),
