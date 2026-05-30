@@ -18,6 +18,7 @@ import os
 import re
 import signal
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -52,6 +53,7 @@ AGY_APP_DATA_DIR = Path(
     )
 ).expanduser()
 AGY_ARTIFACT_MAX_CHARS = int(os.environ.get("GEMINI_REVIEW_AGY_ARTIFACT_MAX_CHARS", "200000"))
+WORKSPACE_ROOT = Path(os.environ.get("GEMINI_REVIEW_WORKSPACE_ROOT", os.getcwd())).expanduser()
 STATE_DIR = Path(
     os.environ.get(
         "GEMINI_REVIEW_STATE_DIR",
@@ -65,6 +67,7 @@ THREADS_DIR = STATE_DIR / "threads"
 _use_ndjson = False
 TERMINAL_JOB_STATES = {"completed", "failed"}
 SHARED_TEMP_DIRS = {Path("/tmp"), Path("/var/tmp")}
+SAFE_ID_MAX_LEN = 128
 SAFE_ID_RE = re.compile(r"^[0-9A-Za-z_-]+$")
 GEMINI_MODEL_RE = re.compile(
     r"^(?:gemini-[A-Za-z0-9][A-Za-z0-9_.:+-]*|models/gemini-[A-Za-z0-9][A-Za-z0-9_.:+-]*|publishers/google/models/gemini-[A-Za-z0-9][A-Za-z0-9_.:+-]*)$",
@@ -112,17 +115,11 @@ AGY_MODEL_LABEL_RE = re.compile(
 def debug_log(message: str) -> None:
     try:
         state_root = resolve_path(STATE_DIR)
-        debug_parent = resolve_path(DEBUG_LOG.parent)
-        if path_is_relative_to(debug_parent, state_root):
-            ensure_private_dir(debug_parent)
-        else:
-            DEBUG_LOG.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                if debug_parent.stat().st_mode & 0o002:
-                    return
-            except OSError:
-                return
-        append_private_text(DEBUG_LOG, f"{message}\n")
+        debug_path = resolve_path(DEBUG_LOG)
+        if not path_is_relative_to(debug_path, state_root):
+            return
+        ensure_private_dir(debug_path.parent)
+        append_private_text(debug_path, f"{message}\n")
     except OSError:
         pass
 
@@ -237,6 +234,8 @@ def normalize_safe_id(raw_value: Any, field_name: str) -> tuple[str | None, str 
     value = str(raw_value or "").strip()
     if not value:
         return None, f"{field_name} is required"
+    if len(value) > SAFE_ID_MAX_LEN:
+        return None, f"{field_name} must be at most {SAFE_ID_MAX_LEN} characters"
     if not SAFE_ID_RE.fullmatch(value):
         return None, f"{field_name} must match ^[0-9A-Za-z_-]+$"
     return value, None
@@ -254,15 +253,50 @@ def confined_state_file(base_dir: Path, identifier: str, field_name: str) -> Pat
     return path
 
 
-def read_text_confined(path: Path, root: Path) -> str | None:
+def open_confined_read_fd(path: Path, root: Path) -> int | None:
     resolved_root = resolve_path(root)
     resolved_path = resolve_path(path)
     if not path_is_relative_to(resolved_path, resolved_root):
         return None
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
     try:
-        return resolved_path.read_text(encoding="utf-8", errors="replace")
+        fd = os.open(resolved_path, flags)
     except OSError:
         return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            os.close(fd)
+            return None
+        proc_fd_path = Path(f"/proc/self/fd/{fd}")
+        if proc_fd_path.exists():
+            fd_path = resolve_path(Path(os.readlink(proc_fd_path)))
+            if not path_is_relative_to(fd_path, resolved_root):
+                os.close(fd)
+                return None
+        return fd
+    except OSError:
+        os.close(fd)
+        return None
+
+
+def read_text_confined(path: Path, root: Path) -> str | None:
+    fd = open_confined_read_fd(path, root)
+    if fd is None:
+        return None
+    with os.fdopen(fd, "r", encoding="utf-8", errors="replace") as fh:
+        return fh.read()
+
+
+def read_bytes_confined(path: Path, root: Path) -> bytes | None:
+    fd = open_confined_read_fd(path, root)
+    if fd is None:
+        return None
+    with os.fdopen(fd, "rb") as fh:
+        return fh.read()
 
 
 def normalize_model_name(raw_value: Any, field_name: str = "model") -> tuple[str | None, str | None]:
@@ -371,17 +405,21 @@ def normalize_image_paths(raw_value: Any) -> tuple[list[str], str | None]:
 
 def build_inline_image_parts(image_paths: list[str]) -> tuple[list[dict[str, Any]], str | None]:
     parts: list[dict[str, Any]] = []
+    workspace_root = resolve_path(WORKSPACE_ROOT)
     for raw_path in image_paths:
         path = Path(raw_path).expanduser()
-        if not path.is_file():
-            return [], f"image file not found: {raw_path}"
-        mime_type, _ = mimetypes.guess_type(path.name)
+        if not path.is_absolute():
+            path = workspace_root / path
+        resolved_path = resolve_path(path)
+        if not path_is_relative_to(resolved_path, workspace_root):
+            return [], f"image file must stay under workspace root: {raw_path}"
+        mime_type, _ = mimetypes.guess_type(resolved_path.name)
         if not mime_type or not mime_type.startswith("image/"):
             return [], f"unsupported image type for Gemini review: {raw_path}"
-        try:
-            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-        except OSError as exc:
-            return [], f"failed to read image file {raw_path}: {exc}"
+        data = read_bytes_confined(resolved_path, workspace_root)
+        if data is None:
+            return [], f"image file not found or not confined to workspace root: {raw_path}"
+        encoded = base64.b64encode(data).decode("ascii")
         parts.append({"inlineData": {"mimeType": mime_type, "data": encoded}})
     return parts, None
 
@@ -558,8 +596,18 @@ def collect_model_candidates_from_agy_log(text: str, candidates: list[str]) -> N
     candidates.extend(match.strip() for match in matches if match.strip())
 
 
+def transcript_lines_at_or_after_nonce(transcript_text: str, invocation_nonce: str | None) -> list[str] | None:
+    if not invocation_nonce:
+        return None
+    lines = transcript_text.splitlines()
+    for index, line in enumerate(lines):
+        if invocation_nonce in line:
+            return lines[index:]
+    return None
+
+
 def transcript_contains_nonce(transcript_text: str, invocation_nonce: str) -> bool:
-    return invocation_nonce in transcript_text
+    return transcript_lines_at_or_after_nonce(transcript_text, invocation_nonce) is not None
 
 
 def agy_conversation_has_nonce(conversation_id: str, invocation_nonce: str) -> bool:
@@ -578,11 +626,11 @@ def select_agy_conversation_id_from_state(
     *,
     invocation_nonce: str | None = None,
 ) -> tuple[str | None, str | None]:
+    if not invocation_nonce:
+        return None, "invocation_nonce is required for Antigravity transcript recovery"
     conversation_ids = extract_agy_conversation_ids_from_log(log_path)
     if not conversation_ids:
         return None, "could not locate Antigravity conversation id in this invocation's log"
-    if invocation_nonce is None:
-        return conversation_ids[-1], None
     for conversation_id in reversed(conversation_ids):
         if agy_conversation_has_nonce(conversation_id, invocation_nonce):
             return conversation_id, None
@@ -595,6 +643,8 @@ def extract_agy_model_from_state(
     conversation_id: str,
     invocation_nonce: str | None = None,
 ) -> tuple[str | None, str | None]:
+    if not invocation_nonce:
+        return None, "invocation_nonce is required for Antigravity model provenance"
     candidates: list[str] = []
     try:
         log_text = log_path.read_text(encoding="utf-8", errors="replace")
@@ -610,9 +660,10 @@ def extract_agy_model_from_state(
             transcript_text = read_text_confined(transcript_path, conversation_root)
             if transcript_text is None:
                 continue
-            if invocation_nonce is not None and not transcript_contains_nonce(transcript_text, invocation_nonce):
+            scoped_lines = transcript_lines_at_or_after_nonce(transcript_text, invocation_nonce)
+            if scoped_lines is None:
                 continue
-            for line in transcript_text.splitlines():
+            for line in scoped_lines:
                 try:
                     step = json.loads(line)
                 except json.JSONDecodeError:
@@ -627,6 +678,8 @@ def extract_agy_response_from_transcript(
     *,
     invocation_nonce: str | None = None,
 ) -> str | None:
+    if not invocation_nonce:
+        return None
     conversation_root = agy_conversation_root(conversation_id)
     if conversation_root is None:
         return None
@@ -634,11 +687,12 @@ def extract_agy_response_from_transcript(
         transcript_text = read_text_confined(transcript_path, conversation_root)
         if transcript_text is None:
             continue
-        if invocation_nonce is not None and not transcript_contains_nonce(transcript_text, invocation_nonce):
+        scoped_lines = transcript_lines_at_or_after_nonce(transcript_text, invocation_nonce)
+        if scoped_lines is None:
             continue
         final_response: str | None = None
         artifact_paths: list[Path] = []
-        for line in transcript_text.splitlines():
+        for line in scoped_lines:
             try:
                 step = json.loads(line)
             except json.JSONDecodeError:
@@ -666,6 +720,8 @@ def extract_agy_response_from_state(
     *,
     invocation_nonce: str | None = None,
 ) -> tuple[str | None, str | None, str | None]:
+    if not invocation_nonce:
+        return None, "invocation_nonce is required for Antigravity transcript recovery", None
     conversation_id, conversation_error = select_agy_conversation_id_from_state(
         log_path,
         invocation_nonce=invocation_nonce,
@@ -906,6 +962,9 @@ def run_gemini_cli_review(
     if model_error:
         return None, model_error
     if selected_model:
+        model_family_error = require_gemini_model(selected_model, "Gemini CLI")
+        if model_family_error:
+            return None, model_family_error
         cmd.extend(["-m", selected_model])
 
     debug_log(f"RUN gemini-cli model={selected_model or 'default'} output_format=json")
@@ -1015,10 +1074,11 @@ def run_agy_cli_review(
             return None, "Antigravity review failed without process details"
 
         response_text = result.stdout.strip()
+        recovered_conversation_id: str | None = None
         if result.returncode != 0:
             message = result.stderr.strip() or response_text or "unknown error"
             return None, f"Antigravity review failed: {message}"
-        if not response_text or agy_output_is_error(response_text):
+        if response_text and agy_output_is_error(response_text):
             recovered_text, recovered_error, recovered_conversation_id = extract_agy_response_from_state(
                 agy_log_path,
                 invocation_nonce=invocation_nonce,
@@ -1042,18 +1102,7 @@ def run_agy_cli_review(
                     message = f"{message}; {recovered_error}"
                 return None, message
 
-        transcript_text, _, transcript_conversation_id = extract_agy_response_from_state(
-            agy_log_path,
-            invocation_nonce=invocation_nonce,
-        )
-        if transcript_text and len(transcript_text) > len(response_text):
-            response_text = transcript_text
-
-        conversation_id = (
-            recovered_conversation_id
-            if "recovered_conversation_id" in locals() and recovered_conversation_id
-            else transcript_conversation_id
-        )
+        conversation_id = recovered_conversation_id
         if not conversation_id:
             conversation_id, conversation_error = select_agy_conversation_id_from_state(
                 agy_log_path,

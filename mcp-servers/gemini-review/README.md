@@ -58,8 +58,9 @@ is enough for API mode without exporting the variable in every shell.
 - `GEMINI_REVIEW_AGY_PRINT_TIMEOUT`: Antigravity `--print-timeout` value, defaults to `${GEMINI_REVIEW_TIMEOUT_SEC}s`
 - `GEMINI_REVIEW_AGY_APP_DATA_DIR`: Antigravity CLI app data directory, defaults to `~/.gemini/antigravity-cli`
 - `GEMINI_REVIEW_AGY_ARTIFACT_MAX_CHARS`: max characters read from an AGY-generated text artifact, defaults to `200000`
+- `GEMINI_REVIEW_WORKSPACE_ROOT`: workspace root for local `imagePaths`, defaults to the server process current working directory
 - `GEMINI_REVIEW_STATE_DIR`: bridge state directory, defaults to `~/.codex/state/gemini-review`
-- `GEMINI_REVIEW_DEBUG_LOG`: debug log path, defaults to `~/.codex/state/gemini-review/debug.log`
+- `GEMINI_REVIEW_DEBUG_LOG`: debug log path, defaults to `~/.codex/state/gemini-review/debug.log`; custom paths must resolve under `GEMINI_REVIEW_STATE_DIR`
 - `GEMINI_API_KEY`: Gemini API key
 - `GOOGLE_API_KEY`: alternate Gemini API key env var
 
@@ -69,13 +70,13 @@ is enough for API mode without exporting the variable in every shell.
 - `GEMINI_REVIEW_BACKEND=auto` is still supported if you want API-first auto-selection; it uses the API when a Gemini API key is configured and otherwise falls back to the Gemini CLI. Antigravity is never selected by `auto`; use `GEMINI_REVIEW_BACKEND=agy` explicitly.
 - `GEMINI_REVIEW_BACKEND=agy` routes review prompts through `agy --print`, which is useful when you want Codex to keep the MCP contract but use Antigravity CLI authentication/model routing. Because `agy --print` can exit successfully after writing a conversation transcript or generated artifact without printing the final text to stdout, the bridge passes a per-call `--log-file` and can recover from the Antigravity transcript for that same invocation only.
 - The `agy` backend is fail-closed for ARIS's cross-model invariant: the bridge cannot choose the Antigravity model per call, so it treats Antigravity's selected model as external configuration. After each call it must recover an actual Gemini-family model id from the current invocation's log/transcript and returns that id as `model`. If a caller passes a `model` value, the response also includes `requested_model` and a `warning` because the current `agy` CLI does not expose per-call model selection. If Antigravity routes the request to a non-Gemini model, or the log/transcript does not expose a model id, the call fails instead of returning an unauditable `"agy-cli"` placeholder.
-- Antigravity transcript recovery validates conversation ids with `^[0-9A-Za-z_-]+$` and reads generated text artifacts only if their resolved `file://` path stays under `GEMINI_REVIEW_AGY_APP_DATA_DIR/brain/<conversation>/`.
+- Antigravity transcript recovery validates conversation ids with `^[0-9A-Za-z_-]+$`, caps ids at 128 characters, requires the per-call invocation nonce, and only considers transcript lines at or after the nonce line. Generated text artifacts are read only if their resolved `file://` path stays under `GEMINI_REVIEW_AGY_APP_DATA_DIR/brain/<conversation>/`.
 - If the default API model is temporarily rate-limited on your current free-tier window, keep the same bridge and set `GEMINI_REVIEW_MODEL=gemini-flash-latest` as a model override.
 - The `tools` argument is accepted for compatibility with existing skills, but is ignored. This matches the original pattern where the external reviewer only sees the prompt context prepared by Codex.
-- `imagePaths` / `image_paths` are supported only by the direct Gemini API backend in this bridge. CLI and `agy` fallback paths remain text-only.
+- `imagePaths` / `image_paths` are supported only by the direct Gemini API backend in this bridge. Paths must resolve under `GEMINI_REVIEW_WORKSPACE_ROOT` and are opened with no-symlink safeguards where supported. CLI and `agy` fallback paths remain text-only.
 - `threadId` is a bridge-local conversation id persisted under `~/.codex/state/gemini-review/threads/` by default and can be passed to `review_reply`.
 - `jobId` is a bridge-local background task id stored under `~/.codex/state/gemini-review/jobs/` by default, so status can be resumed across MCP server restarts.
-- State files contain review prompts/responses so async jobs and threads can resume. The bridge creates state, thread, job, debug-log, and per-call `agy` log directories with owner-only permissions where possible; `agy` per-call log directories are temporary and are removed after the call. Delete `GEMINI_REVIEW_STATE_DIR` when you no longer need resumability. If you override `GEMINI_REVIEW_DEBUG_LOG` or `GEMINI_REVIEW_STATE_DIR`, choose a private directory rather than a shared `/tmp` path.
+- State files contain review prompts/responses so async jobs and threads can resume. The bridge creates state, thread, job, debug-log, and per-call `agy` log directories with owner-only permissions where possible; `agy` per-call log directories are temporary and are removed after the call. Delete `GEMINI_REVIEW_STATE_DIR` when you no longer need resumability. If you override `GEMINI_REVIEW_STATE_DIR`, choose a private directory rather than a shared `/tmp` path.
 - This is intentionally a narrow, repo-local adapter. We did not directly vendor a generic Gemini MCP server, because the ARIS reviewer-aware skills expect the specific `review` / `review_reply` / `review_start` / `review_reply_start` / `review_status` interface and resumable review-thread semantics.
 
 ## Validation
