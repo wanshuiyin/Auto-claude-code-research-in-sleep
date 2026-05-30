@@ -308,11 +308,17 @@ def resolved_fd_path(fd: int) -> Path | None:
 
 
 def read_text_confined(path: Path, root: Path) -> str | None:
+    result = read_text_confined_with_stat(path, root)
+    return result[0] if result is not None else None
+
+
+def read_text_confined_with_stat(path: Path, root: Path) -> tuple[str, os.stat_result] | None:
     fd = open_confined_read_fd(path, root)
     if fd is None:
         return None
     with os.fdopen(fd, "r", encoding="utf-8", errors="replace") as fh:
-        return fh.read()
+        file_stat = os.fstat(fh.fileno())
+        return fh.read(), file_stat
 
 
 def read_bytes_confined(path: Path, root: Path) -> bytes | None:
@@ -569,11 +575,19 @@ def agy_transcript_paths(conversation_id: str) -> list[Path]:
     return [logs_dir / "transcript_full.jsonl", logs_dir / "transcript.jsonl"]
 
 
-def agy_artifact_text(path: Path, *, conversation_root: Path) -> str | None:
+def agy_artifact_text(
+    path: Path,
+    *,
+    conversation_root: Path,
+    artifact_min_mtime: float | None = None,
+) -> str | None:
     if path.suffix.lower() not in {".md", ".markdown", ".txt", ".json", ".yaml", ".yml"}:
         return None
-    text = read_text_confined(path, conversation_root)
-    if text is None:
+    result = read_text_confined_with_stat(path, conversation_root)
+    if result is None:
+        return None
+    text, file_stat = result
+    if artifact_min_mtime is not None and file_stat.st_mtime < artifact_min_mtime - 1.0:
         return None
     text = text.strip()
     if not text:
@@ -711,6 +725,7 @@ def extract_agy_response_from_transcript(
     conversation_id: str,
     *,
     invocation_nonce: str | None = None,
+    artifact_min_mtime: float | None = None,
 ) -> str | None:
     if not invocation_nonce:
         return None
@@ -739,14 +754,18 @@ def extract_agy_response_from_transcript(
                 final_response = content.strip()
                 artifact_paths = extract_file_uri_paths(content)
 
-        if final_response and strip_file_uri_refs(final_response):
-            return final_response
-        for path in reversed(artifact_paths):
-            artifact = agy_artifact_text(path, conversation_root=conversation_root)
-            if artifact:
-                return artifact
         if final_response:
-            return final_response
+            if strip_file_uri_refs(final_response):
+                return final_response
+            for path in reversed(artifact_paths):
+                artifact = agy_artifact_text(
+                    path,
+                    conversation_root=conversation_root,
+                    artifact_min_mtime=artifact_min_mtime,
+                )
+                if artifact:
+                    return artifact
+            return None
     return None
 
 
@@ -754,6 +773,7 @@ def extract_agy_response_from_state(
     log_path: Path,
     *,
     invocation_nonce: str | None = None,
+    artifact_min_mtime: float | None = None,
 ) -> tuple[str | None, str | None, str | None]:
     if not invocation_nonce:
         return None, "invocation_nonce is required for Antigravity transcript recovery", None
@@ -766,6 +786,7 @@ def extract_agy_response_from_state(
     response = extract_agy_response_from_transcript(
         conversation_id,
         invocation_nonce=invocation_nonce,
+        artifact_min_mtime=artifact_min_mtime,
     )
     if response:
         debug_log(f"AGY_TRANSCRIPT_RECOVERED conversation={conversation_id}")
@@ -1097,6 +1118,7 @@ def run_agy_cli_review(
 
         debug_log(f"RUN agy-cli timeout={DEFAULT_AGY_PRINT_TIMEOUT} log={agy_log_path}")
         try:
+            invocation_started_at = time.time()
             result, process_error, duration_ms = run_process_tree(
                 cmd,
                 timeout_sec=DEFAULT_TIMEOUT_SEC + 15,
@@ -1117,6 +1139,7 @@ def run_agy_cli_review(
             recovered_text, recovered_error, recovered_conversation_id = extract_agy_response_from_state(
                 agy_log_path,
                 invocation_nonce=invocation_nonce,
+                artifact_min_mtime=invocation_started_at,
             )
             if recovered_text:
                 response_text = recovered_text
@@ -1128,6 +1151,7 @@ def run_agy_cli_review(
             recovered_text, recovered_error, recovered_conversation_id = extract_agy_response_from_state(
                 agy_log_path,
                 invocation_nonce=invocation_nonce,
+                artifact_min_mtime=invocation_started_at,
             )
             if recovered_text:
                 response_text = recovered_text
