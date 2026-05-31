@@ -1,7 +1,7 @@
 ---
 name: wiki-enrich
 description: "Fill in the per-paper TODO sections (Problem/Method/Key Results/Limitations/Reusable Ingredients/...) of research-wiki/papers/<slug>.md pages that /research-lit, /arxiv, /alphaxiv, /deepxiv, /semantic-scholar, /exa-search ingest as bare scaffolds. Implements the Karpathy LLM-wiki principle that the LLM (not the human) writes and maintains wiki bodies. Use when user says 'enrich wiki', 'fill paper TODOs', 'wiki body 補完', '把 paper 摘要寫進 wiki', 'research-wiki 自動填', or after a batch ingest that left papers/ as TODO scaffolds."
-argument-hint: [target: slug|missing|all] [--source alphaxiv|deepxiv|arxiv|auto] [--force] [--max N]
+argument-hint: "[target: slug|missing|all] [--source alphaxiv|deepxiv|arxiv|auto] [--force] [--max N]"
 allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep, WebFetch
 ---
 
