@@ -86,6 +86,7 @@ MODEL_KEY_NAMES = {
     "currentmodel",
     "reviewermodel",
 }
+PRIVATE_ENV_KEYS = {"GEMINI_API_KEY", "GOOGLE_API_KEY"}
 DEBUG_REDACT_KEYS = {"prompt", "system", "content", "text", "history", "imagePaths", "image_paths"}
 MODEL_UNTRUSTED_CONTAINER_KEYS = {
     "content",
@@ -395,11 +396,12 @@ def read_json(path: Path) -> dict[str, Any]:
 
 def load_private_env_file(env_file: Path | None = None) -> list[str]:
     target = env_file or (Path.home() / ".gemini" / ".env")
-    if not target.is_file():
+    lines = read_private_env_lines(target)
+    if lines is None:
         return []
 
     loaded: list[str] = []
-    for raw_line in target.read_text(encoding="utf-8").splitlines():
+    for raw_line in lines:
         line = raw_line.strip()
         if not line or line.startswith("#"):
             continue
@@ -410,7 +412,7 @@ def load_private_env_file(env_file: Path | None = None) -> list[str]:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip()
-        if not key:
+        if key not in PRIVATE_ENV_KEYS:
             continue
         if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
             value = value[1:-1]
@@ -418,6 +420,40 @@ def load_private_env_file(env_file: Path | None = None) -> list[str]:
             os.environ[key] = value
             loaded.append(key)
     return loaded
+
+
+def read_private_env_lines(path: Path) -> list[str] | None:
+    target = path.expanduser()
+    flags = os.O_RDONLY
+    if hasattr(os, "O_CLOEXEC"):
+        flags |= os.O_CLOEXEC
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        stat_before = os.lstat(target)
+        if stat.S_ISLNK(stat_before.st_mode) or not stat.S_ISREG(stat_before.st_mode):
+            return None
+        if stat_before.st_mode & 0o022:
+            return None
+        if hasattr(os, "getuid") and stat_before.st_uid != os.getuid():
+            return None
+        fd = os.open(target, flags)
+    except OSError:
+        return None
+    try:
+        stat_after = os.fstat(fd)
+        if not stat.S_ISREG(stat_after.st_mode) or stat_after.st_mode & 0o022:
+            return None
+        if hasattr(os, "getuid") and stat_after.st_uid != os.getuid():
+            return None
+        if (stat_before.st_dev, stat_before.st_ino) != (stat_after.st_dev, stat_after.st_ino):
+            return None
+        with os.fdopen(fd, "r", encoding="utf-8", errors="replace") as fh:
+            fd = -1
+            return fh.read().splitlines()
+    finally:
+        if fd >= 0:
+            os.close(fd)
 
 
 def normalize_image_paths(raw_value: Any) -> tuple[list[str], str | None]:
@@ -644,12 +680,44 @@ def collect_model_candidates_from_agy_log(text: str, candidates: list[str]) -> N
     candidates.extend(match.strip() for match in matches if match.strip())
 
 
+def transcript_step_is_user_event(step: dict[str, Any]) -> bool:
+    source = str(step.get("source", "")).upper()
+    role = str(step.get("role", "")).lower()
+    step_type = str(step.get("type", "")).upper()
+    author = str(step.get("author", "")).lower()
+    return (
+        source in {"USER", "USER_EXPLICIT", "USER_IMPLICIT"}
+        or role == "user"
+        or author == "user"
+        or step_type in {"USER_INPUT", "USER_MESSAGE"}
+    )
+
+
+def transcript_step_contains_nonce(step: dict[str, Any], invocation_nonce: str) -> bool:
+    content = step.get("content")
+    if isinstance(content, str):
+        return invocation_nonce in content
+    if isinstance(content, list):
+        return any(isinstance(item, str) and invocation_nonce in item for item in content)
+    if isinstance(content, dict):
+        return invocation_nonce in json.dumps(content, ensure_ascii=False)
+    return False
+
+
 def transcript_lines_at_or_after_nonce(transcript_text: str, invocation_nonce: str | None) -> list[str] | None:
     if not invocation_nonce:
         return None
     lines = transcript_text.splitlines()
     for index, line in enumerate(lines):
-        if invocation_nonce in line:
+        try:
+            step = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if (
+            isinstance(step, dict)
+            and transcript_step_is_user_event(step)
+            and transcript_step_contains_nonce(step, invocation_nonce)
+        ):
             return lines[index:]
     return None
 
