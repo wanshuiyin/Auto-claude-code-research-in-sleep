@@ -321,7 +321,13 @@ for s in "${MERGE_SKILLS[@]:-}"; do
         # Show what personal patterns were found
         local_file="$LOCAL_DIR/$s/SKILL.md"
         for pattern in "${PERSONAL_PATTERNS[@]}"; do
-            match=$(grep -n "$pattern" "$local_file" 2>/dev/null | head -1)
+            # `|| true`: under `set -euo pipefail` this assignment would otherwise
+            # abort the whole script — grep exits 1 on no-match, and even on a match
+            # `head -1` closes the pipe early so grep dies with SIGPIPE (141). Either
+            # way pipefail propagates the failure and `set -e` kills the run *before*
+            # the Summary and the apply block, so `--apply` silently writes nothing
+            # whenever a skill is flagged "needs merge".
+            match=$(grep -n "$pattern" "$local_file" 2>/dev/null | head -1 || true)
             if [[ -n "$match" ]]; then
                 echo -e "     ${YELLOW}→ contains: ${match}${NC}"
                 break
