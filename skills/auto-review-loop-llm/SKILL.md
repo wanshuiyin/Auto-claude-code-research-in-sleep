@@ -57,7 +57,7 @@ Add to `~/.claude/settings.json`:
 |----------|--------------|-----------|
 | **OpenAI** | `https://api.openai.com/v1` | `gpt-4o`, `o3` |
 | **DeepSeek** | `https://api.deepseek.com/v1` | `deepseek-chat`, `deepseek-reasoner` |
-| **MiniMax** | `https://api.minimax.io/v1` | `MiniMax-M2.7` |
+| **MiniMax** | `https://api.minimax.io/v1` | `MiniMax-M3` |
 | **Kimi (Moonshot)** | `https://api.moonshot.cn/v1` | `moonshot-v1-8k`, `moonshot-v1-32k` |
 | **ZhiPu (GLM)** | `https://open.bigmodel.cn/api/paas/v4` | `glm-4`, `glm-4-plus` |
 | **SiliconFlow** | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-72B-Instruct` |

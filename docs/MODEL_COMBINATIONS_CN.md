@@ -15,9 +15,9 @@
 |---|--------|--------|:---:|:---:|---------|
 | **默认** ⭐ | Claude Opus/Sonnet | GPT-5.5（Codex MCP） | 是 | 是 | [快速开始](#quick-start) |
 | **方案 A** | GLM-5（Z.ai） | GPT-5.5（Codex MCP） | 否 | 是 | [配置见下](#alt-a-glm--gpt) |
-| **方案 B** | GLM-5（Z.ai） | MiniMax-M2.7 | 否 | 否 | [MINIMAX_MCP_GUIDE](docs/MINIMAX_MCP_GUIDE.md) |
+| **方案 B** | GLM-5（Z.ai） | MiniMax-M3 | 否 | 否 | [MINIMAX_MCP_GUIDE](docs/MINIMAX_MCP_GUIDE.md) |
 | **方案 C** | 任意 CC 兼容 | 任意 OpenAI 兼容 | 否 | 否 | [LLM_API_MIX_MATCH_GUIDE](docs/LLM_API_MIX_MATCH_GUIDE.md) |
-| **方案 D** | Kimi-K2.5 / Qwen3.5+ | GLM-5 / MiniMax-M2.7 | 否 | 否 | [ALI_CODING_PLAN_GUIDE](docs/ALI_CODING_PLAN_GUIDE.md) |
+| **方案 D** | Kimi-K2.5 / Qwen3.5+ | GLM-5 / MiniMax-M3 | 否 | 否 | [ALI_CODING_PLAN_GUIDE](docs/ALI_CODING_PLAN_GUIDE.md) |
 | **方案 E** 🆓 | DeepSeek-V3.1 / Qwen3-Coder | DeepSeek-R1 / Qwen3-235B | 否 | 否 | [MODELSCOPE_GUIDE](docs/MODELSCOPE_GUIDE.md) |
 | **方案 F** | Codex CLI (GPT-5.5) | Codex `spawn_agent` (GPT-5.5) | 否 | 是 | [skills-codex/](skills/skills-codex/) |
 | **方案 G** 🆕 | Codex CLI | Claude Code CLI（`claude-review` MCP） | 否* | 否* | [CODEX_CLAUDE_REVIEW_GUIDE_CN](docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md) |

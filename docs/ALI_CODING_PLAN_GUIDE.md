@@ -17,7 +17,7 @@
 | `qwen3.5-plus` | 是 | 执行器轻量任务 / 读图 | ~94 tokens/s |
 | `kimi-k2.5` | 是 | 执行器主力（综合能力强） | ~42 tokens/s |
 | `glm-5` | 否 | 审查器主力（推理质量高） | ~51 tokens/s |
-| `MiniMax-M2.7` | 否 | 审查器备选（速度最快） | ~101 tokens/s |
+| `MiniMax-M3` | 否 | 审查器备选（速度最快） | ~101 tokens/s |
 
 ### 为什么不能直接用 Codex MCP
 
@@ -121,7 +121,7 @@ cp -r skills/* ~/.claude/skills/
     "ANTHROPIC_BASE_URL": "https://coding.dashscope.aliyuncs.com/apps/anthropic",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "kimi-k2.5",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "qwen3.5-plus",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M2.7",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M3",
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "6000"
   },
@@ -166,7 +166,7 @@ Claude Code 会自动：
 | 场景 | 执行器（OPUS 位） | 审查器（llm-chat） | 说明 |
 |------|-----------------|------------------|------|
 | **推荐：能力均衡** | `kimi-k2.5` | `glm-5` | kimi 执行综合能力强，glm-5 推理审查严谨 |
-| 备选：速度优先 | `qwen3.5-plus` | `MiniMax-M2.7` | 两者出词最快，适合快速迭代和调试 |
+| 备选：速度优先 | `qwen3.5-plus` | `MiniMax-M3` | 两者出词最快，适合快速迭代和调试 |
 | 备选：测试阶段 | `qwen3.5-plus` | `glm-5` | 执行轻量省请求次数，审查保持质量 |
 
 > **关于跨模型优势**：ARIS 的核心设计是执行器和审查器使用不同模型，互不审自己的输出，形成真正的反馈循环。如果两端用同一模型（如都用 kimi-k2.5），会部分削弱这一优势。
@@ -275,7 +275,7 @@ claude
 | | 默认方案 | **本方案（Coding Plan）** | MiniMax 方案 | GLM + DeepSeek |
 |---|---|---|---|---|
 | 执行器 | Claude Opus/Sonnet | kimi-k2.5 / qwen3.5-plus | GLM-5 (Z.ai) | GLM-5 (Z.ai) |
-| 审查器 | GPT-5.5 (Codex MCP) | glm-5 / MiniMax-M2.7 | MiniMax-M2.7 | DeepSeek |
+| 审查器 | GPT-5.5 (Codex MCP) | glm-5 / MiniMax-M3 | MiniMax-M3 | DeepSeek |
 | 需要 Claude API | 是 | **否** | 否 | 否 |
 | 需要 OpenAI API | 是 | **否** | 否 | 否 |
 | API Key 数量 | 2 个 | **1 个** | 2 个 | 2 个 |
@@ -308,7 +308,7 @@ Coding Plan 专属 API Key 与百炼平台按量调用 Key 不互通。确认在
 
 Coding Plan 明确禁止"非交互式批量调用"，过夜无人值守的自动化循环存在封禁风险。建议改用百炼按量计费 Key 或其他无此限制的提供商。
 
-**Q：如何切换审查器模型（如从 glm-5 改为 MiniMax-M2.7）？**
+**Q：如何切换审查器模型（如从 glm-5 改为 MiniMax-M3）？**
 
 修改 `~/.claude/settings.json` 中 `mcpServers.llm-chat.env.LLM_MODEL` 的值，重启 Claude Code 即可生效。
 

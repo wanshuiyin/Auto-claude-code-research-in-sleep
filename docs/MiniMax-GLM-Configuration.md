@@ -1,8 +1,8 @@
-# MiniMax-M2.7 + GLM 配置教程 (Alt C)
+# MiniMax-M3 + GLM 配置教程 (Alt C)
 
 ## 概述
 
-此配置方案使用 **MiniMax-M2.7** 作为执行者（Executor），**GLM-5** 作为审稿人（Reviewer）。
+此配置方案使用 **MiniMax-M3** 作为执行者（Executor），**GLM-5** 作为审稿人（Reviewer）。
 
 与方案 B（GLM + MiniMax）正好相反——适合需要 MiniMax 强大推理能力作为主力，GLM 进行代码审查的场景。
 
@@ -10,7 +10,7 @@
 
 | 角色 | 方案 A：GLM + GPT | 方案 B：GLM + MiniMax | 方案 C：MiniMax + GLM |
 |------|-------------------|----------------------|----------------------|
-| 执行者（Claude Code） | GLM-5（智谱 API） | GLM-5（智谱 API） | MiniMax-M2.7（MiniMax API） |
+| 执行者（Claude Code） | GLM-5（智谱 API） | GLM-5（智谱 API） | MiniMax-M3（MiniMax API） |
 | 审稿人（Skill 工具） | `mcp__codex__codex` | `mcp__llm-chat__chat` | `mcp__llm-chat__chat` |
 | 需要 OpenAI API？ | 是 | **否** | **否** |
 
@@ -47,9 +47,9 @@ nano ~/.claude/settings.json
         "ANTHROPIC_AUTH_TOKEN": "your_minimax_api_key",
         "ANTHROPIC_BASE_URL": "https://api.minimax.io/anthropic",
         "API_TIMEOUT_MS": "3000000",
-        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M2.7",
-        "ANTHROPIC_DEFAULT_SONNET_MODEL": "MiniMax-M2.7",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": "MiniMax-M2.7"
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "MiniMax-M3",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "MiniMax-M3",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "MiniMax-M3"
     },
     "mcpServers": {
         "llm-chat": {
@@ -93,7 +93,7 @@ claude
 |--------|-----|------|
 | `ANTHROPIC_AUTH_TOKEN` | MiniMax API Key | 从 [MiniMax 开放平台](https://www.minimaxi.com/) 获取 |
 | `ANTHROPIC_BASE_URL` | `https://api.minimax.io/anthropic` | MiniMax Anthropic 兼容端点 |
-| `ANTHROPIC_DEFAULT_*_MODEL` | `MiniMax-M2.7` | 使用 MiniMax-M2.7 作为所有模型 |
+| `ANTHROPIC_DEFAULT_*_MODEL` | `MiniMax-M3` | 使用 MiniMax-M3 作为所有模型 |
 
 ### 审稿人配置（GLM via llm-chat MCP）
 
@@ -130,7 +130,7 @@ claude
                               │
                               ▼
               ┌───────────────────────────────┐
-              │      MiniMax-M2.7             │
+              │      MiniMax-M3               │
               │      (Executor)               │
               │                               │
               │  • 理解研究任务                 │
@@ -165,7 +165,7 @@ claude
 |--|----------------------|----------------------|
 | 审稿人 API | MiniMax OpenAI 兼容 API | GLM OpenAI 兼容 API |
 | MCP 工具 | `mcp__codex__codex` | `mcp__glm__chat` |
-| 模型 | MiniMax-M2.5 | GLM-5 |
+| 模型 | MiniMax-M3 | GLM-5 |
 
 ## 常见问题
 

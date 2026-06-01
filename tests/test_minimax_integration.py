@@ -55,10 +55,13 @@ class TestMCPInitializationFlow(unittest.TestCase):
         self.assertEqual(len(tools), 1)
         self.assertEqual(tools[0]["name"], "minimax_chat")
 
-        # Verify M2.7 models are listed
+        # Verify M3 + M2.7 models are listed
         model_enum = tools[0]["inputSchema"]["properties"]["model"]["enum"]
+        self.assertIn("MiniMax-M3", model_enum)
         self.assertIn("MiniMax-M2.7", model_enum)
         self.assertIn("MiniMax-M2.7-highspeed", model_enum)
+        # Older M2.5 variants have been removed
+        self.assertNotIn("MiniMax-M2.5", model_enum)
 
     def test_ping_during_session(self):
         """Ping should work at any point during the session."""
@@ -161,6 +164,25 @@ class TestLiveAPI(unittest.TestCase):
     Only run when MINIMAX_API_KEY is set in the environment.
     """
 
+    def test_live_m3_chat(self):
+        """Live test: send a simple prompt to MiniMax-M3 (default)."""
+        from _minimax_helpers import call_minimax
+        # Temporarily set the API key
+        import _minimax_helpers
+        original_key = _minimax_helpers.MINIMAX_API_KEY
+        _minimax_helpers.MINIMAX_API_KEY = MINIMAX_API_KEY
+        try:
+            content, error = call_minimax(
+                [{"role": "user", "content": "Say 'hello' and nothing else."}],
+                model="MiniMax-M3",
+                temperature=0.1
+            )
+            self.assertIsNone(error, f"API returned error: {error}")
+            self.assertIsNotNone(content)
+            self.assertIn("hello", content.lower())
+        finally:
+            _minimax_helpers.MINIMAX_API_KEY = original_key
+
     def test_live_m27_chat(self):
         """Live test: send a simple prompt to MiniMax-M2.7."""
         from _minimax_helpers import call_minimax
@@ -207,7 +229,7 @@ class TestLiveAPI(unittest.TestCase):
                 resp = client.post(
                     "https://api.minimax.io/v1/chat/completions",
                     headers={"Content-Type": "application/json"},
-                    json={"model": "MiniMax-M2.7", "messages": []}
+                    json={"model": "MiniMax-M3", "messages": []}
                 )
                 # Should get 401 (no auth) or 400 (bad request), NOT connection error
                 self.assertIn(resp.status_code, [400, 401, 403, 422])

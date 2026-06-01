@@ -59,7 +59,7 @@ pip3 install -r mcp-servers/minimax-chat/requirements.txt
       "env": {
         "MINIMAX_API_KEY": "你的MiniMax API Key",
         "MINIMAX_BASE_URL": "https://api.minimax.io/v1",
-        "MINIMAX_MODEL": "MiniMax-M2.7"
+        "MINIMAX_MODEL": "MiniMax-M3"
       }
     }
   }
@@ -155,7 +155,7 @@ curl -s "https://api.minimax.io/v1/chat/completions" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $MINIMAX_API_KEY" \
   -d '{
-    "model": "MiniMax-M2.7",
+    "model": "MiniMax-M3",
     "messages": [{"role": "user", "content": "Say hello"}],
     "max_tokens": 50
   }'

@@ -241,7 +241,7 @@ claude
 | | 默认方案 | Coding Plan | **本方案（ModelScope）** | GLM + MiniMax |
 |---|---|---|---|---|
 | 执行器 | Claude Opus/Sonnet | kimi-k2.5 | **DeepSeek-V4-Pro** | GLM-5 (Z.ai) |
-| 审查器 | GPT-5.5 (Codex MCP) | glm-5 | **DeepSeek-R1** | MiniMax-M2.7 |
+| 审查器 | GPT-5.5 (Codex MCP) | glm-5 | **DeepSeek-R1** | MiniMax-M3 |
 | 需要 Claude API | 是 | 否 | **否** | 否 |
 | 需要 OpenAI API | 是 | 否 | **否** | 否 |
 | 费用 | 按量 | 套餐付费 | **免费（2000次/天）** | 按量 |
