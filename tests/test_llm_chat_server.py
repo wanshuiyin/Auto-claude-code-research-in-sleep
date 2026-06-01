@@ -8,6 +8,7 @@ Tests cover:
 """
 
 import os
+import subprocess
 import sys
 import unittest
 from unittest.mock import patch, MagicMock, call
@@ -194,6 +195,103 @@ class TestCallLlmSuccess(unittest.TestCase):
         content, error = call_llm([{"role": "user", "content": "test"}])
         self.assertIsNone(content)
         self.assertIn("LLM_API_KEY", error)
+
+
+class TestCodexCliBackend(unittest.TestCase):
+    """Test the Codex CLI backend used for OAuth-authenticated Codex accounts."""
+
+    @patch("tests._llm_chat_helpers.BACKEND", "codex-cli")
+    @patch("tests._llm_chat_helpers.LLM_API_KEY", "")
+    @patch("tests._llm_chat_helpers.CODEX_BIN", "codex-test")
+    @patch("tests._llm_chat_helpers.CODEX_WORKDIR", "/tmp")
+    @patch("subprocess.run")
+    def test_codex_backend_works_without_api_key(self, mock_run):
+        """codex-cli backend should call codex exec and not require LLM_API_KEY."""
+        from tests._llm_chat_helpers import call_llm
+        output_paths = []
+
+        def run_side_effect(cmd, **kwargs):
+            output_path = cmd[cmd.index("--output-last-message") + 1]
+            output_paths.append(output_path)
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write("Codex reply")
+            completed = MagicMock()
+            completed.returncode = 0
+            completed.stdout = ""
+            completed.stderr = ""
+            return completed
+
+        mock_run.side_effect = run_side_effect
+
+        content, error = call_llm(
+            [
+                {"role": "system", "content": "You are concise"},
+                {"role": "user", "content": "hello"},
+            ],
+            model="gpt-5.5",
+        )
+
+        self.assertIsNone(error)
+        self.assertEqual(content, "Codex reply")
+
+        cmd = mock_run.call_args[0][0]
+        self.assertEqual(cmd[:6], ["codex-test", "exec", "--disable", "plugins", "-m", "gpt-5.5"])
+        self.assertEqual(cmd[cmd.index("-C") + 1], "/tmp")
+        self.assertIn("--ephemeral", cmd)
+        self.assertEqual(cmd[cmd.index("--sandbox") + 1], "read-only")
+        self.assertIn("--output-last-message", cmd)
+        self.assertEqual(cmd[-1], "-")
+        self.assertEqual(mock_run.call_args[1]["input"], "SYSTEM:\nYou are concise\n\nUSER:\nhello")
+        self.assertEqual(mock_run.call_args[1]["timeout"], 600)
+        self.assertFalse(os.path.exists(output_paths[0]))
+
+    @patch("tests._llm_chat_helpers.BACKEND", "auto")
+    @patch("tests._llm_chat_helpers.LLM_API_KEY", "")
+    def test_auto_backend_uses_codex_when_api_key_missing(self):
+        """auto backend should fall back to codex-cli when no API key is configured."""
+        from tests._llm_chat_helpers import resolve_backend
+        self.assertEqual(resolve_backend(), "codex-cli")
+
+    @patch("tests._llm_chat_helpers.BACKEND", "codex-cli")
+    @patch("tests._llm_chat_helpers.CODEX_WORKDIR", "/tmp")
+    @patch("subprocess.run")
+    def test_codex_backend_surfaces_cli_errors(self, mock_run):
+        """Non-zero codex exec exits should be returned as tool errors."""
+        completed = MagicMock()
+        completed.returncode = 1
+        completed.stdout = ""
+        completed.stderr = "Not logged in"
+        mock_run.return_value = completed
+
+        from tests._llm_chat_helpers import call_llm
+        content, error = call_llm([{"role": "user", "content": "hello"}])
+
+        self.assertIsNone(content)
+        self.assertIn("Not logged in", error)
+
+    @patch("tests._llm_chat_helpers.BACKEND", "codex-cli")
+    @patch("tests._llm_chat_helpers.CODEX_BIN", "missing-codex")
+    @patch("tests._llm_chat_helpers.CODEX_WORKDIR", "/tmp")
+    @patch("subprocess.run", side_effect=FileNotFoundError)
+    def test_codex_backend_surfaces_missing_binary(self, _mock_run):
+        """Misconfigured CODEX_BIN should return a clear error."""
+        from tests._llm_chat_helpers import call_llm
+        content, error = call_llm([{"role": "user", "content": "hello"}])
+
+        self.assertIsNone(content)
+        self.assertEqual(error, "Codex CLI not found: missing-codex")
+
+    @patch("tests._llm_chat_helpers.BACKEND", "codex-cli")
+    @patch("tests._llm_chat_helpers.CODEX_TIMEOUT_SECS", 17)
+    @patch("tests._llm_chat_helpers.CODEX_WORKDIR", "/tmp")
+    @patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["codex"], timeout=17))
+    def test_codex_backend_surfaces_timeout(self, _mock_run):
+        """Codex CLI timeout should return a bounded, actionable error."""
+        from tests._llm_chat_helpers import call_llm
+        content, error = call_llm([{"role": "user", "content": "hello"}])
+
+        self.assertIsNone(content)
+        self.assertIn("timed out after 17s", error)
 
 
 class TestCallLlm504Retry(unittest.TestCase):
@@ -387,6 +485,12 @@ class TestToolCallFullFlow(unittest.TestCase):
 
 class TestDefaultConfig(unittest.TestCase):
     """Test default configuration values."""
+
+    @patch.dict(os.environ, {"CODEX_TIMEOUT_SECS": "not-a-number"})
+    def test_invalid_timeout_env_falls_back(self):
+        """Invalid CODEX_TIMEOUT_SECS values should not crash server startup."""
+        from tests._llm_chat_helpers import parse_int_env
+        self.assertEqual(parse_int_env("CODEX_TIMEOUT_SECS", 600), 600)
 
     def test_default_base_url(self):
         """Default base URL should be OpenAI API."""
