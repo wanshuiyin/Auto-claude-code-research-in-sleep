@@ -18,7 +18,7 @@ ARIS is a research harness: composable Markdown skills that orchestrate the ML r
 | Codex + Claude-review | `skills/skills-codex-claude-review/` | Overlay on top of `skills-codex/` |
 | Codex + Gemini-review | `skills/skills-codex-gemini-review/` | Same pattern, Gemini reviewer |
 
-**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **77 skills**, grouped by role.
+**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **78 skills**, grouped by role.
 
 Invocation syntax is identical across hosts:
 ```

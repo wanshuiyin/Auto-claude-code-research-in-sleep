@@ -1,6 +1,6 @@
 # ARIS Skills Catalog
 
-Every skill that ships with ARIS, grouped by role. **77 skills** as of the
+Every skill that ships with ARIS, grouped by role. **78 skills** as of the
 latest update; new skills land via PR and get added to the table below.
 
 - Each `Skill` link goes to the canonical `SKILL.md` (the LLM-readable spec).
@@ -39,6 +39,7 @@ End-to-end pipelines that chain many sub-skills. Most users start here.
 | [`/patent-pipeline`](../skills/patent-pipeline/SKILL.md) | Full patent drafting — invention → claims → spec → jurisdiction format (CN / US / EP) | Codex MCP |
 | [`/dse-loop`](../skills/dse-loop/SKILL.md) | Autonomous design-space exploration loop for computer architecture / EDA — run → analyze → tune → iterate until objective met | Domain-specific tools |
 | [`/meta-optimize`](../skills/meta-optimize/SKILL.md) | **Workflow M** — analyze ARIS usage logs and propose SKILL.md / prompt / default-parameter improvements (outer-loop self-evolution) | Codex MCP, hook logging |
+| [`/meta-apply`](../skills/meta-apply/SKILL.md) | **Privileged landing gate** — the only skill allowed to mutate the skill corpus; lands `/meta-optimize` patches the human approved, after a fresh cross-model jury PASS on the staged diff (read-only producer ≠ privileged applier) | Codex MCP, human-in-loop |
 
 ## 📚 Literature & Search
 

@@ -503,12 +503,12 @@ See [full setup guide](#setup) for details and [alternative model combinations](
 
 ## 4. ✨ Features
 
-ARIS chains **77 composable skills** across the whole research lifecycle — literature & novelty → idea discovery → GPU experiments → autonomous review loop → paper writing → peer review — with **cross-model adversarial review** (Claude executes · GPT-5.5 xhigh reviews · optional **GPT-5.5 Pro** via Oracle), anti-hallucination DBLP/CrossRef citations, a persistent **Research Wiki**, flexible model backends, human-in-the-loop checkpoints, and optional Feishu / Zotero / Obsidian / GPU integrations.
+ARIS chains **78 composable skills** across the whole research lifecycle — literature & novelty → idea discovery → GPU experiments → autonomous review loop → paper writing → peer review — with **cross-model adversarial review** (Claude executes · GPT-5.5 xhigh reviews · optional **GPT-5.5 Pro** via Oracle), anti-hallucination DBLP/CrossRef citations, a persistent **Research Wiki**, flexible model backends, human-in-the-loop checkpoints, and optional Feishu / Zotero / Obsidian / GPU integrations.
 
 <details>
 <summary><b>Full feature list</b></summary>
 
-- 📊 **77 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`). See [full catalog →](docs/SKILLS_CATALOG.md)
+- 📊 **78 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`). See [full catalog →](docs/SKILLS_CATALOG.md)
 - 🔍 **Literature & novelty** — multi-source paper search (**[Zotero](docs/integrations/ZOTERO.md)** + **[Obsidian](docs/integrations/OBSIDIAN.md)** + **local PDFs** + arXiv/Scholar) + cross-model novelty verification
 - 💡 **Idea discovery** — literature survey → brainstorm 8-12 ideas → novelty check → GPU pilot experiments → ranked report
 - 🔄 **Auto review loop** — 4-round autonomous review, 5/10 → 7.5/10 overnight with 20+ GPU experiments
@@ -1092,6 +1092,8 @@ Port a polished paper from venue A → B under **hard, non-overridable guardrail
 
 `/paper-talk` turns an accepted paper into a talk: outline → `/paper-slides` (Beamer + PPTX + speaker notes + Q&A) → `/slides-polish` (per-page Codex visual pass) → optional conference-ready audit gate. Sister to `/paper-writing` / `/paper-poster`. **Full flow → [docs/RESUBMIT_AND_TALK.md](docs/RESUBMIT_AND_TALK.md)**
 
+<a id="-research-wiki--persistent-research-memory"></a>
+
 ### 📚 Research Wiki — Persistent Research Memory
 
 > **"Stop re-deriving. Start compounding."** — inspired by [Karpathy's LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
@@ -1276,7 +1278,7 @@ Add `— reviewer: oracle-pro` to any reviewer-aware skill (`/proof-checker`, `/
 
 ## 9. 🧰 Skills Catalog
 
-ARIS ships **77 skills** across literature, ideation, experiments, audit,
+ARIS ships **78+ skills** across literature, ideation, experiments, audit,
 writing, talks, patents, and meta-utilities. The full catalog (with role,
 category, and requirements per skill) lives in
 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)** to keep this README
@@ -1541,6 +1543,8 @@ Skills are plain Markdown — fork and tune them. Per-skill environment variable
 <a id="alternative-model-combinations"></a>
 
 ## 12. 🔀 Alternative Model Combinations
+
+<a id="alt-a-glm--gpt"></a>
 
 No Claude / OpenAI API? Swap in other providers — same cross-model architecture. ARIS ships **9 alternative routes** (Z.ai GLM, Alibaba Kimi/Qwen/MiniMax, free DeepSeek-V3.1 via ModelScope, Codex-as-executor with Claude/Gemini reviewers, Google Antigravity). Full routing table + per-route setup in **[docs/MODEL_COMBINATIONS.md](docs/MODEL_COMBINATIONS.md)**.
 

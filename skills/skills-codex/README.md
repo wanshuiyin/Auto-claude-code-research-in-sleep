@@ -4,7 +4,7 @@ Codex-native mirror and adaptation layer for the main ARIS `skills/` package.
 
 ## Scope
 
-- Base mirror coverage: all `77` mainline skills under `skills/`
+- Base mirror coverage: all `78` mainline skills under `skills/`
 - Support directory: `shared-references/`
 - Default reviewer contract for reviewer-heavy skills:
   - round 1: `spawn_agent`
