@@ -134,7 +134,7 @@ def append_private_text(path: Path, text: str) -> None:
         os.write(fd, text.encode("utf-8"))
         try:
             os.fchmod(fd, 0o600)
-        except OSError:
+        except (OSError, AttributeError):
             pass
     finally:
         os.close(fd)
