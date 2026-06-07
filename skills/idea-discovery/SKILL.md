@@ -1,7 +1,7 @@
 ---
 name: idea-discovery
 description: "Workflow 1: Full idea discovery pipeline to go from a broad research direction to validated, pilot-tested ideas. Use when user says \"找idea全流程\", \"idea discovery pipeline\", \"从零开始找方向\", or wants the complete idea exploration workflow."
-argument-hint: [research-direction]
+argument-hint: [research-direction] [— resume <run_id>]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skill, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
@@ -31,10 +31,55 @@ Each phase builds on the previous one's output. The final deliverables are a val
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 - **ARXIV_DOWNLOAD = false** — When `true`, `/research-lit` downloads the top relevant arXiv PDFs during Phase 1. When `false` (default), only fetches metadata. Passed through to `/research-lit`.
 - **COMPACT = false** — When `true`, generate compact summary files for short-context models and session recovery. Writes `idea-stage/IDEA_CANDIDATES.md` (top 3-5 ideas only) at the end of this workflow. Downstream skills read this instead of the full `idea-stage/IDEA_REPORT.md`.
+- **RESUMABLE = true** — When `true` (default), record per-stage evidence in `.aris/runs/<run_id>.json` via `tools/run_state.py` so skipped stages surface as explicit `BLOCKED` instead of silently degrading the report. See `shared-references/resumable-runs.md`.
 - **RENDER_HTML = true** — When `true` (default), auto-render `idea-stage/IDEA_REPORT.md` to HTML at workflow end via `/render-html`. Uses `--no-review` (the source MD already went through novelty + cross-model review during Phase 3). Set `false` to skip, or pass `— render html: false`.
 - **REF_PAPER = false** — Reference paper to base ideas on. Accepts: local PDF path, arXiv URL, or any paper URL. When set, the paper is summarized first (`idea-stage/REF_PAPER_SUMMARY.md`), then idea generation uses it as context. Combine with `base repo` for "improve this paper with this codebase" workflows.
 
 > 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — ref paper: https://arxiv.org/abs/2406.04329` or `/idea-discovery "topic" — compact: true`.
+
+## Resumable runs + per-stage evidence gate (`— resume <run_id>`)
+
+This workflow is long enough to silently degrade if a sub-skill is skipped, so it
+must track stage evidence the same way `/research-pipeline` does. Skip this whole
+section only if `RESUMABLE = false`.
+
+Use [`shared-references/resumable-runs.md`](../shared-references/resumable-runs.md)
+as the contract and resolve the helper via the canonical chain:
+`.aris/tools/run_state.py` → `tools/run_state.py` → `$ARIS_REPO/tools/run_state.py`
+(warn-and-continue if unresolved; do not block the workflow on the helper itself).
+
+**Phases**, in order:
+`literature-survey, idea-generation, novelty-check, external-review, refine-plan, final-report`
+
+- **At start:** if `— resume <run_id>` was passed, run
+  `run_state.py resume <root> <run_id>` and restart from the first phase that is
+  not terminal (`accepted` / `skipped`). A `done`-but-unaccepted phase is resumed
+  for re-validation, not skipped. Otherwise derive `<run_id>` from the direction
+  slug + date and start:
+
+  ```bash
+  python3 tools/run_state.py start <root> <run_id> --phases     "literature-survey,idea-generation,novelty-check,external-review,refine-plan,final-report"
+  ```
+
+- **Per phase:** call `set ... running` on entry and `set ... done --artifact <path>`
+  after the phase's evidence is written. The minimal evidence record is exactly:
+  `{stage, status, artifact_path, trace_or_thread_id}` and `run_state.py` already
+  stores that shape as `{phase, status, artifact, verdict_id}`.
+
+- **Accept only after evidence is real.** Suggested mappings:
+
+  | phase | artifact path to record with `set ... done` | what upgrades it to `accepted` | record `reviewer` / `verdict_id` as |
+  |---|---|---|---|
+  | `literature-survey` | `idea-stage/IDEA_REPORT.md#literature-landscape` | landscape section exists **and** the scope checkpoint passed (user approved or AUTO_PROCEED continued) | `deterministic:scope-checkpoint` / checkpoint note or trace path |
+  | `idea-generation` | `idea-stage/IDEA_REPORT.md#ranked-ideas` | ranked ideas are written with pilot evidence / eliminations | `deterministic:idea-report` / report path + sha |
+  | `novelty-check` | `idea-stage/IDEA_REPORT.md#ranked-ideas` | every surviving idea has an explicit novelty verdict or was eliminated | `codex-gpt-5.5` (or actual reviewer) / novelty trace/thread id |
+  | `external-review` | `idea-stage/IDEA_REPORT.md#ranked-ideas` | report cites the external review conclusions and trace path | `codex-gpt-5.5` (or actual reviewer) / review trace/thread id |
+  | `refine-plan` | `refine-logs/FINAL_PROPOSAL.md` | `FINAL_PROPOSAL.md` + `EXPERIMENT_PLAN.md` exist | `deterministic:refine-plan-files` / path pair |
+  | `final-report` | `idea-stage/IDEA_REPORT.md` | final report either has all upstream phases `accepted` **or** carries an explicit `BLOCKED` section naming what is missing | `deterministic:idea-report-gate` / report path + sha |
+
+- **Never silently proceed past missing evidence.** If a stage artifact or trace is
+  missing, leave that stage `done` or `failed` (never `accepted`) and continue only
+  in visibly blocked mode — the final report must say so.
 
 ## Pipeline
 
@@ -250,6 +295,11 @@ Proceed to implementation? Or adjust the proposal?
 
 ### Phase 5: Final Report
 
+Before declaring this workflow complete, inspect `.aris/runs/<run_id>.json` (when
+available). If any upstream phase is missing its evidence record or is not
+`accepted`, the report MUST surface that explicitly instead of pretending the
+pipeline finished cleanly.
+
 Finalize `idea-stage/IDEA_REPORT.md` with all accumulated information:
 
 ```markdown
@@ -284,6 +334,12 @@ Finalize `idea-stage/IDEA_REPORT.md` with all accumulated information:
 - Proposal: `refine-logs/FINAL_PROPOSAL.md`
 - Experiment plan: `refine-logs/EXPERIMENT_PLAN.md`
 - Tracker: `refine-logs/EXPERIMENT_TRACKER.md`
+
+## BLOCKED (only if any stage evidence is missing)
+- Missing stage: [literature-survey / novelty-check / external-review / refine-plan]
+- Missing evidence: [artifact path or trace/thread id]
+- Recovery: rerun `/idea-discovery -- resume <run_id>` after restoring that phase
+- Status: DO NOT declare the workflow complete while this section is non-empty
 
 ## Next Steps
 - [ ] /run-experiment to deploy experiments from the plan
@@ -350,6 +406,8 @@ each emit its own overlapping file. Concretely, for this workflow:
 7. **Before finishing,** the `idea-stage/` top level should be roughly: `IDEA_REPORT.md`
    (+ `.html`), the pilot script + results, and the `refine-logs/` dir. Nothing else
    unless it carries content not in the report.
+8. **If any required phase evidence is missing,** add the explicit `## BLOCKED` section
+   above and keep the run-state phase unaccepted. Silent stage-skipping is forbidden.
 
 ## Render HTML view (auto, when `RENDER_HTML = true`)
 
@@ -370,6 +428,8 @@ Skip this step if `RENDER_HTML = false`.
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - **Don't skip phases.** Each phase filters and validates — skipping leads to wasted effort later.
+- **Every phase must leave evidence.** Record artifact path + trace/thread id in
+  `.aris/runs/<run_id>.json`; if you cannot, the final report must say `BLOCKED`.
 - **Checkpoint between phases.** Briefly summarize what was found before moving on.
 - **Kill ideas early.** It's better to kill 10 bad ideas in Phase 3 than to implement one and fail.
 - **Empirical signal > theoretical appeal.** An idea with a positive pilot outranks a "sounds great" idea without evidence.
