@@ -40,8 +40,11 @@ When calling the reviewer, branch on REVIEWER_BACKEND:
     prompt: [follow-up prompt]
     config: {"model_reasoning_effort": "xhigh"}
 
-Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
-Review tracing applies equally to both backends.
+Content fidelity: the manual reviewer should see the same substantive review
+brief Codex would read. If the manual UI supports file upload / attachment,
+reuse the same brief file; otherwise paste the brief contents inline because
+remote web UIs cannot read your local filesystem paths. Review tracing applies
+equally to both backends.
 
 ## Context: $ARGUMENTS
 
@@ -62,7 +65,9 @@ Before calling the external reviewer, compile a comprehensive briefing:
 3. Identify: core claims, methodology, key results, known weaknesses
 
 ### Step 2: Initial Review (Round 1)
-Send a detailed prompt with xhigh reasoning, using the selected backend.
+Send a detailed prompt with xhigh reasoning, using the selected backend. For
+the `codex` backend, keep the MCP payload short: write the full briefing to
+`RESEARCH_REVIEW_REQUEST.md`, then point Codex at that file.
 
 *For codex backend:*
 
@@ -70,7 +75,9 @@ Send a detailed prompt with xhigh reasoning, using the selected backend.
 mcp__codex__codex:
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
-    [Full research context + specific questions]
+    Read the review brief at <absolute path to RESEARCH_REVIEW_REQUEST.md>.
+    Executor notes are not evidence beyond the files they cite, so verify the
+    referenced artifacts before judging.
     Please act as a senior ML reviewer (NeurIPS/ICML level). Identify:
     1. Logical gaps or unjustified claims
     2. Missing experiments that would strengthen the story
@@ -79,12 +86,34 @@ mcp__codex__codex:
     Please be brutally honest.
 ```
 
-*For manual backend:* use `mcp__manual_review__review` with the same prompt and `config: {"model_reasoning_effort": "xhigh"}`. Save the returned `threadId`.
+The review brief should contain the full research context, the specific
+questions, and the primary artifact / raw-result paths the reviewer should
+inspect.
+
+*For manual backend:* use `mcp__manual_review__review` with the same brief
+contents. If the manual-review UI supports attachments, attach
+`RESEARCH_REVIEW_REQUEST.md`; otherwise paste the brief inline. Save the
+returned `threadId`.
 
 ### Step 3: Iterative Dialogue (Rounds 2-N)
 For `codex` backend: use `mcp__codex__codex-reply` with the returned `threadId`.
 For `manual` backend: use `mcp__manual_review__review_reply` with the same `threadId`.
-Use the appropriate tool to continue the conversation:
+Use the appropriate tool to continue the conversation. For Codex follow-up
+rounds, write an updated brief such as `RESEARCH_REVIEW_ROUND_2.md` and send
+only the path:
+
+```text
+mcp__codex__codex-reply:
+  threadId: [saved reviewer threadId from Step 2]
+  config: {"model_reasoning_effort": "xhigh"}
+  prompt: |
+    Read the updated review brief at <absolute path to
+    RESEARCH_REVIEW_ROUND_2.md>.
+    Focus on unresolved weaknesses and whether the revision actually fixed them.
+```
+
+For manual follow-up rounds, attach that same updated brief if possible;
+otherwise paste it inline.
 
 For each round:
 1. **Respond** to criticisms with evidence/counterarguments
@@ -127,7 +156,9 @@ Update project memory/notes with key review conclusions.
 ## Key Rules
 
 - ALWAYS use `config: {"model_reasoning_effort": "xhigh"}` for reviews
-- Send comprehensive context in Round 1 — the external model cannot read your files
+- Put comprehensive context in the review brief. Codex can read local files
+  when you pass an absolute path; manual reviewers usually cannot, so attach or
+  paste the same brief there.
 - Be honest about weaknesses — hiding them leads to worse feedback
 - Push back on criticisms you disagree with, but accept valid ones
 - Focus on ACTIONABLE feedback — "what experiment would fix this?"

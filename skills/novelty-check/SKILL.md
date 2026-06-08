@@ -41,11 +41,20 @@ For EACH core claim, search using ALL available sources:
 3. **Read abstracts**: For each potentially overlapping paper, WebFetch its abstract and related work section
 
 ### Phase C: Cross-Model Verification
-Call REVIEWER_MODEL via Codex MCP (`mcp__codex__codex`) with xhigh reasoning:
+Call REVIEWER_MODEL via Codex MCP (`mcp__codex__codex`) with xhigh reasoning.
+When the method description plus the Phase-B paper list is more than a short
+note, avoid pasting it inline into the MCP prompt. Write a dossier file such as
+`NOVELTY_DOSSIER.md` (or a project-local equivalent) containing the method
+description, core claims, candidate papers, and the exact questions below, then
+send only the file path:
 ```
-config: {"model_reasoning_effort": "xhigh"}
+mcp__codex__codex:
+  config: {"model_reasoning_effort": "xhigh"}
+  prompt: |
+    Read the novelty dossier at <absolute path to NOVELTY_DOSSIER.md> and
+    follow all instructions in it.
 ```
-Prompt should include:
+Dossier contents should include:
 - The proposed method description
 - All papers found in Phase B
 - Ask: "Is this method novel? What is the closest prior work? What is the delta?"

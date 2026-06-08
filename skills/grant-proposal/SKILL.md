@@ -456,7 +456,7 @@ Which should I generate? (e.g., "1 and 3", "all", "skip")
 Invoke `/research-review` on the complete draft for grant-type-specific evaluation:
 
 ```
-/research-review "Complete [GRANT_TYPE] [GRANT_SUBTYPE] proposal draft. Evaluate as a [GRANT_TYPE] review panelist using official criteria. [PASTE FULL PROPOSAL TEXT]"
+/research-review "Read the grant review bundle at grant-proposal/codex_panel_review_bundle_round_1.md and evaluate it as a [GRANT_TYPE] [GRANT_SUBTYPE] review panelist using the official criteria."
 ```
 
 **What this does:**
@@ -472,11 +472,23 @@ If `/research-review` is invoked (preferred), it handles the Codex call internal
 
 #### Round 1 (full draft review):
 
+Write `grant-proposal/codex_panel_review_bundle_round_1.md` containing the
+criteria below plus the absolute path to `grant-proposal/GRANT_PROPOSAL.md`,
+then keep the Codex MCP prompt short:
+
 ```
 mcp__codex__codex-reply:
   threadId: [from Phase 2]
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
+    Read the grant review bundle at <absolute path to
+    grant-proposal/codex_panel_review_bundle_round_1.md> and follow all
+    instructions in it.
+```
+
+Bundle contents:
+
+```
     Review this complete [GRANT_TYPE] [GRANT_SUBTYPE] proposal draft.
 
     Act as a [GRANT_TYPE] review panelist. Evaluate using the official criteria:
@@ -494,18 +506,32 @@ mcp__codex__codex-reply:
     - Single most impactful change to improve funding chances?
     - Any fatal flaws?
 
-    [PASTE FULL PROPOSAL TEXT]
+    Proposal draft path (read this file yourself): <absolute path to
+    grant-proposal/GRANT_PROPOSAL.md>
 ```
 
 #### Round 2+ (after revisions):
 
 If MAX_REVIEW_ROUNDS > 1 and revisions were applied:
 
+Write `grant-proposal/codex_panel_review_bundle_round_N.md` containing the
+change log, any raw diff / changed-file paths worth inspecting, and the
+absolute path to the current `grant-proposal/GRANT_PROPOSAL.md`, then reuse the
+same short MCP prompt pattern:
+
 ```
 mcp__codex__codex-reply:
   threadId: [saved from Round 1]
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
+    Read the grant review bundle at <absolute path to
+    grant-proposal/codex_panel_review_bundle_round_N.md> and follow all
+    instructions in it.
+```
+
+Bundle contents:
+
+```
     [Round N review of revised [GRANT_TYPE] [GRANT_SUBTYPE] proposal]
 
     Since your last review, I have applied the following changes:
@@ -516,7 +542,8 @@ mcp__codex__codex-reply:
     Please re-evaluate. Same format: section scores, overall assessment, remaining weaknesses.
     Focus on whether the CRITICAL and MAJOR issues from Round 1 have been adequately addressed.
 
-    [PASTE REVISED PROPOSAL TEXT]
+    Revised proposal path (read this file yourself): <absolute path to
+    grant-proposal/GRANT_PROPOSAL.md>
 ```
 
 ### Phase 5: Revision & Output

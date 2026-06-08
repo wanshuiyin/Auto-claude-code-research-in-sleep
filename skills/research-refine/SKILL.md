@@ -315,13 +315,27 @@ Use this structure:
 
 ### Phase 2: External Method Review (Round 1)
 
-Send the full proposal to GPT-5.5 for an **elegance-first, frontier-aware, method-first** review. The reviewer should spend most of the critique budget on the method itself, not on expanding the experiment menu.
+Send the proposal to GPT-5.5 for an **elegance-first, frontier-aware,
+method-first** review. The reviewer should spend most of the critique budget
+on the method itself, not on expanding the experiment menu. For Codex MCP, do
+not inline the whole rubric + proposal once the prompt becomes large. Instead,
+write `refine-logs/codex_round_1_review_bundle.md` containing the instructions
+below plus the absolute path to `refine-logs/round-0-initial-proposal.md`, then
+keep the MCP prompt short:
 
 ```
 mcp__codex__codex:
   model: REVIEWER_MODEL
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
+    Read the review bundle at <absolute path to
+    refine-logs/codex_round_1_review_bundle.md> and follow all instructions in
+    it.
+```
+
+Bundle contents:
+
+```
     You are a senior ML reviewer for a top venue (NeurIPS/ICML/ICLR).
     This is an early-stage, method-first research proposal.
 
@@ -342,9 +356,8 @@ mcp__codex__codex:
     Read the Problem Anchor first. If your suggested fix would change the problem being solved,
     call that out explicitly as drift instead of treating it as a normal revision request.
 
-    === PROPOSAL ===
-    [Paste the FULL proposal from Phase 1]
-    === END PROPOSAL ===
+    Proposal path (read this file yourself): <absolute path to
+    refine-logs/round-0-initial-proposal.md>
 
     Score these 7 dimensions from 1-10:
 
@@ -494,7 +507,11 @@ Save to `refine-logs/round-N-refinement.md`:
 
 ### Phase 4: Re-evaluation (Round 2+)
 
-Send the revised proposal back to GPT-5.5 in the **same thread**:
+Send the revised proposal back to GPT-5.5 in the **same thread**. Again, keep
+the MCP payload short: write `refine-logs/codex_round_N_review_bundle.md`
+containing the re-evaluation instructions below, the key changes, and the
+absolute path to `refine-logs/round-N-refinement.md`, then ask Codex to read
+that bundle file.
 
 ```
 mcp__codex__codex-reply:
@@ -502,6 +519,14 @@ mcp__codex__codex-reply:
   model: REVIEWER_MODEL
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
+    Read the re-evaluation bundle at <absolute path to
+    refine-logs/codex_round_N_review_bundle.md> and follow all instructions in
+    it.
+```
+
+Bundle contents:
+
+```
     [Round N re-evaluation]
 
     I revised the proposal based on your feedback.
@@ -513,9 +538,8 @@ mcp__codex__codex-reply:
     2. [Method change 2]
     3. [Simplification / modernization / pushback if any]
 
-    === REVISED PROPOSAL ===
-    [Paste the FULL revised proposal]
-    === END REVISED PROPOSAL ===
+    Revised proposal path (read this file yourself): <absolute path to
+    refine-logs/round-N-refinement.md>
 
     Please:
     - Re-score the same 7 dimensions and overall
