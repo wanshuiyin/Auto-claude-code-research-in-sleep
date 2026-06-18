@@ -142,30 +142,26 @@ def render_inline(text: str) -> str:
 
     text = _RE_CODE_INLINE.sub(_code_sub, text)
 
-    # Neutralize < and > inside math bodies at the LaTeX level. Before MathJax
-    # runs, a bare "<t" (e.g. y_{<t}) is parsed by the browser as an HTML start
-    # tag and silently swallows the rest of the formula (including the closing
-    # $$), so MathJax never sees a complete delimiter pair and dumps the source
-    # as raw text. HTML-entity escaping (&lt;/&gt;) relies on the browser
-    # decoding the entity back into textContent before MathJax reads it, which
-    # is fragile across caches/decode paths. Rewriting to \lt / \gt removes the
-    # "<" character entirely — no character a parser could ever read as a tag —
-    # and renders identically. Trailing space prevents macro-name merging
-    # (e.g. "<t" -> "\lt t", not "\ltt"). Do NOT touch & — it is the alignment
-    # char in cases/align environments and must pass through verbatim.
-    def _math_safe(body: str) -> str:
-        return body.replace("<", "\\lt ").replace(">", "\\gt ")
-
+    # HTML-escape <, >, & inside math bodies. Before MathJax runs, a bare "<t"
+    # (e.g. y_{<t}) is parsed by the browser as an HTML start tag and silently
+    # swallows the rest of the formula (including the closing $$), so MathJax
+    # never sees a complete delimiter pair and dumps the source as raw text.
+    # MathJax v3 reads the *decoded* DOM text node (HTMLDomStrings.handleText ->
+    # adaptor value() -> node.nodeValue), so the browser turns &lt;/&gt;/&amp;
+    # back into </>/& before MathJax sees them — the TeX token stream is
+    # byte-identical and rendering is unchanged. This is escape-transparent and,
+    # unlike a TeX-level \lt/\gt rewrite, leaves literal "<" in \text{}/\texttt{}
+    # and the cases/align alignment "&" intact (quote=False keeps quotes raw).
     # 1b. Display math (passthrough; MathJax will render).
     def _md_sub(m: re.Match[str]) -> str:
-        body = _math_safe(m.group(1))
+        body = html_lib.escape(m.group(1), quote=False)
         return store(f"$${body}$$")
 
     text = _RE_MATH_DISPLAY.sub(_md_sub, text)
 
     # 1c. Inline math (passthrough).
     def _mi_sub(m: re.Match[str]) -> str:
-        body = _math_safe(m.group(1))
+        body = html_lib.escape(m.group(1), quote=False)
         return store(f"${body}$")
 
     text = _RE_MATH_INLINE.sub(_mi_sub, text)
