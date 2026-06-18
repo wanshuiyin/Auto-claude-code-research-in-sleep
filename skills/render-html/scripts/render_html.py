@@ -147,16 +147,10 @@ def render_inline(text: str) -> str:
 
     text = _RE_CODE_INLINE.sub(_code_sub, text)
 
-    # HTML-escape <, >, & inside math bodies. Before MathJax runs, a bare "<t"
-    # (e.g. y_{<t}) is parsed by the browser as an HTML start tag and silently
-    # swallows the rest of the formula (including the closing $$), so MathJax
-    # never sees a complete delimiter pair and dumps the source as raw text.
-    # MathJax v3 reads the *decoded* DOM text node (HTMLDomStrings.handleText ->
-    # adaptor value() -> node.nodeValue), so the browser turns &lt;/&gt;/&amp;
-    # back into </>/& before MathJax sees them — the TeX token stream is
-    # byte-identical and rendering is unchanged. This is escape-transparent and,
-    # unlike a TeX-level \lt/\gt rewrite, leaves literal "<" in \text{}/\texttt{}
-    # and the cases/align alignment "&" intact (quote=False keeps quotes raw).
+    # HTML-escape <, >, & inside math bodies: a bare "<t" (e.g. y_{<t}) is
+    # otherwise parsed as an HTML start tag and eats the rest of the formula
+    # before MathJax runs. MathJax v3 reads the decoded DOM text, so the escape
+    # is transparent to the TeX it sees (and & for cases/align stays intact).
     # 1b. Display math (passthrough; MathJax will render).
     def _md_sub(m: re.Match[str]) -> str:
         body = html_lib.escape(m.group(1), quote=False)
