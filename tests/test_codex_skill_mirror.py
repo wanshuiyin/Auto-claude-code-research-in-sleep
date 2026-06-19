@@ -38,6 +38,39 @@ def test_codex_skill_set_matches_mainline() -> None:
     assert main_names == codex_names
 
 
+def test_codex_mirror_wiki_writers_wired() -> None:
+    # Content parity (the name-set test above is necessary but not sufficient): the Codex
+    # mirror must use the deterministic wiki writers and must NOT carry the old empirical-
+    # claim-status contradiction (the SHARED research_wiki.py validator rejects
+    # supported/partial/invalidated as claim statuses, so a mirror that still instructs it
+    # is a live broken path for Codex-CLI users).
+    r2c = read(CODEX_SKILLS / "result-to-claim" / "SKILL.md")
+    assert "add_experiment" in r2c and "EXP_NODE_OK" in r2c, \
+        "mirror result-to-claim must create the exp node via add_experiment + gate edges on EXP_NODE_OK"
+    assert re.search(r"status\s*(?:→|->|:)\s*(supported|partial|invalidated)", r2c) is None, \
+        "mirror result-to-claim must NOT set a claim status to an empirical value"
+    assert "upsert_idea" in read(CODEX_SKILLS / "idea-creator" / "SKILL.md"), \
+        "mirror idea-creator must record ideas via upsert_idea (not freehand)"
+    assert "add_claim" in read(CODEX_SKILLS / "proof-checker" / "SKILL.md"), \
+        "mirror proof-checker must mint claims via add_claim (Phase 5.5 birth point)"
+    we = read(CODEX_SKILLS / "wiki-enrich" / "SKILL.md")
+    assert "populate via /proof-checker" in we and "populate via /result-to-claim" not in we, \
+        "mirror wiki-enrich must point claim-population at /proof-checker"
+    rw = read(CODEX_SKILLS / "research-wiki" / "SKILL.md")
+    assert "set_claim_status" not in rw, \
+        "mirror research-wiki must not set claim status (empirical support is edge-only)"
+    assert "add_claim" in rw, "mirror research-wiki must document the /proof-checker claim birth point (Hook 4)"
+    # No mainline-convention bleed in the synced mirror files: no `.aris/tools` resolver,
+    # no mainline `.aris/installed-skills.txt` manifest, and no bare `research_wiki.py <sub>`
+    # call (Codex global-install won't have it on PATH — must be `python3 "$WIKI_SCRIPT"`).
+    for name in ("result-to-claim", "idea-creator", "proof-checker", "research-wiki", "wiki-enrich"):
+        t = read(CODEX_SKILLS / name / "SKILL.md")
+        assert ".aris/tools" not in t, f"{name} mirror leaked the mainline .aris/tools resolver"
+        assert ".aris/installed-skills.txt" not in t, f"{name} mirror leaked the mainline manifest (use installed-skills-codex.txt)"
+        assert re.search(r"research_wiki\.py\s+(add_claim|add_edge|add_experiment|upsert_idea)", t) is None, \
+            f"{name} mirror has a bare research_wiki.py command (use python3 \"$WIKI_SCRIPT\")"
+
+
 def test_skill_inventory_check_passes() -> None:
     assert check_inventory() == []
 

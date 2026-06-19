@@ -373,6 +373,39 @@ Write `PROOF_CHECK_STATE.json`:
 }
 ```
 
+### Phase 5.5: Research Wiki Claim Ledger (additive; only if a wiki is active)
+
+If — and only if — a `research-wiki/` exists, persist each top-level theorem/headline
+as a **claim node** (the wiki's PROVE/JUDGE ledger). This is the **birth point** for wiki
+claim nodes. It is a **detect-only record, never a verdict**: it never changes the audit's
+`verdict`/`reason_code`, never blocks, and is skipped when `verdict == NOT_APPLICABLE` or no
+wiki is found. The claim's `status` is the **PROOF axis only** ({drafted, unproven,
+sound-modulo-imports, verified, refuted, retracted}); empirical experiment support is a
+separate axis carried by edges (`/result-to-claim`), never written into `status`.
+
+Resolve the helper via the Codex-side chain (skip cleanly if unavailable; the audit is
+already complete):
+```
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+WIKI_SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
+```
+
+If `research-wiki/` exists and `WIKI_SCRIPT` is available and `verdict != NOT_APPLICABLE`,
+for each top-level theorem map the audit outcome to an honest status — `PASS`/all proofs
+complete → `verified`; closes modulo flagged imports → `sound-modulo-imports`; counterexample
+found or statement judged false → `refuted`; open gap (UNJUSTIFIED, no counterexample) →
+`unproven` (never fake a gap as `refuted`/`verified`) — then record it (idempotent):
+```
+python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug "<stable-theorem-id>" \
+     --name "<theorem headline>" --status "<mapped status>" \
+     --provenance "<trace_path from PROOF_AUDIT.json>" --statement "<canonical statement>" \
+     --scope "<what it does NOT say; flagged imports>" --update-on-exist
+```
+`add_claim` failure is non-fatal (warn and continue; the audit is unaffected).
+
 ## Key Rules
 
 ### Mathematical rigor

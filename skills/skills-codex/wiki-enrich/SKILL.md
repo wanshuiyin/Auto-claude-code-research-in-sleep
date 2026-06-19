@@ -55,11 +55,12 @@ Resolve `$WIKI_ROOT` and `$WIKI_SCRIPT` (canonical chain — see `shared-referen
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 [ -d research-wiki/ ] || { echo "ERROR: research-wiki/ not found. Run /research-wiki init first." >&2; exit 1; }
 
-ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
-WIKI_SCRIPT=".aris/tools/research_wiki.py"
-[ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
-[ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
-[ -f "$WIKI_SCRIPT" ] || { echo "ERROR: research_wiki.py not found." >&2; exit 1; }
+ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
+WIKI_SCRIPT=""
+[ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
+[ -n "$WIKI_SCRIPT" ] || { echo "ERROR: research_wiki.py not found." >&2; exit 1; }
 ```
 
 If either fails, **hard-fail** — this skill manipulates wiki state and must not run blind.
@@ -160,7 +161,7 @@ Write each TODO section's body following these rules:
 | Limitations / Failure Modes | 1-3 bullets | Honest | What the paper explicitly admits OR what's structurally absent (e.g. "no multi-node evaluation", "assumes uniform request length") |
 | Reusable Ingredients | 1-3 bullets | Concrete | Techniques / datasets / insights from this paper that could be ported elsewhere. **Highest value for `/idea-creator` — write carefully.** |
 | Open Questions | 1-2 bullets | Question form | What the paper does NOT answer but raises |
-| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write the literal italic line: `_No claims tracked yet — populate via /result-to-claim._`. Else list claim node IDs. |
+| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write the literal italic line: `_No claims tracked yet — populate via /proof-checker._`. Else list claim node IDs. |
 | Relevance to This Project | 1-2 sentences | Project-contextual | Use `RESEARCH_BRIEF.md` / `AGENTS.md` (or legacy `CLAUDE.md`) / `gap_map.md` to phrase the connection. If no project context, write the literal italic line: `_Project context not yet set — populate RESEARCH_BRIEF.md or gap_map.md to enable this section._` and report. |
 
 **Rules** (Karpathy fidelity):

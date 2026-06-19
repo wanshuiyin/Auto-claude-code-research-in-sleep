@@ -258,21 +258,31 @@ Skip this phase entirely if `research-wiki/` does not exist.
 
 This is critical for spiral learning: without it, `ideas/` stays empty and re-ideation has no memory.
 
-For each recommended and eliminated idea:
-
-1. Create or update `research-wiki/ideas/<idea_id>.md`.
-2. Include `node_id`, `stage`, `outcome`, `based_on`, `target_gaps`, hypothesis, proposed method, expected outcome, and pilot results when available.
-3. If `WIKI_SCRIPT` is available, add edges from idea to source papers and target gaps, then rebuild `query_pack.md`.
-4. If `WIKI_SCRIPT` is unavailable, write the idea pages and report that graph edges/query-pack rebuild require ARIS `research_wiki.py`.
-
-Required edge semantics when helper support exists:
+The idea page is written by the **deterministic `upsert_idea` helper** — NOT freehand
+markdown — so **every generation, including a re-run with updated constraints, records
+reliably** (one helper call per idea, not a prose step the model can skip). `upsert_idea`
+writes the page, wires the `inspired_by`/`addresses_gap` edges, and rebuilds index +
+query_pack in a single call. Default **skip-on-exist**: a re-ideation run records NEW
+ideas without clobbering an existing idea whose `outcome` `/result-to-claim` may already
+have enriched. `--outcome` stays `pending` at creation (the experiment verdict is set
+later by `/result-to-claim`, never guessed here). If `WIKI_SCRIPT` is unavailable, the
+ideas are NOT recorded and a single WARN is reported (fix: install ARIS `research_wiki.py`).
 
 ```text
-idea:<id> --inspired_by--> paper:<slug>
-idea:<id> --addresses_gap--> gap:<id>
+if research-wiki/ exists AND WIKI_SCRIPT is available:
+    for each recommended (stage proposed) and eliminated (stage archived) idea:
+        python3 "$WIKI_SCRIPT" upsert_idea research-wiki/ --slug "<stable-idea-id>" \
+             --title "<idea title>" --stage "<proposed|archived>" --outcome pending \
+             --thesis "<core hypothesis / direction>" \
+             --risks "<novelty / feasibility risks; why killed if eliminated>" \
+             --based-on "<paper:slug,paper:slug2>" --target-gaps "<G2,G10>"
+    log: "idea-creator wrote N ideas (M recommended, K eliminated)"
+else if research-wiki/ exists AND WIKI_SCRIPT unavailable:
+    report: ideas NOT recorded — ARIS research_wiki.py unreachable
 ```
 
-Log the update as: `idea-creator wrote N ideas (M recommended, K eliminated)`.
+Edge semantics (wired by `upsert_idea` itself): `idea:<id> --inspired_by--> paper:<slug>`
+and `idea:<id> --addresses_gap--> gap:<id>`.
 
 ## Output Protocols
 
