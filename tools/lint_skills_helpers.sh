@@ -17,7 +17,7 @@
 set -u
 
 # Patterns that indicate hardcoded helper invocation (no resolver).
-INVOCATION_PY='python3 tools/(verify_papers|extract_paper_style|paper_illustration_image2|figure_renderer|arxiv_fetch|semantic_scholar_fetch|deepxiv_fetch|exa_search|openalex_fetch|research_wiki)\.py'
+INVOCATION_PY='python3 tools/(verify_papers|extract_paper_style|paper_illustration_image2|figure_renderer|arxiv_fetch|semantic_scholar_fetch|deepxiv_fetch|exa_search|openalex_fetch|research_wiki|iteration_log)\.py'
 INVOCATION_SH='bash tools/(verify_paper_audits|save_trace|verify_wiki_coverage|overleaf_audit)\.sh'
 
 # Files exempted from the lint:

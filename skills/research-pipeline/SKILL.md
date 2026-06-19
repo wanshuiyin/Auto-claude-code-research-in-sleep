@@ -15,9 +15,16 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skil
 > the cross-model jury. A heartbeat may say "keep going," never "good enough."
 > See
 > [`shared-references/external-cadence.md`](../shared-references/external-cadence.md)
-> (overnight-pipeline rule). At heartbeat startup, touch the run state first each tick
-> and register this run with the watchdog `loop` type (so a silent death surfaces as
-> STALE); unregister on completion. The watchdog only detects — it never acquits.
+> (overnight-pipeline rule + stall detection & forced structural pivot). At heartbeat
+> startup, touch the run state first each tick and register this run with the watchdog
+> `loop` type (so a silent death surfaces as STALE); unregister on completion. The
+> watchdog only detects — it never acquits. Each tick also record the new-finding count
+> via the `iteration_log.py` helper (resolve through the canonical
+> `.aris/tools → tools → $ARIS_REPO/tools` chain, integration-contract §2; warn-and-skip
+> if unresolved): `python3 "$ITER_LOG" note <root> <run_id> <phase> <n>`. On the returned
+> `pivot=structural` (stale ≥ 2) the nudge must change a STRUCTURAL constraint and pick an
+> untried direction; on `pivot=human` (stale ≥ 4) flag for attention. Counting only —
+> never a quality verdict.
 
 End-to-end autonomous research workflow for: **$ARGUMENTS**
 
@@ -90,6 +97,40 @@ output JSON) — not just the reviewer label.
 
 A stage left `done` (gate failed/ambiguous, or the run crashed before the gate)
 is re-validated on the next resume — the acceptance obligation is never skipped.
+
+## Overnight heartbeat: stall detection → forced structural pivot
+
+Only when an unattended heartbeat is driving this run (overnight `/loop` /
+`CronCreate`). Skip otherwise. Doctrine + rationale:
+[`shared-references/external-cadence.md`](../shared-references/external-cadence.md)
+→ "Stall detection & forced structural pivot". This is a Type-A signal — it counts
+findings and changes *direction*, never *judges quality*.
+
+Resolve the helper via the canonical chain (integration-contract §2), warn-and-skip
+if unresolved (never block the run):
+```bash
+ITER_LOG=".aris/tools/iteration_log.py"
+[ -f "$ITER_LOG" ] || ITER_LOG="tools/iteration_log.py"
+[ -f "$ITER_LOG" ] || ITER_LOG="${ARIS_REPO:-}/tools/iteration_log.py"
+[ -f "$ITER_LOG" ] || { echo "WARN: iteration_log.py not resolved; skipping stall detection" >&2; ITER_LOG=""; }
+```
+Then, **each heartbeat tick**, record how many concrete new findings the current
+stage produced and read the returned `pivot`:
+```bash
+[ -n "$ITER_LOG" ] && python3 "$ITER_LOG" note "$ROOT" "$RUN_ID" "$STAGE" "$N_NEW_FINDINGS"
+# → {"stale_count": N, "pivot": "none|structural|human"}
+```
+Act on `pivot`:
+- `none` — keep going.
+- `structural` (stale ≥ 2) — the next nudge must change a **structural constraint**
+  (frame / objective / data / representation), not a tactical parameter, and pick a
+  direction different from every one already tried. Record the chosen frame so future
+  ticks can avoid it: `python3 "$ITER_LOG" note "$ROOT" "$RUN_ID" "$STAGE" 0 --direction "<the new frame>"`.
+- `human` (stale ≥ 4) — stop nudging blindly; flag for human attention (escalate, do
+  not silently abandon).
+
+The heartbeat may say "keep going / change direction," never "good enough" — every
+quality verdict still terminates in the cross-model jury (`acceptance-gate.md`).
 
 ## Pipeline
 

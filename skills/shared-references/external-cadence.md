@@ -215,6 +215,35 @@ A `/loop` or `CronCreate` heartbeat is parasitic on a living session; if it dies
    unregistered. **It only DETECTS** — it never restarts the loop or re-runs a
    verdict-bearing skill; recovery stays a human/cron decision, per the fence above.
 
+## Stall detection & forced structural pivot
+
+An overnight loop can spin: each iteration tries a near-variant of the last and gets
+diminishing returns. Detect it mechanically and force a *structural* change — not harder
+tuning of the same frame.
+
+- **Count, don't vibe.** Each iteration, record the number of NEW findings (concrete
+  added entries — new evidence, a falsified hypothesis, a candidate direction — *not* a
+  subjective "valuable result"). Resolve the helper via the canonical chain
+  (integration-contract §2): `.aris/tools/iteration_log.py` → `tools/iteration_log.py` →
+  `$ARIS_REPO/tools/iteration_log.py` (warn-and-skip if unresolved), then
+  `python3 "$ITER_LOG" note <root> <run_id> <phase> <new_findings> [--direction "..."]`.
+  Consecutive zero-finding iterations accumulate a `stale_count` in
+  `.aris/runs/<run_id>.iterations.jsonl` — a sidecar that does **not** touch run_state's
+  done/accepted state.
+- **Forced pivot ladder** (the heartbeat reads the returned `pivot`):
+  - `stale_count >= 2` → **pivot structure, not tactics**: change a structural constraint
+    (frame / objective / data / representation), not a tactical parameter, and pick a
+    direction that differs from every one already tried.
+  - `stale_count >= 4` → **escalate to a human** (flag for attention; stop nudging blindly).
+- **Direction diversity.** Before a re-generation, read the tried directions (research-wiki
+  Failed Ideas + the iteration ledger) and reject a candidate too close to one already tried.
+
+This is a Type-A signal — it counts findings and changes *direction*, it never *judges
+quality* ("keep going / change direction," never "good enough"; quality stays with the
+cross-model jury, acceptance-gate.md). Why structure over tactics: when a task stalls
+repeatedly inside one frame, the decisive gain comes from correcting the frame itself, not
+from tuning parameters harder within it.
+
 ## Required components (when you add external cadence to a skill)
 
 1. **Waits on an external fact, not a self-verdict.** State the fact in

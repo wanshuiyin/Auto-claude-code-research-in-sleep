@@ -209,6 +209,23 @@ def check_inventory() -> list[str]:
     require(tool_loop, "tools/watchdog.py must implement the loop-liveness check_loop (A2)", failures)
     require(doc_loop, "external-cadence.md must document registering a watchdog 'loop' task — its trigger (A2)", failures)
 
+    # iteration_log.py (stall→pivot, B) must exist AND be both documented (the ladder with
+    # both thresholds) and actually wired into a heartbeat consumer — else it is dead code.
+    # Same dead-code guard as the Agent-grant⇒cite rule above.
+    extc = read(SKILLS_ROOT / "shared-references" / "external-cadence.md")
+    rp = read(SKILLS_ROOT / "research-pipeline" / "SKILL.md")
+    tool_stall = (REPO_ROOT / "tools" / "iteration_log.py").is_file()
+    doc_ladder = bool(re.search(r"forced structural pivot", extc, re.IGNORECASE)) and \
+        bool(re.search(r"stale_count`?\s*>=\s*2", extc)) and bool(re.search(r"stale_count`?\s*>=\s*4", extc))
+    # Prove the wiring is real (not a prose mention): resolver chain + note invocation +
+    # both pivot branches handled in research-pipeline.
+    wired = ('iteration_log.py' in rp and 'ITER_LOG' in rp
+             and re.search(r'"\$ITER_LOG"\s+note', rp) is not None
+             and 'pivot' in rp and 'structural' in rp and 'human' in rp)
+    require(tool_stall, "tools/iteration_log.py (stall→pivot, B) must exist", failures)
+    require(doc_ladder, "external-cadence.md must document the stall ladder with both thresholds (>=2 structural, >=4 human) (B)", failures)
+    require(wired, "research-pipeline/SKILL.md must actually wire iteration_log.py (resolver + `$ITER_LOG note` + pivot handling) — not just mention it (B)", failures)
+
     return failures
 
 

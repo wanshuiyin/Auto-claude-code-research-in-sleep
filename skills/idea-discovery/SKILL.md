@@ -180,7 +180,14 @@ Which ideas should I validate further? Or should I regenerate with different con
 ```
 
 - **User picks ideas** (or no response + AUTO_PROCEED=true) → proceed to Phase 3 with top-ranked ideas.
-- **User unhappy with all ideas** → collect feedback ("what's missing?", "what direction do you prefer?"), update the prompt with user's constraints, and re-run Phase 2 (idea generation). Repeat until the user selects at least 1 idea.
+- **User unhappy with all ideas** → collect feedback ("what's missing?", "what direction do you prefer?"), update the prompt with user's constraints, and re-run Phase 2 (idea generation). Before
+  regenerating, read the already-tried directions (research-wiki Failed Ideas + any
+  `.aris/runs/<run_id>.iterations.jsonl`) and forbid a candidate too close to one already
+  tried — enforced direction diversity; when an overnight heartbeat drives the run,
+  record each chosen direction via `iteration_log.py note ... --direction "<frame>"`
+  so later ticks can reject near-duplicates (see
+  [`shared-references/external-cadence.md`](../shared-references/external-cadence.md) →
+  Stall detection & forced structural pivot). Repeat until the user selects at least 1 idea.
 - **User wants to adjust scope** → go back to Phase 1 with refined direction.
 
 ### Phase 3: Deep Novelty Verification
