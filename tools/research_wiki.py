@@ -1233,6 +1233,148 @@ def upsert_idea(wiki_root: str, slug: str, title: str, *, description: str = "",
     return page_path
 
 
+_EXPERIMENT_VERDICTS = {"yes", "partial", "no"}
+_EXPERIMENT_CONFIDENCE = {"high", "medium", "low"}
+
+
+def _render_experiment_page(slug, title, idea_id, verdict, confidence, date,
+                            hardware, duration, metrics, reasoning, provenance, tags):
+    """Render an experiments/<slug>.md page (mirrors _render_claim_page). All
+    free-form frontmatter values are _yaml_quote-wrapped (newline-injection safe);
+    verdict/confidence are validated enums; metrics/reasoning live in the body."""
+    label = title.strip() or f"Experiment {slug}"
+    lines = ["---"]
+    lines.append("type: experiment")
+    lines.append(f"node_id: exp:{slug}")
+    lines.append(f"title: {_yaml_quote(label)}")
+    lines.append(f"idea_id: {_yaml_quote(idea_id)}")
+    lines.append(f"verdict: {verdict}")
+    lines.append(f"confidence: {confidence}")
+    lines.append(f"date: {_yaml_quote(date)}")
+    lines.append(f"hardware: {_yaml_quote(hardware)}")
+    lines.append(f"duration: {_yaml_quote(duration)}")
+    lines.append(f"provenance: {_yaml_quote(provenance)}")
+    lines.append(f"added: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}")
+    lines.append("tags: [" + ", ".join(_yaml_quote(t) for t in tags) + "]")
+    lines.append("---")
+    lines.append("")
+    lines.append(f"# {label}")
+    lines.append("")
+    lines.append(f"**verdict:** `{verdict}`  ·  **confidence:** `{confidence}`"
+                 + (f"  ·  tests `{idea_id}`" if idea_id else ""))
+    lines.append("")
+    lines.append("## Metrics")
+    lines.append(metrics.strip() if metrics.strip() else "_TODO: key metrics._")
+    lines.append("")
+    lines.append("## Reasoning")
+    lines.append(reasoning.strip() if reasoning.strip() else "_TODO: why this verdict._")
+    lines.append("")
+    lines.append("## Connections")
+    lines.append("_Edges are recorded in `graph/edges.jsonl`; summarize here for human readers._")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def add_experiment(wiki_root: str, slug: str, *, title: str = "", idea: str = "",
+                   verdict: str = "no", confidence: str = "medium",
+                   date: str = "", hardware: str = "", duration: str = "",
+                   metrics: str = "", reasoning: str = "", provenance: str = "",
+                   tags: list[str] | None = None,
+                   update_on_exist: bool = False) -> Path:
+    """Create (or update) an experiments/<slug>.md node and wire its edge.
+
+    The experiment layer is the pilot/run ledger written by /result-to-claim (the
+    verdict owner). Mirrors add_claim / upsert_idea:
+      - writes experiments/<slug>.md from the schema
+      - dedups by slug (update_on_exist=False SKIPS; /result-to-claim passes
+        --update-on-exist because re-judging the SAME exp must overwrite the stale
+        verdict, not keep it)
+      - records the idea --tested_by--> exp edge via add_edge (--idea idea:slug)
+      - rebuilds index + query_pack, appends to log
+    `verdict` ∈ _EXPERIMENT_VERDICTS, `confidence` ∈ _EXPERIMENT_CONFIDENCE. Ensures
+    the exp:<id> node EXISTS before /result-to-claim adds supports/invalidates edges
+    FROM it — no dangling evidence-graph edge (edge with no node).
+    """
+    root = Path(wiki_root)
+    if not (root / "experiments").exists():
+        raise RuntimeError(f"{root} is not an initialized wiki (experiments/ missing). "
+                           f"Run `init` first.")
+    if verdict not in _EXPERIMENT_VERDICTS:
+        raise RuntimeError(f"unknown experiment verdict '{verdict}'. "
+                           f"Valid: {sorted(_EXPERIMENT_VERDICTS)}")
+    if confidence not in _EXPERIMENT_CONFIDENCE:
+        raise RuntimeError(f"unknown confidence '{confidence}'. "
+                           f"Valid: {sorted(_EXPERIMENT_CONFIDENCE)}")
+
+    tags = tags or []
+    slug = re.sub(r"[^a-z0-9._-]+", "-", slug.strip().lower()).strip("-")
+    if not slug:
+        raise RuntimeError("experiment slug (exp id) is required and must be non-empty")
+    node_id = f"exp:{slug}"
+    idea_id = idea.strip()
+    if idea_id and ":" not in idea_id:
+        idea_id = f"idea:{idea_id}"
+
+    page_path = root / "experiments" / f"{slug}.md"
+    if page_path.exists() and not update_on_exist:
+        append_log(str(root), f"add_experiment: skipped existing experiment "
+                              f"{page_path.name} (slug dedup)")
+        print(f"Experiment already exists: {page_path.name} (slug dedup) — skipping.")
+        return page_path
+    was_update = page_path.exists()
+
+    # Quarantine model-authored body fields (re-read into context) — same hygiene
+    # as add_claim / upsert_idea. Enum + structural fields are not quarantined.
+    if quarantine is not None:
+        _q_hits = []
+
+        def _q(val, field):
+            if not val:
+                return val
+            safe, findings = quarantine(val, scope="strict",
+                                        label=f"experiment {slug}.{field}")
+            if findings:
+                _q_hits.append((field, findings, val))
+            return safe
+
+        metrics = _q(metrics, "metrics")
+        reasoning = _q(reasoning, "reasoning")
+        if _q_hits:
+            qlog = root / "graph" / "quarantine.log"
+            qlog.parent.mkdir(parents=True, exist_ok=True)
+            with open(qlog, "a", encoding="utf-8") as f:
+                for field, findings, raw in _q_hits:
+                    f.write(json.dumps({
+                        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "experiment": node_id, "field": field,
+                        "findings": findings, "raw_text": raw,
+                    }, ensure_ascii=False) + "\n")
+            print(f"⚠️  experiment field(s) quarantined "
+                  f"({', '.join(f for f, _, _ in _q_hits)}); placeholder persisted, "
+                  f"raw text preserved in graph/quarantine.log for review.",
+                  file=sys.stderr)
+
+    rendered = _render_experiment_page(slug, title, idea_id, verdict, confidence,
+                                       date, hardware, duration, metrics, reasoning,
+                                       provenance, tags)
+    page_path.write_text(rendered)
+
+    # Wire the idea --tested_by--> exp edge (idea side owns it, per the schema).
+    if idea_id:
+        if idea_id.startswith("idea:") and not (root / "ideas" / f"{idea_id.split(':', 1)[1]}.md").exists():
+            print(f"⚠️  add_experiment: idea {idea_id} not found in this wiki "
+                  f"(dangling edge recorded — create the node or fix the id).",
+                  file=sys.stderr)
+        add_edge(str(root), idea_id, node_id, "tested_by", evidence=f"exp {slug} tests idea")
+
+    rebuild_index(str(root))
+    rebuild_query_pack(str(root))
+    action = "updated" if was_update else "added"
+    append_log(str(root), f"add_experiment: {action} {node_id} [verdict={verdict} confidence={confidence}]")
+    print(f"Experiment {action}: {page_path} [verdict={verdict} confidence={confidence}]")
+    return page_path
+
+
 def sync_papers(wiki_root: str, arxiv_ids: list[str], update_on_exist: bool = False) -> None:
     """Batch backfill: ingest many arxiv ids with a SINGLE metadata request.
 
@@ -1426,6 +1568,25 @@ def main():
     p_idea.add_argument("--update-on-exist", action="store_true",
                         help="Overwrite an existing idea instead of skipping (default: skip)")
 
+    # add_experiment — create/update an experiment node (result-to-claim Step 5 #1)
+    p_exp = subparsers.add_parser("add_experiment",
+                                  help="Create (or update) an experiments/<slug>.md node")
+    p_exp.add_argument("wiki_root")
+    p_exp.add_argument("--slug", required=True, help="Stable experiment id, e.g. exp-001")
+    p_exp.add_argument("--title", default="", help="Human-readable label (default: 'Experiment <slug>')")
+    p_exp.add_argument("--idea", default="", help="Idea node_id/slug this experiment tests (wires idea --tested_by--> exp)")
+    p_exp.add_argument("--verdict", default="no", help="One of: " + ", ".join(sorted(_EXPERIMENT_VERDICTS)))
+    p_exp.add_argument("--confidence", default="medium", help="One of: " + ", ".join(sorted(_EXPERIMENT_CONFIDENCE)))
+    p_exp.add_argument("--date", default="", help="Run date")
+    p_exp.add_argument("--hardware", default="", help="Hardware used")
+    p_exp.add_argument("--duration", default="", help="Wall-clock / GPU-hours")
+    p_exp.add_argument("--metrics", default="", help="Key metrics (body)")
+    p_exp.add_argument("--reasoning", default="", help="Why this verdict (body)")
+    p_exp.add_argument("--provenance", default="", help="Run dir / EXPERIMENT_AUDIT pointer (honesty receipt)")
+    p_exp.add_argument("--tags", default="", help="Comma-separated tag list")
+    p_exp.add_argument("--update-on-exist", action="store_true",
+                       help="Overwrite an existing experiment (the verdict owner /result-to-claim passes this on a re-judge)")
+
     # sync — batch backfill
     p_sync = subparsers.add_parser("sync",
                                     help="Batch ingest from a list of arXiv IDs")
@@ -1480,6 +1641,13 @@ def main():
                     thesis=args.thesis, risks=args.risks, tags=_spliti(args.tags),
                     based_on=_spliti(args.based_on), target_gaps=_spliti(args.target_gaps),
                     update_on_exist=args.update_on_exist)
+    elif args.command == "add_experiment":
+        add_experiment(args.wiki_root, args.slug, title=args.title, idea=args.idea,
+                       verdict=args.verdict, confidence=args.confidence, date=args.date,
+                       hardware=args.hardware, duration=args.duration, metrics=args.metrics,
+                       reasoning=args.reasoning, provenance=args.provenance,
+                       tags=[x.strip() for x in args.tags.split(",") if x.strip()],
+                       update_on_exist=args.update_on_exist)
     elif args.command == "sync":
         ids: list[str] = []
         if args.arxiv_ids:
