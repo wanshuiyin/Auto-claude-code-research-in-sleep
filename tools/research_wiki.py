@@ -27,6 +27,13 @@ Usage:
     # Batch backfill:
     python3 research_wiki.py sync <wiki_root> --arxiv-ids id1,id2,id3
     python3 research_wiki.py sync <wiki_root> --from-file ids.txt
+
+    # Claim layer (PROVE/JUDGE output ledger):
+    python3 research_wiki.py add_claim <wiki_root> --slug b1-main-ub \
+        --name "..." --status sound-modulo-imports --provenance <run path> \
+        --statement "..." --scope "..." --evidence "..." \
+        --addresses G2,G10 --extends paper:slug --uses paper:slug \
+        --depends-on claim:other --refutes claim:bad
 """
 
 # `from __future__ import annotations` defers annotation evaluation so that
@@ -132,6 +139,11 @@ def add_edge(wiki_root: str, from_id: str, to_id: str, edge_type: str, evidence:
     VALID_TYPES = {
         "extends", "contradicts", "addresses_gap", "inspired_by",
         "tested_by", "supports", "invalidates", "supersedes",
+        # Claim-layer edge types (additive, used by add_claim):
+        #   claim --depends_on--> claim   (proof-obligation dependency)
+        #   claim --refutes--> claim      (a claim that falsifies another)
+        #   claim --uses--> paper         (imports a result/ingredient)
+        "depends_on", "refutes", "uses",
     }
     if edge_type not in VALID_TYPES:
         print(f"Warning: unknown edge type '{edge_type}'. Valid: {VALID_TYPES}", file=sys.stderr)
@@ -406,8 +418,13 @@ def get_stats(wiki_root: str):
     print(f"Ideas:       {ideas} ({count_by_field('ideas', 'outcome', 'negative')} failed, "
           f"{count_by_field('ideas', 'outcome', 'positive')} succeeded)")
     print(f"Experiments: {experiments}")
-    print(f"Claims:      {claims} ({count_by_field('claims', 'status', 'supported')} supported, "
-          f"{count_by_field('claims', 'status', 'invalidated')} invalidated)")
+    _claim_parts = []
+    for _st in sorted(_CLAIM_STATUSES):
+        _n = count_by_field('claims', 'status', _st)
+        if _n:
+            _claim_parts.append(f"{_n} {_st}")
+    print(f"Claims:      {claims}"
+          + (f" ({', '.join(_claim_parts)})" if _claim_parts else ""))
     print(f"Edges:       {edge_count}")
     print(f"Wiki root:   {root}")
 
@@ -796,6 +813,233 @@ def ingest_paper(wiki_root: str, *, arxiv_id: str = "", title: str = "",
     return page_path
 
 
+_CLAIM_STATUSES = {
+    "drafted",                 # written, not yet adversarially reviewed
+    "unproven",                # audited; proof has an open gap (not closed, not falsified)
+    "sound-modulo-imports",    # proof closes modulo flagged [unverified-axiom] imports
+    "verified",                # passed cross-model acquittal, imports discharged
+    "refuted",                 # a counterexample / jury falsified it
+    "retracted",               # withdrawn (e.g. superseded by a corrected claim)
+}
+
+
+def _claim_slugify(name: str, slug: str = "") -> str:
+    """Slug for a claim page.
+
+    A claim usually already carries a stable human ID (e.g. ``b1-main-ub``);
+    if the caller passes ``--slug`` we honor it verbatim (lower-cased, sanitized)
+    so cross-references in proofs stay stable. Otherwise we fall back to the
+    paper slugifier's keyword extraction on the claim name.
+    """
+    if slug:
+        s = re.sub(r"[^a-z0-9._-]+", "-", slug.strip().lower()).strip("-")
+        if s:
+            return s
+    # No explicit slug: reuse the title keyword extractor (no author/year).
+    return slugify(name).lstrip("_").lstrip("0").strip("_") or "claim"
+
+
+def _render_claim_page(slug: str, name: str, description: str, status: str,
+                       provenance: str, statement: str, scope: str,
+                       evidence: str, tags: list[str]) -> str:
+    """Render a claims/<slug>.md page following the research-wiki schema.
+
+    Mirrors ``_render_paper_page``: ``---`` frontmatter block then body
+    sections. ``node_type: claim`` distinguishes the node kind; ``status``
+    is one of ``_CLAIM_STATUSES``; ``provenance`` points at the PROVE/JUDGE
+    run directory that produced the claim (the honesty receipt).
+    """
+    lines = ["---"]
+    lines.append("type: claim")
+    lines.append(f"node_id: claim:{slug}")
+    lines.append(f"name: {_yaml_quote(name)}")
+    lines.append(f"description: {_yaml_quote(description)}")
+    lines.append("node_type: claim")
+    lines.append(f"status: {status}")
+    lines.append(f"provenance: {_yaml_quote(provenance)}")
+    lines.append("tags: [" + ", ".join(_yaml_quote(t) for t in tags) + "]")
+    lines.append(f"date: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}")
+    lines.append(f"added: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}")
+    lines.append("---")
+    lines.append("")
+    lines.append(f"# {name}")
+    lines.append("")
+    lines.append(f"**status:** `{status}`")
+    lines.append("")
+    lines.append("## Statement")
+    lines.append(statement.strip() if statement.strip() else "_TODO: formal statement._")
+    lines.append("")
+    lines.append("## Honest scope")
+    lines.append(scope.strip() if scope.strip()
+                 else "_TODO: what this claim does NOT say; banned wordings; flagged imports._")
+    lines.append("")
+    lines.append("## Evidence chain")
+    lines.append(evidence.strip() if evidence.strip()
+                 else "_TODO: proof obligations, jury verdicts, provenance pointers._")
+    lines.append("")
+    lines.append("## Connections")
+    lines.append("_Edges are recorded in `graph/edges.jsonl`; summarize here for human readers._")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def add_claim(wiki_root: str, slug: str, name: str, *, description: str = "",
+              status: str = "drafted", provenance: str = "",
+              statement: str = "", scope: str = "", evidence: str = "",
+              tags: list[str] | None = None,
+              addresses: list[str] | None = None,
+              extends: list[str] | None = None,
+              uses: list[str] | None = None,
+              depends_on: list[str] | None = None,
+              refutes: list[str] | None = None,
+              update_on_exist: bool = False) -> Path:
+    """Create (or update) a claims/<slug>.md node and wire its edges.
+
+    The claim layer is the PROVE/JUDGE output ledger: every theorem/headline
+    becomes a node with an HONEST ``status`` (one of ``_CLAIM_STATUSES``) and a
+    ``provenance`` pointer to the run directory. Mirrors ``ingest_paper``:
+      - writes claims/<slug>.md from the schema above
+      - dedups by slug (``update_on_exist=False`` skips an existing page)
+      - records typed edges into graph/edges.jsonl via ``add_edge``:
+          claim --addresses_gap--> gap     (--addresses G2,G10)
+          claim --extends--> paper          (--extends paper:slug)
+          claim --uses--> paper             (--uses paper:slug)
+          claim --depends_on--> claim       (--depends-on claim:slug)
+          claim --refutes--> claim          (--refutes claim:slug)
+      - rebuilds index.md + query_pack.md, appends to log.md
+    Bare gap ids (``G2``) and bare claim/paper slugs are auto-prefixed to the
+    ``gap:`` / ``claim:`` / ``paper:`` node_id namespace used by the graph.
+    """
+    root = Path(wiki_root)
+    if not (root / "claims").exists():
+        raise RuntimeError(f"{root} is not an initialized wiki (claims/ missing). "
+                           f"Run `init` first.")
+
+    if status not in _CLAIM_STATUSES:
+        raise RuntimeError(f"unknown claim status '{status}'. "
+                           f"Valid: {sorted(_CLAIM_STATUSES)}")
+
+    tags = tags or []
+    slug = _claim_slugify(name, slug)
+    node_id = f"claim:{slug}"
+
+    page_path = root / "claims" / f"{slug}.md"
+    if page_path.exists() and not update_on_exist:
+        append_log(str(root), f"add_claim: skipped existing claim "
+                              f"{page_path.name} (slug dedup)")
+        print(f"Claim already exists: {page_path.name} (slug dedup) — skipping.")
+        return page_path
+    was_update = page_path.exists()
+
+    # Quarantine claim body fields before persist (model-authored text that is
+    # re-read into agent context via index/query_pack): same Layer-1 injection
+    # hygiene as edge evidence above. Placeholder persists; raw text goes to
+    # graph/quarantine.log for human review — nothing silently dropped.
+    if quarantine is not None:
+        _q_hits = []
+
+        def _q(val, field):
+            if not val:
+                return val
+            safe, findings = quarantine(val, scope="strict",
+                                        label=f"claim {slug}.{field}")
+            if findings:
+                _q_hits.append((field, findings, val))
+            return safe
+
+        description = _q(description, "description")
+        statement = _q(statement, "statement")
+        scope = _q(scope, "scope")
+        evidence = _q(evidence, "evidence")
+        if _q_hits:
+            qlog = root / "graph" / "quarantine.log"
+            qlog.parent.mkdir(parents=True, exist_ok=True)
+            with open(qlog, "a", encoding="utf-8") as f:
+                for field, findings, raw in _q_hits:
+                    f.write(json.dumps({
+                        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "claim": node_id, "field": field,
+                        "findings": findings, "raw_text": raw,
+                    }, ensure_ascii=False) + "\n")
+            print(f"⚠️  claim field(s) quarantined "
+                  f"({', '.join(f for f, _, _ in _q_hits)}); placeholder persisted, "
+                  f"raw text preserved in graph/quarantine.log for review.",
+                  file=sys.stderr)
+
+    rendered = _render_claim_page(slug, name, description, status, provenance,
+                                  statement, scope, evidence, tags)
+    page_path.write_text(rendered)
+
+    # Wire edges. Reuse add_edge so dedup, evidence quarantine, and the JSONL
+    # format are all identical to paper/idea edges.
+    def _norm(target: str, default_prefix: str) -> str:
+        t = target.strip()
+        if not t:
+            return ""
+        if ":" in t:  # already a namespaced node_id (gap:G2 / paper:slug / claim:x)
+            return t
+        # Bare gap ids look like G2, G10; everything else takes default prefix.
+        if default_prefix == "gap:" or re.fullmatch(r"[Gg]\d+", t):
+            return f"gap:{t.upper()}" if re.fullmatch(r"[Gg]\d+", t) else f"{default_prefix}{t}"
+        return f"{default_prefix}{t}"
+
+    def _warn_if_dangling(nid: str) -> None:
+        # Warn-only: dangling edges are recorded (a [[name]]-style forward
+        # reference is legitimate), but the operator should know.
+        if not nid:
+            return
+        kind, _, rest = nid.partition(":")
+        exists = True
+        if kind == "paper":
+            exists = (root / "papers" / f"{rest}.md").exists()
+        elif kind == "claim":
+            exists = rest == slug or (root / "claims" / f"{rest}.md").exists()
+        elif kind == "gap":
+            gm = root / "gap_map.md"
+            exists = gm.exists() and re.search(
+                rf"\b{re.escape(rest)}\b", gm.read_text(encoding="utf-8"))
+        if not exists:
+            print(f"⚠️  add_claim: edge target {nid} not found in this wiki "
+                  f"(dangling edge recorded — create the node or fix the id).",
+                  file=sys.stderr)
+
+    for tgt in (addresses or []):
+        _tid = _norm(tgt, "gap:")
+        _warn_if_dangling(_tid)
+        add_edge(str(root), node_id, _tid, "addresses_gap",
+                 evidence=f"claim {slug} addresses gap")
+    for tgt in (extends or []):
+        _tid = _norm(tgt, "paper:")
+        _warn_if_dangling(_tid)
+        add_edge(str(root), node_id, _tid, "extends",
+                 evidence=f"claim {slug} extends paper")
+    for tgt in (uses or []):
+        _tid = _norm(tgt, "paper:")
+        _warn_if_dangling(_tid)
+        add_edge(str(root), node_id, _tid, "uses",
+                 evidence=f"claim {slug} uses paper")
+    for tgt in (depends_on or []):
+        _tid = _norm(tgt, "claim:")
+        _warn_if_dangling(_tid)
+        add_edge(str(root), node_id, _tid, "depends_on",
+                 evidence=f"claim {slug} depends on claim")
+    for tgt in (refutes or []):
+        _tid = _norm(tgt, "claim:")
+        _warn_if_dangling(_tid)
+        add_edge(str(root), node_id, _tid, "refutes",
+                 evidence=f"claim {slug} refutes claim")
+
+    # Rebuild derived artifacts (same as ingest_paper)
+    rebuild_index(str(root))
+    rebuild_query_pack(str(root))
+
+    action = "updated" if was_update else "added"
+    append_log(str(root), f"add_claim: {action} {node_id} [status={status}]"
+                          + (f" prov={provenance}" if provenance else ""))
+    print(f"Claim {action}: {page_path} [status={status}]")
+    return page_path
+
+
 def sync_papers(wiki_root: str, arxiv_ids: list[str], update_on_exist: bool = False) -> None:
     """Batch backfill: ingest many arxiv ids with a SINGLE metadata request.
 
@@ -844,9 +1088,14 @@ def rebuild_index(wiki_root: str) -> None:
         for f in sorted(d.glob("*.md")):
             meta = _load_paper_frontmatter(f)
             node_id = meta.get("node_id", f.stem)
-            title = meta.get("title", f.stem)
+            # Claims use `name:` (papers use `title:`); fall back across both
+            # so each node type renders its human label without special-casing.
+            title = meta.get("title") or meta.get("name") or f.stem
             year = meta.get("year", "")
-            entries.append(f"- `{node_id}` — {title}" + (f" ({year})" if year else ""))
+            # Surface the claim's honesty status inline (papers have no status).
+            status = meta.get("status", "")
+            suffix = f" ({year})" if year else (f" [{status}]" if status else "")
+            entries.append(f"- `{node_id}` — {title}{suffix}")
         if entries:
             lines.append(f"## {header} ({len(entries)})")
             lines.extend(entries)
@@ -928,6 +1177,39 @@ def main():
     p_ing.add_argument("--update-on-exist", action="store_true",
                        help="Overwrite an existing page instead of skipping (default: skip)")
 
+    # add_claim — create a claim node (PROVE/JUDGE output ledger)
+    p_claim = subparsers.add_parser("add_claim",
+                                    help="Create (or update) a claims/<slug>.md node")
+    p_claim.add_argument("wiki_root")
+    p_claim.add_argument("--slug", default="",
+                         help="Stable claim id, e.g. b1-main-ub (honored verbatim)")
+    p_claim.add_argument("--name", required=True,
+                         help="Human-readable claim name/headline")
+    p_claim.add_argument("--description", default="",
+                         help="One-line description for the index/frontmatter")
+    p_claim.add_argument("--status", default="drafted",
+                         help="One of: " + ", ".join(sorted(_CLAIM_STATUSES)))
+    p_claim.add_argument("--provenance", default="",
+                         help="Run directory that produced this claim (honesty receipt)")
+    p_claim.add_argument("--statement", default="", help="Formal statement (body)")
+    p_claim.add_argument("--scope", default="",
+                         help="Honest scope: what the claim does NOT say / banned wordings")
+    p_claim.add_argument("--evidence", default="",
+                         help="Evidence chain: obligations, verdicts, provenance pointers")
+    p_claim.add_argument("--tags", default="", help="Comma-separated tag list")
+    p_claim.add_argument("--addresses", default="",
+                         help="Comma-separated gap ids this claim addresses, e.g. G2,G10")
+    p_claim.add_argument("--extends", default="",
+                         help="Comma-separated paper node_ids/slugs this claim extends")
+    p_claim.add_argument("--uses", default="",
+                         help="Comma-separated paper node_ids/slugs this claim uses")
+    p_claim.add_argument("--depends-on", dest="depends_on", default="",
+                         help="Comma-separated claim node_ids/slugs this claim depends on")
+    p_claim.add_argument("--refutes", default="",
+                         help="Comma-separated claim node_ids/slugs this claim refutes")
+    p_claim.add_argument("--update-on-exist", action="store_true",
+                         help="Overwrite an existing claim instead of skipping (default: skip)")
+
     # sync — batch backfill
     p_sync = subparsers.add_parser("sync",
                                     help="Batch ingest from a list of arXiv IDs")
@@ -962,6 +1244,18 @@ def main():
                      authors=authors, year=args.year, venue=args.venue,
                      doi=args.doi, thesis=args.thesis, tags=tags,
                      update_on_exist=args.update_on_exist)
+    elif args.command == "add_claim":
+        def _split(s: str) -> list[str]:
+            return [x.strip() for x in s.split(",") if x.strip()]
+        add_claim(args.wiki_root, args.slug, args.name,
+                  description=args.description, status=args.status,
+                  provenance=args.provenance, statement=args.statement,
+                  scope=args.scope, evidence=args.evidence,
+                  tags=_split(args.tags),
+                  addresses=_split(args.addresses), extends=_split(args.extends),
+                  uses=_split(args.uses), depends_on=_split(args.depends_on),
+                  refutes=_split(args.refutes),
+                  update_on_exist=args.update_on_exist)
     elif args.command == "sync":
         ids: list[str] = []
         if args.arxiv_ids:
