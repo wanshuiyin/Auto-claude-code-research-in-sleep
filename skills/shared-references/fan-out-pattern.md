@@ -230,13 +230,11 @@ pass. After fan-out the merged set should be **mechanically deduped only**
 (cluster near-identical ideas; never drop one for being "weak"). The
 **jury** is the already-existing Phase-4 cross-model devil's-advocate
 pass: GPT-5.5 via Codex MCP surfaces the strongest reviewer objection per
-idea and ranks for a top venue. `/idea-creator` does **not** currently
-declare the `Agent` tool — it was stripped in the WB2 least-privilege
-sweep because its body does not yet fan out. The WB3 fan-out refactor
-re-grants `Agent` in the *same* change that wires these lens shards and
-fixes the Phase-3 gap below (per the re-grant rule in **Allowed-tools
-hygiene**). On a Tier-1 runtime the lenses then run as Workflow shards;
-on Tier 3 they fall back to sequential enumeration with no grant needed.
+idea and ranks for a top venue. `/idea-creator` declares the `Agent` tool — re-granted (per the re-grant
+rule in **Allowed-tools hygiene**) when the lens fan-out was wired, after
+the WB2 sweep had stripped the earlier vestigial grant. On a Tier-1 runtime
+the lenses run as Workflow shards; on Tier 3 they fall back to sequential
+enumeration with no grant needed.
 
 > ⚠️ **Known gap — idea-creator is an *aspirational* example here, not yet a clean one.**
 > Today `/idea-creator` Phase 3 (`skills/idea-creator/SKILL.md:159,175`)
@@ -268,6 +266,23 @@ so there is no same-family-self-judgment risk to begin with. When the
 "jury" is a deterministic check rather than a model verdict, the
 cross-model-family rule is automatically satisfied (a process is not a
 model family). Fan out freely.
+
+## Shard safety invariants
+
+Two invariants keep a fan-out from manufacturing or laundering errors:
+
+- **Shards are read-only on shared artifacts.** A shard may read the repo/workspace and
+  return its findings; it must NOT write shared state, mutate files the executor or other
+  shards also touch, or rank/drop another shard's output. The *only* write is the
+  post-merge executor write, after dedup. This forecloses silent world-model divergence
+  (parallel agents mutating a shared workspace and integrating into conflicts only
+  discovered at composition time).
+- **Don't inherit the upstream premise unchecked.** When a phase's jury reviews work built
+  on a load-bearing upstream artifact (a prior phase's claim, a cited number, an earlier
+  agent's conclusion), give the jury the *path to that upstream artifact* and ask it to
+  check the dependency, not just the local step. Otherwise one plausible-but-wrong upstream
+  assertion is treated as ground truth and amplified down the chain — a cascading
+  hallucination that compounds instead of self-correcting.
 
 ## Cross-references
 
@@ -332,12 +347,13 @@ This matters because the other two tiers need no per-skill grant:
   Correctly, `kill-argument` does **not** grant `Agent`.
 
 So `Agent` is needed *only* for the Tier-2 form, *only* in skills that
-genuinely fan out. As of the WB2 least-privilege sweep, **no mainline skill
-spawns Claude subagents in its body**, so no mainline skill grants `Agent`.
-(48 vestigial grants — pure copied boilerplate, never invoked — were
-removed.) Note that "reviewer **sub-agent**" in several skills refers to the
-cross-model *codex/GPT reviewer*, not the Agent tool, and never implied a
-real grant need.
+genuinely fan out. The WB2 least-privilege sweep removed 48 vestigial grants
+(pure copied boilerplate, never invoked); since then **only skills that
+genuinely fan out at Tier-2 re-grant `Agent`, and each must cite this doc in
+its body** (enforced by `check_skills_inventory.py`). As of writing those are
+`idea-creator`, `proof-checker`, and `research-lit`. Note that "reviewer
+**sub-agent**" in several skills refers to the cross-model *codex/GPT
+reviewer*, not the Agent tool, and never implied a real grant need.
 
 **Re-granting rule.** A skill that adds genuine fan-out re-introduces
 `Agent` to its `allowed-tools` **in the same change that adds the fan-out

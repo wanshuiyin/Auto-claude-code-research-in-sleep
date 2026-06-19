@@ -294,6 +294,20 @@ regardless of how many rounds it runs or how confident it sounds.
   clock instead of on the reviewer's turn — noise at best, a corrupted
   acquittal at worst. Keep external cadence outside the acceptance gate.
 
+## Epistemic status of a PASS
+
+A cross-model PASS is a **heterogeneous second opinion**, not external ground truth. Its
+value is specific and bounded: a reviewer from a different model family breaks *correlated*
+blind spots — the executor's own failure modes it cannot see in itself — so a PASS means
+"a differently-built model, reading the artifact cold, did not find the flaw the author
+would miss." It does **not** mean the work is correct, novel, publishable, or that a venue
+will accept it. Same-family review (Claude judging Claude) does not even clear that bar,
+which is why the jury must be cross-family.
+
+Treat a PASS as the strongest *automatable* heterogeneous quality check this framework has, then keep the human in the loop for
+what no in-framework verdict can supply: updated literature, venue taste, and ground truth.
+A green gate lowers risk; it does not transfer accountability.
+
 ## See Also
 
 - `reviewer-independence.md` — the single-shot form: executor never

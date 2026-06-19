@@ -269,6 +269,20 @@ from tuning parameters harder within it.
    a blocking poll or a manual re-invocation; the cross-model jury at
    the end is identical either way (`fan-out-pattern.md`).
 
+## Autonomous-mode discipline (when the human checkpoint is off)
+
+When a skill runs with its human-checkpoint toggle OFF (e.g. `AUTO_PROCEED=true`) or under
+an external heartbeat, it must not stall by ending on a question. Resolve a routine
+ambiguity yourself, act, and log the decision and its reasoning (a `level=decision` log
+line) so the choice is auditable — "ready means execute": finishing preparation and then
+asking "should I proceed?" is the stall this rule forbids.
+
+This does **not** override an *explicit* human gate. A checkpoint the skill declares as
+load-bearing — a missing venue/target, a patent/submission step, anything marked as
+requiring sign-off — still stops and waits. If you are unsure whether a gate is explicit, treat it as explicit and stop. Autonomy removes *needless* pauses, not
+deliberate ones; and it never lets the loop self-acquit a quality verdict (that stays with
+the cross-model jury, see [`acceptance-gate.md`](acceptance-gate.md)).
+
 ## Cross-references
 
 - `acceptance-gate.md` — who is allowed to ACCEPT. Cadence drives;
