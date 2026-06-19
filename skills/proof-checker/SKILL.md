@@ -553,6 +553,69 @@ Write `PROOF_CHECK_STATE.json`:
 }
 ```
 
+### Phase 5.5: Research Wiki Claim Ledger (additive; only if a wiki is active)
+
+If — and only if — a `research-wiki/` exists, persist each top-level
+theorem/headline as a **claim node** so the wiki's PROVE/JUDGE ledger records what
+was proven and with what honesty. This is the **birth point** for wiki claim nodes
+(`claims/<slug>.md`). It is a **detect-only record, never a verdict**: it never
+changes the audit's `verdict`/`reason_code`, never blocks, and is skipped entirely
+when `verdict == NOT_APPLICABLE` (no theorems) or no wiki is found.
+
+> The claim's `status` is the **PROOF axis only** (`verified` / `sound-modulo-imports`
+> / `refuted` / `unproven` / `drafted` / `retracted`). Empirical experiment support is
+> a **separate axis** carried by `supports` / `invalidates` *edges* from
+> `/result-to-claim` — those words are NEVER written into this `status` field (the
+> `research_wiki.py` validator rejects them).
+
+Resolve the helper via the **canonical resolver** (integration-contract §2). Check
+`NOT_APPLICABLE` first (in cwd, where the audit ran), then run from the project root
+(the wiki sits at root; a paper audit may run from a `paper/` subdir). Every guard
+warn-and-skips — the audit is already complete and is never affected:
+
+```bash
+grep -q '"verdict"[[:space:]]*:[[:space:]]*"NOT_APPLICABLE"' PROOF_AUDIT.json 2>/dev/null \
+  && { echo "verdict NOT_APPLICABLE (no theorems); skipping claim ledger" >&2; exit 0; }
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 0
+[ -d research-wiki ] || { echo "no research-wiki/ at project root; skipping claim ledger (audit complete)" >&2; exit 0; }
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+WIKI_SCRIPT=".aris/tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+[ -f "$WIKI_SCRIPT" ] || { echo "WARN: research_wiki.py not resolved; skipping claim ledger (audit unaffected)" >&2; exit 0; }
+```
+
+For each top-level theorem/headline in `PROOF_SKELETON.md` (the main theorem + the
+key lemmas the headline depends on — NOT every micro-claim), map the audit outcome
+to an **honest** claim status:
+
+| Audit outcome (`PROOF_AUDIT.json` verdict + Phase 1.5 counterexamples) | `--status` |
+|---|---|
+| `verdict=PASS` / `all_proofs_complete`, no flagged imports | `verified` |
+| proof closes but rests on a flagged `[unverified-axiom]` / imported result | `sound-modulo-imports` |
+| counterexample found (Phase 1.5) **or** reviewer judged the statement false | `refuted` |
+| open gap (unresolved FATAL/CRITICAL / UNJUSTIFIED, no counterexample) | `unproven` |
+
+Never invent a status: a plain proof gap is `unproven` — never `refuted` (which
+asserts falsity) and never `verified`/`drafted`. Then record (idempotent):
+
+```bash
+python3 "$WIKI_SCRIPT" add_claim research-wiki/ \
+  --slug "<stable-theorem-id, e.g. thm-main-ub>" --name "<theorem headline>" \
+  --status "<mapped status>" --provenance "<trace_path from PROOF_AUDIT.json>" \
+  --statement "<canonical theorem statement>" \
+  --scope "<what it does NOT say; any flagged imports>" \
+  --evidence "<PROOF_AUDIT.json verdict + counterexample / obligation pointers>" \
+  --update-on-exist \
+  || echo "WARN: add_claim failed for <slug> (audit unaffected; fix wiki/status and re-run)" >&2
+```
+
+`--update-on-exist` lets a re-audit refresh a claim's status (an `unproven` claim
+becomes `verified` once the gap closes). `--provenance` is the honesty receipt (the
+`trace_path`); never omit it.
+
 ## Deep-Fix Mode (opt-in)
 
 **Default**: disabled. The Phase 1 reviewer emits issues with `minimal_fix` (a 1-2 sentence pointer); existing callers see no change.

@@ -222,9 +222,11 @@ See `shared-references/experiment-integrity.md` for the full integrity protocol.
 If `research-wiki/` exists, resolve `$WIKI_SCRIPT` per the canonical
 chain documented in
 [`shared-references/wiki-helper-resolution.md`](../shared-references/wiki-helper-resolution.md)
-(Variant B — warn-and-skip for caller skills). The verdict / claim
-status / idea-outcome page edits below run on raw markdown and don't
-need the helper, but edges, query-pack rebuild, and the log line do.
+(Variant B — warn-and-skip for caller skills). The verdict / idea-outcome
+page edits below run on raw markdown and don't need the helper, but edges,
+query-pack rebuild, and the log line do. **This skill never edits a claim's
+`status` field and never creates a claim node** — claims are born (and their
+proof `status` set) by `/proof-checker`; here we only attach experiment edges.
 
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
@@ -247,16 +249,20 @@ if research-wiki/ exists:
       - date, hardware, duration, metrics
       - verdict, confidence, reasoning summary
 
-    # 2. Update claim status (page edits run unconditionally; edges only if $WIKI_SCRIPT resolved)
-    for each claim resolved by this verdict:
+    # 2. Record empirical support as EDGES ONLY — never edit the claim page's `status`
+    #    field. A claim's `status` is the PROOF axis (verified / refuted / unproven /
+    #    sound-modulo-imports / drafted / retracted), owned by /proof-checker (the claim
+    #    birth point). Experiment support is a SEPARATE axis carried by these edges;
+    #    "supported"/"invalidated" are NOT valid claim statuses (the validator rejects them).
+    #    The edge attaches to a claim that should ALREADY be born by /proof-checker.
+    #    add_edge does NOT verify the target exists — a missing claim yields a SILENT
+    #    dangling edge — so ensure /proof-checker ran first; never hand-create the claim here.
+    for each claim resolved by this verdict (edges only if $WIKI_SCRIPT resolved):
         if verdict == "yes":
-            Update claim page: status → supported
             [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "<metric>"
         elif verdict == "partial":
-            Update claim page: status → partial
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "partial"
+            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "partial: <metric>"
         else:
-            Update claim page: status → invalidated
             [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type invalidates --evidence "<why>"
 
     # 3. Update idea outcome (raw markdown, helper-free)

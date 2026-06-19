@@ -24,7 +24,7 @@ Inspired by [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6
 | **Paper** | `papers/` | `paper:<slug>` | A published or preprint research paper |
 | **Idea** | `ideas/` | `idea:<id>` | A research idea (proposed, tested, or failed) |
 | **Experiment** | `experiments/` | `exp:<id>` | A concrete experiment run with results |
-| **Claim** | `claims/` | `claim:<id>` | A testable scientific claim with evidence status |
+| **Claim** | `claims/` | `claim:<id>` | A theorem/headline with an honest PROOF status — born via `/proof-checker` (see Hook 4) |
 
 ### Typed Relationships (`graph/edges.jsonl`)
 
@@ -281,7 +281,7 @@ Update a specific entity:
 ```
 /research-wiki update paper:chen2025 — relevance: core
 /research-wiki update idea:001 — outcome: negative
-/research-wiki update claim:C1 — status: invalidated
+/research-wiki update claim:C1 — status: refuted
 ```
 
 After any update: rebuild `query_pack.md`, update `log.md`.
@@ -291,7 +291,7 @@ After any update: rebuild `query_pack.md`, update `log.md`.
 Health check the wiki:
 
 1. **Orphan pages** — entities with zero edges
-2. **Stale claims** — claims with `status: reported` older than 14 days
+2. **Stale claims** — claims still `status: drafted` or `status: unproven` older than 14 days
 3. **Contradictions** — claims with both `supports` and `invalidates` edges
 4. **Missing connections** — papers sharing 2+ tags but no explicit relationship
 5. **Dead ideas** — `stage: proposed` ideas that were never tested
@@ -308,7 +308,7 @@ Quick overview:
 Papers: 28 (12 core, 10 related, 6 peripheral)
 Ideas: 7 (2 active, 3 failed, 1 partial, 1 succeeded)
 Experiments: 12
-Claims: 15 (5 supported, 3 invalidated, 7 reported)
+Claims: 15 (8 verified, 4 unproven, 2 refuted, 1 sound-modulo-imports)
 Edges: 64
 Gaps: 8 (3 unresolved)
 Last updated: 2026-04-07T10:12:00Z
@@ -374,19 +374,20 @@ log "idea-creator wrote N ideas to wiki"
 ### Hook 3: After `/result-to-claim` verdict
 
 ```
-# Create experiment page
+# Create experiment page (the experiment verdict lives HERE)
 exp_id = upsert_experiment(experiment_data)
 
-# Update each claim's status
+# Record empirical support as EDGES ONLY — never overwrite the claim's `status`.
+# A claim's `status` is the PROOF axis (verified / sound-modulo-imports / refuted /
+# unproven / drafted / retracted), owned by /proof-checker (the claim birth point).
+# Experiment support is a SEPARATE axis, carried entirely by supports/invalidates
+# edges; writing "supported"/"invalidated" into status is rejected by the validator.
 for claim_id in resolved_claims:
     if verdict == "yes":
-        set_claim_status(claim_id, "supported")
         add_edge(exp_id, claim_id, "supports")
     elif verdict == "partial":
-        set_claim_status(claim_id, "partial")
-        add_edge(exp_id, claim_id, "supports")  # partial
+        add_edge(exp_id, claim_id, "supports")   # partial — qualify in --evidence
     else:
-        set_claim_status(claim_id, "invalidated")
         add_edge(exp_id, claim_id, "invalidates")
 
 # Update idea outcome
@@ -399,6 +400,25 @@ if verdict in ("no", "partial"):
 rebuild query_pack
 log "result-to-claim: exp_id updated, verdict=..."
 ```
+
+### Hook 4: Claim birth — from `/proof-checker` (the ONLY birth point)
+
+Wiki **claim nodes are born here.** `/proof-checker` Phase 5.5 calls `add_claim`
+for each top-level theorem/headline after writing `PROOF_AUDIT.json`, stamping an
+honest PROOF-axis `status` and a `provenance` pointer to the audit trace. No other
+skill creates a claim node: `/result-to-claim` (Hook 3) only adds empirical
+`supports`/`invalidates` *edges* to an already-born claim and never edits its `status`.
+
+```bash
+# (run by /proof-checker; shown here for the wiki's record)
+python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug thm-main-ub \
+  --name "Main upper bound" --status verified \
+  --provenance ".aris/traces/proof-checker/<run>/" --statement "..." --update-on-exist
+```
+
+Claim `status` ∈ {`drafted`, `unproven`, `sound-modulo-imports`, `verified`,
+`refuted`, `retracted`} — the **proof axis only**. Empirical support is a separate
+axis, carried entirely by edges (Hook 3), never written into `status`.
 
 ## Re-ideation Trigger
 

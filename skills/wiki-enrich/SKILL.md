@@ -160,7 +160,7 @@ Write each TODO section's body following these rules:
 | Limitations / Failure Modes | 1-3 bullets | Honest | What the paper explicitly admits OR what's structurally absent (e.g. "no multi-node evaluation", "assumes uniform request length") |
 | Reusable Ingredients | 1-3 bullets | Concrete | Techniques / datasets / insights from this paper that could be ported elsewhere. **Highest value for `/idea-creator` — write carefully.** |
 | Open Questions | 1-2 bullets | Question form | What the paper does NOT answer but raises |
-| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write the literal italic line: `_No claims tracked yet — populate via /result-to-claim._`. Else list claim node IDs. |
+| Claims | 1 line | Static | If no `claim:` edges in `graph/edges.jsonl` reference this paper, write the literal italic line: `_No claims tracked yet — populate via /proof-checker._`. Else list claim node IDs. |
 | Relevance to This Project | 1-2 sentences | Project-contextual | Use `RESEARCH_BRIEF.md` / `CLAUDE.md` / `gap_map.md` to phrase the connection. If no project context, write the literal italic line: `_Project context not yet set — populate RESEARCH_BRIEF.md or gap_map.md to enable this section._` and report. |
 
 **Rules** (Karpathy fidelity):

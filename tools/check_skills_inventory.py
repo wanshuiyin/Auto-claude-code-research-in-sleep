@@ -226,6 +226,19 @@ def check_inventory() -> list[str]:
     require(doc_ladder, "external-cadence.md must document the stall ladder with both thresholds (>=2 structural, >=4 human) (B)", failures)
     require(wired, "research-pipeline/SKILL.md must actually wire iteration_log.py (resolver + `$ITER_LOG note` + pivot handling) — not just mention it (B)", failures)
 
+    # research_wiki.py add_claim (claim layer) ⇔ its documented birth trigger in
+    # /proof-checker. add_claim is a writer; without a skill that calls it, the claim
+    # layer is dead code (the exact orphan-writer trap). Same dead-code guard as above:
+    # the writer and its single birth point must BOTH be present.
+    rwiki = read(REPO_ROOT / "tools" / "research_wiki.py")
+    pchk = read(SKILLS_ROOT / "proof-checker" / "SKILL.md")
+    tool_claim = bool(re.search(r"def add_claim\b", rwiki)) and bool(re.search(r'add_parser\("add_claim"', rwiki))
+    # Prove the trigger is real (anchored to the actual command line, not a prose
+    # mention or comment): proof-checker must literally invoke the resolved helper.
+    born = re.search(r'python3\s+"\$WIKI_SCRIPT"\s+add_claim\b', pchk) is not None
+    require(tool_claim, "tools/research_wiki.py must implement the add_claim claim-layer writer + its CLI", failures)
+    require(born, "proof-checker/SKILL.md must invoke `add_claim` as the claim birth point — not just mention it (else add_claim is an orphan writer)", failures)
+
     return failures
 
 
