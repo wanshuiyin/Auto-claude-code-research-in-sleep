@@ -239,6 +239,15 @@ def check_inventory() -> list[str]:
     require(tool_claim, "tools/research_wiki.py must implement the add_claim claim-layer writer + its CLI", failures)
     require(born, "proof-checker/SKILL.md must invoke `add_claim` as the claim birth point — not just mention it (else add_claim is an orphan writer)", failures)
 
+    # research_wiki.py upsert_idea (idea layer) ⇔ its documented write-back in
+    # /idea-creator Phase 7. Same orphan-writer guard: the deterministic idea writer
+    # and the skill that calls it must BOTH be present, anchored to the real command.
+    icreator = read(SKILLS_ROOT / "idea-creator" / "SKILL.md")
+    tool_idea = bool(re.search(r"def upsert_idea\b", rwiki)) and bool(re.search(r'add_parser\("upsert_idea"', rwiki))
+    idea_written = re.search(r'python3\s+"\$WIKI_SCRIPT"\s+upsert_idea\b', icreator) is not None
+    require(tool_idea, "tools/research_wiki.py must implement the upsert_idea idea-layer writer + its CLI", failures)
+    require(idea_written, "idea-creator/SKILL.md must invoke `upsert_idea` to record ideas (Phase 7) — not just mention it (else ideas are written freehand and skipped on re-gen)", failures)
+
     return failures
 
 

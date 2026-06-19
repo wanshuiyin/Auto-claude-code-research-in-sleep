@@ -359,15 +359,19 @@ if research-wiki/query_pack.md exists (and < 7 days old):
     still run fresh literature search for last 3-6 months
 ```
 
-**After ideation (THIS IS CRITICAL — without it, ideas/ stays empty):**
+**After ideation (CRITICAL — without it, `ideas/` stays empty; runs on EVERY
+generation, including a re-run with updated constraints):** the page write is a
+**deterministic helper command**, not a freehand step the model can skip:
 ```
 for idea in all_generated_ideas (recommended + killed):
-    /research-wiki upsert_idea(idea)
-    for paper_id in idea.based_on:
-        add_edge(idea.node_id, paper_id, "inspired_by")
-    for gap_id in idea.target_gaps:
-        add_edge(idea.node_id, gap_id, "addresses_gap")
-rebuild query_pack
+    python3 "$WIKI_SCRIPT" upsert_idea research-wiki/ \
+      --slug <stable-id> --title <title> --stage <proposed|archived> --outcome pending \
+      --thesis <...> --risks <...> --based-on <paper:slug,...> --target-gaps <G2,...>
+    # one call: writes ideas/<slug>.md, wires inspired_by/addresses_gap edges,
+    # rebuilds index + query_pack, logs. Default skip-on-exist (won't clobber an
+    # existing idea enriched by /result-to-claim). `outcome` ∈ {unknown, pending,
+    # negative, mixed, positive} — the experiment verdict is set later by
+    # /result-to-claim, never guessed at ideation.
 log "idea-creator wrote N ideas to wiki"
 ```
 

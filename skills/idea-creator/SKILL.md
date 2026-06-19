@@ -390,35 +390,33 @@ Write a structured report to `idea-stage/IDEA_REPORT.md`:
 This is critical for spiral learning — without it, `ideas/` stays empty and re-ideation has no memory.
 
 `$WIKI_SCRIPT` was resolved in Phase 0 above. If Phase 0 did not run
-(no `research-wiki/`), this phase is skipped. If Phase 0 ran but the
-resolution chain failed to find the helper (`$WIKI_SCRIPT` is empty),
-the page-write step still runs (idea pages are plain markdown the
-agent writes directly), but the edge / query-pack / log steps that
-require the helper are skipped with a single warning.
+(no `research-wiki/`), skip this phase. The idea page is written by a
+**deterministic helper (`upsert_idea`)** — NOT freehand markdown — so **every
+generation, including a re-run with updated constraints, records reliably**
+(one CLI call per idea, not a prose step the model can skip). `upsert_idea`
+writes the page, wires the `inspired_by` / `addresses_gap` edges, and rebuilds
+index + query_pack in a single call. **Default skip-on-exist**: a re-ideation
+run records NEW ideas without clobbering an existing idea whose `outcome`
+`/result-to-claim` may already have enriched. If `$WIKI_SCRIPT` is empty
+(helper unreachable) the ideas are **NOT** recorded and a single WARN prints
+(fix: `bash tools/install_aris.sh` or `export ARIS_REPO`).
 
 ```
-if research-wiki/ exists:
+if research-wiki/ exists AND [ -n "$WIKI_SCRIPT" ]:
     for each idea in recommended_ideas + eliminated_ideas:
-        1. Create page: research-wiki/ideas/<idea_id>.md
-           - node_id: idea:<id>
-           - stage: proposed (or: piloted, archived)
-           - outcome: unknown (or: negative, mixed, positive)
-           - based_on: [paper:<slug>, ...]
-           - target_gaps: [gap:<id>, ...]
-           - Include: hypothesis, proposed method, expected outcome
-           - If pilot was run: actual outcome, failure notes, reusable components
-
-        2. Add edges (only if $WIKI_SCRIPT resolved):
-           [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "idea:<id>" --to "paper:<slug>" --type inspired_by --evidence "..."
-           [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "idea:<id>" --to "gap:<id>" --type addresses_gap --evidence "..."
-
-    Rebuild query pack (only if $WIKI_SCRIPT resolved):
-        [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" rebuild_query_pack research-wiki/
-    Log (only if $WIKI_SCRIPT resolved):
-        [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" log research-wiki/ "idea-creator wrote N ideas (M recommended, K eliminated)"
-
-    if [ -z "$WIKI_SCRIPT" ]:
-        echo "WARN: idea pages were written but edges / query_pack / log were skipped because research_wiki.py is unreachable (see Phase 0 warning above)." >&2
+        # recommended → --stage proposed; eliminated-at-ideation → --stage archived.
+        # --outcome stays "pending" (the experiment verdict, negative/mixed/positive,
+        # is set LATER by /result-to-claim — never guessed here).
+        python3 "$WIKI_SCRIPT" upsert_idea research-wiki/ \
+          --slug "<stable-idea-id>" --title "<idea title>" \
+          --stage "<proposed|archived>" --outcome pending \
+          --thesis "<core hypothesis / direction>" \
+          --risks "<novelty / feasibility risks; why killed if eliminated>" \
+          --based-on "<paper:slug,paper:slug2>" --target-gaps "<G2,G10>" \
+          || echo "WARN: upsert_idea failed for <id> (continuing; audit/report unaffected)" >&2
+    python3 "$WIKI_SCRIPT" log research-wiki/ "idea-creator wrote N ideas (M recommended, K eliminated)"
+elif research-wiki/ exists AND [ -z "$WIKI_SCRIPT" ]:
+    echo "WARN: ideas NOT recorded — research_wiki.py unreachable (see Phase 0). Fix: bash tools/install_aris.sh or export ARIS_REPO." >&2
 ```
 
 ## Output Protocols
