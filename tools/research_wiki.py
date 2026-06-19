@@ -285,15 +285,16 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     if ideas_dir.exists():
         failed = []
         for f in sorted(ideas_dir.glob("*.md")):
-            content = f.read_text()
-            if "outcome: negative" in content or "outcome: mixed" in content:
-                # Extract frontmatter title and failure notes
+            meta = _load_paper_frontmatter(f)
+            # Gate on the FRONTMATTER outcome only (not a full-text substring): a
+            # `pending` idea whose body discusses an "outcome: negative" failure mode
+            # must NOT be banlisted.
+            if meta.get("outcome") in ("negative", "mixed"):
+                content = f.read_text()
                 lines = content.split("\n")
-                title = ""
+                title = meta.get("title", "")
                 failure = ""
                 for line in lines:
-                    if line.startswith("title:"):
-                        title = line.split(":", 1)[1].strip().strip('"')
                     if "failure" in line.lower() or "lesson" in line.lower():
                         idx = lines.index(line)
                         failure = "\n".join(lines[idx:idx+3])
@@ -399,7 +400,9 @@ def get_stats(wiki_root: str):
             return 0
         count = 0
         for f in d.glob("*.md"):
-            if f"{field}: {value}" in f.read_text():
+            # Read the FRONTMATTER field only — not a full-text substring, so body
+            # text mentioning e.g. "outcome: negative" can't inflate the count.
+            if _load_paper_frontmatter(f).get(field) == value:
                 count += 1
         return count
 
@@ -1040,6 +1043,196 @@ def add_claim(wiki_root: str, slug: str, name: str, *, description: str = "",
     return page_path
 
 
+_IDEA_OUTCOMES = {
+    "unknown",                 # not yet assessed
+    "pending",                 # proposed / awaiting pilot or experiment
+    "negative",                # tested, failed (feeds the re-ideation banlist)
+    "mixed",                   # partial result (also banlisted)
+    "positive",                # tested, succeeded
+}
+
+_IDEA_STAGES = {"proposed", "active", "piloted", "archived"}
+
+
+def _idea_slugify(name: str, slug: str = "") -> str:
+    """Slug for an idea page (mirrors _claim_slugify): honor an explicit --slug
+    verbatim (sanitized), else fall back to the title keyword extractor."""
+    if slug:
+        s = re.sub(r"[^a-z0-9._-]+", "-", slug.strip().lower()).strip("-")
+        if s:
+            return s
+    return slugify(name).lstrip("_").lstrip("0").strip("_") or "idea"
+
+
+def _render_idea_page(slug, title, description, stage, outcome, thesis, risks,
+                      based_on_ids, target_gap_ids, tags):
+    """Render an ideas/<slug>.md page following the research-wiki schema.
+
+    Mirrors _render_claim_page. The frontmatter `outcome` field is the one the
+    re-ideation banlist + stats read (rebuild_query_pack / get_stats), so it must
+    be one of _IDEA_OUTCOMES. Edges live in graph/edges.jsonl; the frontmatter
+    based_on / target_gaps lists mirror them for human-readable provenance.
+    """
+    lines = ["---"]
+    lines.append("type: idea")
+    lines.append(f"node_id: idea:{slug}")
+    lines.append(f"title: {_yaml_quote(title)}")
+    lines.append(f"stage: {stage}")
+    lines.append(f"outcome: {outcome}")
+    lines.append(f"added: {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}")
+    lines.append("based_on: [" + ", ".join(_yaml_quote(i) for i in based_on_ids) + "]")
+    lines.append("target_gaps: [" + ", ".join(_yaml_quote(i) for i in target_gap_ids) + "]")
+    lines.append("tags: [" + ", ".join(_yaml_quote(t) for t in tags) + "]")
+    lines.append("---")
+    lines.append("")
+    lines.append(f"# {title}")
+    lines.append("")
+    lines.append(f"**stage:** `{stage}`  ·  **outcome:** `{outcome}`")
+    if description.strip():
+        lines.append("")
+        lines.append(description.strip())
+    lines.append("")
+    lines.append("## Thesis")
+    lines.append(thesis.strip() if thesis.strip() else "_TODO: the core hypothesis / direction._")
+    lines.append("")
+    lines.append("## Key risks")
+    lines.append(risks.strip() if risks.strip() else "_TODO: novelty / feasibility risks._")
+    lines.append("")
+    lines.append("## Connections")
+    lines.append("_Edges are recorded in `graph/edges.jsonl`; summarize here for human readers._")
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def upsert_idea(wiki_root: str, slug: str, title: str, *, description: str = "",
+                stage: str = "proposed", outcome: str = "pending",
+                thesis: str = "", risks: str = "",
+                tags: list[str] | None = None,
+                based_on: list[str] | None = None,
+                target_gaps: list[str] | None = None,
+                update_on_exist: bool = False) -> Path:
+    """Create (or update) an ideas/<slug>.md node and wire its edges.
+
+    The idea layer is the research-direction ledger written by /idea-creator after
+    ideation (Phase 7). Mirrors add_claim / ingest_paper:
+      - writes ideas/<slug>.md from the schema above
+      - dedups by slug (update_on_exist=False SKIPS an existing page — so a
+        re-ideation run records NEW ideas without clobbering an existing idea whose
+        outcome /result-to-claim may have already enriched)
+      - records typed edges into graph/edges.jsonl via add_edge:
+          idea --inspired_by--> paper    (--based-on paper:slug)
+          idea --addresses_gap--> gap    (--target-gaps G2,G10)
+      - rebuilds index.md + query_pack.md, appends to log.md
+    `outcome` must be one of _IDEA_OUTCOMES (it drives the re-ideation banlist + stats).
+    NOTE: /result-to-claim updates an idea's outcome by editing the page in place (to
+    preserve the rich body); it must NOT call this with update_on_exist (would clobber).
+    """
+    root = Path(wiki_root)
+    if not (root / "ideas").exists():
+        raise RuntimeError(f"{root} is not an initialized wiki (ideas/ missing). "
+                           f"Run `init` first.")
+    if outcome not in _IDEA_OUTCOMES:
+        raise RuntimeError(f"unknown idea outcome '{outcome}'. "
+                           f"Valid: {sorted(_IDEA_OUTCOMES)}")
+    if stage not in _IDEA_STAGES:
+        raise RuntimeError(f"unknown idea stage '{stage}'. "
+                           f"Valid: {sorted(_IDEA_STAGES)}")
+
+    tags = tags or []
+    slug = _idea_slugify(title, slug)
+    node_id = f"idea:{slug}"
+
+    page_path = root / "ideas" / f"{slug}.md"
+    if page_path.exists() and not update_on_exist:
+        append_log(str(root), f"upsert_idea: skipped existing idea "
+                              f"{page_path.name} (slug dedup)")
+        print(f"Idea already exists: {page_path.name} (slug dedup) — skipping.")
+        return page_path
+    was_update = page_path.exists()
+
+    # Quarantine model-authored body fields before persist (re-read into agent
+    # context via index/query_pack) — same Layer-1 injection hygiene as add_claim.
+    # Title is structural (not quarantined, like add_claim's name). Placeholder
+    # persists; raw text → graph/quarantine.log for human review.
+    if quarantine is not None:
+        _q_hits = []
+
+        def _q(val, field):
+            if not val:
+                return val
+            safe, findings = quarantine(val, scope="strict",
+                                        label=f"idea {slug}.{field}")
+            if findings:
+                _q_hits.append((field, findings, val))
+            return safe
+
+        description = _q(description, "description")
+        thesis = _q(thesis, "thesis")
+        risks = _q(risks, "risks")
+        if _q_hits:
+            qlog = root / "graph" / "quarantine.log"
+            qlog.parent.mkdir(parents=True, exist_ok=True)
+            with open(qlog, "a", encoding="utf-8") as f:
+                for field, findings, raw in _q_hits:
+                    f.write(json.dumps({
+                        "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        "idea": node_id, "field": field,
+                        "findings": findings, "raw_text": raw,
+                    }, ensure_ascii=False) + "\n")
+            print(f"⚠️  idea field(s) quarantined "
+                  f"({', '.join(f for f, _, _ in _q_hits)}); placeholder persisted, "
+                  f"raw text preserved in graph/quarantine.log for review.",
+                  file=sys.stderr)
+
+    def _norm(target: str, default_prefix: str) -> str:
+        t = target.strip()
+        if not t:
+            return ""
+        if ":" in t:                                  # already a namespaced node_id
+            return t
+        if default_prefix == "gap:" or re.fullmatch(r"[Gg]\d+", t):
+            return f"gap:{t.upper()}" if re.fullmatch(r"[Gg]\d+", t) else f"{default_prefix}{t}"
+        return f"{default_prefix}{t}"
+
+    def _warn_if_dangling(nid: str) -> None:
+        if not nid:
+            return
+        kind, _, rest = nid.partition(":")
+        exists = True
+        if kind == "paper":
+            exists = (root / "papers" / f"{rest}.md").exists()
+        elif kind == "gap":
+            gm = root / "gap_map.md"
+            exists = gm.exists() and re.search(
+                rf"\b{re.escape(rest)}\b", gm.read_text(encoding="utf-8"))
+        if not exists:
+            print(f"⚠️  upsert_idea: edge target {nid} not found in this wiki "
+                  f"(dangling edge recorded — create the node or fix the id).",
+                  file=sys.stderr)
+
+    based_on_ids = [n for n in (_norm(t, "paper:") for t in (based_on or [])) if n]
+    target_gap_ids = [n for n in (_norm(t, "gap:") for t in (target_gaps or [])) if n]
+
+    rendered = _render_idea_page(slug, title, description, stage, outcome, thesis,
+                                 risks, based_on_ids, target_gap_ids, tags)
+    page_path.write_text(rendered)
+
+    # Wire edges (reuse add_edge so dedup + JSONL format match paper/claim edges).
+    for nid in based_on_ids:
+        _warn_if_dangling(nid)
+        add_edge(str(root), node_id, nid, "inspired_by", evidence=f"idea {slug} inspired by paper")
+    for nid in target_gap_ids:
+        _warn_if_dangling(nid)
+        add_edge(str(root), node_id, nid, "addresses_gap", evidence=f"idea {slug} addresses gap")
+
+    rebuild_index(str(root))
+    rebuild_query_pack(str(root))
+    action = "updated" if was_update else "added"
+    append_log(str(root), f"upsert_idea: {action} {node_id} [stage={stage} outcome={outcome}]")
+    print(f"Idea {action}: {page_path} [stage={stage} outcome={outcome}]")
+    return page_path
+
+
 def sync_papers(wiki_root: str, arxiv_ids: list[str], update_on_exist: bool = False) -> None:
     """Batch backfill: ingest many arxiv ids with a SINGLE metadata request.
 
@@ -1210,6 +1403,29 @@ def main():
     p_claim.add_argument("--update-on-exist", action="store_true",
                          help="Overwrite an existing claim instead of skipping (default: skip)")
 
+    # upsert_idea — create/update an idea node (idea-creator Phase 7 write-back)
+    p_idea = subparsers.add_parser("upsert_idea",
+                                   help="Create (or update) an ideas/<slug>.md node")
+    p_idea.add_argument("wiki_root")
+    p_idea.add_argument("--slug", default="",
+                        help="Stable idea id (honored verbatim); else derived from --title")
+    p_idea.add_argument("--title", required=True, help="Human-readable idea title")
+    p_idea.add_argument("--description", default="",
+                        help="One-line description for the index/frontmatter")
+    p_idea.add_argument("--stage", default="proposed",
+                        help="proposed | active | piloted | archived")
+    p_idea.add_argument("--outcome", default="pending",
+                        help="One of: " + ", ".join(sorted(_IDEA_OUTCOMES)))
+    p_idea.add_argument("--thesis", default="", help="Core hypothesis / direction (body)")
+    p_idea.add_argument("--risks", default="", help="Novelty / feasibility risks (body)")
+    p_idea.add_argument("--tags", default="", help="Comma-separated tag list")
+    p_idea.add_argument("--based-on", dest="based_on", default="",
+                        help="Comma-separated paper node_ids/slugs that inspired this idea")
+    p_idea.add_argument("--target-gaps", dest="target_gaps", default="",
+                        help="Comma-separated gap ids this idea addresses, e.g. G2,G10")
+    p_idea.add_argument("--update-on-exist", action="store_true",
+                        help="Overwrite an existing idea instead of skipping (default: skip)")
+
     # sync — batch backfill
     p_sync = subparsers.add_parser("sync",
                                     help="Batch ingest from a list of arXiv IDs")
@@ -1256,6 +1472,14 @@ def main():
                   uses=_split(args.uses), depends_on=_split(args.depends_on),
                   refutes=_split(args.refutes),
                   update_on_exist=args.update_on_exist)
+    elif args.command == "upsert_idea":
+        def _spliti(s: str) -> list[str]:
+            return [x.strip() for x in s.split(",") if x.strip()]
+        upsert_idea(args.wiki_root, args.slug, args.title,
+                    description=args.description, stage=args.stage, outcome=args.outcome,
+                    thesis=args.thesis, risks=args.risks, tags=_spliti(args.tags),
+                    based_on=_spliti(args.based_on), target_gaps=_spliti(args.target_gaps),
+                    update_on_exist=args.update_on_exist)
     elif args.command == "sync":
         ids: list[str] = []
         if args.arxiv_ids:
