@@ -378,21 +378,28 @@ log "idea-creator wrote N ideas to wiki"
 ### Hook 3: After `/result-to-claim` verdict
 
 ```
-# Create experiment page (the experiment verdict lives HERE)
-exp_id = upsert_experiment(experiment_data)
+# Create/refresh the experiment node FIRST via the deterministic helper (verdict owner
+# → --update-on-exist). This is the experiment BIRTH point. add_edge does NOT verify
+# node existence, so GATE the supports/invalidates edges below on the node having been
+# born (EXP_NODE_OK) — else they'd dangle off a missing exp node.
+EXP_NODE_OK = (python3 "$WIKI_SCRIPT" add_experiment research-wiki/ --slug <exp_id> \
+  --idea idea:<active_idea> --verdict <yes|partial|no> --confidence <high|medium|low> \
+  --metrics <...> --reasoning <...> --provenance <run dir> --update-on-exist) succeeded
+  # writes page + idea--tested_by-->exp edge + rebuilds index/query_pack
 
-# Record empirical support as EDGES ONLY — never overwrite the claim's `status`.
-# A claim's `status` is the PROOF axis (verified / sound-modulo-imports / refuted /
-# unproven / drafted / retracted), owned by /proof-checker (the claim birth point).
-# Experiment support is a SEPARATE axis, carried entirely by supports/invalidates
+# Record empirical support as EDGES ONLY, and ONLY if EXP_NODE_OK — never overwrite the
+# claim's `status`. A claim's `status` is the PROOF axis (verified / sound-modulo-imports
+# / refuted / unproven / drafted / retracted), owned by /proof-checker (the claim birth
+# point). Experiment support is a SEPARATE axis carried entirely by supports/invalidates
 # edges; writing "supported"/"invalidated" into status is rejected by the validator.
-for claim_id in resolved_claims:
-    if verdict == "yes":
-        add_edge(exp_id, claim_id, "supports")
-    elif verdict == "partial":
-        add_edge(exp_id, claim_id, "supports")   # partial — qualify in --evidence
-    else:
-        add_edge(exp_id, claim_id, "invalidates")
+if EXP_NODE_OK:
+    for claim_id in resolved_claims:
+        if verdict == "yes":
+            add_edge(exp_id, claim_id, "supports")
+        elif verdict == "partial":
+            add_edge(exp_id, claim_id, "supports")   # partial — qualify in --evidence
+        else:
+            add_edge(exp_id, claim_id, "invalidates")
 
 # Update idea outcome
 update_idea(active_idea_id, outcome=verdict)

@@ -248,6 +248,15 @@ def check_inventory() -> list[str]:
     require(tool_idea, "tools/research_wiki.py must implement the upsert_idea idea-layer writer + its CLI", failures)
     require(idea_written, "idea-creator/SKILL.md must invoke `upsert_idea` to record ideas (Phase 7) — not just mention it (else ideas are written freehand and skipped on re-gen)", failures)
 
+    # research_wiki.py add_experiment (experiment layer) ⇔ its write-back in
+    # /result-to-claim Step 5. Same orphan-writer guard; closes the last freehand
+    # wiki layer so the supports/invalidates edges never dangle off a missing exp node.
+    r2c = read(SKILLS_ROOT / "result-to-claim" / "SKILL.md")
+    tool_exp = bool(re.search(r"def add_experiment\b", rwiki)) and bool(re.search(r'add_parser\("add_experiment"', rwiki))
+    exp_written = re.search(r'python3\s+"\$WIKI_SCRIPT"\s+add_experiment\b', r2c) is not None
+    require(tool_exp, "tools/research_wiki.py must implement the add_experiment experiment-layer writer + its CLI", failures)
+    require(exp_written, "result-to-claim/SKILL.md must invoke `add_experiment` to create the experiment node (Step 5) — not just mention it (else exp pages are freehand and supports/invalidates edges dangle)", failures)
+
     return failures
 
 

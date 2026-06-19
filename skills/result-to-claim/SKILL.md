@@ -242,28 +242,38 @@ WIKI_SCRIPT=".aris/tools/research_wiki.py"
 
 ```
 if research-wiki/ exists:
-    # 1. Create experiment page
-    Create research-wiki/experiments/<exp_id>.md with:
-      - node_id: exp:<id>
-      - idea_id: idea:<active_idea>
-      - date, hardware, duration, metrics
-      - verdict, confidence, reasoning summary
+    # 1. Create/refresh the experiment node FIRST (verdict OWNER → --update-on-exist so
+    #    a re-judge overwrites the stale verdict). The supports/invalidates edges in #2
+    #    point FROM exp:<id>, and add_edge does NOT verify node existence — so GATE those
+    #    edges on the experiment node having been born (EXP_NODE_OK), else they'd dangle
+    #    (the exact bug this closes). On failure: warn, skip the wiki edges, still report.
+    EXP_NODE_OK=0
+    if [ -n "$WIKI_SCRIPT" ]; then
+      if python3 "$WIKI_SCRIPT" add_experiment research-wiki/ \
+           --slug "<exp_id>" --idea "idea:<active_idea>" \
+           --verdict "<yes|partial|no>" --confidence "<high|medium|low>" \
+           --date "<date>" --hardware "<hw>" --duration "<dur>" \
+           --metrics "<key metrics>" --reasoning "<one-line why this verdict>" \
+           --provenance "<EXPERIMENT_AUDIT.md / run dir>" --update-on-exist; then
+        EXP_NODE_OK=1   # page written + idea--tested_by-->exp edge + index/query_pack rebuilt
+      else
+        echo "WARN: add_experiment failed for <exp_id>; skipping wiki edges (verdict still reported)." >&2
+      fi
+    fi
 
-    # 2. Record empirical support as EDGES ONLY — never edit the claim page's `status`
-    #    field. A claim's `status` is the PROOF axis (verified / refuted / unproven /
+    # 2. Record empirical support as EDGES ONLY — and ONLY when the exp node was born
+    #    ([ "$EXP_NODE_OK" = 1 ]), so no edge dangles off a missing node. Never edit the
+    #    claim page's `status`: that is the PROOF axis (verified / refuted / unproven /
     #    sound-modulo-imports / drafted / retracted), owned by /proof-checker (the claim
-    #    birth point). Experiment support is a SEPARATE axis carried by these edges;
-    #    "supported"/"invalidated" are NOT valid claim statuses (the validator rejects them).
-    #    The edge attaches to a claim that should ALREADY be born by /proof-checker.
-    #    add_edge does NOT verify the target exists — a missing claim yields a SILENT
-    #    dangling edge — so ensure /proof-checker ran first; never hand-create the claim here.
-    for each claim resolved by this verdict (edges only if $WIKI_SCRIPT resolved):
+    #    birth point) — "supported"/"invalidated" are NOT valid claim statuses. The claim
+    #    target should ALREADY be born by /proof-checker; add_edge does not verify it.
+    for each claim resolved by this verdict (only if [ "$EXP_NODE_OK" = 1 ]):
         if verdict == "yes":
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "<metric>"
+            python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "<metric>"
         elif verdict == "partial":
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "partial: <metric>"
+            python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "partial: <metric>"
         else:
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type invalidates --evidence "<why>"
+            python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type invalidates --evidence "<why>"
 
     # 3. Update idea outcome (raw markdown, helper-free)
     Update research-wiki/ideas/<idea_id>.md:
