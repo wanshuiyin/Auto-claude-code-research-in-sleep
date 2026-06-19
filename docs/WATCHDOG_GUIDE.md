@@ -24,6 +24,7 @@ A lightweight Python daemon that runs on each GPU server, continuously monitorin
 |-----------|--------|-----------|
 | `training` | Session alive + GPU utilization | `DEAD` (session gone), `IDLE` (GPU <5%) |
 | `download` | Session alive + file size growth + speed | `DEAD`, `STALLED` (no growth), `SLOW` (<1MB/s) |
+| `loop` | State-file mtime vs `stale_after_seconds` (detect-only) | `STALE` (no update in window), `MISSING` (file absent past grace), `PENDING` (awaiting first write), `COMPLETED` |
 
 **What it outputs:**
 
@@ -89,11 +90,13 @@ python3 tools/watchdog.py --register '{
 
 **Required fields:**
 - `name` — unique task identifier
-- `type` — `"training"` or `"download"`
-- `session` — screen/tmux session name
+- `type` — `"training"`, `"download"`, or `"loop"`
+- `session` — screen/tmux session name (training/download only)
+- `state_file` — path to the loop's heartbeat/state file (loop only)
+- `stale_after_seconds` — staleness window in seconds; set ≥ the loop's longest single iteration (loop only)
 
 **Optional fields:**
-- `session_type` — `"screen"` (default) or `"tmux"`
+- `session_type` — `"screen"` (default) or `"tmux"` (training/download)
 - `gpus` — list of GPU indices to monitor (training only)
 - `target_path` — file/directory to track size growth (download only)
 
@@ -138,6 +141,10 @@ python3 tools/watchdog.py --unregister exp01
 | `IDLE` | GPU utilization <5% | Training may have finished, crashed, or is stuck in data loading |
 | `STALLED` | Download file size not growing | Check network, disk space, auth tokens |
 | `SLOW` | Download speed <1 MB/s | May be throttled; check network or source |
+| `STALE` | Loop's state file not updated within `stale_after_seconds` | Loop may have died silently (compaction/session close); restart/nudge it (detect-only — watchdog never auto-restarts) |
+| `MISSING` | Loop registered but state file absent past grace | Likely a path typo in `state_file`, or the loop never started |
+| `PENDING` | Loop registered, awaiting first state write | Normal at startup; no action |
+| `COMPLETED` | Loop reported completion | Unregister it (`--unregister`) |
 | `ERROR` | Watchdog encountered an error checking this task | Check watchdog logs |
 
 ## Integration with ARIS Workflows

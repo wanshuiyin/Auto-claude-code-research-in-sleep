@@ -198,6 +198,17 @@ def check_inventory() -> list[str]:
                 f"fan-out (see shared-references/fan-out-pattern.md)"
             )
 
+    # Watchdog 'loop' task type ⇔ its documented trigger (A2). Mirrors the Agent-grant⇒cite
+    # rule above: a feature with no documented trigger is dead weight, a documented trigger
+    # for a missing feature is a broken pointer. The loop type is a shipped feature, so BOTH
+    # must be present.
+    watchdog_py = read(REPO_ROOT / "tools" / "watchdog.py")
+    ext_cadence = read(SKILLS_ROOT / "shared-references" / "external-cadence.md")
+    tool_loop = bool(re.search(r"def check_loop\b", watchdog_py)) and bool(re.search(r'==\s*"loop"', watchdog_py))
+    doc_loop = bool(re.search(r'"type"\s*:\s*"loop"', ext_cadence))
+    require(tool_loop, "tools/watchdog.py must implement the loop-liveness check_loop (A2)", failures)
+    require(doc_loop, "external-cadence.md must document registering a watchdog 'loop' task — its trigger (A2)", failures)
+
     return failures
 
 

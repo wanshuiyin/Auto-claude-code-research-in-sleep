@@ -194,6 +194,27 @@ acquit the work the pipeline produces.
 
 One-liner: **a heartbeat may say "keep going," never "good enough."**
 
+## Loop self-heartbeat + watchdog liveness (catch a silent death)
+
+A `/loop` or `CronCreate` heartbeat is parasitic on a living session; if it dies
+(context compaction, session close) nothing notices. Two-part convention:
+
+1. **Write a heartbeat first.** As the FIRST action of every iteration, rewrite
+   (or `touch`) the loop's state file (`*_STATE.json` / `run_state.json` / a tiny
+   `last_seen` file) so its mtime advances each tick *before* any work that might hang.
+2. **Register it with the watchdog** at startup, and **unregister on completion**:
+   ```bash
+   python3 tools/watchdog.py --register      '{"name":"<run_id>","type":"loop","state_file":"<the heartbeat file>","stale_after_seconds":21600}'
+   # on completion: python3 tools/watchdog.py --unregister "<run_id>"
+   ```
+   `stale_after_seconds` is the loop's OWN tolerance — set it to **comfortably exceed
+   the longest single iteration/operation** (≈ a few × the tick interval), **never** the
+   watchdog poll interval. The watchdog writes **STALE** to `summary.txt` + `alerts.log`
+   (which your poll already reads) when the file's mtime is older than that; a finished
+   loop shows **COMPLETED** (if its state carries a terminal `status`) or should be
+   unregistered. **It only DETECTS** — it never restarts the loop or re-runs a
+   verdict-bearing skill; recovery stays a human/cron decision, per the fence above.
+
 ## Required components (when you add external cadence to a skill)
 
 1. **Waits on an external fact, not a self-verdict.** State the fact in

@@ -24,6 +24,7 @@ ARIS 实验在远程 screen/tmux session 中运行。当前的监控（`/monitor
 |----------|--------|----------|
 | `training` | Session 存活 + GPU 利用率 | `DEAD`（session 没了）、`IDLE`（GPU <5%） |
 | `download` | Session 存活 + 文件大小增长 + 速度 | `DEAD`、`STALLED`（不增长）、`SLOW`（<1MB/s） |
+| `loop` | state 文件 mtime vs `stale_after_seconds`(仅检测) | `STALE`(窗口内无更新)、`MISSING`(grace 后文件缺失)、`PENDING`(等首次写入)、`COMPLETED` |
 
 **输出结构：**
 
@@ -88,11 +89,13 @@ python3 tools/watchdog.py --register '{
 
 **必填字段：**
 - `name` — 唯一任务标识
-- `type` — `"training"` 或 `"download"`
-- `session` — screen/tmux session 名
+- `type` — `"training"`、`"download"` 或 `"loop"`
+- `session` — screen/tmux session 名（仅 training/download）
+- `state_file` — loop 的心跳/state 文件路径（仅 loop）
+- `stale_after_seconds` — 判定停滞的秒数窗口；设为 ≥ loop 最长单次迭代（仅 loop）
 
 **可选字段：**
-- `session_type` — `"screen"`（默认）或 `"tmux"`
+- `session_type` — `"screen"`（默认）或 `"tmux"`（training/download）
 - `gpus` — 要监控的 GPU 编号列表（仅训练）
 - `target_path` — 追踪大小增长的文件/目录（仅下载）
 
@@ -137,6 +140,10 @@ python3 tools/watchdog.py --unregister exp01
 | `IDLE` | GPU 利用率 <5% | 训练可能已完成、崩溃或卡在数据加载 |
 | `STALLED` | 下载文件大小不增长 | 检查网络、磁盘空间、认证 token |
 | `SLOW` | 下载速度 <1 MB/s | 可能被限速，检查网络或下载源 |
+| `STALE` | loop 的 state 文件超过 `stale_after_seconds` 未更新 | loop 可能已静默死亡（compaction/session 关闭），重启/nudge 它（仅检测——watchdog 绝不自动重启） |
+| `MISSING` | loop 已注册但 grace 后 state 文件仍缺失 | 多半是 `state_file` 路径写错，或 loop 从未启动 |
+| `PENDING` | loop 已注册，等待首次 state 写入 | 启动期正常，无需操作 |
+| `COMPLETED` | loop 报告完成 | 用 `--unregister` 注销它 |
 | `ERROR` | Watchdog 检查任务时出错 | 检查 watchdog 日志 |
 
 ## 与 ARIS 工作流集成

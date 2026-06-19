@@ -15,7 +15,9 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skil
 > the cross-model jury. A heartbeat may say "keep going," never "good enough."
 > See
 > [`shared-references/external-cadence.md`](../shared-references/external-cadence.md)
-> (overnight-pipeline rule).
+> (overnight-pipeline rule). At heartbeat startup, touch the run state first each tick
+> and register this run with the watchdog `loop` type (so a silent death surfaces as
+> STALE); unregister on completion. The watchdog only detects — it never acquits.
 
 End-to-end autonomous research workflow for: **$ARGUMENTS**
 
