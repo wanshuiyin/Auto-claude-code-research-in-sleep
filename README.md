@@ -30,7 +30,7 @@
   </a>
 </p>
 
-> 🧭 *Not just multi-frame movies — the same **audited spiral** generates clean **method / flow diagrams** too: this figure was produced by ARIS-Movie-Director's own `image_gen` + cross-model `panel_gate` loop (same DNA as core ARIS — an authored source of truth, a gate where no step signs off on itself, a research-wiki audit trail).*
+> 🧭 *Not just multi-frame movies — the same **audited spiral** generates clean **method / flow diagrams** too: this figure was produced by ARIS-Movie-Director's own `image_gen` + cross-model `panel_gate` loop (same DNA as core ARIS — an authored source of truth, a gate where no step signs off on itself, a research-wiki audit trail). 👉 **The skills + an end-to-end CLI are in [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — the [`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) agent workflow with a deterministic CLI core you can run standalone, plus [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md) — the skill that made this figure.*
 
 <table><tr>
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_audit.webp" alt="ARIS-Movie-Director frame — the evaluator-integrity audit page" width="100%"></a></td>

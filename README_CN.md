@@ -30,7 +30,7 @@
   </a>
 </p>
 
-> 🧭 *不止做多帧电影 —— 同一套**受审螺旋**也能生成干净的**方法图 / 流程图**：这张图就是 ARIS-Movie-Director 自己的 `image_gen` + 跨模型 `panel_gate` loop 跑出来的（和核心 ARIS 同宗 —— 可信源头、没有哪一步能自己给自己放行的 gate、research-wiki 审计留痕）。*
+> 🧭 *不止做多帧电影 —— 同一套**受审螺旋**也能生成干净的**方法图 / 流程图**：这张图就是 ARIS-Movie-Director 自己的 `image_gen` + 跨模型 `panel_gate` loop 跑出来的（和核心 ARIS 同宗 —— 可信源头、没有哪一步能自己给自己放行的 gate、research-wiki 审计留痕）。👉 **skills 和端到端 CLI 也都在 [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— [`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) agent 工作流(含可独立运行的确定性 CLI 内核),以及做出这张图的 [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md)。*
 
 <table><tr>
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_audit.webp" alt="ARIS-Movie-Director 帧 —— evaluator 诚实度审计页" width="100%"></a></td>
