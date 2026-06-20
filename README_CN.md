@@ -26,7 +26,7 @@
 
 <p align="center">
   <a href="https://github.com/wanshuiyin/ARIS-Movie-Director">
-    <img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/method_figure.png" alt="ARIS-Movie-Director 方法图 —— 受审螺旋：可信源头（asset library · outline · storyboard · comic.json）→ 逐格 image_gen + 跨模型 panel_gate（盲 token-diff、单票否决）→ research-wiki 审计留痕 → 组装与发布" width="100%">
+    <img src="docs/aris-movie-director-method.png" alt="ARIS-Movie-Director 方法图 —— 受审螺旋：可信源头（asset library · outline · storyboard · comic.json）→ 逐格 image_gen + 跨模型 panel_gate（盲 token-diff、单票否决）→ research-wiki 审计留痕 → 组装与发布" width="100%">
   </a>
 </p>
 
