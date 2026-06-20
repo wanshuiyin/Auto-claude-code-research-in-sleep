@@ -16,7 +16,7 @@
 
 🚀 **从 科研 → 任何 "研究"**：[**ARIS-Anything**](https://github.com/wanshuiyin/ARIS-Anything) 把 ARIS 的五步 loop（plan / draft / 跨模型对抗审 / 迭代 / 持久化）从学术科研推广到非学术的结构化研究——投资尽调 / 法律研究 / 市场研究 / 自驱学习 / 调查新闻 / 工程复盘等。
 
-🎬 **ARIS 走向多模态 → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— 从科研、coding 走进**视觉生成**：把模糊的故事丢给 agent，睡醒收一部**跨模型审过的电影**（参考片 = 19 个场景）。长程视觉叙事会两头漂——🧠 **长程遗忘** 和 🗣️ **自审式串行**（每帧由画它的模型自己签收，错误一路累积）。ARIS 用同宗的法宝兜住：**research-wiki** 当记忆、把后面的帧锚回最初的事实，**多智能体对抗审**（跨模型盲转写 + token-diff）确保*没有一帧能自己给自己放行*。
+🎬 **ARIS 走向多模态 → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— 把模糊的故事丢给 agent，睡醒收一部**跨模型审过的电影**（参考片 = 19 个场景）。长程视觉叙事会两头漂（🧠 **长程遗忘** · 🗣️ 每帧由**画它的模型自己签收**，错误一路累积）；ARIS 用同宗的法宝兜住 —— **research-wiki** 当记忆,**多智能体对抗审**(跨模型盲转写 + token-diff)确保*没有一帧能自己给自己放行*。
 
 <p align="center">
   <a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/">
@@ -30,7 +30,10 @@
   </a>
 </p>
 
-> 🧭 *不止做多帧电影 —— 同一套**受审螺旋**也能生成干净的**方法图 / 流程图**：这张图就是 ARIS-Movie-Director 自己的 `image_gen` + 跨模型 `panel_gate` loop 跑出来的（和核心 ARIS 同宗 —— 可信源头、没有哪一步能自己给自己放行的 gate、research-wiki 审计留痕）。👉 **skills 和端到端 CLI 也都在 [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— [`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) agent 工作流(含可独立运行的确定性 CLI 内核),以及做出这张图的 [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md)。*
+> 🧭 *不止做电影 —— 同一套**受审螺旋**也能生成干净的**方法图 / 流程图**:这张图就是 ARIS-Movie-Director 自己的 `image_gen` + 跨模型 `panel_gate` loop 跑出来的。👉 **skills 和端到端 CLI 都在 [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)**:[`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md)(agent 工作流 + 可独立跑的确定性 CLI 内核)和做出这张图的 [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md)。*
+
+<details>
+<summary>🎞️ <i>参考片里的几帧 —— 故事自身的诚实度 beat：一次 <b>号称 <code>+6.2</code></b> 实则 <b>只动了 <code>+1.4</code></b> 的 run。</i> &nbsp;<b><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/">▶ 浏览器看全部 19 个场景 →</a></b></summary>
 
 <table><tr>
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_audit.webp" alt="ARIS-Movie-Director 帧 —— evaluator 诚实度审计页" width="100%"></a></td>
@@ -38,7 +41,7 @@
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_fix.webp" alt="ARIS-Movie-Director 帧 —— 诚实度 beat（号称 +6.2，实际只动了 +1.4）" width="100%"></a></td>
 </tr></table>
 
-> 🎞️ *参考片里的几帧 —— 含故事自身的诚实度 beat（一次 **号称 `+6.2`** 实则 **只动了 `+1.4`** 的 run）。现在是图像版，下一步是视频 —— **[▶ 浏览器看全部 19 个场景 →](https://wanshuiyin.github.io/ARIS-Movie-Director/comic/)***
+</details>
 
 🎯 **准备 2026 AI 秋招？** → [**🌐 ARIS-in-AI-Offer 网页版**](https://wanshuiyin.github.io/ARIS-in-AI-Offer/) · [GitHub repo](https://github.com/wanshuiyin/ARIS-in-AI-Offer) · [English](https://github.com/wanshuiyin/ARIS-in-AI-Offer/blob/main/README_EN.md) —— 长文中文 ML / LLM / 多模态 / 生成式 / Agent 面试 cheat sheet，每篇 = 公式推导 + 从零 PyTorch + 25 高频面试题（L1 / L2 / L3），全部由 ARIS 的 `/render-html` 自动生成。**希望大家秋招的时候轻松一点 🌱**
 

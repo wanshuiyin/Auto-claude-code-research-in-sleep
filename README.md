@@ -16,7 +16,7 @@
 
 🚀 **Beyond 科研 → 任何 "研究"**：[**ARIS-Anything**](https://github.com/wanshuiyin/ARIS-Anything) 把 ARIS 的五步 loop（plan / draft / 对抗审 / 迭代 / 持久化）推广到非学术的结构化研究——投资尽调 / 法律研究 / 市场研究 / 自驱学习 / 调查新闻 / 工程复盘等。
 
-🎬 **ARIS goes multimodal → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — from research & coding into **visual generation**: hand over a fuzzy story, wake up to a **cross-model-audited movie** (reference run = 19 scenes). Long-horizon visual stories drift two ways — 🧠 **long-range forgetting** and 🗣️ **self-approved streaming** (each frame signed off by the model that drew it). ARIS answers with the same DNA: a **research-wiki** for memory + **multi-agent debate** so *no frame signs off on itself*.
+🎬 **ARIS goes multimodal → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — hand over a fuzzy story, wake up to a **cross-model-audited movie** (reference run = 19 scenes). Long-horizon visual stories drift two ways (🧠 **long-range forgetting** · 🗣️ each frame **signed off by the model that drew it**); ARIS answers with the same DNA — a **research-wiki** for memory + **multi-agent debate** so *no frame signs off on itself*.
 
 <p align="center">
   <a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/">
@@ -30,7 +30,10 @@
   </a>
 </p>
 
-> 🧭 *Not just multi-frame movies — the same **audited spiral** generates clean **method / flow diagrams** too: this figure was produced by ARIS-Movie-Director's own `image_gen` + cross-model `panel_gate` loop (same DNA as core ARIS — an authored source of truth, a gate where no step signs off on itself, a research-wiki audit trail). 👉 **The skills + an end-to-end CLI are in [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — the [`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) agent workflow with a deterministic CLI core you can run standalone, plus [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md) — the skill that made this figure.*
+> 🧭 *Not just movies — the same **audited spiral** also generates clean **method / flow diagrams**: this very figure was baked by ARIS-Movie-Director's `image_gen` + cross-model `panel_gate` loop. 👉 **Skills + an end-to-end CLI** in [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director): [`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) (agent workflow + standalone deterministic CLI core) and [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md), the skill that made this figure.*
+
+<details>
+<summary>🎞️ <i>A few frames from the reference movie — the story's own integrity beat: a run that <b>reported <code>+6.2</code></b> but <b>really moved <code>+1.4</code></b>.</i> &nbsp;<b><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/">▶ watch all 19 scenes →</a></b></summary>
 
 <table><tr>
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_audit.webp" alt="ARIS-Movie-Director frame — the evaluator-integrity audit page" width="100%"></a></td>
@@ -38,7 +41,7 @@
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_fix.webp" alt="ARIS-Movie-Director frame — the integrity beat (reported +6.2, really moved +1.4)" width="100%"></a></td>
 </tr></table>
 
-> 🎞️ *A few frames from the reference movie — including the story's own integrity beat (a run that **reported `+6.2`** but **really moved `+1.4`**). Image-based today, video next — **[▶ watch all 19 scenes →](https://wanshuiyin.github.io/ARIS-Movie-Director/comic/)***
+</details>
 
 🎯 **准备 2026 AI 秋招？** → [**🌐 ARIS-in-AI-Offer**](https://wanshuiyin.github.io/ARIS-in-AI-Offer/) · [GitHub repo](https://github.com/wanshuiyin/ARIS-in-AI-Offer) · [中文 README](https://github.com/wanshuiyin/ARIS-in-AI-Offer/blob/main/README_CN.md) —— 23 篇双语 ML / LLM / 多模态 / 生成式 / Agent 面试 cheat sheet，每篇 = 公式推导 + 从零 PyTorch + 25 高频面试题（L1 / L2 / L3），全部由 ARIS 的 `/render-html` 自动生成。**希望大家秋招轻松一点 🌱**
 
