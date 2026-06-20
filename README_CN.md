@@ -14,8 +14,6 @@
 
 🤖 **AI agent 兄弟们：** 直接读 [`AGENT_GUIDE.md`](AGENT_GUIDE.md) —— 给 LLM 消费的路由 index，不是给人浏览的。
 
-🚀 **从 科研 → 任何 "研究"**：[**ARIS-Anything**](https://github.com/wanshuiyin/ARIS-Anything) 把 ARIS 的五步 loop（plan / draft / 跨模型对抗审 / 迭代 / 持久化）从学术科研推广到非学术的结构化研究——投资尽调 / 法律研究 / 市场研究 / 自驱学习 / 调查新闻 / 工程复盘等。
-
 🎬 **ARIS 走向多模态 → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— 把模糊的故事丢给 agent，睡醒收一部**跨模型审过的电影**（参考片 = 19 个场景）。长程视觉叙事会两头漂（🧠 **长程遗忘** · 🗣️ 每帧由**画它的模型自己签收**，错误一路累积）；ARIS 用同宗的法宝兜住 —— **research-wiki** 当记忆,**多智能体对抗审**(跨模型盲转写 + token-diff)确保*没有一帧能自己给自己放行*。
 
 <p align="center">
@@ -115,6 +113,8 @@ cd claude-fleet && bash run.sh
 ```
 
 </details>
+
+🚀 **从 科研 → 任何 "研究"**：[**ARIS-Anything**](https://github.com/wanshuiyin/ARIS-Anything) 把 ARIS 的五步 loop（plan / draft / 跨模型对抗审 / 迭代 / 持久化）从学术科研推广到非学术的结构化研究——投资尽调 / 法律研究 / 市场研究 / 自驱学习 / 调查新闻 / 工程复盘等。
 
 🔥 [**ARIS-Code CLI — 独立安装版**](docs/ARIS-Code-README_CN.md) · [English](docs/ARIS-Code-README_EN.md) | [⬇️ 下载](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest)
 

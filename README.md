@@ -14,8 +14,6 @@
 
 🤖 **AI agents:** Read [`AGENT_GUIDE.md`](AGENT_GUIDE.md) instead — structured for LLM consumption, not human browsing.
 
-🚀 **Beyond 科研 → 任何 "研究"**：[**ARIS-Anything**](https://github.com/wanshuiyin/ARIS-Anything) 把 ARIS 的五步 loop（plan / draft / 对抗审 / 迭代 / 持久化）推广到非学术的结构化研究——投资尽调 / 法律研究 / 市场研究 / 自驱学习 / 调查新闻 / 工程复盘等。
-
 🎬 **ARIS goes multimodal → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — hand over a fuzzy story, wake up to a **cross-model-audited movie** (reference run = 19 scenes). Long-horizon visual stories drift two ways (🧠 **long-range forgetting** · 🗣️ each frame **signed off by the model that drew it**); ARIS answers with the same DNA — a **research-wiki** for memory + **multi-agent debate** so *no frame signs off on itself*.
 
 <p align="center">
@@ -105,6 +103,8 @@ cd claude-fleet && bash run.sh
 ```
 
 </details>
+
+🚀 **Beyond 科研 → 任何 "研究"**：[**ARIS-Anything**](https://github.com/wanshuiyin/ARIS-Anything) 把 ARIS 的五步 loop（plan / draft / 对抗审 / 迭代 / 持久化）推广到非学术的结构化研究——投资尽调 / 法律研究 / 市场研究 / 自驱学习 / 调查新闻 / 工程复盘等。
 
 🔥 [**ARIS-Code CLI — 独立安装版**](docs/ARIS-Code-README_CN.md) · [English](docs/ARIS-Code-README_EN.md) | [⬇️ Download](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest) · [![Downloads](https://img.shields.io/github/downloads/wanshuiyin/Auto-claude-code-research-in-sleep/total?style=flat-square&color=brightgreen)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases)
 
