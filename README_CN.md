@@ -122,7 +122,7 @@ cd claude-fleet && bash run.sh
 <tr>
 <td valign="top" width="60%">
 
-📰 **ARIS-Code v0.4.17** (2026-06) — **MCP 版本。** 用户配置的 `mcpServers` 终于驱动真实工具调度，且**跨模型对抗审稿不再需要 OpenAI API key**：`aris setup` 一步把你已有的 **ChatGPT 订阅**经 *Codex MCP* 接成 reviewer。v0.4.5 → v0.4.17 共 13 个 release 的打磨收官——逐版本详情见下。贡献者：[@GetIT-Sunday](https://github.com/GetIT-Sunday)、[@Anduin9527](https://github.com/Anduin9527)、[@GO-player-hhy](https://github.com/GO-player-hhy)、[@Jxy-yxJ](https://github.com/Jxy-yxJ)、[@screw-44](https://github.com/screw-44)、[@StevenUST](https://github.com/StevenUST)、[@opposj](https://github.com/opposj)、[@ShijunLei-cn](https://github.com/ShijunLei-cn)、[@algojogacor](https://github.com/algojogacor)。
+📰 **ARIS-Code v0.4.20**（2026-06）—— 最新是 **bug-fix 补丁**（Codex 排查出的 7 个用户可见修复：短 REPL 回复、粘连段落、CJK 表格、记住的 executor 模型、Esc 等；[#299](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/299)）。头牌特性：**v0.4.18 —— 默认模型 Claude Opus 4.8**（计费已修正 + 可用性 fallback）和 **v0.4.17 —— MCP 版本**（`mcpServers` 驱动真实工具调度；**跨模型对抗审无需 OpenAI API key** —— `aris setup` 一步把你的 **ChatGPT 订阅**经 *Codex MCP* 接成 reviewer）。收官 16 个 release 打磨（v0.4.5 → v0.4.20）；逐版本详情见下。贡献者：[@GetIT-Sunday](https://github.com/GetIT-Sunday)、[@Anduin9527](https://github.com/Anduin9527)、[@GO-player-hhy](https://github.com/GO-player-hhy)、[@Jxy-yxJ](https://github.com/Jxy-yxJ)、[@screw-44](https://github.com/screw-44)、[@StevenUST](https://github.com/StevenUST)、[@opposj](https://github.com/opposj)、[@ShijunLei-cn](https://github.com/ShijunLei-cn)、[@algojogacor](https://github.com/algojogacor)。
 
 </td>
 <td valign="top" width="40%">
