@@ -24,6 +24,14 @@
   </a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/wanshuiyin/ARIS-Movie-Director">
+    <img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/method_figure.png" alt="ARIS-Movie-Director 方法图 —— 受审螺旋：可信源头（asset library · outline · storyboard · comic.json）→ 逐格 image_gen + 跨模型 panel_gate（盲 token-diff、单票否决）→ research-wiki 审计留痕 → 组装与发布" width="100%">
+  </a>
+</p>
+
+> 🧭 *不止做多帧电影 —— 同一套**受审螺旋**也能生成干净的**方法图 / 流程图**：这张图就是 ARIS-Movie-Director 自己的 `image_gen` + 跨模型 `panel_gate` loop 跑出来的（和核心 ARIS 同宗 —— 可信源头、没有哪一步能自己给自己放行的 gate、research-wiki 审计留痕）。*
+
 <table><tr>
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_audit.webp" alt="ARIS-Movie-Director 帧 —— evaluator 诚实度审计页" width="100%"></a></td>
 <td width="33%"><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/"><img src="https://raw.githubusercontent.com/wanshuiyin/ARIS-Movie-Director/main/docs/preview_panels.webp" alt="ARIS-Movie-Director 帧 —— 多格场景" width="100%"></a></td>
