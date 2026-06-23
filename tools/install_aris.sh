@@ -83,7 +83,7 @@ REPLACE_LINK_NAMES=()
 
 usage() { sed -n '2,40p' "$0" | sed 's/^# \?//'; }
 
-ORIGINAL_ARGS=("$@")
+FORWARDED_ARGS=()
 PLATFORM_OVERRIDE=""
 DETECTED_PLATFORM=""
 CLAUDE_ONLY_FLAGS_USED=()
@@ -94,39 +94,45 @@ CODEX_ONLY_FLAGS_SEEN=()
 # and NO Claude markers (.claude/, CLAUDE.md), delegate to install_aris_codex.sh.
 auto_detect_platform() {
     local proj="$1"
-    local has_codex_markers=false
+    local has_strong_codex_markers=false
+    local has_codex_hint=false
     local has_claude_markers=false
 
-    # Codex markers
-    [[ -d "$proj/.agents" || -f "$proj/AGENTS.md" || -f "$proj/.codex/config.toml" ]] && has_codex_markers=true
+    # Strong Codex markers. AGENTS.md by itself is only a hint because many Claude
+    # projects may carry repo-level agent instructions before .claude/ exists.
+    [[ -d "$proj/.agents" || -f "$proj/.codex/config.toml" ]] && has_strong_codex_markers=true
+    [[ -f "$proj/AGENTS.md" ]] && has_codex_hint=true
 
     # Claude markers
     [[ -d "$proj/.claude" || -f "$proj/CLAUDE.md" || -f "$proj/.claude/settings.json" ]] && has_claude_markers=true
 
-    if $has_codex_markers && $has_claude_markers; then
+    if $has_strong_codex_markers && $has_claude_markers; then
         warn "Both Claude and Codex markers found in $proj"
         warn "  Defaulting to claude; use --platform codex to override."
         DETECTED_PLATFORM="claude"
-    elif $has_codex_markers && ! $has_claude_markers; then
+    elif $has_strong_codex_markers && ! $has_claude_markers; then
         DETECTED_PLATFORM="codex"
     elif $has_claude_markers; then
         DETECTED_PLATFORM="claude"
+    elif $has_codex_hint; then
+        warn "AGENTS.md found without .agents/ or .codex/config.toml; defaulting to claude."
+        warn "  Use --platform codex to delegate to install_aris_codex.sh."
     fi
 }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --reconcile)         ACTION="reconcile"; shift ;;
-        --uninstall)         ACTION="uninstall"; shift ;;
-        --aris-repo)         ARIS_REPO_OVERRIDE="${2:?--aris-repo requires path}"; shift 2 ;;
-        --dry-run)           DRY_RUN=true; shift ;;
-        --quiet)             QUIET=true; shift ;;
-        --no-doc)            NO_DOC=true; shift ;;
-        --from-old)          FROM_OLD=true; CLAUDE_ONLY_FLAGS_USED+=("--from-old"); shift ;;
-        --migrate-copy)      MIGRATE_COPY="${2:?--migrate-copy requires keep-user|prefer-upstream}"; CLAUDE_ONLY_FLAGS_USED+=("--migrate-copy"); shift 2 ;;
-        --clear-stale-lock)  CLEAR_STALE_LOCK=true; shift ;;
-        --adopt-existing)    ADOPT_NAMES+=("${2:?--adopt-existing requires NAME}"); CLAUDE_ONLY_FLAGS_USED+=("--adopt-existing"); shift 2 ;;
-        --replace-link)      REPLACE_LINK_NAMES+=("${2:?--replace-link requires NAME}"); shift 2 ;;
+        --reconcile)         FORWARDED_ARGS+=("$1"); ACTION="reconcile"; shift ;;
+        --uninstall)         FORWARDED_ARGS+=("$1"); ACTION="uninstall"; shift ;;
+        --aris-repo)         FORWARDED_ARGS+=("$1" "${2:?--aris-repo requires path}"); ARIS_REPO_OVERRIDE="$2"; shift 2 ;;
+        --dry-run)           FORWARDED_ARGS+=("$1"); DRY_RUN=true; shift ;;
+        --quiet)             FORWARDED_ARGS+=("$1"); QUIET=true; shift ;;
+        --no-doc)            FORWARDED_ARGS+=("$1"); NO_DOC=true; shift ;;
+        --from-old)          FORWARDED_ARGS+=("$1"); FROM_OLD=true; CLAUDE_ONLY_FLAGS_USED+=("--from-old"); shift ;;
+        --migrate-copy)      FORWARDED_ARGS+=("$1" "${2:?--migrate-copy requires keep-user|prefer-upstream}"); MIGRATE_COPY="$2"; CLAUDE_ONLY_FLAGS_USED+=("--migrate-copy"); shift 2 ;;
+        --clear-stale-lock)  FORWARDED_ARGS+=("$1"); CLEAR_STALE_LOCK=true; shift ;;
+        --adopt-existing)    FORWARDED_ARGS+=("$1" "${2:?--adopt-existing requires NAME}"); ADOPT_NAMES+=("$2"); CLAUDE_ONLY_FLAGS_USED+=("--adopt-existing"); shift 2 ;;
+        --replace-link)      FORWARDED_ARGS+=("$1" "${2:?--replace-link requires NAME}"); REPLACE_LINK_NAMES+=("$2"); shift 2 ;;
         --platform)
             PLATFORM_OVERRIDE="${2:?--platform requires codex|claude}"; shift 2 ;;
         --force)
@@ -137,13 +143,13 @@ while [[ $# -gt 0 ]]; do
             exit 2 ;;
         -h|--help)           usage; exit 0 ;;
         # Codex-only flags: recognized by parent, forwarded during delegation
-        --with-claude-review-overlay) CODEX_ONLY_FLAGS_SEEN+=("$1"); shift ;;
-        --with-gemini-review-overlay) CODEX_ONLY_FLAGS_SEEN+=("$1"); shift ;;
+        --with-claude-review-overlay) FORWARDED_ARGS+=("$1"); CODEX_ONLY_FLAGS_SEEN+=("$1"); shift ;;
+        --with-gemini-review-overlay) FORWARDED_ARGS+=("$1"); CODEX_ONLY_FLAGS_SEEN+=("$1"); shift ;;
         --*)                 echo "Unknown option: $1" >&2; exit 2 ;;
         *)
             if [[ -z "$PROJECT_PATH" ]]; then PROJECT_PATH="$1"
             else echo "Error: unexpected positional: $1" >&2; exit 2; fi
-            shift ;;
+            FORWARDED_ARGS+=("$1"); shift ;;
     esac
 done
 
@@ -299,15 +305,10 @@ if [[ "$PLATFORM" == "codex" ]]; then
         log "  (override with --platform claude)"
     fi
     log ""
-    # Strip --platform flag from args before delegating
-    FILTERED_ARGS=()
-    skip_next=false
-    for arg in "${ORIGINAL_ARGS[@]}"; do
-        if $skip_next; then skip_next=false; continue; fi
-        if [[ "$arg" == "--platform" ]]; then skip_next=true; continue; fi
-        FILTERED_ARGS+=("$arg")
-    done
-    exec bash "$CODEX_INSTALLER" "${FILTERED_ARGS[@]}"
+    if [[ ${#FORWARDED_ARGS[@]} -gt 0 ]]; then
+        exec bash "$CODEX_INSTALLER" "${FORWARDED_ARGS[@]}"
+    fi
+    exec bash "$CODEX_INSTALLER"
 fi
 # Validate: codex-only flags are incompatible with claude platform
 if [[ ${#CODEX_ONLY_FLAGS_SEEN[@]} -gt 0 ]]; then
