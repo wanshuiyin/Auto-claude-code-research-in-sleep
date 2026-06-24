@@ -287,7 +287,9 @@ PROJECT_PATH="$(abs_path "$PROJECT_PATH")"
 # ─── Platform auto-detect + delegation (before resolve_aris_repo) ─────────────
 # Must happen before resolve_aris_repo because the Codex installer resolves its
 # own repo path (looking for skills/skills-codex instead of just skills/).
-auto_detect_platform "$PROJECT_PATH"
+# Skip auto-detect (and its marker warnings) when --platform is explicit — the
+# override wins anyway, so detecting would only print a misleading "defaulting to …".
+[[ -n "$PLATFORM_OVERRIDE" ]] || auto_detect_platform "$PROJECT_PATH"
 PLATFORM="${PLATFORM_OVERRIDE:-$DETECTED_PLATFORM}"
 if [[ "$PLATFORM" == "codex" ]]; then
     # Validate: claude-only flags are incompatible with codex platform
