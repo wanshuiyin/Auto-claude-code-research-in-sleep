@@ -14,9 +14,9 @@
 
 🤖 **AI agents:** Read [`AGENT_GUIDE.md`](AGENT_GUIDE.md) instead — structured for LLM consumption, not human browsing.
 
-🛡️ **ARIS audits its own output → now [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) audits everyone's.** It catalogs **27 common autoresearch hack-patterns** (numbers no table backs, missing baselines, code that won't reproduce its own paper, fabricated citations…) and checks a submission for them **end-to-end** with one workflow: evidence ledger → cross-model auditors → a deterministic verdict → a reviewer-ready report. *Self-consistency + fabrication forensics, **not** an AI-text detector.*
+🛡️ **ARIS audits its own output → now [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) audits everyone's.** It catalogs **27 common autoresearch hack-patterns** and checks a submission for them **end-to-end**, producing a deterministic, reviewer-ready integrity report. *Self-consistency + fabrication forensics, **not** an AI-text detector.*
 
-<p align="center"><em>The field has put up with unreliable autoresearch long enough — Anti-Autoresearch is the reviewer-side read that finally catches it.</em></p>
+<p align="center"><em>The field has put up with unreliable autoresearch long enough —<br>Anti-Autoresearch is the read that finally catches it.</em></p>
 
 🎬 **ARIS goes multimodal → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — hand over a fuzzy story, wake up to a **cross-model-audited movie** (reference run = 19 scenes). Long-horizon visual stories drift two ways (🧠 **long-range forgetting** · 🗣️ each frame **signed off by the model that drew it**); ARIS answers with the same DNA — a **research-wiki** for memory + **multi-agent debate** so *no frame signs off on itself*.
 
