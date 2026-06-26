@@ -14,6 +14,8 @@
 
 🤖 **AI agents:** Read [`AGENT_GUIDE.md`](AGENT_GUIDE.md) instead — structured for LLM consumption, not human browsing.
 
+🛡️ **ARIS audits its own output → now [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) audits everyone's** — substantive integrity-forensics for autoresearch / AI-Scientist papers (**self-consistency + fabrication forensics**, *not* an AI-text detector). The same audit DNA (experiment-audit · paper-claim-audit · citation-audit · kill-argument) pointed **outward** at a third party's submission: a deterministic **evidence ledger** + a **rules-based adjudicator** (the model proposes span-anchored findings, *code* decides the verdict) → a reviewer-ready integrity report.
+
 🎬 **ARIS goes multimodal → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — hand over a fuzzy story, wake up to a **cross-model-audited movie** (reference run = 19 scenes). Long-horizon visual stories drift two ways (🧠 **long-range forgetting** · 🗣️ each frame **signed off by the model that drew it**); ARIS answers with the same DNA — a **research-wiki** for memory + **multi-agent debate** so *no frame signs off on itself*.
 
 <p align="center">
