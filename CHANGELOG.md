@@ -1,5 +1,76 @@
 # ARIS-Code Changelog
 
+## v0.4.21 (2026-06-28)
+
+A **bug-fix patch** — five new user-facing bugs surfaced by a Codex adversarial
+hunt (all five disk-verified, all distinct from v0.4.20 and the known-deferred
+backlog), each cross-model reviewed at a design gate and an implementation gate
+(gpt-5.5 xhigh). The headline fix stops streamed CJK/emoji text from being
+corrupted into `�` on OpenAI-compatible providers.
+
+### 🐛 Streaming / output
+
+- **OpenAI-compatible streaming corrupted multi-byte UTF-8 split across network
+  chunks.** Each HTTP body chunk was decoded with `String::from_utf8_lossy`
+  independently before being buffered, so a CJK (3-byte) or emoji (4-byte) scalar
+  whose bytes straddled a chunk boundary became `�` on both sides — a frequent
+  hit for Chinese users on domestic OpenAI-compatible providers
+  (Kimi/GLM/MiniMax/DeepSeek/Qwen/Doubao) streaming Chinese text. The stream
+  buffer is now raw bytes (`Vec<u8>`); only complete, newline-terminated SSE
+  lines are UTF-8-decoded, so a character split across chunks is never decoded
+  mid-scalar (mirrors the Anthropic side's byte discipline).
+
+- **An Anthropic stream truncated after content but before a terminal signal was
+  saved as a complete turn.** On a clean EOF (e.g. a proxy dropping the
+  connection) after meaningful text but with no `message_stop` and no
+  `stop_reason`-bearing `message_delta`, `next_event()` returned `Ok(None)` and
+  the consumer synthesized a `MessageStop` — committing a half-finished answer to
+  history as if complete, so the next turn continued as though the model had
+  finished. It now hard-errors (`premature_eof`), symmetric to the OpenAI-side
+  `#249` truncation guard; the `stop_reason`-only compat path (CL2) is preserved.
+  Safety valve: a proxy that legitimately never emits a terminal signal can opt
+  back into the pre-v0.4.21 accept-as-complete behavior with
+  `ARIS_ALLOW_EOF_WITHOUT_STOP=1`.
+
+### 🐛 Provider routing
+
+- **A saved OpenAI/custom executor config silently overrode a shell-set
+  `EXECUTOR_PROVIDER`.** `apply_to_env` (the startup "shell-provided vars win"
+  path) wrote `EXECUTOR_PROVIDER=openai` unconditionally when the saved config
+  was `openai`/`custom`, contradicting its own contract and every sibling field —
+  so `EXECUTOR_PROVIDER=anthropic … aris …` got re-pointed to OpenAI (wrong
+  executor / model-not-found). The write is now gated like its siblings (the
+  shell value wins; the explicit `/setup` force path is unchanged).
+
+### 🐛 Tools
+
+- **`grep_search` with `multiline: true` silently returned nothing in
+  content/default mode.** `count` mode matched over the whole file (multiline
+  worked), but content/default mode matched per-line, so a cross-line pattern
+  could never match. Multiline now derives matched line indices from whole-file
+  matches, mapping the end to the *last matched byte* to avoid an off-by-one that
+  would pull in a nonexistent line on trailing-newline files.
+
+- **MCP tool results carried only in `structuredContent` were dropped.** Dispatch
+  flattened only the `content` blocks, so a spec-valid server returning only
+  `structuredContent` (empty/absent `content`) handed the model an empty result.
+  It now falls back to the JSON-serialized structured content when the flattened
+  text is empty (content-bearing results are byte-identical).
+
+### ✅ Tests / review
+
+- +21 tests (CI mode, all green): api 32→35 (incl. **2 stream-level integration
+  tests** — truncation → `premature_eof`; stop_reason-only → clean drain — and
+  the safety-valve parse), runtime 205→212, aris-cli 172→181, tools 67,
+  commands 5.
+- Codex MCP (gpt-5.5 xhigh): **design gate** (NO-GO → corrected an off-by-one in
+  the grep line-mapping, the provider-gate semantics, and the truncation
+  hard-error decision) → **implementation gate** (NO-GO on a #1 test gap → added
+  the stream-level integration tests → GO). The Anthropic streaming spec (every
+  stream ends with `message_stop`) was WebFetch-verified.
+- Two latent-only candidates (Anthropic `content_block_start.index` routing,
+  OpenAI multi-line `data:` SSE frames) remain deferred to a hardening pass.
+
 ## v0.4.20 (2026-06-19)
 
 A **bug-fix patch** — seven user-facing bugs, surfaced by a Codex adversarial
