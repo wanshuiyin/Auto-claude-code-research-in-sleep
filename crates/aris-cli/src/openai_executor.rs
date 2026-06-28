@@ -411,6 +411,28 @@ fn sse_data_payload(line: &str) -> Option<&str> {
     line.strip_prefix("data:").map(str::trim)
 }
 
+/// Drain all COMPLETE (newline-terminated) lines from `buf`, decoding each as
+/// UTF-8 (lossy — a complete SSE line is valid UTF-8) with the trailing `\n`
+/// and any `\r` stripped. Incomplete trailing bytes stay in `buf` until more
+/// arrive, so a multi-byte character split across chunk boundaries is never
+/// decoded mid-character. Returns the decoded lines in order.
+///
+/// v0.4.21 #3: boundary-safe replacement for the old per-chunk
+/// `String::from_utf8_lossy(&chunk)` decode, which corrupted a CJK (3-byte) or
+/// emoji (4-byte) scalar straddling a chunk boundary into `�` on both sides.
+/// Mirrors the Anthropic side's discipline of feeding raw bytes to the parser
+/// and decoding only complete units.
+fn drain_complete_lines(buf: &mut Vec<u8>) -> Vec<String> {
+    let mut lines = Vec::new();
+    while let Some(nl) = buf.iter().position(|&b| b == b'\n') {
+        let line_bytes: Vec<u8> = buf.drain(..=nl).collect(); // includes trailing \n
+        let s = String::from_utf8_lossy(&line_bytes);
+        let s = s.trim_end_matches('\n').trim_end_matches('\r');
+        lines.push(s.to_string());
+    }
+    lines
+}
+
 /// Re-send the streaming POST when restarting a broken stream. Bounded
 /// inline retry loop covers 429 / 5xx / transient network errors during
 /// the restart — without it, a restart triggered by proxy instability
@@ -814,7 +836,11 @@ on a compatible third-party proxy, or use Claude/another provider as executor an
             // Accumulate tool calls: index → (id, name, arguments_json)
             let mut pending_tools: Vec<(String, String, String)> = Vec::new();
 
-            let mut stream_buf = String::new();
+            // v0.4.21 #3: raw byte buffer (was `String`). SSE chunks are
+            // accumulated as bytes and decoded only at COMPLETE line boundaries
+            // (see `drain_complete_lines`) so a multi-byte UTF-8 scalar split
+            // across two HTTP chunks is never decoded mid-character into `�`.
+            let mut stream_buf: Vec<u8> = Vec::new();
             let mut done = false;
             // C6 v0.4.10: whole-stream restart budget for mid-body aborts
             // or premature EOF before any event has been emitted. See
@@ -966,13 +992,20 @@ on a compatible third-party proxy, or use Claude/another provider as executor an
                         return Err(RuntimeError::new(error.to_string()));
                     }
                 };
-                let text = String::from_utf8_lossy(&chunk);
-                stream_buf.push_str(&text);
+                // v0.4.21 #3: accumulate RAW bytes; decode only COMPLETE
+                // (newline-terminated) lines via `drain_complete_lines`. A
+                // multi-byte UTF-8 scalar (CJK = 3 bytes, emoji = 4) whose bytes
+                // straddle a chunk boundary used to be `from_utf8_lossy`'d into
+                // `�` on BOTH sides when each chunk was decoded independently.
+                // The helper keeps the incomplete trailing bytes in `stream_buf`
+                // until the next chunk arrives, so a split character is never
+                // decoded mid-character. A complete SSE line is valid UTF-8
+                // (JSON), so lossy decoding of a whole line is effectively
+                // lossless.
+                stream_buf.extend_from_slice(&chunk);
 
                 // Process complete SSE lines
-                while let Some(line_end) = stream_buf.find('\n') {
-                    let line = stream_buf[..line_end].trim_end_matches('\r').to_string();
-                    stream_buf = stream_buf[line_end + 1..].to_string();
+                for line in drain_complete_lines(&mut stream_buf) {
 
                     if line.is_empty() || line.starts_with(':') {
                         continue;
@@ -1845,6 +1878,104 @@ mod tests {
         // Blank / comment lines → None.
         assert_eq!(sse_data_payload(""), None);
         assert_eq!(sse_data_payload(": keep-alive"), None);
+    }
+
+    // v0.4.21 #3: drain_complete_lines must never decode a multi-byte UTF-8
+    // scalar that straddles a chunk boundary as `�`. The old per-chunk
+    // `from_utf8_lossy(&chunk)` corrupted CJK (3-byte) and emoji (4-byte)
+    // characters split across chunk boundaries on both sides.
+    #[test]
+    fn drain_complete_lines_cjk_split_across_chunks() {
+        // `data: {"x":"你好"}\n` — split the FIRST push in the MIDDLE of the
+        // 3-byte '你' (U+4F60 = E4 BD A0). We cut one byte into '你' so the
+        // chunk boundary lands mid-character.
+        let full: Vec<u8> = "data: {\"x\":\"你好\"}\n".as_bytes().to_vec();
+        let prefix = "data: {\"x\":\"".len(); // byte offset where '你' begins
+        let split = prefix + 1; // one byte into the 3-byte '你'
+        let (first, second) = full.split_at(split);
+
+        let mut buf: Vec<u8> = Vec::new();
+        buf.extend_from_slice(first);
+        // No newline yet → no line emitted, and the partial multi-byte char
+        // stays buffered (nothing decoded).
+        assert!(
+            drain_complete_lines(&mut buf).is_empty(),
+            "no newline yet → no line emitted"
+        );
+
+        buf.extend_from_slice(second);
+        let lines = drain_complete_lines(&mut buf);
+        assert_eq!(lines.len(), 1, "one complete line after the newline arrives");
+        assert_eq!(lines[0], "data: {\"x\":\"你好\"}");
+        assert!(
+            !lines[0].contains('\u{FFFD}'),
+            "no replacement char in reassembled CJK line: {}",
+            lines[0]
+        );
+        assert!(buf.is_empty(), "no leftover bytes after a clean newline");
+    }
+
+    // 4-byte emoji split across the chunk boundary → no mojibake.
+    #[test]
+    fn drain_complete_lines_emoji_split_across_chunks() {
+        // '🦀' = U+1F980 = F0 9F A6 80 (4 bytes).
+        let full: Vec<u8> = "data: \"🦀\"\n".as_bytes().to_vec();
+        let prefix = "data: \"".len(); // byte offset where '🦀' begins
+        let split = prefix + 2; // two bytes into the 4-byte emoji
+        let (first, second) = full.split_at(split);
+
+        let mut buf: Vec<u8> = Vec::new();
+        buf.extend_from_slice(first);
+        assert!(drain_complete_lines(&mut buf).is_empty(), "no newline yet");
+
+        buf.extend_from_slice(second);
+        let lines = drain_complete_lines(&mut buf);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "data: \"🦀\"");
+        assert!(
+            !lines[0].contains('\u{FFFD}'),
+            "no replacement char in reassembled emoji line: {}",
+            lines[0]
+        );
+    }
+
+    // `\r\n` (CRLF) line endings: the trailing `\r` is stripped along with `\n`.
+    #[test]
+    fn drain_complete_lines_strips_crlf() {
+        let mut buf: Vec<u8> = b"data: {\"x\":1}\r\n".to_vec();
+        let lines = drain_complete_lines(&mut buf);
+        assert_eq!(lines, vec!["data: {\"x\":1}".to_string()]);
+        assert!(buf.is_empty());
+    }
+
+    // Multiple complete lines in one buffer are all returned, in order.
+    #[test]
+    fn drain_complete_lines_multiple_lines_in_order() {
+        let mut buf: Vec<u8> = b"a\nb\nc\n".to_vec();
+        let lines = drain_complete_lines(&mut buf);
+        assert_eq!(
+            lines,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
+        assert!(buf.is_empty());
+    }
+
+    // A trailing partial line (no `\n`) stays buffered; only the complete lines
+    // are returned. The leftover bytes wait for the next chunk, then complete.
+    #[test]
+    fn drain_complete_lines_trailing_partial_stays_buffered() {
+        let mut buf: Vec<u8> = b"first\nsecond-incomplete".to_vec();
+        let lines = drain_complete_lines(&mut buf);
+        assert_eq!(lines, vec!["first".to_string()]);
+        // The incomplete tail remains for the next push.
+        assert_eq!(buf, b"second-incomplete".to_vec());
+
+        // When the rest (with a newline) arrives, the buffered tail is
+        // completed and emitted as one line.
+        buf.extend_from_slice(b"-done\n");
+        let lines = drain_complete_lines(&mut buf);
+        assert_eq!(lines, vec!["second-incomplete-done".to_string()]);
+        assert!(buf.is_empty());
     }
 
     // ─────────────────────────────────────────────────────────────────────

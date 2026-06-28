@@ -5692,7 +5692,7 @@ impl CliToolExecutor {
         let result = response.result.ok_or_else(|| {
             ToolError::new(format!("MCP tool `{tool_name}` returned an empty response"))
         })?;
-        let text = flatten_mcp_content(&result.content);
+        let text = mcp_result_text(&result.content, result.structured_content.as_ref());
         if result.is_error.unwrap_or(false) {
             return Err(ToolError::new(if text.is_empty() {
                 format!("MCP tool `{tool_name}` reported an error")
@@ -5770,6 +5770,27 @@ fn flatten_mcp_content(content: &[runtime::McpToolCallContent]) -> String {
         parts.push(serde_json::Value::Object(obj).to_string());
     }
     parts.join("\n")
+}
+
+/// v0.4.21 (#4): resolve an MCP tool result to its text payload. Flattens the
+/// `content` blocks via [`flatten_mcp_content`]; when that yields no meaningful
+/// text (empty or whitespace-only) but the server supplied `structuredContent`,
+/// fall back to the JSON-serialized structured payload. A spec-valid server that
+/// returns ONLY `structuredContent` (absent/empty `content`) would otherwise hand
+/// the model an empty tool result. Content-bearing results are byte-identical to
+/// the pre-fallback behavior — the structured payload is consulted only when the
+/// flattened text is empty.
+fn mcp_result_text(
+    content: &[runtime::McpToolCallContent],
+    structured: Option<&serde_json::Value>,
+) -> String {
+    let mut text = flatten_mcp_content(content);
+    if text.trim().is_empty() {
+        if let Some(structured) = structured {
+            text = structured.to_string();
+        }
+    }
+    text
 }
 
 impl ToolExecutor for CliToolExecutor {
@@ -7355,6 +7376,56 @@ mod tests {
             serde_json::from_str(lines[1]).expect("non-text block serialized as JSON");
         assert_eq!(parsed["type"], "image");
         assert_eq!(parsed["data"], "base64==");
+    }
+
+    /// v0.4.21 (#4): `mcp_result_text` falls back to `structuredContent` only
+    /// when the flattened `content` text is empty. A spec-valid server returning
+    /// ONLY structuredContent must not hand the model an empty result, while a
+    /// content-bearing result keeps its content verbatim (structured ignored).
+    /// The fallback is pure, so it is unit-tested directly here rather than
+    /// through `dispatch_mcp` (which needs a live `McpServerManager` subprocess);
+    /// the wiring is still exercised end-to-end by
+    /// `mcp_executor_dispatch_end_to_end`.
+    #[test]
+    fn mcp_result_text_structured_fallback() {
+        use runtime::McpToolCallContent;
+
+        let structured = json!({"answer": 42});
+
+        // (1) Empty content + structuredContent present → serialized structured JSON.
+        assert_eq!(
+            super::mcp_result_text(&[], Some(&structured)),
+            "{\"answer\":42}"
+        );
+
+        // (2) Non-empty text content + structuredContent present → content wins,
+        //     the structured payload is ignored (common path unchanged).
+        let mut text_block = McpToolCallContent {
+            kind: "text".to_string(),
+            data: std::collections::BTreeMap::new(),
+        };
+        text_block
+            .data
+            .insert("text".to_string(), json!("hello world"));
+        assert_eq!(
+            super::mcp_result_text(&[text_block], Some(&structured)),
+            "hello world"
+        );
+
+        // (3) Neither content nor structuredContent → empty string (unchanged).
+        assert_eq!(super::mcp_result_text(&[], None), "");
+
+        // (4) Whitespace-only content + structuredContent → fallback still fires
+        //     (the guard trims before testing emptiness).
+        let mut blank_block = McpToolCallContent {
+            kind: "text".to_string(),
+            data: std::collections::BTreeMap::new(),
+        };
+        blank_block.data.insert("text".to_string(), json!("   "));
+        assert_eq!(
+            super::mcp_result_text(&[blank_block], Some(&structured)),
+            "{\"answer\":42}"
+        );
     }
 
     fn fake_mcp_echo_server_script() -> std::path::PathBuf {

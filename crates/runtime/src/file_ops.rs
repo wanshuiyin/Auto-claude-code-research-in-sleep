@@ -315,13 +315,42 @@ pub fn grep_search(input: &GrepSearchInput) -> io::Result<GrepSearchOutput> {
         }
 
         let lines: Vec<&str> = file_contents.lines().collect();
-        let mut matched_lines = Vec::new();
-        for (index, line) in lines.iter().enumerate() {
-            if regex.is_match(line) {
-                total_matches += 1;
-                matched_lines.push(index);
+        // v0.4.21 (#5): with `multiline:true` the regex enables dot_matches_new_line
+        // so a pattern may span lines, but per-line `regex.is_match(line)` can never
+        // match a newline-free line — multiline silently matched nothing in content/
+        // default mode (count mode already scans the whole file). When multiline is
+        // set, derive matched line indices from whole-file matches. `Match::end()` is
+        // EXCLUSIVE, so map the END line from the LAST MATCHED BYTE (`m.end() - 1`),
+        // counting newlines over `as_bytes()` (never slice `&str` at a non-char
+        // boundary — counting `b'\n'` over bytes is always safe). Clamp to the last
+        // line; skip empty files. The non-multiline branch is behavior-identical to
+        // the previous per-line loop.
+        let multiline = input.multiline.unwrap_or(false);
+        let matched_lines: Vec<usize> = if multiline && !lines.is_empty() {
+            let bytes = file_contents.as_bytes();
+            let count_nl = |upto: usize| bytes[..upto].iter().filter(|&&b| b == b'\n').count();
+            let last = lines.len() - 1;
+            let mut set = std::collections::BTreeSet::new();
+            for m in regex.find_iter(&file_contents) {
+                let start_line = count_nl(m.start()).min(last);
+                let end_byte = if m.end() > m.start() { m.end() - 1 } else { m.start() };
+                let end_line = count_nl(end_byte).min(last);
+                for l in start_line..=end_line {
+                    set.insert(l);
+                }
             }
-        }
+            set.into_iter().collect()
+        } else if multiline {
+            Vec::new()
+        } else {
+            lines
+                .iter()
+                .enumerate()
+                .filter(|(_, line)| regex.is_match(line))
+                .map(|(index, _)| index)
+                .collect()
+        };
+        total_matches += matched_lines.len();
 
         if matched_lines.is_empty() {
             continue;
@@ -572,5 +601,124 @@ mod tests {
         })
         .expect("grep should succeed");
         assert!(grep_output.content.unwrap_or_default().contains("hello"));
+    }
+
+    // ---- v0.4.21 (#5): grep_search multiline in content/default mode ----
+
+    fn grep_input(
+        path: &std::path::Path,
+        pattern: &str,
+        mode: &str,
+        multiline: bool,
+    ) -> GrepSearchInput {
+        GrepSearchInput {
+            pattern: pattern.to_string(),
+            path: Some(path.to_string_lossy().into_owned()),
+            glob: None,
+            output_mode: Some(mode.to_string()),
+            before: None,
+            after: None,
+            context_short: None,
+            context: None,
+            line_numbers: Some(true),
+            case_insensitive: Some(false),
+            file_type: None,
+            head_limit: None,
+            offset: None,
+            multiline: Some(multiline),
+        }
+    }
+
+    // A cross-line pattern with multiline=true must match every line the match
+    // spans: `foo\nbar` over `foo\nbar\n` covers line 1 (foo) AND line 2 (bar).
+    #[test]
+    fn grep_multiline_content_matches_across_lines() {
+        let path = temp_path("grep-ml-across.txt");
+        write_file(path.to_string_lossy().as_ref(), "foo\nbar\n").expect("write should succeed");
+        let out = grep_search(&grep_input(&path, "foo\nbar", "content", true))
+            .expect("grep should succeed");
+        assert_eq!(out.num_lines, Some(2), "match spans two lines");
+        let content = out.content.unwrap_or_default();
+        assert!(content.contains(":1:foo"), "expected line 1 foo, got: {content}");
+        assert!(content.contains(":2:bar"), "expected line 2 bar, got: {content}");
+    }
+
+    // Off-by-one guard: `foo\n` matching `foo\n` ends right after the newline.
+    // The END line must map to the LAST matched byte (the '\n' on line 1), NOT a
+    // non-existent line 2. Behavior must be only line 1, with no panic.
+    #[test]
+    fn grep_multiline_trailing_newline_no_off_by_one() {
+        let path = temp_path("grep-ml-trailing.txt");
+        write_file(path.to_string_lossy().as_ref(), "foo\n").expect("write should succeed");
+        let out =
+            grep_search(&grep_input(&path, "foo\n", "content", true)).expect("grep should succeed");
+        assert_eq!(out.num_lines, Some(1), "only line 1 exists/matches");
+        let content = out.content.unwrap_or_default();
+        assert!(content.contains(":1:foo"), "got: {content}");
+        assert!(!content.contains(":2:"), "must not reference a second line: {content}");
+    }
+
+    // Discriminating off-by-one catch: `foo\n` over `foo\nbar\n` ends just past
+    // line 1's newline. The naive `count_nl(m.end())` would map the END to line 2
+    // and wrongly pull in "bar"; mapping to the LAST matched byte keeps it on line 1.
+    #[test]
+    fn grep_multiline_match_ending_at_newline_does_not_pull_next_line() {
+        let path = temp_path("grep-ml-endnl.txt");
+        write_file(path.to_string_lossy().as_ref(), "foo\nbar\n").expect("write should succeed");
+        let out =
+            grep_search(&grep_input(&path, "foo\n", "content", true)).expect("grep should succeed");
+        assert_eq!(out.num_lines, Some(1), "only line 1 should match");
+        let content = out.content.unwrap_or_default();
+        assert!(content.contains(":1:foo"), "got: {content}");
+        assert!(!content.contains("bar"), "off-by-one pulled in line 2: {content}");
+    }
+
+    // No trailing newline: `bar` over `foo\nbar` matches its line (line 2) without
+    // any panic from byte/char-boundary arithmetic.
+    #[test]
+    fn grep_multiline_no_trailing_newline_no_panic() {
+        let path = temp_path("grep-ml-notrail.txt");
+        write_file(path.to_string_lossy().as_ref(), "foo\nbar").expect("write should succeed");
+        let out =
+            grep_search(&grep_input(&path, "bar", "content", true)).expect("grep should succeed");
+        assert_eq!(out.num_lines, Some(1));
+        let content = out.content.unwrap_or_default();
+        assert!(content.contains(":2:bar"), "got: {content}");
+    }
+
+    // Empty file with multiline=true: no matches, no panic, and no bogus line 0.
+    #[test]
+    fn grep_multiline_empty_file_no_match() {
+        let path = temp_path("grep-ml-empty.txt");
+        write_file(path.to_string_lossy().as_ref(), "").expect("write should succeed");
+        let out = grep_search(&grep_input(&path, "foo\nbar", "content", true))
+            .expect("grep should succeed");
+        assert_eq!(out.num_files, 0, "empty file must not match");
+        assert_eq!(out.num_lines, Some(0), "no bogus line emitted");
+        assert_eq!(out.content.unwrap_or_default(), "");
+    }
+
+    // Unchanged behavior: without multiline, a cross-line pattern cannot match a
+    // single newline-free line, so `foo\nbar` over `foo\nbar` yields no match.
+    #[test]
+    fn grep_without_multiline_cross_line_pattern_no_match() {
+        let path = temp_path("grep-nomulti.txt");
+        write_file(path.to_string_lossy().as_ref(), "foo\nbar").expect("write should succeed");
+        let out = grep_search(&grep_input(&path, "foo\nbar", "content", false))
+            .expect("grep should succeed");
+        assert_eq!(out.num_files, 0, "cross-line pattern must not match per-line");
+        assert_eq!(out.num_lines, Some(0));
+    }
+
+    // multiline=true with a plain single-line pattern still matches normally.
+    #[test]
+    fn grep_multiline_single_line_pattern_still_matches() {
+        let path = temp_path("grep-ml-single.txt");
+        write_file(path.to_string_lossy().as_ref(), "foo\nbar\n").expect("write should succeed");
+        let out =
+            grep_search(&grep_input(&path, "bar", "content", true)).expect("grep should succeed");
+        assert_eq!(out.num_lines, Some(1));
+        let content = out.content.unwrap_or_default();
+        assert!(content.contains(":2:bar"), "got: {content}");
     }
 }

@@ -216,7 +216,15 @@ impl ArisConfig {
         let force_reviewer = force_rev;
 
         if let Some(provider) = &self.executor_provider {
-            if provider == "openai" || provider == "custom" {
+            // Gate this write like every sibling field below: in IfMissing mode a
+            // shell-provided EXECUTOR_PROVIDER must win (honoring the function
+            // docstring), so a saved openai/custom config can no longer silently
+            // re-point a shell-set EXECUTOR_PROVIDER=anthropic at startup. In Force*
+            // modes EXECUTOR_PROVIDER was already remove_var'd above, so `force`
+            // still applies the value → the explicit /setup path is unchanged.
+            if (provider == "openai" || provider == "custom")
+                && (force || std::env::var("EXECUTOR_PROVIDER").is_err())
+            {
                 std::env::set_var("EXECUTOR_PROVIDER", "openai");
             }
         }
@@ -1733,6 +1741,92 @@ mod tests {
         assert_eq!(
             std::env::var("EXECUTOR_BASE_URL").ok().as_deref(),
             Some("https://api.openai.com/v1")
+        );
+    }
+
+    /// case: ifmissing_shell_executor_provider_wins  🔴 v0.4.21 #2 BUG-FIX GUARD
+    /// A saved openai/custom config must NOT clobber a shell-provided
+    /// EXECUTOR_PROVIDER under IfMissing (the apply_to_env / startup path).
+    /// Before the fix the provider write was unconditional, so
+    /// `EXECUTOR_PROVIDER=anthropic aris …` with a saved OpenAI config got
+    /// silently re-pointed to OpenAI → wrong executor / model-not-found. The
+    /// gate now mirrors every sibling field: the shell value wins.
+    #[test]
+    fn char_ifmissing_shell_executor_provider_wins() {
+        let _g = crate::env_test_guard();
+        let _snap = EnvSnapshot::capture(EXECUTOR_ENV_VARS);
+
+        // Shell explicitly selects the Anthropic executor.
+        std::env::set_var("EXECUTOR_PROVIDER", "anthropic");
+
+        let config = ArisConfig {
+            executor_provider: Some("openai".into()),
+            executor_api_key: Some("config-key".into()),
+            executor_base_url: Some("https://api.openai.com/v1".into()),
+            ..Default::default()
+        };
+        // IfMissing mode: the shell-provided EXECUTOR_PROVIDER must survive.
+        config.apply_to_env();
+
+        assert_eq!(
+            std::env::var("EXECUTOR_PROVIDER").ok().as_deref(),
+            Some("anthropic"),
+            "IfMissing must not let a saved openai config clobber a shell-set EXECUTOR_PROVIDER"
+        );
+    }
+
+    /// case: ifmissing_unset_executor_provider_takes_config
+    /// v0.4.21 #2 companion: with NO shell EXECUTOR_PROVIDER, IfMissing still
+    /// applies the saved openai/custom provider (the gate's `is_err()` branch),
+    /// so config-only setups are unaffected by the fix.
+    #[test]
+    fn char_ifmissing_unset_executor_provider_takes_config() {
+        let _g = crate::env_test_guard();
+        let _snap = EnvSnapshot::capture(EXECUTOR_ENV_VARS);
+
+        // EnvSnapshot::capture cleared EXECUTOR_PROVIDER → it is unset here.
+        assert!(std::env::var("EXECUTOR_PROVIDER").is_err());
+
+        let config = ArisConfig {
+            executor_provider: Some("openai".into()),
+            executor_api_key: Some("config-key".into()),
+            executor_base_url: Some("https://api.openai.com/v1".into()),
+            ..Default::default()
+        };
+        config.apply_to_env();
+
+        assert_eq!(
+            std::env::var("EXECUTOR_PROVIDER").ok().as_deref(),
+            Some("openai"),
+            "IfMissing must fill EXECUTOR_PROVIDER from saved config when the shell left it unset"
+        );
+    }
+
+    /// case: force_executor_provider_applies_over_shell
+    /// v0.4.21 #2 companion: force_apply_to_env (ForceAll) remove_var's
+    /// EXECUTOR_PROVIDER first, so the `force` arm of the gate still applies the
+    /// saved openai value even though the shell had set anthropic. Locks that
+    /// the explicit /setup path is UNCHANGED by the fix.
+    #[test]
+    fn char_force_executor_provider_applies_over_shell() {
+        let _g = crate::env_test_guard();
+        let _snap = EnvSnapshot::capture(EXECUTOR_ENV_VARS);
+
+        // Even a shell-set value is overridden by an explicit force-apply.
+        std::env::set_var("EXECUTOR_PROVIDER", "anthropic");
+
+        let config = ArisConfig {
+            executor_provider: Some("openai".into()),
+            executor_api_key: Some("config-key".into()),
+            executor_base_url: Some("https://api.openai.com/v1".into()),
+            ..Default::default()
+        };
+        config.force_apply_to_env();
+
+        assert_eq!(
+            std::env::var("EXECUTOR_PROVIDER").ok().as_deref(),
+            Some("openai"),
+            "force_apply_to_env must still apply the saved openai provider (unchanged force behavior)"
         );
     }
 

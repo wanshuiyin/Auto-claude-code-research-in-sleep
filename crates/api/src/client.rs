@@ -834,6 +834,47 @@ fn should_retry_on_premature_eof(
         && stream_retries_remaining > 0
 }
 
+/// v0.4.21 #1 — once the premature-EOF retry gate has declined and
+/// `SseParser::finish()` yielded no terminal event, decide whether a *clean*
+/// EOF is a truncation that must hard-error rather than be reported as success.
+/// True iff meaningful content was already delivered to the caller but no
+/// terminal signal (`message_stop`, or a non-empty `stop_reason` `message_delta`)
+/// was ever observed. Symmetric to the OpenAI executor's
+/// `StreamEofAction::Truncated` branch: the point is to stop the consumer
+/// synthesizing a `MessageStop` and committing a half-finished answer as a
+/// complete turn (which corrupts follow-up turns). When no meaningful content
+/// was emitted the retry path owns that case and an empty `Ok(None)` is correct;
+/// when a terminal WAS seen the response is genuinely complete. Extracted as a
+/// pure fn so it is unit-testable without mocking a `reqwest::Response`,
+/// mirroring [`should_retry_on_premature_eof`].
+fn eof_is_truncation(has_emitted_meaningful_content: bool, observed_terminal: bool) -> bool {
+    has_emitted_meaningful_content && !observed_terminal
+}
+
+/// v0.4.21 #1 safety valve — pure parse of `ARIS_ALLOW_EOF_WITHOUT_STOP`. A
+/// third-party Anthropic-compatible proxy that legitimately streams a COMPLETE
+/// response without ever emitting a terminal signal (no `message_stop`, no
+/// `stop_reason`-bearing `message_delta`) can opt back into the pre-v0.4.21
+/// behavior (accept the partial as complete) by setting this to `1`/`true`.
+/// Off by default: a missing terminal signal is a truncation and hard-errors,
+/// so a half-finished answer is never silently saved as complete. Pure fn so
+/// the mapping is unit-tested without env races (mirrors
+/// `parse_stream_idle_timeout_secs`).
+fn parse_allow_eof_without_terminal(value: Option<&str>) -> bool {
+    value
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Env-backed wrapper over [`parse_allow_eof_without_terminal`].
+fn allow_eof_without_terminal() -> bool {
+    parse_allow_eof_without_terminal(
+        std::env::var("ARIS_ALLOW_EOF_WITHOUT_STOP")
+            .ok()
+            .as_deref(),
+    )
+}
+
 /// v0.4.17 A5.2 (CL2) — classify whether an event signals that the stream
 /// reached a terminal state, symmetric to the `OpenAI` executor's v0.4.15
 /// `observed_done || observed_finish_reason` semantics:
@@ -950,6 +991,37 @@ impl MessageStream {
                     }
                     self.events_emitted = self.events_emitted.saturating_add(1);
                     return Ok(Some(event));
+                }
+                // v0.4.21 #1: symmetric to the OpenAI `StreamEofAction::Truncated`
+                // branch. A clean EOF that delivered meaningful content but never
+                // a terminal signal (message_stop / stop_reason-bearing
+                // message_delta) is a TRUNCATED response, not success. Returning
+                // Ok(None) here lets the consumer synthesize a MessageStop and
+                // commit a half-finished answer as a complete turn. The retry
+                // gate above never fires once meaningful content was emitted
+                // (tearing visible output is worse), and SseParser::finish()
+                // returns Ok(empty) on a mid-message EOF, so without this guard
+                // the truncation is silently masked. `observed_terminal` here
+                // already reflects any terminal frame popped from the trailing
+                // buffer just above. Safety valve: ARIS_ALLOW_EOF_WITHOUT_STOP=1
+                // opts a proxy that legitimately never sends a terminal signal
+                // back into the pre-v0.4.21 accept-as-complete behavior.
+                if eof_is_truncation(self.has_emitted_meaningful_content, self.observed_terminal)
+                    && !allow_eof_without_terminal()
+                {
+                    return Err(ApiError::Api {
+                        status: reqwest::StatusCode::OK,
+                        error_type: Some("premature_eof".to_string()),
+                        message: Some(
+                            "Anthropic stream ended without message_stop or a stop_reason \
+                             (truncated response)"
+                                .to_string(),
+                        ),
+                        body: "Anthropic stream ended without message_stop or a stop_reason \
+                               (truncated response)"
+                            .to_string(),
+                        retryable: false,
+                    });
                 }
                 return Ok(None);
             }
@@ -1784,6 +1856,98 @@ mod tests {
             /* leftover_empty */ true,
             /* stream_retries_remaining */ 2,
         ));
+    }
+
+    /// v0.4.21 #1 — `eof_is_truncation` truth table. A clean EOF is a truncation
+    /// (and `next_event` must hard-error instead of returning Ok(None)) iff
+    /// meaningful content was delivered to the caller but no terminal signal was
+    /// ever observed. Mirrors `should_retry_on_premature_eof_truth_table`.
+    #[test]
+    fn eof_is_truncation_truth_table() {
+        // content emitted + NO terminal → TRUNCATION (hard-error).
+        assert!(super::eof_is_truncation(true, false));
+        // content emitted + terminal seen → genuinely complete, NOT a truncation.
+        assert!(!super::eof_is_truncation(true, true));
+        // no content + no terminal → the retry path owns this; an empty Ok(None)
+        // is correct, not a truncation error.
+        assert!(!super::eof_is_truncation(false, false));
+        // no content + terminal → signalled completion (empty but not truncated).
+        assert!(!super::eof_is_truncation(false, true));
+    }
+
+    /// v0.4.21 #1 safety valve — `ARIS_ALLOW_EOF_WITHOUT_STOP` parsing. Only an
+    /// explicit `1`/`true` (case-insensitive) opts back into accept-as-complete;
+    /// anything else (incl. unset) keeps the default truncation hard-error.
+    #[test]
+    fn parse_allow_eof_without_terminal_truth_table() {
+        assert!(super::parse_allow_eof_without_terminal(Some("1")));
+        assert!(super::parse_allow_eof_without_terminal(Some("true")));
+        assert!(super::parse_allow_eof_without_terminal(Some("TRUE")));
+        assert!(!super::parse_allow_eof_without_terminal(Some("0")));
+        assert!(!super::parse_allow_eof_without_terminal(Some("")));
+        // only 1/true count — a stray value does NOT silently disable the guard.
+        assert!(!super::parse_allow_eof_without_terminal(Some("yes")));
+        assert!(!super::parse_allow_eof_without_terminal(None));
+    }
+
+    /// v0.4.21 #1 — composition test (same style as the CL2 tests above):
+    /// the codex-required scenarios expressed through the pure helpers that
+    /// `next_event`'s EOF branch composes. (a) content + NO message_stop + NO
+    /// stop_reason + clean EOF → truncation (Err); (b) stop_reason-only delta +
+    /// EOF → complete (CL2 compat path NOT regressed); (c) canonical
+    /// message_stop → complete; (d) no content + EOF → not a truncation.
+    #[test]
+    fn eof_truncation_matches_codex_scenarios() {
+        use crate::types::{MessageDelta, MessageDeltaEvent, MessageStopEvent, StreamEvent, Usage};
+
+        let usage = || Usage {
+            input_tokens: 0,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+            output_tokens: 0,
+        };
+
+        // (a) content streamed, then a usage-only delta (stop_reason: None), then
+        // clean EOF — no terminal signal ever observed → TRUNCATION → Err.
+        let plain_delta = StreamEvent::MessageDelta(MessageDeltaEvent {
+            delta: MessageDelta {
+                stop_reason: None,
+                stop_sequence: None,
+            },
+            usage: usage(),
+        });
+        assert!(!super::event_signals_terminal(&plain_delta));
+        assert!(
+            super::eof_is_truncation(/* content emitted */ true, /* observed_terminal */ false),
+            "content + no terminal + clean EOF must be a truncation (Err), not synthesized success"
+        );
+
+        // (b) stop_reason-only delta then clean EOF (anthropic-compat proxy that
+        // never sends message_stop): observed_terminal=true → COMPLETE, not a
+        // truncation. Proves the CL2 compat path is NOT regressed by #1.
+        let stop_delta = StreamEvent::MessageDelta(MessageDeltaEvent {
+            delta: MessageDelta {
+                stop_reason: Some("end_turn".to_string()),
+                stop_sequence: None,
+            },
+            usage: usage(),
+        });
+        let observed = super::event_signals_terminal(&stop_delta);
+        assert!(observed);
+        assert!(
+            !super::eof_is_truncation(true, observed),
+            "stop_reason-only delta + EOF must be complete (CL2 path intact)"
+        );
+
+        // (c) canonical message_stop → terminal → complete.
+        let observed_stop =
+            super::event_signals_terminal(&StreamEvent::MessageStop(MessageStopEvent {}));
+        assert!(observed_stop);
+        assert!(!super::eof_is_truncation(true, observed_stop));
+
+        // (d) no content emitted + no terminal → not a truncation (retry/empty
+        // path owns it; unchanged behavior).
+        assert!(!super::eof_is_truncation(false, false));
     }
 
     /// v0.4.14 C11 — chunk-idle timeout env parser truth table. Pure

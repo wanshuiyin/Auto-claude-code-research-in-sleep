@@ -162,6 +162,113 @@ async fn stream_message_parses_sse_events_with_tool_use() {
     assert!(request.body.contains("\"stream\":true"));
 }
 
+/// v0.4.21 #1 — a stream that delivers meaningful text then the connection
+/// closes cleanly WITHOUT a terminal signal (no `message_stop`, no
+/// `stop_reason`-bearing `message_delta`) is a TRUNCATION. `next_event()` must
+/// surface an `ApiError::Api` with `error_type == "premature_eof"` instead of
+/// returning `Ok(None)`, so the consumer cannot synthesize a `MessageStop` and
+/// commit a half-finished answer as a complete turn. Drives the patched EOF
+/// branch end-to-end (not just the pure helper).
+#[tokio::test]
+async fn stream_truncated_without_terminal_signal_errors() {
+    // Hermetic: this test asserts the DEFAULT (guard-on) behavior, which the
+    // ARIS_ALLOW_EOF_WITHOUT_STOP=1 opt-out would suppress — ensure it's unset.
+    std::env::remove_var("ARIS_ALLOW_EOF_WITHOUT_STOP");
+    let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
+    // message_start + a text content block delta, then the connection closes —
+    // no content_block_stop, no message_delta, no message_stop.
+    let sse = concat!(
+        "event: message_start\n",
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_trunc\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-3-7-sonnet-latest\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":8,\"output_tokens\":0}}}\n\n",
+        "event: content_block_start\n",
+        "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The answer is 42\"}}\n\n",
+    );
+    let server = spawn_server(
+        state.clone(),
+        vec![http_response("200 OK", "text/event-stream", sse)],
+    )
+    .await;
+
+    let client = AnthropicClient::new("test-key").with_base_url(server.base_url());
+    let mut stream = client
+        .stream_message(&sample_request(false))
+        .await
+        .expect("stream should start");
+
+    let mut error = None;
+    loop {
+        match stream.next_event().await {
+            Ok(Some(_event)) => continue,
+            Ok(None) => break,
+            Err(e) => {
+                error = Some(e);
+                break;
+            }
+        }
+    }
+
+    match error.expect("truncated stream must surface an error, not Ok(None)") {
+        ApiError::Api { error_type, .. } => assert_eq!(
+            error_type.as_deref(),
+            Some("premature_eof"),
+            "content + clean EOF without a terminal signal must be premature_eof"
+        ),
+        other => panic!("expected a premature_eof Api error, got {other:?}"),
+    }
+}
+
+/// v0.4.21 #1 companion — a `stop_reason`-bearing `message_delta` IS a terminal
+/// signal (CL2), so a clean EOF afterwards (an anthropic-compat proxy that
+/// never sends `message_stop`) must drain to `Ok(None)`, NOT error. Guards
+/// against the truncation fix regressing the stop_reason-only compat path.
+#[tokio::test]
+async fn stream_stop_reason_delta_without_message_stop_drains_cleanly() {
+    let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
+    // Same as above but a stop_reason-bearing message_delta arrives before the
+    // connection closes — no message_stop, but the stream IS terminal.
+    let sse = concat!(
+        "event: message_start\n",
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_cl2\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-3-7-sonnet-latest\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":8,\"output_tokens\":0}}}\n\n",
+        "event: content_block_start\n",
+        "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hi\"}}\n\n",
+        "event: message_delta\n",
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":8,\"output_tokens\":2}}\n\n",
+    );
+    let server = spawn_server(
+        state.clone(),
+        vec![http_response("200 OK", "text/event-stream", sse)],
+    )
+    .await;
+
+    let client = AnthropicClient::new("test-key").with_base_url(server.base_url());
+    let mut stream = client
+        .stream_message(&sample_request(false))
+        .await
+        .expect("stream should start");
+
+    let mut events = Vec::new();
+    while let Some(event) = stream
+        .next_event()
+        .await
+        .expect("stop_reason-only stream must drain cleanly, not error")
+    {
+        events.push(event);
+    }
+
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            StreamEvent::MessageDelta(MessageDeltaEvent { delta, .. })
+                if delta.stop_reason.as_deref() == Some("end_turn")
+        )),
+        "the stop_reason-bearing message_delta (end_turn) should have been yielded before clean EOF"
+    );
+}
+
 #[tokio::test]
 async fn retries_retryable_failures_before_succeeding() {
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
