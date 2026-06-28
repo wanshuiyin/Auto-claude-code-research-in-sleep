@@ -1,7 +1,7 @@
 ---
 name: paper-poster-html
 description: "DEFAULT poster pipeline — build an academic conference poster (ICML/NeurIPS/ICLR/CVPR/...) as a single HTML/CSS file with measurement-driven hard gates, real paper figures, a two-hue design-token system, and print-ready PDF via headless Chromium. Use when the user says \"做海报\", \"poster\", \"conference poster\", \"paper poster\", or asks to design/redo a research poster. Supersedes the retired LaTeX /paper-poster."
-argument-hint: [paper-dir-or-pdf] [— venue: ICLR, canvas: 185x90cm landscape, venue-colors: true]
+argument-hint: "[paper-dir-or-pdf] [— venue: ICLR, canvas: 185x90cm landscape, venue-colors: true]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebFetch, WebSearch, AskUserQuestion, mcp__codex__codex
 ---
 
