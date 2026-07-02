@@ -296,6 +296,16 @@ Write `idea-stage/IDEA_CANDIDATES.md` — a lean summary of the top 3-5 survivin
 - Next step: /experiment-bridge or /research-refine
 ```
 
+### Phase 5.6: Instantiate the Research Contract (always — NOT gated on COMPACT)
+
+When Phase 4 ends with a RECOMMENDED idea, create `idea-stage/docs/research_contract.md`
+from `templates/RESEARCH_CONTRACT_TEMPLATE.md` (repo root or `$ARIS_REPO/templates/`),
+filling in: the selected idea + selection rationale, core claims, minimum
+convincing evidence, and the next-step pointer. Skip only when the run produced
+no RECOMMENDED idea. `/experiment-bridge` implements against this contract;
+`/result-to-claim` + `/ablation-planner` read it as the claims source; session
+recovery reloads the ACTIVE idea from it instead of the full idea pool.
+
 ## Output Protocols
 
 > Follow these shared protocols for all output files:

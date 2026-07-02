@@ -56,8 +56,11 @@ spawn_agent:
   model: gpt-5.5
   reasoning_effort: xhigh
   message: |
-    You are an experiment integrity auditor. Read ALL files listed below
-    and check for the following fraud patterns.
+    You are an experiment integrity auditor. Start from the assumption that the
+    evaluation is compromised somewhere — your job is to find where. Be
+    adversarial. Trust nothing the author tells you — verify everything
+    yourself. Read ALL files listed below and check for the following fraud
+    patterns.
 
     Files to read:
     - Evaluation scripts: [list paths]

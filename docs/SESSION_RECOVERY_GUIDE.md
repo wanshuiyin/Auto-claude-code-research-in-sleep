@@ -110,6 +110,8 @@ On new session or post-compaction recovery:
 The Pipeline Status convention works without any tooling — the LLM just needs to follow the rules in CLAUDE.md. But in practice, LLMs sometimes forget, especially after compaction. Claude Code [hooks](https://docs.anthropic.com/en/docs/claude-code/hooks) can automate the recovery.
 
 > **These hooks are Claude Code-specific.** If you use Cursor, Trae, or other platforms, skip this section — the Pipeline Status convention above is all you need.
+>
+> **They are copy-paste snippets, not shipped automation** — `install_aris.sh` does not create or register them; you set them up manually with the steps below. `session-restore.sh` alone covers ~80% of the value if you only want one.
 
 ### Overview
 

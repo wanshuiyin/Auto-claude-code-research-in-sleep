@@ -108,14 +108,18 @@ spawn_agent:
     - Raw results (verbatim files, not a summary): <path(s)>
     - Changed since last round: <changed-file paths> — read the diff, not my description
 
-    Please act as a senior ML reviewer (NeurIPS/ICML level).
+    Please act as a senior ML reviewer (NeurIPS/ICML level). Start from the
+    assumption that the work is broken somewhere — your job is to find where.
+    Be adversarial. Trust nothing the author tells you — verify everything
+    yourself.
 
     1. Score this work 1-10 for a top venue
     2. List remaining critical weaknesses (ranked by severity)
     3. For each weakness, specify the MINIMUM fix (experiment, analysis, or reframing)
     4. State clearly: is this READY for submission? Yes/No/Almost
 
-    Be brutally honest. If the work is ready, say so clearly.
+    Be brutally honest. If, after genuinely trying to break it, the work holds
+    up and is ready, say so clearly.
 ```
 
 If this is round 2+, use `send_input` with the saved agent id to maintain continuity.

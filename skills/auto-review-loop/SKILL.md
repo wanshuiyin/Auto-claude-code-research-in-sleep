@@ -135,14 +135,18 @@ mcp__codex__codex:
     - Raw results (verbatim files, not a summary): <path(s)>
     - Changed since last round: <changed-file paths> — read the diff, not my description
 
-    Please act as a senior ML reviewer (NeurIPS/ICML level).
+    Please act as a senior ML reviewer (NeurIPS/ICML level). Start from the
+    assumption that the work is broken somewhere — your job is to find where.
+    Be adversarial. Trust nothing the author tells you — verify everything
+    yourself.
 
     1. Score this work 1-10 for a top venue
     2. List remaining critical weaknesses (ranked by severity)
     3. For each weakness, specify the MINIMUM fix (experiment, analysis, or reframing)
     4. State clearly: is this READY for submission? Yes/No/Almost
 
-    Be brutally honest. If the work is ready, say so clearly.
+    Be brutally honest. If, after genuinely trying to break it, the work holds
+    up and is ready, say so clearly.
 ```
 
 *For manual backend:* use `mcp__manual_review__review` with the `prompt` text above and `config: {"model_reasoning_effort": "xhigh"}`. Save the returned `threadId`.
@@ -259,6 +263,10 @@ After parsing the assessment, update `REVIEWER_MEMORY.md` in the project root:
 - Append each round, never delete prior rounds (audit trail)
 - If the reviewer's response includes a "Memory update" section, copy it verbatim
 - This file is passed back to the reviewer in the next round's Phase A — it is the reviewer's persistent memory
+- **If the score REGRESSES round-to-round**, don't just write a new memory line:
+  diff the two rounds' raw `.response.md` files in `.aris/traces/` first and find
+  the exact criterion that flipped (see `shared-references/review-tracing.md`
+  § *Debugging With Traces*). The memory file is a summary; the trace is evidence.
 
 #### Phase B.6: Debate Protocol (hard + nightmare only)
 

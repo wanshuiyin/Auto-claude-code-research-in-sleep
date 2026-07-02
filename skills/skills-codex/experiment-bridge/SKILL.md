@@ -72,6 +72,11 @@ Present a brief summary:
 Proceeding to implementation.
 ```
 
+**Research-contract fallback**: if `idea-stage/docs/research_contract.md` does
+not exist yet, create it now from `templates/RESEARCH_CONTRACT_TEMPLATE.md`
+using the selected idea + claims from the experiment plan — downstream
+`/result-to-claim` and `/ablation-planner` read it as the claims source.
+
 ### Phase 2: Implement Experiment Code
 
 **If `BASE_REPO` is set** — clone the repo first:

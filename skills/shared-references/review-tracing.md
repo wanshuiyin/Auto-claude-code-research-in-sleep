@@ -138,6 +138,45 @@ After writing a trace, append a compact summary event to `.aris/meta/events.json
 
 This allows `/meta-optimize` to discover traces without reading the full trace files.
 
+## Debugging With Traces
+
+Traces are not only audit evidence — they are the **first place to look when a
+verdict is surprising**: a score regresses round-to-round, two reviewer backends
+disagree, or `/result-to-claim` contradicts an earlier claim. Before re-invoking
+the reviewer for "a better answer", read the raw transcript and find the moment
+its judgment actually changed:
+
+```bash
+# Diff the raw response bodies across the two calls in question
+diff .aris/traces/<skill>/<run>/002-round-2.response.md \
+     .aris/traces/<skill>/<run>/003-round-3.response.md
+
+# Grep for the sentence where the assessment turned
+grep -n "however\|but\|concern\|missing\|cannot" \
+     .aris/traces/<skill>/<run>/003-round-3.response.md
+```
+
+The paragraph where the assessment changed **is** the causal explanation for the
+divergence — cite it, don't guess. Re-running the reviewer without reading the
+trace is tuning by vibe: you get a new opinion, not an explanation.
+
+This is the same muscle ARIS already applies to code failures (the "**Read the
+error** — parse traceback, stderr, and log files" step in `/experiment-bridge`'s
+auto-debug sequence, and `/codex:rescue` reading tracebacks before a retry) —
+applied to saved AI-judgment transcripts instead of stderr. The trace is written
+in English and most of it is the reviewer talking to itself; the discipline is
+identical: read the primary artifact first, then act on the exact divergence
+point rather than re-rolling the dice.
+
+Practical triggers:
+
+| Surprise | Trace move |
+|---|---|
+| Score dropped after a "fix" round | diff the two rounds' `.response.md`; find which criterion flipped |
+| Two backends disagree (codex vs gemini/manual) | grep both responses for the SAME artifact path; compare what each actually read |
+| Reviewer "forgot" an earlier concern | grep prior rounds for the concern keyword; if present-then-absent, cite it in the next prompt instead of restating from memory |
+| Verdict contradicts a deterministic checker | read the request `.md` — was the checker's output actually in the files the reviewer was pointed at? |
+
 ## Privacy
 
 - `.aris/traces/` should be in `.gitignore` — traces are project-local, never committed

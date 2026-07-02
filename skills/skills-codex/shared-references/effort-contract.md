@@ -4,6 +4,8 @@
 
 Every ARIS skill accepts an optional `effort` parameter that controls how much work the system does. This affects breadth, depth, iterations, and coverage — but **never** the quality of cross-model review.
 
+> Design stance: the unattended *procedure* (gather → reason → act → verify → repeat) is the engineered artifact, not any single prompt — after Karpathy's "write the loop, not the prompt" (LOOPS.md, *Field Notes on Agents That Run for Days*).
+
 ```
 /any-skill "args" — effort: lite | balanced | max | beast
 ```

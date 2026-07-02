@@ -105,6 +105,27 @@ After writing a trace, append a compact event to `.aris/meta/events.jsonl`:
 {"event":"review_trace","skill":"auto-review-loop","purpose":"round-1-review","agent_id":"...","trace_path":".aris/traces/auto-review-loop/2026-04-15_run01/","status":"ok"}
 ```
 
+## Debugging With Traces
+
+Traces are not only audit evidence — they are the **first place to look when a
+verdict is surprising**: a score regresses round-to-round, two reviewer agents
+disagree, or a claim check contradicts an earlier round. Before re-invoking the
+reviewer for "a better answer", read the raw transcript and find the moment its
+judgment actually changed:
+
+```bash
+diff .aris/traces/<skill>/<run>/002-round-2.response.md \
+     .aris/traces/<skill>/<run>/003-round-3.response.md
+grep -n "however\|but\|concern\|missing\|cannot" \
+     .aris/traces/<skill>/<run>/003-round-3.response.md
+```
+
+The paragraph where the assessment changed **is** the causal explanation for the
+divergence — cite it, don't guess. Re-running the reviewer without reading the
+trace is tuning by vibe: you get a new opinion, not an explanation. Same muscle
+as reading a stack trace before retrying a failed run — the trace is just
+written in English, and most of it is the reviewer talking to itself.
+
 ## Privacy
 
 `.aris/traces/` is project-local and should not be committed. Use `--- trace: off` for strict confidentiality projects.

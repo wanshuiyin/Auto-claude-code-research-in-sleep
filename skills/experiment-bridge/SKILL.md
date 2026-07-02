@@ -72,6 +72,13 @@ Present a brief summary:
 Proceeding to implementation.
 ```
 
+**Research-contract fallback**: if `idea-stage/docs/research_contract.md` does
+not exist yet (idea selected outside `/idea-discovery`, or an older run),
+create it now from `templates/RESEARCH_CONTRACT_TEMPLATE.md` using the selected
+idea + claims from the experiment plan. Downstream `/result-to-claim` and
+`/ablation-planner` read this file as the claims source, and session recovery
+(`docs/SESSION_RECOVERY_GUIDE.md`) depends on it existing.
+
 ### Phase 2: Implement Experiment Code
 
 **If `BASE_REPO` is set** — clone the repo first:
@@ -155,7 +162,9 @@ Wait for completion. Verify:
 
 If sanity fails → **auto-debug before giving up** (max 3 attempts):
 
-1. **Read the error** — parse traceback, stderr, and log files
+1. **Read the error** — parse traceback, stderr, and log files. (The same
+   read-the-primary-artifact discipline applies to surprising REVIEWER verdicts:
+   see `shared-references/review-tracing.md` § *Debugging With Traces*.)
 2. **Diagnose** — classify the failure:
    - OOM → reduce batch size or enable gradient checkpointing
    - ImportError → install missing package
