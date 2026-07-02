@@ -38,6 +38,12 @@ All of these are pure engineering friction that can be orchestrated.
 
 ## Core Concepts
 
+> **Environment contract**: queue jobs assume the target env is already built
+> and validated per `../shared-references/compute-env-contract.md` (spec-hash
+> ledger + kernel witness). A wave of jobs dying at import time = the env
+> contract was skipped, not a queue bug; check the provider's
+> `.aris/compute/<provider>.md` ledger before re-queueing.
+
 ### Job Manifest
 
 A manifest lists jobs with explicit state:

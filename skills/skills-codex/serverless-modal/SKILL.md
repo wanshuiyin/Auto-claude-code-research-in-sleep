@@ -16,6 +16,10 @@ Task: $ARGUMENTS
 - **Auto scale-to-zero**: billing stops the instant your code finishes. No idle instances.
 - **Local-first**: run `modal run` from your laptop. Code, data, and results stay local; only the GPU function runs remotely.
 - **Reproducible environments**: dependencies declared in code via `modal.Image`, not system-level packages.
+  Treat the `modal.Image` chain as the RENDERED form of the declarative env spec in
+  `../shared-references/compute-env-contract.md` — same spec fields (base, ordered
+  pip phases, env vars, smoke probes), same `env:<name>@<specHash>` ledger entry in
+  `.aris/compute/modal.md`, same three-tier validation before a long run.
 
 **Best for**: Users without a local GPU who need to debug CUDA code, run small-scale tests, or iterate quickly on experiments. The $5 free tier (no card) is enough for code debugging; $30 (with card) covers most small-scale experiment runs.
 

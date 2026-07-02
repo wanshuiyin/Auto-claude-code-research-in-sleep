@@ -11,6 +11,14 @@ A kubectl/docker-style CLI for managing GPU compute jobs on the Qizhi (启智) p
 
 **GitHub:** [tianyilt/qzcli_tool](https://github.com/tianyilt/qzcli_tool)
 
+## Environment contract
+
+Qizhi is the scheduler-cluster shape of `../shared-references/compute-env-contract.md`:
+images are built OFF-platform and referenced at submit time, so the declarative
+env spec + `env:<name>@<specHash>` ledger (`.aris/compute/qizhi.md`) is what
+keeps "which image has which stack" answerable. Run the kernel witness inside a
+submitted job (not on the login side) before trusting an image for a long run.
+
 ## Installation
 
 ```bash

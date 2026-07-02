@@ -22,6 +22,15 @@ Read the project's `CLAUDE.md` to determine the experiment environment:
 
 **Modal detection:** If `CLAUDE.md` has `gpu: modal` or a `## Modal` section, the entire deployment is handled by `/serverless-modal`. Jump to **Step 4: Deploy (Modal)** — Steps 2-3 are not needed (Modal handles code sync and GPU allocation automatically).
 
+**Environment contract** (`../shared-references/compute-env-contract.md`): before
+building or trusting any environment, read the provider's env ledger
+(`.aris/compute/<provider>.md`) — an unchanged spec hash means warm-reuse, a
+changed one means rebuild. New env → write the declarative spec first, render it
+for this provider's shape, and never declare it ready on import-success alone:
+run the seeded kernel witness, and after any rebuild/doc edit run the
+agent-follows-doc pass (a fresh subagent executes the documented invocation
+verbatim and reports doc-vs-reality divergence).
+
 **Vast.ai detection priority:**
 1. If `CLAUDE.md` has `gpu: vast` or a `## Vast.ai` section:
    - If `vast-instances.json` exists and has a running instance → use that instance

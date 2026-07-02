@@ -20,6 +20,15 @@ Read the project's `AGENTS.md` to determine the experiment environment:
 
 If no server info is found in `AGENTS.md`, ask the user.
 
+**Environment contract** (`../shared-references/compute-env-contract.md`): before
+building or trusting any environment, read the provider's env ledger
+(`.aris/compute/<provider>.md`) — an unchanged spec hash means warm-reuse, a
+changed one means rebuild. New env → write the declarative spec first, render it
+for this provider's shape, and never declare it ready on import-success alone:
+run the seeded kernel witness, and after any rebuild/doc edit run the
+agent-follows-doc pass (a fresh subagent executes the documented invocation
+verbatim and reports doc-vs-reality divergence).
+
 ### Step 2: Pre-flight Check
 
 Check GPU availability on the target machine:

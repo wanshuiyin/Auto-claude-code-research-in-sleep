@@ -235,6 +235,12 @@ To destroy when done: /vast-gpu destroy <ID>
 
 ### Action: Setup
 
+> Follow `../shared-references/compute-env-contract.md`: write/reuse the
+> declarative env spec (ordered `pip_phases`, not one big install), record the
+> `env:<name>@<specHash>` block in `.aris/compute/vast.md`, and run the seeded
+> kernel witness before launching the real experiment — a fresh instance whose
+> `import torch` succeeds can still have the wrong-SM wheel.
+
 Set up the rented instance for a specific experiment. Called automatically by `/run-experiment` when targeting a vast.ai instance.
 
 **Step 1: Install Dependencies**
