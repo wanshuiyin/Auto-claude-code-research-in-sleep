@@ -40,7 +40,7 @@ This pipeline accepts one of:
 
 1. **`NARRATIVE_REPORT.md`** (best) — structured research narrative with claims, experiments, results, figures
 2. **Research direction + experiment results** — the skill will help draft the narrative first
-3. **Existing `PAPER_PLAN.md`** — skip Phase 1, start from Phase 2
+3. **Existing `PAPER_PLAN.md`** — skip Phase 1, start from **Phase 1.5** (the contract negotiation still runs; only resuming a genuine pre-1.5 legacy run may skip it, and then Phase 6.0's row 0 records "no contract")
 
 The more detailed the input (especially figure descriptions and quantitative results), the better the output.
 
@@ -213,16 +213,23 @@ contract is what gets graded.)
        followed by your numbered revision demands if no.
    ```
 
+   A reply with a missing or malformed `CONTRACT_ACCEPTED:` line is treated as
+   `no`; request a corrected verdict via `codex-reply` — that correction
+   exchange does not consume a negotiation round.
+
 3. **Iterate.** On `no`, revise the contract per the demands and resubmit via
    `mcp__codex__codex-reply` (same thread — the negotiation is one
    conversation). **Max 3 rounds.**
 
 4. **Fallback — never stall the pipeline.** If round 3 still ends in `no`:
    record the unresolved demands verbatim in a "## Disputed" section of the
-   contract, mark it `status: contested`, present the dispute at the next
-   checkpoint (the human is the tie-breaker — this is exactly the "insert a
-   human when the CONTRACT is wrong" trigger), and proceed. A contested
-   contract still gates Phase 6.0 on its UNDISPUTED assertions.
+   contract and mark it `status: contested`. A contested contract is precisely
+   the "insert a human when the CONTRACT is wrong" trigger, so it OVERRIDES
+   `AUTO_PROCEED` for this one decision: pause and present the dispute for a
+   human tie-break. If no human responds (unattended/overnight run), proceed —
+   but a contested contract caps the outcome: Phase 6.0 gates on the UNDISPUTED
+   assertions and the Final Report must set `Submission-ready: no` with the
+   dispute reproduced verbatim; the tie-break happens when the human returns.
 
 **Output:** `PAPER_ACCEPTANCE_CONTRACT.md` (`status: accepted | contested`,
 round count, reviewer thread id). The contract is FROZEN once accepted —
@@ -604,7 +611,10 @@ skipping audits while claiming to have run them.
    [ ] 3. /citation-audit       → paper/CITATION_AUDIT.json
    [ ] 4. Resolve $AUDIT_VERIFIER per integration-contract.md §2 (Policy A),
           then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
-   [ ] 5. Block Final Report iff verifier exit code != 0
+   [ ] 5. Block Final Report iff verifier exit code != 0 OR row 0 found a
+          violated undisputed assertion. (TWO separate gates: row 0 is graded
+          by instruction against the contract; the verifier checks audit JSONs
+          only — verify_paper_audits.sh does NOT read the contract.)
 ```
 
 > The resolver in "Running the verifier" below tries
