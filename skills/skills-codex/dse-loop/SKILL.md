@@ -257,7 +257,12 @@ If the context window compacts mid-run, the loop recovers from `DSE_STATE.json` 
 - **Keep raw outputs** — save each run's full output in `dse_results/outputs/iter_N/`
 - **Constraint violations are not improvements** — a design point that violates constraints is never "best", regardless of the metric
 - If a run crashes, log the error, skip that point, and continue with the next
-- If the same crash repeats 3 times with different configs, stop and report the issue
+- If the same crash repeats 3 times with different configs, the harness code itself is
+  the suspect — **discard and reimplement the run/parse script cleanly from the spec**
+  (a peer move to another patch; delete only the script, never `dse_log.csv` /
+  `dse_results/`; per mainline `external-cadence.md`, "Let a broken attempt restart, not
+  just patch"). If a clean reimplement crashes the same way, stop and report — the spec
+  or the environment is then in question, which is what needs the human
 
 ## Example Invocations
 

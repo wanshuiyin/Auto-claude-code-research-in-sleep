@@ -80,7 +80,13 @@ jobs:
 ```
 pending → running → completed
                  ↘ failed_oom → pending (after delay) [retry up to N]
-                 ↘ failed_other → stuck (needs manual inspection)
+                 ↘ failed_other → stuck (needs manual inspection; before handing
+                    over, if the same failure repeats across jobs, try ONE clean
+                    reimplement of the job script from the plan — a peer move to
+                    patching; delete only the script, never queue state / logs /
+                    results (per mainline external-cadence.md, "Let a broken
+                    attempt restart, not just patch"). Reserve "stuck" for
+                    contract/environment doubts, not merely broken job code)
 stale_screen_detected → cleaned → pending
 ```
 

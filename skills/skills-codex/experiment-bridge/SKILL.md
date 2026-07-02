@@ -160,8 +160,14 @@ Wait for completion. Verify:
 If sanity fails → READ the traceback/stderr/logs first, then fix the code and
 re-run — never re-run unchanged hoping for a different outcome. (The same
 read-the-primary-artifact discipline applies to surprising REVIEWER verdicts:
-see `shared-references/review-tracing.md` § *Debugging With Traces*.) Do not
-proceed to full deployment with broken code.
+see `shared-references/review-tracing.md` § *Debugging With Traces*.) After 1–2
+failed patches on the same failure, **discard and reimplement the failing
+script cleanly from the plan** — a peer move to another patch, not a last
+resort; delete only the attempt's own code, never the plan / tracker / data /
+results (per mainline `external-cadence.md`, "Let a broken attempt restart, not
+just patch"). Two clean reimplements failing the same way put the plan or the
+environment in question — report that explicitly. Do not proceed to full
+deployment with broken code.
 
 If the same sanity failure repeats, trigger a second opinion: summarize the plan, code diff, command, logs, backend, and failure, then ask a fresh Codex reviewer agent for a rescue diagnosis. Apply only concrete fixes grounded in the logs.
 

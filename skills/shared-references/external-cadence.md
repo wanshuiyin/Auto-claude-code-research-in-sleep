@@ -244,6 +244,35 @@ cross-model jury, acceptance-gate.md). Why structure over tactics: when a task s
 repeatedly inside one frame, the decisive gain comes from correcting the frame itself, not
 from tuning parameters harder within it.
 
+## Let a broken attempt restart, not just patch
+
+The stall ladder above pivots *direction*; this section is the level below it — a single
+implementation/debug attempt (a build, a training script, an eval harness) that keeps
+failing while the loop is still running. The repo's historical convention was "patch N
+times, then stop and report to a human." That misroutes the escalation: a broken build is
+squarely the executor's job, and the missing move is the RESTART.
+
+- **Discard-and-reimplement is a peer move to another patch, not a last resort.** After
+  1–2 targeted patches fail on the same failure, rewriting the failing piece cleanly from
+  the contract/plan is usually cheaper and more reliable than a third patch on top of two
+  wrong ones — patched-code archaeology is how attempts rot. Treat "delete the attempt
+  and rebuild from the spec" as a normal option at every retry decision, and prefer it
+  once patches start stacking.
+- **Escalate to a human only when the CONTRACT is in question** — the plan/spec is
+  missing, ambiguous, or looks wrong — not merely because the current attempt is broken.
+  "The build is broken" is the executor's problem; "the plan may be wrong" is the human's.
+- **Hard boundary — what a restart may delete.** Only the current attempt's own
+  code/scaffolding (scripts it wrote, configs it generated, its build artifacts). NEVER
+  deletable in a restart: the contract/plan (`research_contract.md`,
+  `EXPERIMENT_PLAN.md`, `PAPER_PLAN.md`), progress ledgers (`EXPERIMENT_TRACKER.md`,
+  iteration/bottleneck ledgers, `*_STATE.json`, `.aris/traces/`), collected data, and
+  completed results. The restart rebuilds the code FROM those files; deleting them
+  defeats the restart. When in doubt whether a path is "attempt" or "state," it is state
+  — keep it.
+- **Restart is bounded like any other move.** A restart consumes a retry-budget slot; two
+  clean reimplements failing the SAME way means the failure is probably in the contract
+  or the environment — which IS the human-escalation trigger above.
+
 ## Required components (when you add external cadence to a skill)
 
 1. **Waits on an external fact, not a self-verdict.** State the fact in
