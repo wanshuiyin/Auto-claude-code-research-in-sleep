@@ -159,8 +159,10 @@ Run: `modal run launcher.py`
 import modal
 
 app = modal.App("inference-api")
-image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "torch", "transformers", "accelerate"
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("torch")                          # phase 1: pins
+    .pip_install("transformers", "accelerate")     # phase 2
 )
 
 @app.cls(image=image, gpu="L40S")
