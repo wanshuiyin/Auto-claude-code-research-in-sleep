@@ -98,7 +98,14 @@ rsync -avz -e "ssh -p <PORT>" \
   ./ root@<HOST>:/workspace/project/
 ```
 
-If `requirements.txt` exists, install dependencies:
+Install dependencies per the env contract (ordered phases — pins first, one
+`pip install` per phase; see `../shared-references/compute-env-contract.md`):
+```bash
+ssh -p <PORT> root@<HOST> "pip install -q torch==<pinned>"       # phase 1: pins
+ssh -p <PORT> root@<HOST> "pip install -q <remaining packages>"  # phase 2+
+```
+Legacy fallback — `requirements.txt` only, no env spec: install as one phase,
+and treat any version fight as the signal to convert to ordered phases:
 ```bash
 scp -P <PORT> requirements.txt root@<HOST>:/workspace/
 ssh -p <PORT> root@<HOST> "pip install -q -r /workspace/requirements.txt"
