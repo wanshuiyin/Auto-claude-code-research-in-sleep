@@ -43,7 +43,9 @@ run_commands: []                          # escape-hatch shell (RUN / %post / pl
 weight_dirs: {chai: {path: /scratch/weights/chai, source: "tool's own loader", gated: false}}
 smoke:                                    # probes that run INSIDE the env on every shape
   import_names: [torch, flash_attn]
-  gpu_tests:    ["python -c 'import torch;x=torch.randn(8,8,device=\"cuda\");print(\"WITNESS\", (x@x).shape, torch.cuda.get_device_name())'"]
+  gpu_tests:                              # each = {cmd, expect}; expect is the witness regex
+    - cmd: "python -c 'import torch;torch.manual_seed(0);x=torch.randn(8,8,device=\"cuda\");print(\"WITNESS\", (x@x).shape, torch.cuda.get_device_name())'"
+      expect: "^WITNESS torch.Size"
   cli_checks:   [nvidia-smi]
 ```
 
@@ -65,8 +67,20 @@ smoke:                                    # probes that run INSIDE the env on ev
 
 Per provider, keep an append-friendly `.aris/compute/<provider>.md` (or the
 project's existing server-notes file). One block per env, keyed by a content
-hash of the spec — `shasum -a 256` over the canonicalized spec text, first 8
-hex chars:
+hash of the spec, computed over an EXACT canonical form so two agents can
+never hash the same spec differently: parse the spec file, re-serialize as
+JSON with sorted keys and no whitespace, sha256, first 8 hex chars —
+
+```bash
+# spec stored as YAML (env-spec.yaml); requires PyYAML. If PyYAML is absent,
+# store the spec as JSON instead and drop the yaml import — same pipeline.
+python3 -c 'import sys,json,hashlib,yaml; \
+s=json.dumps(yaml.safe_load(open(sys.argv[1])),sort_keys=True,separators=(",",":")); \
+print(hashlib.sha256(s.encode()).hexdigest()[:8])' env-spec.yaml
+```
+
+Key order, comments, indentation, and trailing whitespace in the source file
+do NOT affect the hash — only the parsed content does:
 
 ```
 ### env: dllm@a3f9c2e1
@@ -80,9 +94,11 @@ gotcha: <any diagnosis-table row hit on THIS provider>
 Spec changed → hash changes → **cache miss**: the ledger entry no longer
 matches and the env must be rebuilt (or a new block added). Spec unchanged →
 warm-reuse without rebuilding or re-validating tier 1–2. This turns "I think
-the env is the same as last week" into a string comparison — and when a run
-that worked last week breaks, the first question (`did the env change?`) has a
-git-blameable answer.
+the env is the same as last week" into a string comparison. Note `.aris/` is
+gitignored by convention — the ledger is **project-local and uncommitted** by
+default (like `.aris/traces/`). If you want committed, git-blameable history,
+keep the ledger blocks in the project's tracked server-notes file instead;
+the block format is the contract, not the path.
 
 ## 4. Validation — three tiers; the gap between them is where debugging lives
 

@@ -114,8 +114,13 @@ The most common pattern for `run-experiment` integration. Wraps an existing trai
 import modal
 
 app = modal.App("experiment-name")
-image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "torch", "transformers", "accelerate", "datasets", "wandb"
+# One .pip_install() call per SPEC PHASE (chained calls install in order, so a
+# pinned torch in the first call can't be dragged by packages in the second —
+# the rendered form of compute-env-contract.md's ordered pip_phases):
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("torch")                                        # phase 1: pins
+    .pip_install("transformers", "accelerate", "datasets", "wandb")  # phase 2
 )
 
 # Mount local project code into the container

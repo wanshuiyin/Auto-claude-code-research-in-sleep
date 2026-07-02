@@ -243,13 +243,21 @@ Set up the rented instance for a specific experiment. Called automatically by `/
 > kernel witness before launching the real experiment — a fresh instance whose
 > `import torch` succeeds can still have the wrong-SM wheel.
 
-**Step 1: Install Dependencies**
+**Step 1: Install Dependencies (render the env spec, phase by phase)**
+
+Render the project's env spec as ORDERED phases — one `pip install` per phase,
+so an earlier phase's pin can't be dragged by a later package:
 
 ```bash
+# phase 1: the fought-over pins first (torch/cuda wheel)
+ssh -p <PORT> root@<HOST> "pip install -q torch==<pinned>"
+# phase 2+: everything that must respect those pins
 ssh -p <PORT> root@<HOST> "pip install -q wandb tensorboard scipy scikit-learn pandas"
 ```
 
-If a `requirements.txt` exists in the project, install that instead:
+Legacy fallback — if the project only has a `requirements.txt` and no env spec,
+install it as a single phase, then treat any version fight it causes as the
+signal to convert it into ordered phases:
 ```bash
 scp -P <PORT> requirements.txt root@<HOST>:/workspace/
 ssh -p <PORT> root@<HOST> "pip install -q -r /workspace/requirements.txt"
