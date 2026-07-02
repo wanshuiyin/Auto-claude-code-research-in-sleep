@@ -227,7 +227,16 @@ pdftoppm -r 100 poster_html/poster_preview.pdf poster_html/review_full -png -f 1
 # plus 2-4 region crops at higher res (header / one column / equations) via PIL
 ```
 
-Score strictly 1–10. **Critical caps**: < 2 real paper figures → ≤ 3; broken canvas /
+**Calibrate first** (per mainline `taste-calibration.md`): if `references/good/`
++ `references/bad/` exist under this skill dir (or the project supplies its own
+pair), score those 3+3 reference posters on the axes below BEFORE the target,
+anchoring the scale; if no reference sets exist, proceed uncalibrated and mark
+`CALIBRATION: none` — never fabricate anchor scores. Axes (weights sum 1.0):
+Design 0.35 · Craft 0.30 · Functionality 0.20 · Originality 0.15; composite
+maps onto the 1–10 scale below.
+
+Score strictly 1–10. **Critical caps** (hard floors — a calibrated composite
+never overrides them): < 2 real paper figures → ≤ 3; broken canvas /
 clipped content / unreadable math → ≤ 4; ≥ 4 visible hue families or gradient-heavy
 header → ≤ 4; large blank cards or columns → ≤ 5; fabricated visual claim → ≤ 3.
 Checks: posterly-showcase gestalt (would this hang next to a professionally designed
@@ -239,6 +248,8 @@ narrative. Output format:
 
 ```
 SCORE: N/10
+CALIBRATION: anchored | none
+GAP: <which reference poster the target falls short of / exceeds, on which axis, and why — one paragraph; omit only when CALIBRATION: none>
 CAPS_TRIGGERED: ...
 TOP_ISSUES: (max 3)
 ALLOWED_FIX_TYPE per issue: token | component | rebalance | asset | template/canvas

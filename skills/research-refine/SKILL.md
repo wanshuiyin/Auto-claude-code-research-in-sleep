@@ -377,6 +377,11 @@ Bundle contents:
 
     **OVERALL SCORE** (1-10): Weighted toward Problem Fidelity, Method Specificity, Contribution Quality, and Frontier Leverage.
     Use this weighting: Problem Fidelity 15%, Method Specificity 25%, Contribution Quality 25%, Frontier Leverage 15%, Feasibility 10%, Validation Focus 5%, Venue Readiness 5%.
+    (This weighted-axis rubric is the repo's working precedent for
+    `shared-references/taste-calibration.md`; if curated known-good/known-bad
+    past proposals are available — e.g. from research-wiki's accepted/rejected
+    idea history — score 3 of each on these axes FIRST to anchor the scale, and
+    name in the review which anchor the proposal sits closest to.)
 
     For each dimension scoring < 7, provide:
     - The specific weakness
