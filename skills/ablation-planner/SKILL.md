@@ -22,7 +22,7 @@ Systematically design ablation studies that answer the questions reviewers will 
 ### Step 1: Prepare Context
 
 CC reads available project files to build the full picture:
-- Method description and components (from docs/research_contract.md or project CLAUDE.md)
+- Method description and components (from `idea-stage/docs/research_contract.md`, legacy `docs/research_contract.md`, or project CLAUDE.md)
 - Current experiment results (from EXPERIMENT_LOG.md, EXPERIMENT_TRACKER.md, or W&B)
 - Confirmed and intended claims (from result-to-claim output or project notes)
 - Available compute resources (from CLAUDE.md server config, if present)

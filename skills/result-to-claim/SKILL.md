@@ -35,7 +35,7 @@ Gather experiment data from whatever sources are available in the project:
 2. **EXPERIMENT_LOG.md**: full results table with baselines and verdicts
 3. **EXPERIMENT_TRACKER.md**: check which experiments are DONE vs still running
 4. **Log files**: `ssh server "tail -100 /path/to/training.log"` if no other source
-5. **docs/research_contract.md**: intended claims and experiment design
+5. **`idea-stage/docs/research_contract.md`** (legacy fallback: `docs/research_contract.md`): intended claims and experiment design
 
 Assemble the key information:
 - What experiments were run (method, dataset, config)

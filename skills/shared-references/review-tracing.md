@@ -148,12 +148,13 @@ its judgment actually changed:
 
 ```bash
 # Diff the raw response bodies across the two calls in question
-diff .aris/traces/<skill>/<run>/002-round-2.response.md \
-     .aris/traces/<skill>/<run>/003-round-3.response.md
+skill=auto-review-loop run=2026-04-15_run01
+diff ".aris/traces/$skill/$run/002-round-2.response.md" \
+     ".aris/traces/$skill/$run/003-round-3.response.md"
 
 # Grep for the sentence where the assessment turned
-grep -n "however\|but\|concern\|missing\|cannot" \
-     .aris/traces/<skill>/<run>/003-round-3.response.md
+grep -En 'however|but|concern|missing|cannot' \
+     ".aris/traces/$skill/$run/003-round-3.response.md"
 ```
 
 The paragraph where the assessment changed **is** the causal explanation for the

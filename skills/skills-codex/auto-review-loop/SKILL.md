@@ -170,6 +170,10 @@ Pass this file back to the reviewer in the next round so it can track its own su
 Rules:
 - Append each round; never delete prior rounds.
 - If the reviewer response includes a `Memory update` section, copy it verbatim.
+- If the score REGRESSES round-to-round, don't just write a new memory line:
+  diff the two rounds' raw `.response.md` files in `.aris/traces/` first and
+  find the exact criterion that flipped (see `shared-references/review-tracing.md`
+  § *Debugging With Traces*). The memory file is a summary; the trace is evidence.
 - This file is passed back to the reviewer in the next round's Phase A.
 
 #### Phase B.6: Debate Protocol (hard + nightmare only)

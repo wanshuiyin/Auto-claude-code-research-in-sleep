@@ -22,7 +22,7 @@ Systematically design ablation studies that answer the questions reviewers will 
 
 Read available project files to build the full picture:
 
-- Method description and components (from `docs/research_contract.md`, project notes, or method docs)
+- Method description and components (from `idea-stage/docs/research_contract.md`, legacy `docs/research_contract.md`, project notes, or method docs)
 - Current experiment results (from `EXPERIMENT_LOG.md`, `EXPERIMENT_TRACKER.md`, or W&B)
 - Confirmed and intended claims (from `/result-to-claim` output or project notes)
 - Available compute resources (from server notes, run configs, or user-provided budget)
