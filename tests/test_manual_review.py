@@ -10,6 +10,7 @@ Covers:
 7. Concurrency (fail-fast on second review)
 """
 
+import importlib.util
 import json
 import os
 import subprocess
@@ -23,9 +24,18 @@ from pathlib import Path
 
 import pytest
 
-# Add the server directory to path for import
+# Load the server by explicit path under a UNIQUE module name. A bare
+# `import server` is unsafe here: every mcp-server is named server.py, and
+# sibling test modules (e.g. test_minimax_chat_server) do
+# `sys.path.insert(0, <their-server-dir>)` at collection time — so by the time
+# these tests run, a bare `import server` can resolve to the wrong server and
+# fail with AttributeError. spec_from_file_location sidesteps sys.path entirely.
 SERVER_DIR = Path(__file__).parent.parent / "mcp-servers" / "manual-review"
-sys.path.insert(0, str(SERVER_DIR))
+_SRV_SPEC = importlib.util.spec_from_file_location(
+    "manual_review_server", SERVER_DIR / "server.py")
+assert _SRV_SPEC and _SRV_SPEC.loader
+srv = importlib.util.module_from_spec(_SRV_SPEC)
+_SRV_SPEC.loader.exec_module(srv)
 
 # Prevent auto-open browser during tests
 os.environ["MANUAL_REVIEW_AUTO_OPEN"] = "false"
@@ -104,7 +114,6 @@ def _start_server(**extra_env):
 # Test 1: Module import
 # ============================================================
 def test_import():
-    import server as srv
     assert hasattr(srv, "handle_request")
     assert hasattr(srv, "create_thread")
     assert hasattr(srv, "do_review")
@@ -156,7 +165,6 @@ def test_tools_list():
 # Test 4: Thread management
 # ============================================================
 def test_thread_management():
-    import server as srv
     tid = srv.create_thread()
     assert tid and len(tid) == 12, f"bad thread id: {tid}"
     srv.append_exchange(tid, "user", "hello")
@@ -174,7 +182,6 @@ import socketserver
 # Test 5: Browser mode — HTTP server + submit flow
 # ============================================================
 def test_browser_mode_http():
-    import server as srv
 
     prompt = "Test review prompt for unit testing"
     config = {"model_reasoning_effort": "xhigh"}
@@ -267,7 +274,6 @@ def test_browser_mode_http():
 # Test 6: File mode — prompt + response + cross-model warning
 # ============================================================
 def test_file_mode():
-    import server as srv
 
     with tempfile.TemporaryDirectory() as tmpdir:
         original_dir = srv.PENDING_DIR
@@ -339,7 +345,6 @@ def test_file_mode():
 # Test 7: File mode — empty file rejected
 # ============================================================
 def test_file_mode_empty_rejected():
-    import server as srv
 
     with tempfile.TemporaryDirectory() as tmpdir:
         original_dir = srv.PENDING_DIR
@@ -405,7 +410,6 @@ def test_file_mode_empty_rejected():
 # Test 8: review rejects empty prompt
 # ============================================================
 def test_review_missing_prompt():
-    import server as srv
     resp = srv.handle_review({"prompt": ""}, 99, threading.Event(), "")
     assert resp["result"].get("isError") is True, f"unexpected: {resp}"
 
@@ -414,7 +418,6 @@ def test_review_missing_prompt():
 # Test 9: review_reply rejects unknown threadId
 # ============================================================
 def test_review_reply_unknown_thread():
-    import server as srv
     resp = srv.handle_review_reply(
         {"threadId": "nonexistent", "prompt": "hi"}, 100, threading.Event(), "",
     )
@@ -425,7 +428,6 @@ def test_review_reply_unknown_thread():
 # Test 10: Pending state file
 # ============================================================
 def test_pending_state():
-    import server as srv
 
     with tempfile.TemporaryDirectory() as tmpdir:
         original_dir = srv.PENDING_DIR
@@ -448,7 +450,6 @@ def test_pending_state():
 # Test 11: File mode cancellation via _PendingCall
 # ============================================================
 def test_file_mode_cancelled():
-    import server as srv
 
     with tempfile.TemporaryDirectory() as tmpdir:
         original_dir = srv.PENDING_DIR

@@ -8,9 +8,26 @@ import sys
 import tempfile
 import httpx
 
-# Force unbuffered stdout/stdin
-sys.stdout = os.fdopen(sys.stdout.fileno(), 'wb', buffering=0)
-sys.stdin = os.fdopen(sys.stdin.fileno(), 'rb', buffering=0)
+_stdio_initialized = False
+
+
+def _init_stdio():
+    """Rebind stdio to raw unbuffered binary streams for MCP framing.
+
+    Deferred into a function (called at the top of main()) so that merely
+    IMPORTING this module has no stdio side effects. os.fdopen(fileno) defaults
+    to closefd=True and thus seizes ownership of the fd; doing that at import
+    time under a test harness that captures stdio (pytest fd-capture) closes the
+    harness's capture fd and corrupts capture for every subsequent test. Real
+    server launch (python server.py) still calls this first via main(), so
+    runtime behavior is unchanged. Idempotent."""
+    global _stdio_initialized
+    if _stdio_initialized:
+        return
+    # Force unbuffered stdout/stdin
+    sys.stdout = os.fdopen(sys.stdout.fileno(), 'wb', buffering=0)
+    sys.stdin = os.fdopen(sys.stdin.fileno(), 'rb', buffering=0)
+    _stdio_initialized = True
 
 # Debug logging
 DEBUG_LOG = os.path.join(tempfile.gettempdir(), "minimax-mcp-debug.log")
@@ -329,6 +346,7 @@ def read_message():
 
 def main():
     """Main loop - read JSON-RPC messages from stdin"""
+    _init_stdio()
     debug_log("Entering main loop")
 
     while True:

@@ -23,8 +23,26 @@ from pathlib import Path
 from typing import Any
 
 
-sys.stdout = os.fdopen(sys.stdout.fileno(), "wb", buffering=0)
-sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
+_stdio_initialized = False
+
+
+def _init_stdio() -> None:
+    """Rebind stdio to raw unbuffered binary streams for MCP framing.
+
+    Deferred into a function (called at the top of main()) so that merely
+    IMPORTING this module has no stdio side effects. os.fdopen(fileno) defaults
+    to closefd=True and thus seizes ownership of the fd; doing that at import
+    time under a test harness that captures stdio (pytest fd-capture) closes the
+    harness's capture fd and corrupts capture for every subsequent test. Real
+    server launch (python server.py) still calls this first via main(), so
+    runtime behavior is unchanged. Idempotent."""
+    global _stdio_initialized
+    if _stdio_initialized:
+        return
+    sys.stdout = os.fdopen(sys.stdout.fileno(), "wb", buffering=0)
+    sys.stdin = os.fdopen(sys.stdin.fileno(), "rb", buffering=0)
+    _stdio_initialized = True
+
 
 SERVER_NAME = os.environ.get("CODEX_IMAGE2_SERVER_NAME", "codex-image2")
 CODEX_BIN = os.environ.get("CODEX_IMAGE2_CODEX_BIN", "codex")
@@ -858,6 +876,7 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def main() -> int:
+    _init_stdio()
     if len(sys.argv) == 3 and sys.argv[1] == "--run-job":
         return run_async_job(sys.argv[2])
 

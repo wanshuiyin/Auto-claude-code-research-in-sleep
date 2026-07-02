@@ -13,6 +13,8 @@ from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_PATH = ROOT / "mcp-servers" / "codex-image2" / "server.py"
+# server.py defers its stdio rebind into _init_stdio() (called from main()), so
+# a plain import has no stdio side effects and is safe under pytest fd-capture.
 SPEC = importlib.util.spec_from_file_location("codex_image2_server", SERVER_PATH)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
