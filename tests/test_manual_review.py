@@ -24,6 +24,13 @@ from pathlib import Path
 
 import pytest
 
+# Set env BEFORE loading the server: server.py reads MANUAL_REVIEW_AUTO_OPEN
+# and MANUAL_REVIEW_TIMEOUT_SEC at import time into module constants, so these
+# must be in place before exec_module (the old per-test `import server` ran
+# after this block; loading once at module level does not).
+os.environ["MANUAL_REVIEW_AUTO_OPEN"] = "false"   # no browser popup in tests
+os.environ["MANUAL_REVIEW_TIMEOUT_SEC"] = "10"
+
 # Load the server by explicit path under a UNIQUE module name. A bare
 # `import server` is unsafe here: every mcp-server is named server.py, and
 # sibling test modules (e.g. test_minimax_chat_server) do
@@ -36,10 +43,6 @@ _SRV_SPEC = importlib.util.spec_from_file_location(
 assert _SRV_SPEC and _SRV_SPEC.loader
 srv = importlib.util.module_from_spec(_SRV_SPEC)
 _SRV_SPEC.loader.exec_module(srv)
-
-# Prevent auto-open browser during tests
-os.environ["MANUAL_REVIEW_AUTO_OPEN"] = "false"
-os.environ["MANUAL_REVIEW_TIMEOUT_SEC"] = "10"
 
 
 def _send_jsonrpc(proc, method, params=None, req_id=1):

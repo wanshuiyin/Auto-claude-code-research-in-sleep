@@ -7,28 +7,15 @@ import sys
 import unittest
 from unittest.mock import patch, MagicMock
 
-# Add parent dir to path so we can import the server module
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'mcp-servers', 'minimax-chat'))
+# NB: do NOT `sys.path.insert(0, <minimax-chat dir>)` here. All mcp-servers are
+# named server.py, and a dir on sys.path[0] makes a bare `import server` in any
+# OTHER test module resolve to this server (collection runs every module's
+# top-level code before any test). Tests below use tests._minimax_helpers and
+# subprocess launches, neither of which needs the server dir on sys.path.
 
 
 class TestClampTemperature(unittest.TestCase):
     """Test temperature clamping for MiniMax API constraints."""
-
-    def _import_clamp(self):
-        """Import clamp_temperature from server module."""
-        # We need to mock sys.stdout/stdin before importing to avoid fd issues
-        with patch('sys.stdout'), patch('sys.stdin'):
-            # Force re-import to get fresh module
-            if 'server' in sys.modules:
-                del sys.modules['server']
-            import importlib
-            spec = importlib.util.spec_from_file_location(
-                "minimax_server",
-                os.path.join(os.path.dirname(__file__), '..', 'mcp-servers', 'minimax-chat', 'server.py')
-            )
-            # We can't easily import server.py because it does sys.stdout/stdin manipulation at module level
-            # Instead, test the clamp logic directly
-        pass
 
     def test_clamp_none_returns_none(self):
         """None temperature should return None."""
