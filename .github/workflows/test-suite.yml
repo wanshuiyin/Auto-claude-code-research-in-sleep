@@ -10,9 +10,17 @@ name: Test suite
 on:
   pull_request:
     paths:
+      # Not just tools/tests: test_codex_skill_mirror.py checks skills/ ↔ mirror
+      # parity, and check_skills_inventory.py (invoked by mirror-adjacent tests)
+      # reads docs/**, README*, AGENT_GUIDE.md — so changes there must retrigger.
       - 'tools/**'
       - 'tests/**'
       - 'mcp-servers/**'
+      - 'skills/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'README_CN.md'
+      - 'AGENT_GUIDE.md'
       - '.github/workflows/test-suite.yml'
   push:
     branches: [main]
@@ -20,6 +28,11 @@ on:
       - 'tools/**'
       - 'tests/**'
       - 'mcp-servers/**'
+      - 'skills/**'
+      - 'docs/**'
+      - 'README.md'
+      - 'README_CN.md'
+      - 'AGENT_GUIDE.md'
       - '.github/workflows/test-suite.yml'
   workflow_dispatch:
 
