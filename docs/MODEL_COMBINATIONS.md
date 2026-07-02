@@ -20,7 +20,7 @@ Beyond the default Claude × GPT-5.5 route, ARIS ships **10 alternative routes (
 | **Alt C.1** | Claude / any CC-compatible | OpenRouter pinned model via `llm-chat` | Optional | No | [OPENROUTER_GUIDE](OPENROUTER_GUIDE.md) |
 | **Alt D** | Kimi-K2.5 / Qwen3.5+ | GLM-5 / MiniMax-M3 | No | No | [ALI_CODING_PLAN_GUIDE](ALI_CODING_PLAN_GUIDE.md) |
 | **Alt E** 🆓 | DeepSeek-V3.1 / Qwen3-Coder | DeepSeek-R1 / Qwen3-235B | No | No | [MODELSCOPE_GUIDE](MODELSCOPE_GUIDE.md) |
-| **Alt F** | Codex CLI (GPT-5.5) | Codex `spawn_agent` (GPT-5.5) | No | Yes | [skills-codex/](skills/skills-codex/) |
+| **Alt F** | Codex CLI (GPT-5.5) | Codex `spawn_agent` (GPT-5.5) | No | Yes | [skills-codex/](../skills/skills-codex/) |
 | **Alt G** 🆕 | Codex CLI | Claude Code CLI (`claude-review` MCP) | No* | No* | [CODEX_CLAUDE_REVIEW_GUIDE](CODEX_CLAUDE_REVIEW_GUIDE.md) |
 | **Alt H** 🆕 | Antigravity (Claude Opus 4.6 / Gemini 3.1 Pro) | GPT-5.5 (Codex MCP) or any via llm-chat | No | Optional | [ANTIGRAVITY_ADAPTATION](ANTIGRAVITY_ADAPTATION.md) |
 | **Alt I** 🆕 | Codex CLI | Gemini direct API (`gemini-review` MCP) | No | No | [CODEX_GEMINI_REVIEW_GUIDE](CODEX_GEMINI_REVIEW_GUIDE.md) |
@@ -42,7 +42,7 @@ Beyond the default Claude × GPT-5.5 route, ARIS ships **10 alternative routes (
 <details>
 <summary><b>Show detailed provider notes for Alt C/D/E/G/H/I</b></summary>
 
-**Alt C** supports tested providers: GLM (Z.ai), Kimi (Moonshot), LongCat (Meituan) as executors; DeepSeek, MiniMax as reviewers. Any OpenAI-compatible API should also work via the generic [`llm-chat`](mcp-servers/llm-chat/) MCP server.
+**Alt C** supports tested providers: GLM (Z.ai), Kimi (Moonshot), LongCat (Meituan) as executors; DeepSeek, MiniMax as reviewers. Any OpenAI-compatible API should also work via the generic [`llm-chat`](../mcp-servers/llm-chat/) MCP server.
 
 **Alt D** uses [Alibaba Coding Plan](https://bailian.console.aliyun.com/) — one API key for both executor and reviewer, 4 models included (Kimi, Qwen, GLM, MiniMax).
 

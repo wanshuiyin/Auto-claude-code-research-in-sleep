@@ -26,7 +26,7 @@ User input (PROBLEM + vague APPROACH)
   -> Phase 1 (Claude): Scan grounding papers -> identify technical gap -> choose the sharpest route -> write focused proposal
   -> Phase 2 (Claude reviewer): Review for fidelity, specificity, contribution quality, and frontier leverage
   -> Phase 3 (Claude): Anchor check + simplicity check -> revise method -> rewrite full proposal
-  -> Phase 4 (Codex, same agent): Re-evaluate revised proposal
+  -> Phase 4 (Claude reviewer, same thread): Re-evaluate revised proposal
   -> Repeat Phase 3-4 until OVERALL SCORE >= 9 or MAX_ROUNDS reached
   -> Phase 5: Save full history to refine-logs/
   -> Optional handoff: /experiment-plan for a detailed execution-ready experiment roadmap

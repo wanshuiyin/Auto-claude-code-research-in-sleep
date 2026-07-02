@@ -20,7 +20,7 @@
 | **方案 C.1** | Claude / 任意 CC 兼容 | OpenRouter 固定模型 via `llm-chat` | 可选 | 否 | [OPENROUTER_GUIDE_CN](OPENROUTER_GUIDE_CN.md) |
 | **方案 D** | Kimi-K2.5 / Qwen3.5+ | GLM-5 / MiniMax-M3 | 否 | 否 | [ALI_CODING_PLAN_GUIDE](ALI_CODING_PLAN_GUIDE.md) |
 | **方案 E** 🆓 | DeepSeek-V3.1 / Qwen3-Coder | DeepSeek-R1 / Qwen3-235B | 否 | 否 | [MODELSCOPE_GUIDE](MODELSCOPE_GUIDE.md) |
-| **方案 F** | Codex CLI (GPT-5.5) | Codex `spawn_agent` (GPT-5.5) | 否 | 是 | [skills-codex/](skills/skills-codex/) |
+| **方案 F** | Codex CLI (GPT-5.5) | Codex `spawn_agent` (GPT-5.5) | 否 | 是 | [skills-codex/](../skills/skills-codex/) |
 | **方案 G** 🆕 | Codex CLI | Claude Code CLI（`claude-review` MCP） | 否* | 否* | [CODEX_CLAUDE_REVIEW_GUIDE_CN](CODEX_CLAUDE_REVIEW_GUIDE_CN.md) |
 | **方案 H** 🆕 | Antigravity（Claude Opus 4.6 / Gemini 3.1 Pro） | GPT-5.5（Codex MCP）或 llm-chat | 否 | 可选 | [ANTIGRAVITY_ADAPTATION_CN](ANTIGRAVITY_ADAPTATION_CN.md) |
 | **方案 I** 🆕 | Codex CLI | Gemini direct API（`gemini-review` MCP） | 否 | 否 | [CODEX_GEMINI_REVIEW_GUIDE_CN](CODEX_GEMINI_REVIEW_GUIDE_CN.md) |
@@ -42,7 +42,7 @@
 <details>
 <summary><b>展开方案 C/D/E/G/H/I 的提供商细节</b></summary>
 
-**方案 C** 已适配的提供商：GLM（Z.ai）、Kimi（Moonshot）、LongCat（美团）作为执行器；DeepSeek、MiniMax 作为审查器。任何 OpenAI 兼容 API 理论上均可通过通用 [`llm-chat`](mcp-servers/llm-chat/) MCP 服务器接入。
+**方案 C** 已适配的提供商：GLM（Z.ai）、Kimi（Moonshot）、LongCat（美团）作为执行器；DeepSeek、MiniMax 作为审查器。任何 OpenAI 兼容 API 理论上均可通过通用 [`llm-chat`](../mcp-servers/llm-chat/) MCP 服务器接入。
 
 **方案 D** 使用[阿里百炼 Coding Plan](https://bailian.console.aliyun.com/)——一个 API Key 包含 4 款模型（Kimi、Qwen、GLM、MiniMax），双端点配置。
 
