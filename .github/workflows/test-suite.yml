@@ -1,0 +1,44 @@
+name: Test suite
+
+# Full pytest suite on Linux AND macOS. macOS matters: its stock /bin/bash is
+# 3.2, where `set -u` + empty-array "${ARR[@]}" expansion aborts — a class of
+# bug (e.g. smart_update_codex.sh --overlay handling) that Linux bash >= 4.4
+# never surfaces. Tests needing unavailable environments skip themselves
+# (Windows PowerShell tests skip off-Windows; MiniMax live tests skip without
+# MINIMAX_API_KEY) — no curated exclude list.
+
+on:
+  pull_request:
+    paths:
+      - 'tools/**'
+      - 'tests/**'
+      - 'mcp-servers/**'
+      - '.github/workflows/test-suite.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/**'
+      - 'tests/**'
+      - 'mcp-servers/**'
+      - '.github/workflows/test-suite.yml'
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install test dependencies
+        run: python -m pip install pytest httpx
+      - name: Show bash version (the macOS leg must be 3.2.x)
+        run: bash --version | head -1
+      - name: Run full test suite
+        run: python -m pytest tests/ -q

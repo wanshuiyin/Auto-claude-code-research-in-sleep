@@ -247,7 +247,11 @@ build_upstream_inventory() {
     for s in "${SUPPORT_NAMES[@]}"; do
         if [[ -d "$skills_dir/$s" ]]; then entries+=("support|$s"); fi
     done
-    printf "%s\n" "${entries[@]}"
+    # bash 3.2: empty-array "${ARR[@]}" trips `set -u`; an upstream with no valid
+    # entries should yield empty output so the caller's own diagnostic fires.
+    if [[ ${#entries[@]} -gt 0 ]]; then
+        printf "%s\n" "${entries[@]}"
+    fi
 }
 
 # Parse manifest into a global associative-style array via temp file lookup
@@ -825,11 +829,17 @@ N_CONFLICT=$(grep -c '^CONFLICT|' "$PLAN_FILE" || true)
 if (( N_CONFLICT > 0 )); then
     # Check if any can be auto-resolved by --adopt-existing (where current target == expected)
     # (Already handled by ADOPT classification — anything still in CONFLICT is a real conflict.)
-    # Apply --replace-link allowlist for symlink-to-other-repo-entry conflicts
+    # Apply --replace-link allowlist for symlink-to-other-repo-entry conflicts.
+    # awk (string compare on field 3 = name) instead of sed: plan lines are
+    # pipe-delimited, and only symlink conflicts may convert — a real_path
+    # CONFLICT must never become UPDATE_TARGET. Converting also strips the
+    # symlink_to: prefix so field 4 matches the shape of native UPDATE_TARGET rows.
     if [[ ${#REPLACE_LINK_NAMES[@]} -gt 0 ]]; then
         for n in "${REPLACE_LINK_NAMES[@]}"; do
-            sed -i.bak "s|^CONFLICT|$n|UPDATE_TARGET|$n|" "$PLAN_FILE" 2>/dev/null || true
-            rm -f "$PLAN_FILE.bak"
+            PLAN_TMP="${PLAN_FILE}.tmp"
+            awk -F'|' -v OFS='|' -v n="$n" \
+                '$1=="CONFLICT" && $3==n && $4 ~ /^symlink_to:/ { sub(/^symlink_to:/, "", $4); $1="UPDATE_TARGET" } { print }' \
+                "$PLAN_FILE" > "$PLAN_TMP" && mv "$PLAN_TMP" "$PLAN_FILE"
         done
         N_CONFLICT=$(grep -c '^CONFLICT|' "$PLAN_FILE" || true)
     fi

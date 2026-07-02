@@ -95,6 +95,8 @@ is_symlink() { [[ -L "$1" ]]; }
 name_in_replace_allowlist() {
     local needle="$1"
     local item
+    # bash 3.2: empty-array "${ARR[@]}" trips `set -u`; no --replace-link = empty allowlist
+    [[ ${#REPLACE_LINK_NAMES[@]} -gt 0 ]] || return 1
     for item in "${REPLACE_LINK_NAMES[@]}"; do
         [[ "$item" == "$needle" ]] && return 0
     done

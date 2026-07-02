@@ -246,26 +246,33 @@ fi
 # Apply updates
 log "Applying updates..."
 
-for name in "${UPDATED[@]}"; do
-    rm -rf "$LOCAL/$name"
-    cp -r "$UPSTREAM/$name" "$LOCAL/$name"
-    # Record new baseline hash
-    if [[ -f "$LOCAL/$name/SKILL.md" ]]; then
-        new_hash="$(file_sha256 "$LOCAL/$name/SKILL.md")"
-        record_baseline "$BASELINE_FILE" "$name" "$new_hash"
-    fi
-    log "  ~ updated $name"
-done
+# bash 3.2 (stock macOS): "${ARR[@]}" on an EMPTY array trips `set -u`. Only one of
+# UPDATED/NEW is guaranteed non-empty here (the line-236 early-exit needs BOTH empty),
+# so each apply loop gets its own length guard.
+if (( ${#UPDATED[@]} > 0 )); then
+    for name in "${UPDATED[@]}"; do
+        rm -rf "$LOCAL/$name"
+        cp -r "$UPSTREAM/$name" "$LOCAL/$name"
+        # Record new baseline hash
+        if [[ -f "$LOCAL/$name/SKILL.md" ]]; then
+            new_hash="$(file_sha256 "$LOCAL/$name/SKILL.md")"
+            record_baseline "$BASELINE_FILE" "$name" "$new_hash"
+        fi
+        log "  ~ updated $name"
+    done
+fi
 
-for name in "${NEW[@]}"; do
-    cp -r "$UPSTREAM/$name" "$LOCAL/$name"
-    # Record baseline hash for new installs
-    if [[ -f "$LOCAL/$name/SKILL.md" ]]; then
-        new_hash="$(file_sha256 "$LOCAL/$name/SKILL.md")"
-        record_baseline "$BASELINE_FILE" "$name" "$new_hash"
-    fi
-    log "  + added $name"
-done
+if (( ${#NEW[@]} > 0 )); then
+    for name in "${NEW[@]}"; do
+        cp -r "$UPSTREAM/$name" "$LOCAL/$name"
+        # Record baseline hash for new installs
+        if [[ -f "$LOCAL/$name/SKILL.md" ]]; then
+            new_hash="$(file_sha256 "$LOCAL/$name/SKILL.md")"
+            record_baseline "$BASELINE_FILE" "$name" "$new_hash"
+        fi
+        log "  + added $name"
+    done
+fi
 
 log ""
 log "Done. ${#UPDATED[@]} updated, ${#NEW[@]} added."

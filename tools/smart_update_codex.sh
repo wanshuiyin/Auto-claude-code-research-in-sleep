@@ -50,12 +50,16 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASE_UPSTREAM="$REPO_ROOT/skills/skills-codex"
 DEFAULT_GLOBAL_LOCAL="$HOME/.codex/skills"
 
-for overlay in "${OVERLAYS[@]}"; do
-    case "$overlay" in
-        claude-review|gemini-review) ;;
-        *) die "--overlay must be claude-review or gemini-review (got: $overlay)" ;;
-    esac
-done
+# bash 3.2 (stock macOS): "${ARR[@]}" on an EMPTY array trips `set -u`; guard every
+# possibly-empty expansion with a length check (repo-wide idiom).
+if [[ ${#OVERLAYS[@]} -gt 0 ]]; then
+    for overlay in "${OVERLAYS[@]}"; do
+        case "$overlay" in
+            claude-review|gemini-review) ;;
+            *) die "--overlay must be claude-review or gemini-review (got: $overlay)" ;;
+        esac
+    done
+fi
 
 case "$MODE" in
     explicit)
@@ -103,11 +107,13 @@ while IFS= read -r link_entry; do
     if [[ "$link_name" == "shared-references" || -d "$UPSTREAM_DIR/$link_name" ]]; then
         die "local skill directory contains symlink-managed ARIS entry '$link_name'. Use: git pull && bash $REPO_ROOT/tools/install_aris_codex.sh \"${PROJECT_ROOT:-<project>}\" --reconcile"
     fi
-    for overlay in "${OVERLAYS[@]}"; do
-        if [[ -d "$REPO_ROOT/skills/skills-codex-$overlay/$link_name" ]]; then
-            die "local skill directory contains symlink-managed ARIS overlay entry '$link_name'. Use: git pull && bash $REPO_ROOT/tools/install_aris_codex.sh \"${PROJECT_ROOT:-<project>}\" --reconcile"
-        fi
-    done
+    if [[ ${#OVERLAYS[@]} -gt 0 ]]; then
+        for overlay in "${OVERLAYS[@]}"; do
+            if [[ -d "$REPO_ROOT/skills/skills-codex-$overlay/$link_name" ]]; then
+                die "local skill directory contains symlink-managed ARIS overlay entry '$link_name'. Use: git pull && bash $REPO_ROOT/tools/install_aris_codex.sh \"${PROJECT_ROOT:-<project>}\" --reconcile"
+            fi
+        done
+    fi
 done < <(find "$LOCAL_DIR" -mindepth 1 -maxdepth 1 -type l)
 
 TMP_ROOT=""
@@ -189,12 +195,14 @@ done < <(list_entries "$UPSTREAM_DIR")
 while IFS= read -r name; do
     [[ -z "$name" ]] && continue
     found=false
-    for upstream_name in "${UPSTREAM_NAMES[@]}"; do
-        if [[ "$upstream_name" == "$name" ]]; then
-            found=true
-            break
-        fi
-    done
+    if [[ ${#UPSTREAM_NAMES[@]} -gt 0 ]]; then
+        for upstream_name in "${UPSTREAM_NAMES[@]}"; do
+            if [[ "$upstream_name" == "$name" ]]; then
+                found=true
+                break
+            fi
+        done
+    fi
     if ! $found; then
         LOCAL_ONLY=$((LOCAL_ONLY + 1))
         LOCAL_SKILLS+=("$name")
