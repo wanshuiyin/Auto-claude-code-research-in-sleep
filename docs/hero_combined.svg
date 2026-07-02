@@ -128,7 +128,7 @@
       <rect x="37" y="91" width="7" height="7" fill="#444"/>
       <rect x="44" y="91" width="7" height="7" fill="#444"/>
     </g>
-    <text x="387" y="82" text-anchor="middle" fill="#74AA63" font-size="7px" font-weight="bold">GPT-5.4 xhigh</text>
+    <text x="387" y="82" text-anchor="middle" fill="#74AA63" font-size="7px" font-weight="bold">GPT-5.5 xhigh</text>
 
     <!-- Conversation bubbles (compressed spacing) -->
     <rect x="65" y="90" width="200" height="22" fill="#e8f4fd" stroke="#4a9eda" stroke-width="1.2" rx="6"/>
@@ -265,7 +265,7 @@
     <text x="275" y="166" font-size="8px" fill="#4aaa4a"> ████░ 78%</text>
     <text x="233" y="178" font-size="8px" fill="#4aaa4a">Loss: 2.341 → 1.872</text>
 
-    <!-- GPT-5.4 mini pixel character (code reviewer) between code and deploy -->
+    <!-- GPT-5.5 mini pixel character (code reviewer) between code and deploy -->
     <g transform="translate(355,192) scale(0.5)">
       <!-- Hair (dark) -->
       <rect x="20" y="42" width="7" height="7" fill="#2C2C2C"/>
@@ -323,7 +323,7 @@
       <rect x="37" y="91" width="7" height="7" fill="#444"/>
       <rect x="44" y="91" width="7" height="7" fill="#444"/>
     </g>
-    <text x="372" y="247" text-anchor="middle" font-size="6px" fill="#74AA63" font-weight="bold">GPT-5.4</text>
+    <text x="372" y="247" text-anchor="middle" font-size="6px" fill="#74AA63" font-weight="bold">GPT-5.5</text>
     <text x="372" y="254" text-anchor="middle" font-size="5px" fill="#74AA63">(Code Review)</text>
 
     <!-- Results panel -->
@@ -449,7 +449,7 @@
       <rect x="667" y="91" width="7" height="7" fill="#444"/>
       <rect x="674" y="91" width="7" height="7" fill="#444"/>
     </g>
-    <text x="813" y="178" text-anchor="middle" fill="#74AA63" font-size="9px" font-weight="bold">GPT-5.4 xhigh</text>
+    <text x="813" y="178" text-anchor="middle" fill="#74AA63" font-size="9px" font-weight="bold">GPT-5.5 xhigh</text>
     <text x="813" y="188" text-anchor="middle" fill="#74AA63" font-size="9px" font-weight="bold">(Reviewer)</text>
 
     <!-- Row 1: CC → GPT -->
@@ -612,8 +612,8 @@
     <line x1="365" y1="135" x2="381" y2="135" stroke="#e67e22" stroke-width="1.5" stroke-dasharray="4,2"/>
     <line x1="615" y1="135" x2="631" y2="135" stroke="#27ae60" stroke-width="1.5" stroke-dasharray="4,2"/>
 
-    <!-- GPT-5.4 label near score cards -->
-    <text x="498" y="238" text-anchor="middle" font-size="8px" fill="#74AA63" font-weight="bold">reviewed by GPT-5.4 xhigh</text>
+    <!-- GPT-5.5 label near score cards -->
+    <text x="498" y="238" text-anchor="middle" font-size="8px" fill="#74AA63" font-weight="bold">reviewed by GPT-5.5 xhigh</text>
 
     <!-- Gemini Pixel Character (purple, right side, same size as CC/GPT) -->
     <g transform="translate(760,120)">
@@ -724,7 +724,7 @@
 
     <!-- GPT stress test + output (right) -->
     <rect x="585" y="40" width="230" height="110" fill="#f0faf0" stroke="#74AA63" stroke-width="1" rx="6"/>
-    <text x="700" y="58" text-anchor="middle" font-size="9px" fill="#74AA63" font-weight="bold">🔬 GPT-5.4 Stress Test</text>
+    <text x="700" y="58" text-anchor="middle" font-size="9px" fill="#74AA63" font-weight="bold">🔬 GPT-5.5 Stress Test</text>
     <text x="595" y="75" font-size="7px" fill="#666">Coverage: ✅ 8/8 issues answered</text>
     <text x="595" y="88" font-size="7px" fill="#666">Provenance: ✅ no fabrication</text>
     <text x="595" y="101" font-size="7px" fill="#666">Commitment: ✅ no overpromise</text>
@@ -835,7 +835,7 @@
       <rect x="37" y="91" width="7" height="7" fill="#444"/>
       <rect x="44" y="91" width="7" height="7" fill="#444"/>
     </g>
-    <text x="795" y="228" text-anchor="middle" font-size="8px" fill="#74AA63" font-weight="bold">GPT-5.4</text>
+    <text x="795" y="228" text-anchor="middle" font-size="8px" fill="#74AA63" font-weight="bold">GPT-5.5</text>
     <text x="795" y="237" text-anchor="middle" font-size="7px" fill="#74AA63">(Stress Test)</text>
 
     <!-- Tagline -->

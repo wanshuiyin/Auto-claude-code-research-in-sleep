@@ -15,15 +15,15 @@
 |---|--------|--------|:---:|:---:|---------|
 | **默认** ⭐ | Claude Opus/Sonnet | GPT-5.5（Codex MCP） | 是 | 是 | [快速开始](#quick-start) |
 | **方案 A** | GLM-5（Z.ai） | GPT-5.5（Codex MCP） | 否 | 是 | [配置见下](#alt-a-glm--gpt) |
-| **方案 B** | GLM-5（Z.ai） | MiniMax-M3 | 否 | 否 | [MINIMAX_MCP_GUIDE](docs/MINIMAX_MCP_GUIDE.md) |
-| **方案 C** | 任意 CC 兼容 | 任意 OpenAI 兼容 | 否 | 否 | [LLM_API_MIX_MATCH_GUIDE](docs/LLM_API_MIX_MATCH_GUIDE.md) |
-| **方案 C.1** | Claude / 任意 CC 兼容 | OpenRouter 固定模型 via `llm-chat` | 可选 | 否 | [OPENROUTER_GUIDE_CN](docs/OPENROUTER_GUIDE_CN.md) |
-| **方案 D** | Kimi-K2.5 / Qwen3.5+ | GLM-5 / MiniMax-M3 | 否 | 否 | [ALI_CODING_PLAN_GUIDE](docs/ALI_CODING_PLAN_GUIDE.md) |
-| **方案 E** 🆓 | DeepSeek-V3.1 / Qwen3-Coder | DeepSeek-R1 / Qwen3-235B | 否 | 否 | [MODELSCOPE_GUIDE](docs/MODELSCOPE_GUIDE.md) |
+| **方案 B** | GLM-5（Z.ai） | MiniMax-M3 | 否 | 否 | [MINIMAX_MCP_GUIDE](MINIMAX_MCP_GUIDE.md) |
+| **方案 C** | 任意 CC 兼容 | 任意 OpenAI 兼容 | 否 | 否 | [LLM_API_MIX_MATCH_GUIDE](LLM_API_MIX_MATCH_GUIDE.md) |
+| **方案 C.1** | Claude / 任意 CC 兼容 | OpenRouter 固定模型 via `llm-chat` | 可选 | 否 | [OPENROUTER_GUIDE_CN](OPENROUTER_GUIDE_CN.md) |
+| **方案 D** | Kimi-K2.5 / Qwen3.5+ | GLM-5 / MiniMax-M3 | 否 | 否 | [ALI_CODING_PLAN_GUIDE](ALI_CODING_PLAN_GUIDE.md) |
+| **方案 E** 🆓 | DeepSeek-V3.1 / Qwen3-Coder | DeepSeek-R1 / Qwen3-235B | 否 | 否 | [MODELSCOPE_GUIDE](MODELSCOPE_GUIDE.md) |
 | **方案 F** | Codex CLI (GPT-5.5) | Codex `spawn_agent` (GPT-5.5) | 否 | 是 | [skills-codex/](skills/skills-codex/) |
-| **方案 G** 🆕 | Codex CLI | Claude Code CLI（`claude-review` MCP） | 否* | 否* | [CODEX_CLAUDE_REVIEW_GUIDE_CN](docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md) |
-| **方案 H** 🆕 | Antigravity（Claude Opus 4.6 / Gemini 3.1 Pro） | GPT-5.5（Codex MCP）或 llm-chat | 否 | 可选 | [ANTIGRAVITY_ADAPTATION_CN](docs/ANTIGRAVITY_ADAPTATION_CN.md) |
-| **方案 I** 🆕 | Codex CLI | Gemini direct API（`gemini-review` MCP） | 否 | 否 | [CODEX_GEMINI_REVIEW_GUIDE_CN](docs/CODEX_GEMINI_REVIEW_GUIDE_CN.md) |
+| **方案 G** 🆕 | Codex CLI | Claude Code CLI（`claude-review` MCP） | 否* | 否* | [CODEX_CLAUDE_REVIEW_GUIDE_CN](CODEX_CLAUDE_REVIEW_GUIDE_CN.md) |
+| **方案 H** 🆕 | Antigravity（Claude Opus 4.6 / Gemini 3.1 Pro） | GPT-5.5（Codex MCP）或 llm-chat | 否 | 可选 | [ANTIGRAVITY_ADAPTATION_CN](ANTIGRAVITY_ADAPTATION_CN.md) |
+| **方案 I** 🆕 | Codex CLI | Gemini direct API（`gemini-review` MCP） | 否 | 否 | [CODEX_GEMINI_REVIEW_GUIDE_CN](CODEX_GEMINI_REVIEW_GUIDE_CN.md) |
 
 </details>
 
@@ -33,7 +33,7 @@
 - **方案 A** —— 只换执行者（Claude → GLM），审稿人保留 GPT-5.5 via Codex MCP。
 - **方案 B** 或 **方案 E** —— 不用 Claude、不用 OpenAI API（方案 E 通过 ModelScope 免费）。
 - **方案 C** 或 **方案 D** —— OpenAI 兼容 API 自由混搭（方案 D 用阿里一个 Key 跑双端）。
-- **方案 C.1** —— [OpenRouter](docs/OPENROUTER_GUIDE_CN.md) 作为 opt-in 的 `llm-chat` 审稿后端：一个 Key 用多家模型;请固定具体审稿模型,并确保与执行者来自不同模型家族。
+- **方案 C.1** —— [OpenRouter](OPENROUTER_GUIDE_CN.md) 作为 opt-in 的 `llm-chat` 审稿后端：一个 Key 用多家模型;请固定具体审稿模型,并确保与执行者来自不同模型家族。
 - **方案 G** 或 **方案 I** —— 保留 Codex 作为执行者，只换审稿人（Claude 或 Gemini）。
 - **方案 H** —— 用 Antigravity 作为执行器（Claude Opus 4.6 或 Gemini 3.1 Pro），GPT-5.5 或任意 `llm-chat` 审稿。
 
@@ -96,11 +96,11 @@ codex setup   # 提示选模型时选 gpt-5.5
 
 ### 方案 B: GLM + MiniMax
 
-无需 Claude 或 OpenAI API。使用自定义 MiniMax MCP 服务器替代 Codex（因为 MiniMax 不支持 OpenAI 的 Responses API）。完整指南：[`docs/MINIMAX_MCP_GUIDE.md`](docs/MINIMAX_MCP_GUIDE.md)。
+无需 Claude 或 OpenAI API。使用自定义 MiniMax MCP 服务器替代 Codex（因为 MiniMax 不支持 OpenAI 的 Responses API）。完整指南：[`docs/MINIMAX_MCP_GUIDE.md`](MINIMAX_MCP_GUIDE.md)。
 
 ### 方案 C: 任意执行者 + 任意审稿人
 
-通过通用 `llm-chat` MCP 服务器自由混搭，支持任意 OpenAI 兼容 API 作为审稿人。完整指南：[`docs/LLM_API_MIX_MATCH_GUIDE.md`](docs/LLM_API_MIX_MATCH_GUIDE.md)。
+通过通用 `llm-chat` MCP 服务器自由混搭，支持任意 OpenAI 兼容 API 作为审稿人。完整指南：[`docs/LLM_API_MIX_MATCH_GUIDE.md`](LLM_API_MIX_MATCH_GUIDE.md)。
 
 示例组合：GLM + DeepSeek、Kimi + MiniMax、Claude + DeepSeek、LongCat + GLM 等。
 

@@ -121,7 +121,7 @@
     <rect x="667" y="91" width="7" height="7" fill="#444"/>
     <rect x="674" y="91" width="7" height="7" fill="#444"/>
   </g>
-  <text x="813" y="178" text-anchor="middle" fill="#74AA63" font-size="9px" font-weight="bold">GPT-5.4 xhigh</text>
+  <text x="813" y="178" text-anchor="middle" fill="#74AA63" font-size="9px" font-weight="bold">GPT-5.5 xhigh</text>
   <text x="813" y="188" text-anchor="middle" fill="#74AA63" font-size="9px" font-weight="bold">(Reviewer)</text>
 
   <!-- ====== Row 1 (y=42): CC → GPT ====== -->

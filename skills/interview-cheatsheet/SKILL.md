@@ -42,7 +42,7 @@ Generate one comprehensive Chinese cheat sheet per invocation: formulas + deriva
 | Callout prefixes only: `💡` `⚠️` `✅` `❌` (others won't get class) | renderer maps these to `callout-info/warn/good/bad` | `> ⚠️ **FP16 overflow** — 即使除了 √d_k …` |
 | Math: `$...$` inline, `$$...$$` display, `$$\boxed{...}$$` for key boxes | MathJax CDN; literal in source | — |
 | Code: ```python fences, **real PyTorch that would run** | reviewer will check executability | — |
-| Personal-info banlist: `SJTU JHC`, `JHC PhD`, `Server5`, `job market`, `/Users/...`, specific lab/company names | reviewer flags as FAIL | byline goes via `--author` at render time, not in body |
+| Personal-info banlist: owner's institution/lab/center names, degree-program affiliations, private server aliases, job-search context, `/Users/...` paths, specific lab/company names | reviewer flags as FAIL | byline goes via `--author` at render time, not in body |
 | Language: Chinese primary, English technical terms in-place | matches established cheat-sheet style | "softmax 饱和", "vector field" |
 
 ### Eyebrow / subtitle / title naming
@@ -99,7 +99,7 @@ You are reviewing a long-form Chinese interview-prep tutorial on <TOPIC> for mat
 7. heading_consistency — All `## §N` and `### N.M` follow style guide (space after §N, no glued chars).
 8. section_completeness — Sections §0..§10 (and §A if effort=max) present and non-trivial.
 9. length_target — Within ±20% of target (600 for balanced, 1000 for max).
-10. personal_info_leak — None of: SJTU JHC, JHC PhD, Server5, job market, /Users/, specific lab names like "John Hopcroft Center", company recruitment context.
+10. personal_info_leak — None of: the owner's institution / lab / center names, degree-program affiliations, private server aliases, job-search or recruitment context, absolute `/Users/...` paths. (Keep the concrete string banlist in local untracked notes — the public SKILL defines only the CATEGORIES; listing the real values here would itself be the leak.)
 
 Return JSON:
 {

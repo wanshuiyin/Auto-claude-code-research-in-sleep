@@ -113,7 +113,7 @@
     <rect x="37" y="91" width="7" height="7" fill="#444"/>
     <rect x="44" y="91" width="7" height="7" fill="#444"/>
   </g>
-  <text x="387" y="90" text-anchor="middle" fill="#74AA63" font-size="7px" font-weight="bold">GPT-5.4 xhigh</text>
+  <text x="387" y="90" text-anchor="middle" fill="#74AA63" font-size="7px" font-weight="bold">GPT-5.5 xhigh</text>
 
   <!-- ====== Row 1: CC → GPT ====== -->
   <rect x="65" y="100" width="200" height="22" fill="#e8f4fd" stroke="#4a9eda" stroke-width="1.2" rx="6"/>

@@ -60,7 +60,7 @@ It orchestrates up to four major workflows in sequence. Workflow 3 (paper writin
 
 This pipeline is long and can fail mid-run; it tracks per-stage state via
 `run_state.py` so you can resume instead of restarting (see
-[`shared-references/resumable-runs.md`](shared-references/resumable-runs.md)).
+[`shared-references/resumable-runs.md`](../shared-references/resumable-runs.md)).
 Skip this whole section if `RESUMABLE = false`.
 
 Resolve the helper via the canonical chain (integration-contract §2):

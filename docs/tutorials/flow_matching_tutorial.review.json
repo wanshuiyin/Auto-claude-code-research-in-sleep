@@ -29,7 +29,7 @@
       "verdict": "PASS",
       "thread_id": "019e3e54-aed3-7600-a5c0-989f345596ed",
       "issue": null,
-      "fix": "Pre-render fixes: §0 TL;DR / §1 Convention / Sampler cheat sheet / Production list — separated callout intro from bullet/numbered list so neither gets swallowed; redacted personal info (SJTU JHC PhD, Server5, job market, absolute paths)."
+      "fix": "Pre-render fixes: §0 TL;DR / §1 Convention / Sampler cheat sheet / Production list — separated callout intro from bullet/numbered list so neither gets swallowed; redacted personal info (institution/degree affiliations, private server aliases, job-search context, absolute paths)."
     }
   ],
   "summary": "Single-round PASS after pre-render structural cleanup (callout-list separation) and personal-info redaction.",

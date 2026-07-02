@@ -61,7 +61,7 @@
   <!-- ═══ ARIS text + tagline (center) ═══ -->
   <text x="240" y="38" text-anchor="middle" fill="#333" font-family="monospace" font-size="32" font-weight="bold" letter-spacing="6">ARIS</text>
   <text x="241" y="56" text-anchor="middle" fill="#888" font-family="monospace" font-size="11">Adversarial Research in Sleep</text>
-  <text x="241" y="72" text-anchor="middle" font-family="monospace" font-size="9"><tspan fill="#4A9EDA">Claude Code</tspan><tspan fill="#888"> × </tspan><tspan fill="#74AA63">GPT-5.4 xhigh</tspan></text>
+  <text x="241" y="72" text-anchor="middle" font-family="monospace" font-size="9"><tspan fill="#4A9EDA">Claude Code</tspan><tspan fill="#888"> × </tspan><tspan fill="#74AA63">GPT-5.5 xhigh</tspan></text>
   <text x="241" y="86" text-anchor="middle" fill="#aaa" font-family="monospace" font-size="8">speed × rigor</text>
 
   <!-- ═══ GPT Character (exact hero style, glasses) ═══ -->
