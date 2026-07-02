@@ -464,7 +464,13 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
             header += f"### {'Prompt' if ex['role'] == 'user' else 'Response'} (Round {i // 2 + 1})\n\n"
             header += ex["content"][:500] + ("..." if len(ex["content"]) > 500 else "") + "\n\n"
         header += "---\n\n## Current Prompt\n\n"
-    prompt_path.write_text(header + prompt, encoding="utf-8")
+    # Atomic write (tmp + rename): watchers poll for prompt.md by NAME, and a
+    # bare write_text has an exists-but-empty window between create and flush —
+    # a reader (human tooling or the test suite) that wins that race sees "".
+    # os.replace is atomic on POSIX/Windows: the name appears only with full content.
+    prompt_tmp = pdir / ".prompt.md.tmp"
+    prompt_tmp.write_text(header + prompt, encoding="utf-8")
+    os.replace(prompt_tmp, prompt_path)
 
     write_pending_state(url=None, thread_id=thread_id, prompt_file=str(prompt_path))
     debug_log(f"File mode: prompt written to {prompt_path}, waiting for {response_path}")
