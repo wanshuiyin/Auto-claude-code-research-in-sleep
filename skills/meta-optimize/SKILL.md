@@ -93,7 +93,18 @@ if [ "$SKILL_INVOCATIONS" -lt 5 ]; then
     echo "⚠️  Insufficient data (<5 skill invocations). Continue using ARIS normally and re-run later."
     exit 0
 fi
+
+# Bottleneck succession: what did the LAST cycle say was the limiting stage?
+BOTTLENECK_LOG=".aris/meta/bottleneck_log.jsonl"
+if [ -f "$BOTTLENECK_LOG" ]; then
+    echo "🧭 Prior cycle's bottleneck: $(tail -1 "$BOTTLENECK_LOG")"
+fi
 ```
+
+If a prior bottleneck entry exists, open the report (Step 5) by stating whether
+that named bottleneck was **resolved** (and by which landed patches) and what it
+has now **moved to** — bottleneck SUCCESSION, not just existence, is the signal
+this ledger exists to carry.
 
 ### Step 1: Analyze Usage Patterns
 
@@ -119,7 +130,40 @@ Read `.aris/meta/events.jsonl` and compute:
 - Where do users interrupt with manual prompts during workflows?
 - What manual corrections do users make most? (These indicate skill gaps.)
 
+**Model-delta analysis (harness diet):**
+- Has the session model (`session_start` events' `model` field) or the pinned
+  reviewer model changed since a skill's SKILL.md was last touched?
+  (`git log -1 --format=%cs -- skills/<skill>/SKILL.md` vs the model-bump date.)
+- If yes, flag every explicit reasoning-scaffolding step, guardrail, and worked
+  example in that SKILL.md as a **DELETION candidate**, not just an addition
+  candidate. The harness exists to compensate for the model; a capability the
+  new model has natively is pure overhead — context-window weight, drift
+  surface, and reading cost with no return. A harness that only ever grows is a
+  harness nobody is re-reading.
+
 Present findings as a structured summary table.
+
+### Step 1.5: Name the Current Bottleneck
+
+Synthesize the Step-1 analyses into **one sentence naming the single
+most-limiting pipeline stage right now** — e.g. "planning", "verification
+quality", "experiment execution reliability", "writing polish" — with the
+supporting evidence. The bottleneck always moves: when coding stops being the
+constraint, planning becomes it; when planning is solved, verification; when
+verification is automated, taste. This step exists to make the CURRENT
+constraint visible, so Step 2's ranked table reads as sub-fixes for one named
+constraint instead of scattered tweaks.
+
+Append the verdict to the append-only ledger `.aris/meta/bottleneck_log.jsonl`
+(same never-mutate discipline as `.aris/runs/<run_id>.iterations.jsonl`):
+
+```bash
+mkdir -p .aris/meta
+printf '%s\n' '{"ts":"2026-07-02T15:00:00+08:00","cycle":3,"bottleneck":"verification quality","evidence":"review rounds plateau at 6/10 while tool failures are rare","top_patch_ids":["P1","P2"]}' \
+  >> .aris/meta/bottleneck_log.jsonl
+```
+
+Never edit or delete prior lines — succession history is the point.
 
 ### Step 2: Identify Optimization Targets
 
@@ -133,7 +177,12 @@ Based on Step 1, rank optimization opportunities by expected impact:
 | 1 | auto-review-loop default threshold | Users override to 7/10 in 60% of runs | Change default from 6/10 to 7/10 | Fewer manual overrides |
 | 2 | experiment-bridge retry count | 40% of runs hit max retries on OOM | Add OOM-specific recovery (reduce batch size) | Fewer failed experiments |
 | 3 | paper-write de-AI patterns | Users manually fix "delve" in 80% of runs | Add "delve" to default watchword list | Fewer manual edits |
+| 4 | experiment-bridge Phase-2 hand-holding steps | Model bump (session_start model changed); scaffold untouched since 2 generations ago; zero tool_failures in the steps it guards | **DELETE steps N–M — the new model does this unprompted** | Smaller harness, less drift surface |
 ```
+
+The Proposed-Change column is explicitly allowed to be a **deletion** — "DELETE
+step N, new model does this for free" is a first-class optimization, ranked by
+the same impact logic as additions.
 
 If `$ARGUMENTS` specifies a target skill, focus analysis on that skill only.
 If `$ARGUMENTS` is empty or "all", analyze all skills with sufficient data.
@@ -211,6 +260,12 @@ Output a structured report:
 **Data**: [N] events, [M] skill invocations, [K] sessions
 **Target**: [skill name or "all"]
 
+## Current Bottleneck
+
+**[one-phrase name]** — [one-line evidence]. Prior cycle's bottleneck: [name —
+resolved by <patch ids> / unresolved / first recorded cycle]. (Ledger:
+`.aris/meta/bottleneck_log.jsonl`)
+
 ## Proposed Changes
 
 ### Change 1: [title]
@@ -262,7 +317,7 @@ never produces the acquittal.
 ## Key Rules
 
 - **Log-driven, not speculative.** Every proposed change must cite specific data from the event log. No "I think this would be better."
-- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills.
+- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills — unless the proposal is a scaffolding **deletion** justified by a documented model-capability delta (cite the model-bump News entry or the `session_start` model change as evidence). Deleting what a newer model now does for free is the one sanctioned large edit; it still goes through the same review + approval gates.
 - **Reviewer-gated.** Every patch goes through cross-model review before recommendation.
 - **Reversible.** Always back up before applying. Always log what changed.
 - **User-approved.** Never auto-apply. Present, explain, let the user decide.
@@ -294,11 +349,16 @@ This skill is NOT part of the standard W1→W1.5→W2→W3→W4 pipeline. It is 
    ```
    📊 ARIS has logged 8 skill runs since last optimization. Run /meta-optimize to check for improvement opportunities.
    ```
-   This is a **suggestion only** — it does not auto-run optimization.
+   It ALSO fires — regardless of invocation count — when the session model has
+   changed since the last optimize (compared against `.aris/meta/.last_optimize_model`):
+   ```
+   🔁 Model changed since last optimization (claude-opus-4-6 → claude-opus-4-8). Run /meta-optimize — a model bump makes existing scaffolding a deletion candidate (harness diet).
+   ```
+   Both are **suggestions only** — they do not auto-run optimization.
 
 3. **Manual trigger**: User runs `/meta-optimize` when they see the reminder or whenever they want.
 
-**After each `/meta-optimize` run**, the skill writes the current timestamp to `.aris/meta/.last_optimize` so the readiness check only counts new invocations.
+**After each `/meta-optimize` run**, the skill writes the current timestamp to `.aris/meta/.last_optimize` and the current session model (latest `session_start` event's `model` field) to `.aris/meta/.last_optimize_model`, so the readiness check can detect both new usage and model bumps.
 
 ## Acknowledgements
 

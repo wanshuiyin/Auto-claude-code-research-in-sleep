@@ -81,7 +81,35 @@ Read `.aris/meta/events.jsonl` and compute:
 - Where do users interrupt with manual prompts during workflows?
 - What manual corrections do users make most? (These indicate skill gaps.)
 
+**Model-delta analysis (harness diet):**
+- Has the session model or the pinned reviewer model changed since a skill's
+  SKILL.md was last touched? If yes, flag every explicit reasoning-scaffolding
+  step, guardrail, and worked example in that SKILL.md as a **DELETION
+  candidate**, not just an addition candidate. The harness exists to compensate
+  for the model; a capability the new model has natively is pure overhead. A
+  harness that only ever grows is a harness nobody is re-reading.
+
 Present findings as a structured summary table.
+
+### Step 1.5: Name the Current Bottleneck
+
+Synthesize the Step-1 analyses into **one sentence naming the single
+most-limiting pipeline stage right now** — e.g. "planning", "verification
+quality", "experiment execution reliability", "writing polish" — with evidence.
+The bottleneck always moves: coding → planning → verification → taste. Step 2's
+ranked table should read as sub-fixes for this one named constraint.
+
+Append the verdict to the append-only ledger `.aris/meta/bottleneck_log.jsonl`
+(never edit or delete prior lines — succession history is the point):
+
+```bash
+mkdir -p .aris/meta
+printf '%s\n' '{"ts":"2026-07-02T15:00:00+08:00","cycle":3,"bottleneck":"verification quality","evidence":"review rounds plateau at 6/10 while tool failures are rare","top_patch_ids":["P1","P2"]}' \
+  >> .aris/meta/bottleneck_log.jsonl
+```
+
+On the next run, read the last line first and open the report by stating
+whether that bottleneck was resolved and what it has moved to.
 
 ### Step 2: Identify Optimization Targets
 
@@ -95,7 +123,11 @@ Based on Step 1, rank optimization opportunities by expected impact:
 | 1 | auto-review-loop default threshold | Users override to 7/10 in 60% of runs | Change default from 6/10 to 7/10 | Fewer manual overrides |
 | 2 | experiment-bridge retry count | 40% of runs hit max retries on OOM | Add OOM-specific recovery (reduce batch size) | Fewer failed experiments |
 | 3 | paper-write de-AI patterns | Users manually fix "delve" in 80% of runs | Add "delve" to default watchword list | Fewer manual edits |
+| 4 | experiment-bridge Phase-2 hand-holding steps | Model bump; scaffold untouched for 2 generations; zero failures in the guarded steps | **DELETE steps N–M — the new model does this unprompted** | Smaller harness, less drift surface |
 ```
+
+The Proposed-Change column is explicitly allowed to be a **deletion** — "DELETE
+step N, new model does this for free" is a first-class optimization.
 
 If `$ARGUMENTS` specifies a target skill, focus analysis on that skill only.
 If `$ARGUMENTS` is empty or "all", analyze all skills with sufficient data.
@@ -161,6 +193,12 @@ Output a structured report:
 **Data**: [N] events, [M] skill invocations, [K] sessions
 **Target**: [skill name or "all"]
 
+## Current Bottleneck
+
+**[one-phrase name]** — [one-line evidence]. Prior cycle's bottleneck: [name —
+resolved by <patch ids> / unresolved / first recorded cycle]. (Ledger:
+`.aris/meta/bottleneck_log.jsonl`)
+
 ## Proposed Changes
 
 ### Change 1: [title]
@@ -199,7 +237,7 @@ If user runs `/meta-optimize apply [N]`:
 ## Key Rules
 
 - **Log-driven, not speculative.** Every proposed change must cite specific data from the event log. No "I think this would be better."
-- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills.
+- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills — unless the proposal is a scaffolding **deletion** justified by a documented model-capability delta; deleting what a newer model now does for free is the one sanctioned large edit, and it still goes through the same review + approval gates.
 - **Reviewer-gated.** Every patch goes through cross-model review before recommendation.
 - **Reversible.** Always back up before applying. Always log what changed.
 - **User-approved.** Never auto-apply. Present, explain, let the user decide.
