@@ -271,8 +271,13 @@ If the context window compacts mid-run, the loop recovers from `DSE_STATE.json` 
   the suspect — **discard and reimplement the run/parse script cleanly from the spec**
   (a peer move to another patch; delete only the script, never `dse_log.csv` /
   `dse_results/`; see `shared-references/external-cadence.md` § *Let a broken attempt
-  restart, not just patch*). If a clean reimplement crashes the same way, stop and
-  report — the spec or the environment is then in question, which is what needs the human
+  restart, not just patch*). **Before resuming the sweep, re-validate metric
+  comparability**: re-parse one COMPLETED iteration's raw output from
+  `dse_results/outputs/iter_N/` with the new parser and confirm it reproduces that row of
+  `dse_log.csv`; on mismatch, either fix the parser or re-parse and flag all affected
+  rows — never mix two parsing semantics in one log. If a clean reimplement crashes the
+  same way, stop and report — the spec or the environment is then in question, which is
+  what needs the human
 
 ## Example Invocations
 

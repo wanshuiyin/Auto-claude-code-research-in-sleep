@@ -89,15 +89,19 @@ jobs:
 ```
 pending → running → completed
                  ↘ failed_oom → pending (after delay) [retry up to N]
-                 ↘ failed_other → stuck (needs manual inspection; before handing
-                    over, if the same failure repeats across jobs, try ONE clean
-                    reimplement of the job script from the plan — a peer move to
-                    patching; delete only the script, never queue state / logs /
-                    results (external-cadence.md § "Let a broken attempt restart,
-                    not just patch"). Reserve "stuck" for contract/environment
-                    doubts, not merely broken job code)
+                 ↘ failed_other → stuck (needs manual inspection)
 stale_screen_detected → cleaned → pending
 ```
+
+> **Operator note on `stuck` (the agent's move, not the queue's):** the queue
+> deterministically parks `failed_other` jobs as `stuck` — that part is code and
+> unchanged. Before handing a `stuck` batch to the human, the OPERATING AGENT
+> should check: if the same failure repeats across jobs, try ONE clean
+> reimplement of the **agent-generated wrapper/attempt script only** — never
+> user/project source (`run_*.py` you didn't write), the manifest, queue state,
+> logs, or results (see `shared-references/external-cadence.md` § *Let a broken
+> attempt restart, not just patch*). Reserve the human handoff for
+> contract/environment doubts, not merely broken attempt code.
 
 ### Wave Orchestration
 

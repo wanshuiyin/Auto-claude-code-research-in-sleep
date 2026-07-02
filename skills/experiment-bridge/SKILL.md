@@ -160,7 +160,8 @@ Wait for completion. Verify:
 - GPU memory usage is within bounds
 - Output format matches expectations
 
-If sanity fails → **auto-debug before giving up** (max 3 attempts):
+If sanity fails → **auto-debug before giving up**. Budget: up to **2 patch
+attempts** on the same failure, then up to **2 clean reimplements** (4 total):
 
 1. **Read the error** — parse traceback, stderr, and log files. (The same
    read-the-primary-artifact discipline applies to surprising REVIEWER verdicts:
@@ -175,14 +176,19 @@ If sanity fails → **auto-debug before giving up** (max 3 attempts):
 4. **Attempt 2+ still failing? → Call in Codex rescue** (if Codex plugin installed):
    Before the next retry, invoke `/codex:rescue` to get a second opinion on the root cause. Codex independently reads the code and error logs — it may spot issues Claude missed (wrong tensor shapes, subtle import shadowing, config mismatches, etc.). Apply its suggested fix, then re-run.
    - If `/codex:rescue` is not available (plugin not installed), continue with Claude's own diagnosis
-5. **Patches stacking on the same failure? → Discard and reimplement cleanly.**
-   Rewriting the failing script from `EXPERIMENT_PLAN.md` / the research contract is a
-   PEER move to another patch, not a last resort — a third patch on top of two wrong
-   ones is usually worse than a clean rebuild. Delete ONLY the attempt's own
-   code/scaffolding; the plan, `EXPERIMENT_TRACKER.md`, collected data, and results are
-   never deletable (see `shared-references/external-cadence.md` § *Let a broken attempt
-   restart, not just patch*). A reimplement consumes one retry slot.
-6. **Still failing after 3 attempts (patches + reimplements combined)?** → stop, report the failure with all attempted fixes and error logs. Two clean reimplements failing the SAME way usually means the plan or the environment is wrong — say so explicitly in the report, because that (not the broken build itself) is what needs the human. Do not proceed with broken code.
+5. **Both patch attempts failed on the same failure? → Discard and reimplement cleanly**
+   (up to 2 reimplements). Rewriting the failing script from `EXPERIMENT_PLAN.md` / the
+   research contract is a PEER move to another patch, not a last resort — a third patch
+   on top of two wrong ones is usually worse than a clean rebuild. Delete ONLY the
+   attempt's own code/scaffolding (scripts this phase generated); the plan,
+   `EXPERIMENT_TRACKER.md`, user-authored project source, collected data, and results
+   are never deletable (see `shared-references/external-cadence.md` § *Let a broken
+   attempt restart, not just patch*).
+6. **Budget exhausted (2 patches + 2 reimplements), or two reimplements failed the SAME
+   way?** → stop, report the failure with all attempted fixes and error logs. Two clean
+   reimplements failing identically usually means the plan or the environment is wrong —
+   say so explicitly in the report, because that (not the broken build itself) is what
+   needs the human. Do not proceed with broken code.
 
 > Never give up on the first failure. Most experiment crashes are fixable without human intervention.
 
