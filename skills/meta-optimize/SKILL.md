@@ -134,11 +134,17 @@ Read `.aris/meta/events.jsonl` and compute:
 - Has the session model (`session_start` events' `model` field) or the pinned
   reviewer model changed since a skill's SKILL.md was last touched?
   (`git log -1 --format=%cs -- skills/<skill>/SKILL.md` vs the model-bump date.)
-- If yes, flag every explicit reasoning-scaffolding step, guardrail, and worked
-  example in that SKILL.md as a **DELETION candidate**, not just an addition
-  candidate. The harness exists to compensate for the model; a capability the
-  new model has natively is pure overhead — context-window weight, drift
-  surface, and reading cost with no return. A harness that only ever grows is a
+- A model bump is a **trigger to re-read, not evidence by itself**. For each
+  reasoning-scaffolding step or worked example in that SKILL.md, a deletion
+  proposal must cite TARGET-SPECIFIC evidence that the new model no longer
+  needs it: a capability-specific release note, or repeated observed behavior
+  in the event log (e.g. zero failures/interventions in the guarded step since
+  the bump). "The model got newer" alone never justifies a deletion.
+- **Never deletion candidates**, regardless of model: privilege boundaries,
+  acceptance/review gates, corpus- and provenance-integrity rules, output
+  contracts, and safety checks. The diet targets model-compensation scaffolding
+  only — a capability the new model has natively is pure overhead (context
+  weight, drift surface, reading cost). A harness that only ever grows is a
   harness nobody is re-reading.
 
 Present findings as a structured summary table.
@@ -159,8 +165,20 @@ Append the verdict to the append-only ledger `.aris/meta/bottleneck_log.jsonl`
 
 ```bash
 mkdir -p .aris/meta
-printf '%s\n' '{"ts":"2026-07-02T15:00:00+08:00","cycle":3,"bottleneck":"verification quality","evidence":"review rounds plateau at 6/10 while tool failures are rare","top_patch_ids":["P1","P2"]}' \
-  >> .aris/meta/bottleneck_log.jsonl
+# json.dumps, NOT hand-interpolated shell strings: bottleneck/evidence are
+# natural language — a stray quote must not break the JSONL (or the shell).
+python3 - <<'PY'
+import json, datetime
+entry = {
+    "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+    "cycle": 3,
+    "bottleneck": "verification quality",
+    "evidence": "review rounds plateau at 6/10 while tool failures are rare",
+    "top_patch_ids": ["P1", "P2"],
+}
+with open(".aris/meta/bottleneck_log.jsonl", "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
 ```
 
 Never edit or delete prior lines — succession history is the point.
@@ -317,7 +335,7 @@ never produces the acquittal.
 ## Key Rules
 
 - **Log-driven, not speculative.** Every proposed change must cite specific data from the event log. No "I think this would be better."
-- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills — unless the proposal is a scaffolding **deletion** justified by a documented model-capability delta (cite the model-bump News entry or the `session_start` model change as evidence). Deleting what a newer model now does for free is the one sanctioned large edit; it still goes through the same review + approval gates.
+- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills — the one sanctioned large edit is a scaffolding **deletion** backed by TARGET-SPECIFIC model-delta evidence (a capability-specific release note, or repeated post-bump event-log behavior showing the scaffold is unused — the model name changing is a trigger to look, never sufficient evidence). Privilege boundaries, acceptance gates, corpus/provenance rules, output contracts, and safety checks are never deletion candidates. Deletions go through the same review + approval gates as everything else.
 - **Reviewer-gated.** Every patch goes through cross-model review before recommendation.
 - **Reversible.** Always back up before applying. Always log what changed.
 - **User-approved.** Never auto-apply. Present, explain, let the user decide.
