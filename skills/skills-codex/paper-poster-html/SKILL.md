@@ -227,13 +227,16 @@ pdftoppm -r 100 poster_html/poster_preview.pdf poster_html/review_full -png -f 1
 # plus 2-4 region crops at higher res (header / one column / equations) via PIL
 ```
 
-**Calibrate first** (per mainline `taste-calibration.md`): if `references/good/`
-+ `references/bad/` exist under this skill dir (or the project supplies its own
-pair), score those 3+3 reference posters on the axes below BEFORE the target,
-anchoring the scale; if no reference sets exist, proceed uncalibrated and mark
-`CALIBRATION: none` — never fabricate anchor scores. Axes (weights sum 1.0):
-Design 0.35 · Craft 0.30 · Functionality 0.20 · Originality 0.15; composite
-maps onto the 1–10 scale below.
+**Calibrate first** (per mainline `taste-calibration.md`): if **human-curated**
+`references/good/` + `references/bad/` exist under this skill dir (or the
+project supplies its own pair), score those 3+3 reference posters on the axes
+below BEFORE the target, anchoring the scale. Never select, search for, or
+generate anchors yourself; if no reference sets exist, proceed uncalibrated and
+mark `CALIBRATION: none` — never fabricate anchor scores. Axes (weights sum
+1.0): Design 0.35 · Craft 0.30 · Functionality 0.20 · Originality 0.15.
+Mapping: `SCORE = min(round(1 + 9 × COMPOSITE), lowest triggered cap)` — caps
+apply AFTER the mapping, and the loop's `Score ≥ 9` threshold always reads this
+final capped `SCORE`, never the raw composite.
 
 Score strictly 1–10. **Critical caps** (hard floors — a calibrated composite
 never overrides them): < 2 real paper figures → ≤ 3; broken canvas /
@@ -247,7 +250,8 @@ serif-body/sans-display pairing, no gradient kitsch, component consistency, 60-s
 narrative. Output format:
 
 ```
-SCORE: N/10
+SCORE: N/10            (= min(round(1 + 9 × COMPOSITE), lowest cap); drives the loop)
+COMPOSITE: 0.xx        (weighted; list the four per-axis scores)
 CALIBRATION: anchored | none
 GAP: <which reference poster the target falls short of / exceeds, on which axis, and why — one paragraph; omit only when CALIBRATION: none>
 CAPS_TRIGGERED: ...

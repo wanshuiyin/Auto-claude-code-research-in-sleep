@@ -13,7 +13,7 @@ already has (hard caps, measurement gates); it never replaces them.
 
 ## 1. Named axes with explicit numeric weights
 
-Define 2–6 named axes and give each an explicit weight; weights sum to 1.0.
+Define 2–7 named axes and give each an explicit weight; weights sum to 1.0.
 Model the table on `research-refine`'s working precedent (its Phase 2 uses
 15/25/25/15/10/5/5% across seven axes):
 
@@ -35,10 +35,13 @@ The grader first scores **3 known-good and 3 known-bad reference exemplars** on
 the same axes, so the scale is anchored to concrete artifacts instead of the
 grader's free-floating prior.
 
-- The invoking skill supplies the reference paths — convention:
-  `<skill-dir>/references/good/` and `<skill-dir>/references/bad/` (images,
-  PDFs, or text artifacts of the same kind as the target). Project-local
-  references may override the skill-local set.
+- References are **pre-existing, human-curated files** — the executor never
+  selects, generates, or searches for anchors itself (an executor-picked anchor
+  set just smuggles the free-floating prior back in). The invoking skill
+  supplies the paths — convention: `<skill-dir>/references/good/` and
+  `<skill-dir>/references/bad/` (images, PDFs, or text artifacts of the same
+  kind as the target). Project-local references may override the skill-local
+  set.
 - The grader is TOLD which set is which ("these three are good, these three are
   slop") — calibration is about anchoring the scale, not blind classification.
 - Sanity check: if the calibrated scores don't separate the sets (a "bad"
@@ -72,9 +75,11 @@ anchors, not just its scalar.
   "< 2 real figures → ≤ 3"). Compute caps first; the composite lives under
   them.
 - **Calibration ≠ acquittal.** A taste score produced by the executor's own
-  model family is a Type-A signal (drives the fix loop). Wherever a skill's
-  acceptance requires a cross-model verdict, that requirement is unchanged
-  (`acceptance-gate.md`).
+  model family may DRIVE the fix loop (rank issues, decide what to patch next)
+  but can never acquit: wherever a skill's acceptance requires a cross-model
+  verdict, that requirement is unchanged. (Per `acceptance-gate.md`'s taxonomy
+  a model-assigned score is a semantic judgment — calibration narrows its
+  variance; it does not make it machine-checkable.)
 - **Rubric drift is meta-optimize's job.** If users repeatedly override
   calibrated scores, the rubric or the anchors are wrong — that's an event-log
   signal for `/meta-optimize`, not a reason to hand-tweak scores per run.
