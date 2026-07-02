@@ -38,6 +38,28 @@ def test_codex_skill_set_matches_mainline() -> None:
     assert main_names == codex_names
 
 
+def test_codex_mirror_shared_reference_links_resolve() -> None:
+    """Every `shared-references/<name>.md` PATH reference in a mirror or overlay
+    SKILL.md must resolve to a file that exists in the mirror's own
+    shared-references/. The mirror is an appendage and does not carry every
+    mainline shared-reference; skills that mean the mainline copy must qualify
+    the mention with the word "mainline" (prose, e.g. "per mainline
+    `skill-governance.md`") rather than a bare `shared-references/…` path — that
+    prose form is intentionally NOT matched here. Guards against the dangling
+    reference class (mirror meta-apply once cited a non-existent
+    skill-governance.md)."""
+    ref_re = re.compile(r"shared-references/([a-z0-9-]+\.md)")
+    mirror_refs = {p.name for p in (CODEX_SKILLS / "shared-references").glob("*.md")}
+    roots = [CODEX_SKILLS, CLAUDE_OVERLAY, GEMINI_OVERLAY]
+    dangling: list[str] = []
+    for root in roots:
+        for skill_md in root.glob("*/SKILL.md"):
+            for ref in ref_re.findall(read(skill_md)):
+                if ref not in mirror_refs:
+                    dangling.append(f"{skill_md.relative_to(REPO_ROOT)} -> shared-references/{ref}")
+    assert not dangling, "mirror SKILL.md cites shared-references not in the mirror:\n" + "\n".join(dangling)
+
+
 def test_codex_mirror_wiki_writers_wired() -> None:
     # Content parity (the name-set test above is necessary but not sufficient): the Codex
     # mirror must use the deterministic wiki writers and must NOT carry the old empirical-

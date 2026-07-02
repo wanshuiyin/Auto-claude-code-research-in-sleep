@@ -119,7 +119,7 @@ auto-curator reads it as evidence):
   on the staged diff; never trust a producer-written verdict; the human picks among
   survivors, never resurrects a KILL.
 - **Cross-family or refuse.** `assert_cross_family` must not raise. A
-  `deterministic:<verifier>` reviewer is valid per skill-governance.md.
+  `deterministic:<verifier>` reviewer is valid per mainline `skill-governance.md`.
 - **Corpus mutation goes through Write/Edit** (reviewable, attributable), not Bash. The
   `corpus_write_guard` hook (if installed) additionally denies Bash corpus writes — it
   does NOT gate Write/Edit, so it does not by itself stop this skill from editing the
