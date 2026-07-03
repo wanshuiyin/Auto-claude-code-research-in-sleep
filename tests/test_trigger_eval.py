@@ -56,9 +56,17 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(out, "trigger")
         self.assertEqual(detail, "check-gpu")
 
-    def test_plugin_namespaced_target_matches_on_tail(self):
-        out, _ = TE.classify([("Skill", {"skill": "myplugin:check-gpu"})], "check-gpu")
+    def test_plugin_namespaced_target_matches_on_tail_but_is_tagged(self):
+        out, detail = TE.classify([("Skill", {"skill": "myplugin:check-gpu"})], "check-gpu")
         self.assertEqual(out, "trigger")
+        # namespaced match must be surfaced distinctly, not silently == exact
+        self.assertIn("namespaced", detail)
+        self.assertIn("myplugin:check-gpu", detail)
+
+    def test_namespaced_target_does_not_tail_match(self):
+        # if the TARGET itself is namespaced, don't fuzzy-tail-match a bare id
+        out, _ = TE.classify([("Skill", {"skill": "check-gpu"})], "plug:check-gpu")
+        self.assertEqual(out, "confusion")
 
     def test_different_skill_is_confusion_with_name(self):
         out, detail = TE.classify([("Skill", {"skill": "vast-gpu"})], "check-gpu")
@@ -103,6 +111,46 @@ class AggregateTest(unittest.TestCase):
     def test_all_errors_gives_none_rate_not_zerodiv(self):
         recs = [{"skill": "s", "query": "q", "outcome": "error", "detail": "x"}]
         self.assertIsNone(TE.aggregate(recs)["s"]["trigger_rate"])
+
+
+class StreamErrorTest(unittest.TestCase):
+    def test_max_turns_termination_is_NOT_a_real_error(self):
+        # the probe deliberately caps at 1 turn; error_max_turns is the expected
+        # successful ending, not a failure — must be gradeable.
+        stream = "\n".join([
+            _assistant_event([_skill_use("check-gpu")]),
+            json.dumps({"type": "result", "is_error": True, "subtype": "error_max_turns"}),
+        ])
+        self.assertFalse(TE._stream_real_error(stream))
+        self.assertTrue(TE._stream_has_assistant(stream))
+
+    def test_genuine_error_subtype_is_detected(self):
+        stream = json.dumps({"type": "result", "is_error": True,
+                             "subtype": "error_during_execution"})
+        self.assertTrue(TE._stream_real_error(stream))
+
+    def test_clean_success_result_is_not_error(self):
+        stream = "\n".join([
+            _assistant_event([_skill_use("check-gpu")]),
+            json.dumps({"type": "result", "subtype": "success", "is_error": False}),
+        ])
+        self.assertFalse(TE._stream_real_error(stream))
+        self.assertTrue(TE._stream_has_assistant(stream))
+
+    def test_no_assistant_turn_detected(self):
+        stream = "\n".join([json.dumps({"type": "system", "subtype": "init"}),
+                            json.dumps({"type": "result", "subtype": "success"})])
+        self.assertFalse(TE._stream_has_assistant(stream))
+
+
+class DenyToolsTest(unittest.TestCase):
+    def test_stateful_tools_are_denied(self):
+        # the safety invariant: side-effecting tools are on the deny list
+        for t in ("Bash", "Write", "Edit"):
+            self.assertIn(t, TE._DENY_TOOLS)
+        # the tools we SCORE on must NOT be denied (or we'd never see a trigger)
+        for t in ("Skill", "Read"):
+            self.assertNotIn(t, TE._DENY_TOOLS)
 
 
 class SampleEvalFileTest(unittest.TestCase):

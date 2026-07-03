@@ -12,22 +12,28 @@ EVIDENCE for a /meta-optimize proposal (which lands only via the human-gated
 too.
 
 How it works (adapted from Anthropic's Claude Science `skill-creator`
-run_eval.py, Apache-2.0; ported off its host.* runtime):
+run_eval.py — Apache-2.0; ported off its host.* runtime onto plain `claude -p`):
 - For each (skill, query), run `claude -p <query> --output-format stream-json
-  --max-turns 1` as a subprocess FROM A NEUTRAL TEMP CWD. The user-level
-  ~/.claude/skills corpus is loaded as usual, so the measurement happens under
-  the REALISTIC long installed list — the exact condition under which
-  omission happens (an isolated one-skill sandbox would trivially inflate
-  trigger rates).
+  --max-turns 1 --permission-mode plan --disallowed-tools Bash Write Edit …`
+  as a subprocess FROM A NEUTRAL TEMP CWD. The user-level ~/.claude/skills
+  corpus is loaded as usual, so the measurement happens under the REALISTIC
+  long installed list — the exact condition under which omission happens (an
+  isolated one-skill sandbox would trivially inflate trigger rates).
 - Parse the stream for the first assistant turn's tool_use blocks. A `Skill`
   tool call with input.skill == target counts as a TRIGGER; a Skill call for a
   different skill is a CONFUSION (recorded by name — the confusion matrix is
   the interesting part for the long-list problem); no Skill call is a MISS.
   Reading the target's SKILL.md via the Read tool counts as a trigger too
   (secondary signal).
-- `--max-turns 1` + no --allowedTools: the tool call is captured from the
-  assistant message BEFORE any permission gate, is auto-denied by -p mode, and
-  the run ends. Nothing executes; each probe costs one short model turn.
+- SAFETY: `--permission-mode plan` blocks every side-effecting tool (Bash,
+  Write, Edit, …) from executing, so a probed skill's own commands (e.g.
+  check-gpu's ssh, vast-gpu's rentals) do NOT run — we observe only which tool
+  the model REACHED FOR. The read-only tools we score on (a `Skill` load, a
+  `Read` of a SKILL.md) may execute, and both are side-effect-free.
+  `--disallowed-tools` denies the stateful tools explicitly as belt-and-braces,
+  and `--no-session-persistence` avoids leaving session artifacts. This is a
+  measurement, not a sandbox — it does not stop the user's own SessionStart
+  hooks (their normal per-session behavior), it stops the PROBED WORK.
 
 Query-set methodology (see trigger_evals.sample.json): queries must PARAPHRASE
 user intent, never quote the description's own trigger phrases verbatim — a
@@ -81,17 +87,24 @@ def parse_stream_tool_uses(stream_text: str):
 def classify(tool_uses, target_skill: str):
     """Classify one probe run: ('trigger'|'confusion'|'miss', detail).
 
-    Trigger: a Skill call for the target, or a Read of the target's SKILL.md.
+    Trigger: a Skill call for the target (exact id, or a `plugin:target`
+    namespaced form — the latter tagged in detail so a namespaced match is
+    never silently indistinguishable from an exact one), or a Read of the
+    target's SKILL.md.
     Confusion: the FIRST Skill call named a different skill (detail = its name).
     Miss: no skill engagement at all.
     """
     for name, inp in tool_uses:
         if name == "Skill":
             invoked = (inp.get("skill") or "").strip()
-            # plugin-namespaced form "plugin:skill" — compare the tail
-            tail = invoked.split(":")[-1]
-            if tail == target_skill:
+            if invoked == target_skill:
                 return "trigger", invoked
+            # plugin-namespaced form "plugin:skill": a trigger only if the tail
+            # equals the target AND the target itself is bare (not namespaced),
+            # surfaced distinctly so a human can spot a plugin/bare collision.
+            if ":" in invoked and invoked.split(":")[-1] == target_skill \
+                    and ":" not in target_skill:
+                return "trigger", f"{invoked} (namespaced→{target_skill})"
             return "confusion", invoked
         if name == "Read":
             path = str(inp.get("file_path") or "")
@@ -128,10 +141,61 @@ def aggregate(records):
 
 # ------------------------------------------------------------------- probing
 
+# Stateful tools that must never execute during a probe (belt-and-braces on top
+# of --permission-mode plan, which already blocks side-effecting tools).
+_DENY_TOOLS = ["Bash", "Write", "Edit", "NotebookEdit", "WebFetch"]
+
+
+# `--max-turns 1` deliberately caps the probe at one turn, so the CLI ends with
+# result subtype `error_max_turns` and a NONZERO exit — that is the EXPECTED,
+# successful termination for a probe, NOT a failure. Only other errors (auth,
+# startup/hook failure, execution error) count as a real error.
+_EXPECTED_TERMINATION = "error_max_turns"
+
+
+def _stream_real_error(stream_text: str) -> bool:
+    """True iff the stream carries a genuine terminal error — an `is_error`
+    result whose subtype is NOT the expected max-turns cap. Auth/hook failures
+    that still emit JSON are caught here so they are graded `error`, never a
+    `miss` that would silently corrupt the trigger rate."""
+    for line in stream_text.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            ev = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if ev.get("type") == "result" and ev.get("is_error") \
+                and ev.get("subtype") != _EXPECTED_TERMINATION:
+            return True
+    return False
+
+
+def _stream_has_assistant(stream_text: str) -> bool:
+    """True iff the model produced at least one assistant turn — i.e. the probe
+    ran far enough to be gradeable (even if it then hit the max-turns cap)."""
+    for line in stream_text.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            if json.loads(line).get("type") == "assistant":
+                return True
+        except json.JSONDecodeError:
+            continue
+    return False
+
+
 def run_probe(query: str, model: str | None, timeout: int, cwd: str) -> str:
-    """One `claude -p` probe; returns raw stream-json text. Raises on failure."""
+    """One `claude -p` probe; returns raw stream-json text. Raises RuntimeError
+    on a REAL failure (genuine error event, or nonzero exit with no assistant
+    turn at all) so the caller records `error` rather than a rate-corrupting
+    `miss`. The expected max-turns termination (nonzero exit + assistant turn
+    present) is a normal, gradeable result."""
     cmd = ["claude", "-p", "--output-format", "stream-json", "--verbose",
-           "--max-turns", "1"]
+           "--max-turns", "1", "--permission-mode", "plan",
+           "--no-session-persistence", "--disallowed-tools", *_DENY_TOOLS]
     if model:
         cmd += ["--model", model]
     # Allow nesting claude -p inside a Claude Code session (same pattern as the
@@ -139,10 +203,14 @@ def run_probe(query: str, model: str | None, timeout: int, cwd: str) -> str:
     env = {k: v for k, v in os.environ.items() if k != "CLAUDECODE"}
     result = subprocess.run(cmd, input=query, capture_output=True, text=True,
                             env=env, timeout=timeout, cwd=cwd)
-    if result.returncode != 0 and not result.stdout.strip():
-        raise RuntimeError(f"claude -p exited {result.returncode}: "
-                           f"{result.stderr.strip()[:300]}")
-    return result.stdout
+    if _stream_real_error(result.stdout):
+        raise RuntimeError("claude -p stream carried a terminal error result event")
+    if _stream_has_assistant(result.stdout):
+        return result.stdout                       # gradeable (max-turns cap is fine)
+    if result.returncode != 0:                     # no assistant turn AND failed = real
+        raise RuntimeError(f"claude -p exited {result.returncode} with no assistant "
+                           f"turn: {result.stderr.strip()[:300]}")
+    return result.stdout                            # clean, no tool call → graded miss
 
 
 def main(argv=None) -> int:
@@ -151,8 +219,10 @@ def main(argv=None) -> int:
                     help='JSON: {"<skill>": ["query", ...], ...}')
     ap.add_argument("--skills", default="",
                     help="comma-separated subset of skills to probe (default: all in file)")
-    ap.add_argument("--samples", type=int, default=1,
-                    help="probes per query (trigger behavior is stochastic; 2-3 for stability)")
+    ap.add_argument("--samples", type=int, default=3,
+                    help="probes per query (trigger behavior is stochastic; the "
+                         "default 3 matches the upstream eval — samples=1 is too "
+                         "noisy to act on)")
     ap.add_argument("--model", default=None,
                     help="model override for probes (default: claude CLI default). "
                          "NB: trigger behavior is model-dependent — compare like with like.")
