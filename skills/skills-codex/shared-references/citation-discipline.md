@@ -426,6 +426,27 @@ Before treating a citation as complete, verify:
 - [ ] the specific claim you cite is actually supported by the paper,
 - [ ] any unresolved uncertainty is marked with `[VERIFY]` or an explicit placeholder.
 
+## Output Discipline: Verification Lives in the Trace, Not in Prose
+
+Two rules on how verification shows up in what the reader sees (adapted from
+Anthropic's Claude Science `literature-review` skill, Apache-2.0):
+
+- **Never write a "citations verified" line in the output.** Not as an opener,
+  not as a footer, not as a subtitle — "All DOIs verified", "no retraction
+  flags", "bibliography checked" are process narration. Verification is
+  something that happens in your tool trace (the `verify_papers` run, the DBLP
+  lookups, the audit JSON); the reader infers it from citations that resolve
+  and claims that hold up. A reply or section whose content is "I verified
+  things" is not content. (ARIS-specific: the machine-readable verification
+  record belongs in the audit artifact — `CITATION_AUDIT.json`, traces — never
+  as reassurance prose in the paper or report body.)
+- **A style/consistency lint runs ONCE, as a lint — not as a loop-until-clean
+  gate.** Run it on the full draft, fix what it lists in a single editing
+  pass, and move on; do not re-run until it returns clean. A lint that becomes
+  a convergence loop burns rounds polishing cosmetics while real
+  (cross-model-review) gates wait. Quality/correctness convergence belongs to
+  the reviewer loops, not to lints.
+
 ## Bottom Line
 
 **When a citation is uncertain, leave an explicit gap instead of silently inventing metadata.**
