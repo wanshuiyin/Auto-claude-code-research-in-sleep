@@ -92,6 +92,16 @@ Read `.aris/meta/events.jsonl` and compute:
   only — a capability the new model has natively is pure overhead. A harness
   that only ever grows is a harness nobody is re-reading.
 
+**Trigger-rate analysis (measured, not from the event log):** the log shows
+which skills were USED, not which were WANTED-but-omitted. Mainline ships
+`tools/meta_opt/trigger_eval.py`, which measures Claude Code's skill triggering
+via `claude -p` probes (trigger / confusion / miss). It is Claude-Code-specific
+— there is no equivalent `codex` skill-selection probe yet, so for a Codex
+executor treat trigger-rate as a mainline signal, not a step you run here.
+Measure-only regardless: a low rate is INPUT to a proposal, never a self-applied
+rewrite; the confusion matrix (which sibling a query lands on) points at
+disambiguation, not "make it pushier".
+
 Present findings as a structured summary table.
 
 ### Step 1.5: Name the Current Bottleneck

@@ -147,6 +147,25 @@ Read `.aris/meta/events.jsonl` and compute:
   weight, drift surface, reading cost). A harness that only ever grows is a
   harness nobody is re-reading.
 
+**Trigger-rate analysis (optional, measured — not from the event log):**
+- The event log shows which skills were USED, not which were WANTED-but-omitted
+  — the omission failure mode (Claude Code passing over the right skill when the
+  installed list is long) is invisible to it. `tools/meta_opt/trigger_eval.py`
+  measures it directly: `claude -p` probes with paraphrased-intent queries run
+  from a neutral cwd (so the realistic long installed corpus is loaded), scored
+  as trigger / confusion(→which skill) / miss.
+- Run it when a specific skill is suspected of under- or mis-triggering, or as a
+  before/after check around a description edit:
+  `python3 tools/meta_opt/trigger_eval.py --eval-file tools/meta_opt/trigger_evals.sample.json --skills <name> --samples 2`
+- The **confusion matrix is the signal**, not just the rate: a query that keeps
+  landing on a sibling skill means the two descriptions overlap on that intent —
+  the fix is disambiguation, not "make the description pushier".
+- **Measure-only, evidence not verdict.** A low trigger rate is an INPUT to a
+  Step-2 proposal (which lands only via `/meta-apply`), never a self-applied
+  description rewrite. Trigger rate is model-dependent, so compare like with
+  like (record the probe model) and treat it as a proxy — it measures selection
+  under a query set, not the full long-list omission problem.
+
 Present findings as a structured summary table.
 
 ### Step 1.5: Name the Current Bottleneck
