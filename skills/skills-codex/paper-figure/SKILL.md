@@ -177,7 +177,11 @@ for script in gen_fig*.py; do
 done
 ```
 
-Verify all output files exist and are non-empty.
+Verify all output files exist and are non-empty. Then **render-then-verify**:
+re-open each RENDERED PDF/PNG (not the script) and self-check — no clipped
+labels, no legend covering data, every number/label readable at final print
+size. This self-check happens BEFORE the Step 7 review, so the reviewer's
+budget goes to substance, not to catching clipped axes.
 
 ### Step 6: Generate LaTeX Include Snippets
 
@@ -239,13 +243,14 @@ a clean result, but a deliberate, stated alternative may override them.
       difference in the caption
 - [ ] **State n and what was held fixed** — every panel with a summary mark
       says n and the unit of replication (panel or caption)
-- [ ] **Render-then-verify** — re-open the RENDERED PDF/PNG (not the script)
-      before hand-off: no clipped labels, no legend covering data, every
-      number/label readable at final print size. Step 7's reviewer must see an
-      already-self-checked render
+- [ ] **Render-then-verify** — the Step-5 self-check on the RENDERED PDF/PNG
+      (not the script) actually happened: no clipped labels, no legend covering
+      data, every number/label readable at final print size
 
 **Guidance — strong defaults (from pedrohcgs/claude-code-my-workflow), a
-deliberate stated alternative may override:**
+deliberate stated alternative may override — EXCEPT items that Key Rules below
+make hard (vector-PDF output and no-titles-inside-figures are Key Rules: treat
+those two as binding, not overridable):**
 
 - [ ] Font size readable at printed paper size (not too small)
 - [ ] Colors distinguishable in grayscale (print-friendly)
