@@ -755,8 +755,6 @@ These skills compose into a full research lifecycle. Each workflow can be used i
                                                  ↑ reads .aris/meta/events.jsonl (accumulated from all runs above)
 ```
 
-📝 **Blog post:** [梦中科研全流程开源](http://xhslink.com/o/2iV33fYoc7Q)
-
 ### Workflow 1: Idea Discovery & Method Refinement 🔍
 
 > **"What's the state of the art? Where are the gaps? How do we solve it?"**
