@@ -14,7 +14,8 @@
 
 🤖 **AI agent 兄弟们：** 直接读 [`AGENT_GUIDE.md`](AGENT_GUIDE.md) —— 给 LLM 消费的路由 index，不是给人浏览的。
 
-🎬 **ARIS 走向多模态 → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— 把模糊的故事丢给 agent，睡醒收一部**跨模型审过的电影**（参考片 = 19 个场景）。长程视觉叙事会两头漂（🧠 **长程遗忘** · 🗣️ 每帧由**画它的模型自己签收**，错误一路累积）；ARIS 用同宗的法宝兜住 —— **research-wiki** 当记忆,**多智能体对抗审**(跨模型盲转写 + token-diff)确保*没有一帧能自己给自己放行*。
+🎬 **ARIS 走向多模态 → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— 给它一个粗略的故事,拿回一部按场景检查过的图像电影(参考运行有 19 个场景)。
+长故事最容易坏在两点:模型忘了前面的细节,或者自己给自己打分——所以 ARIS 用 research-wiki 记住上下文,再让别的模型检查每一帧。
 
 <p align="center">
   <a href="https://github.com/wanshuiyin/ARIS-Movie-Director">
@@ -22,7 +23,7 @@
   </a>
 </p>
 
-> 🧭 *不止做电影 —— 同一套**受审螺旋**也能生成干净的**方法图 / 流程图**:这张图就是 ARIS-Movie-Director 自己的 `image_gen` + 跨模型 `panel_gate` loop 跑出来的。👉 **skills 和端到端 CLI 都在 [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)**:[`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md)(agent 工作流 + 可独立跑的确定性 CLI 内核)和做出这张图的 [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md)。*
+> 🧭 *同一套流程也能画干净的方法图 / 流程图——上面这张图就是它做出来的。入口在 **[ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)**:[`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) 和 [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md),后者就是生成这张图的 skill。*
 
 <details>
 <summary>🎞️ <i>参考片里的几帧 —— 故事自身的诚实度 beat：一次 <b>号称 <code>+6.2</code></b> 实则 <b>只动了 <code>+1.4</code></b> 的 run。</i> &nbsp;<b><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/">▶ 浏览器看全部 19 个场景 →</a></b></summary>

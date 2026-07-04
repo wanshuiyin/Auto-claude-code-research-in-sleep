@@ -18,7 +18,8 @@
 
 <p align="center"><em>The field has put up with unreliable autoresearch long enough —<br>Anti-Autoresearch is the read that finally catches it.</em></p>
 
-🎬 **ARIS goes multimodal → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — hand over a fuzzy story, wake up to a **cross-model-audited movie** (reference run = 19 scenes). Long-horizon visual stories drift two ways (🧠 **long-range forgetting** · 🗣️ each frame **signed off by the model that drew it**); ARIS answers with the same DNA — a **research-wiki** for memory + **multi-agent debate** so *no frame signs off on itself*.
+🎬 **ARIS goes multimodal → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** — hand it a rough story and get back a movie told in still frames, checked scene by scene (the reference run has 19 scenes).
+Long stories usually break when the model forgets earlier details or judges its own work — so ARIS keeps a research-wiki for memory and has other models check every frame.
 
 <p align="center">
   <a href="https://github.com/wanshuiyin/ARIS-Movie-Director">
@@ -26,7 +27,7 @@
   </a>
 </p>
 
-> 🧭 *Not just movies — the same **audited spiral** also generates clean **method / flow diagrams**: this very figure was baked by ARIS-Movie-Director's `image_gen` + cross-model `panel_gate` loop. 👉 **Skills + an end-to-end CLI** in [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director): [`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) (agent workflow + standalone deterministic CLI core) and [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md), the skill that made this figure.*
+> 🧭 *The same loop also makes clean method / flow diagrams — the figure above was made with it. Entry points in **[ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)**: [`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) and [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md), the skill that made this figure.*
 
 <details>
 <summary>🎞️ <i>A few frames from the reference movie — the story's own integrity beat: a run that <b>reported <code>+6.2</code></b> but <b>really moved <code>+1.4</code></b>.</i> &nbsp;<b><a href="https://wanshuiyin.github.io/ARIS-Movie-Director/comic/">▶ watch all 19 scenes →</a></b></summary>
