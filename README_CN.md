@@ -48,10 +48,6 @@
 
 </details>
 
-> 📖 *预览来自 [Diffusion Foundations cheat sheet](https://wanshuiyin.github.io/ARIS-in-AI-Offer/tutorials/diffusion_foundations_tutorial.html) —— [ARIS-in-AI-Offer](https://github.com/wanshuiyin/ARIS-in-AI-Offer) 里每篇 tutorial 都按相同的三柱结构组织（基础 / 面试 Q&A / 可跑代码）。*
->
-> 🌐 *同一套 workflow，不同的 deliverable —— [**ARIS-Homepage v1 live demo**](https://wanshuiyin.github.io/)（CV → fact-checked 单文件学术主页，由 `/homepage-generator` 生成）。*
->
 > 📝 *三篇 long-form blog，跨模型协作写成（`/render-html`）—— [Continuous DLM：表征视角综述（2026 上半年）](https://wanshuiyin.github.io/ARIS-in-AI-Offer/blogs/continuous_dlm_representation_perspective.html) · [Cosmos 3：理解与生成缝进一个 Transformer（MoT）](https://wanshuiyin.github.io/ARIS-in-AI-Offer/blogs/cosmos3_mot_guide.html) · [扩散 × 表征 × 流形学习](https://wanshuiyin.github.io/ARIS-in-AI-Offer/blogs/diffusion_representation_manifold.html)。*
 
 ![ARIS Logo](docs/aris_logo.svg)

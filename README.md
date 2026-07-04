@@ -52,10 +52,6 @@
 
 </details>
 
-> 📖 *Preview from the [Diffusion Foundations cheat sheet](https://wanshuiyin.github.io/ARIS-in-AI-Offer/tutorials/diffusion_foundations_tutorial.html) — every tutorial in [ARIS-in-AI-Offer](https://github.com/wanshuiyin/ARIS-in-AI-Offer) follows the same three-pillar structure (foundations / interview Q&A / runnable code).*
->
-> 🌐 *Same workflow, different deliverable — [**ARIS-Homepage v1 live demo**](https://wanshuiyin.github.io/) (CV → fact-checked single-file academic homepage via `/homepage-generator`).*
->
 > 📝 *Three long-form blogs, cross-model collaborative writing via `/render-html` — [Continuous DLM — a representation-perspective survey (2026 H1)](https://wanshuiyin.github.io/ARIS-in-AI-Offer/blogs/continuous_dlm_representation_perspective.html) · [Cosmos 3 — understanding + generation in one Transformer (MoT)](https://wanshuiyin.github.io/ARIS-in-AI-Offer/blogs/cosmos3_mot_guide.html) · [Diffusion × representation × manifold learning](https://wanshuiyin.github.io/ARIS-in-AI-Offer/blogs/diffusion_representation_manifold.html).*
 
 🛰 **社区好物 · [Claude Fleet](https://github.com/tianyilt/claude-fleet)**（by [@tianyilt](https://github.com/tianyilt)）—— 本地**只读**看板，一眼盯住并行的一堆 **Claude Code / Codex** 窗口(谁在跑 / 等授权 / 跑完了)，一键跳转 + 全文搜 transcript。多 agent 工作流神器，**好用点个 ⭐**
