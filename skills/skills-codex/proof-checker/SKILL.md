@@ -420,7 +420,7 @@ python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug "<stable-theorem-id>" \
 
 ### Cross-model protocol
 - **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
-- **Codex reasoning always xhigh**: Never downgrade.
+- **Codex reasoning always ultra** (deep-audit tier): never below `xhigh` — only the capability fallback in `reviewer-routing.md` may step down, on explicit capability errors.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
 - **Fresh reviewer agents**: Save each returned `agent_id` for traceability, but launch a new `spawn_agent` for each review round. Do not use `send_input` across proof-checker rounds.
 

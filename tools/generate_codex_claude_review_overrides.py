@@ -193,6 +193,9 @@ def transform_body(text: str) -> str:
     text = text.replace("store the returned agent_id for crash recovery only", "store the returned threadId for crash recovery only")
     text = text.replace("Save the agent_id for Round 2.", "Save the completed threadId for Round 2.")
     text = text.replace("Save the returned agent_id only for recovery bookkeeping.", "Save the returned threadId only for recovery bookkeeping.")
+    text = text.replace("via a Claude reviewer via `claude-review` MCP (ultra reasoning)", "via `claude-review` MCP (high-rigor review)")
+    text = text.replace("saved agent id", "saved threadId")
+    text = text.replace("— Codex Review", "— Claude Review")
     # generic prose mop-up — AFTER all longer specific rows
     text = text.replace("`spawn_agent`", "`mcp__claude-review__review_start`")
     text = text.replace("`send_input`", "`mcp__claude-review__review_reply_start`")

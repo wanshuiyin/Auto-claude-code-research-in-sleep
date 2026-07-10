@@ -93,7 +93,7 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 **Route by REVIEWER_DIFFICULTY:**
 
-##### Medium (default) — Codex Review
+##### Medium (default) — Claude Review
 
 Send comprehensive context to the external reviewer:
 
@@ -127,7 +127,7 @@ After this start call, immediately save the returned `jobId` and poll `mcp__clau
 
 If this is round 2+, use `mcp__claude-review__review_reply_start` with the saved completed `threadId`, then poll `mcp__claude-review__review_status` with the returned `jobId` until `done=true` to maintain continuity.
 
-##### Hard — Codex Review + Reviewer Memory
+##### Hard — Claude Review + Reviewer Memory
 
 Use the same `mcp__claude-review__review_start` / `mcp__claude-review__review_reply_start` route as medium, but prepend the full `review-stage/REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)` and require a `Memory update` section in the reviewer response.
 
@@ -321,7 +321,7 @@ Increment round counter → back to Phase A.
 
 ## Review Tracing
 
-After every `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, `oracle-pro`, or nightmare adversarial verification call, save a trace following `../shared-references/review-tracing.md`. Include prompt summary, reviewer route, saved agent id, raw response path, score/verdict, accepted fixes, rejected rebuttals, and the `Reviewer Memory` update if present.
+After every `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, `oracle-pro`, or nightmare adversarial verification call, save a trace following `../shared-references/review-tracing.md`. Include prompt summary, reviewer route, saved threadId, raw response path, score/verdict, accepted fixes, rejected rebuttals, and the `Reviewer Memory` update if present.
 
 ### Termination
 

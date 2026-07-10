@@ -74,7 +74,7 @@ If the topic is too broad to fit in one cheat sheet, **stop and ask the user to 
 
 Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide. Length target: 600 lines (balanced) or 1000 lines (max), ±20%.
 
-### Step 3 — Cross-model math/code review (codex 5.5 xhigh, FRESH thread)
+### Step 3 — Cross-model math/code review (codex gpt-5.6-sol xhigh, FRESH thread)
 
 Invoke `spawn_agent` with `model: gpt-5.6-sol`, `reasoning_effort: xhigh`, and a fresh thread. Do not reuse prior reviewer context.
 

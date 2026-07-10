@@ -5,7 +5,7 @@ description: "Get a deep critical review of research from Claude via claude-revi
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
 
-# Research Review via a Claude reviewer via `claude-review` MCP (ultra reasoning)
+# Research Review via `claude-review` MCP (high-rigor review)
 
 Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
 
@@ -103,7 +103,7 @@ Update project memory/notes with key review conclusions.
 
 ### Step 6: Review Tracing
 
-Save a trace for every `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, or `oracle-pro` review call following `../shared-references/review-tracing.md`. Record the reviewer route, saved agent id, prompt summary, raw response path, decisions, and action items. This preserves the Claude mainline Review Tracing semantics while using Codex-native reviewer calls.
+Save a trace for every `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, or `oracle-pro` review call following `../shared-references/review-tracing.md`. Record the reviewer route, saved threadId, prompt summary, raw response path, decisions, and action items. This preserves the Claude mainline Review Tracing semantics while using Codex-native reviewer calls.
 
 ## Key Rules
 

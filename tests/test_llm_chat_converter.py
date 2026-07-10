@@ -26,6 +26,8 @@ FIXTURES = [
     "skills/kill-argument/SKILL.md",
     "skills/interview-cheatsheet/SKILL.md",
     "skills/patent-review/SKILL.md",
+    "skills/render-html/SKILL.md",
+    "skills/auto-review-loop/SKILL.md",
 ]
 FORBIDDEN = re.compile(r"mcp__codex__|model_reasoning_effort|model_#|model:\s*[\"'`]?gpt-|model:\s*REVIEWER_MODEL")
 

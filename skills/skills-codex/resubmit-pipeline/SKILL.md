@@ -52,7 +52,7 @@ Three mandatory inputs:
 
 Optional:
 
-- **`— reviewer-model: gpt-5.4`** — override the default reviewer (`gpt-5.5`); use this for legacy reproducibility or to consume the older quota tier.
+- **`— reviewer-model: gpt-5.4`** — override the default reviewer (`gpt-5.6-sol`); use this for legacy reproducibility or to consume the older quota tier.
 - **`— rounds: <int>`** — override default 2.
 - **`— assurance: draft`** — relax MANDATORY gates (default `submission`).
 - **`— effort: balanced`** — relax `max` if time is critical.

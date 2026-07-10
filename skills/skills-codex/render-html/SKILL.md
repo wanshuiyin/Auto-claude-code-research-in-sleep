@@ -140,7 +140,7 @@ So:
 - `--template dashboard` → no review by default. Force with `--review`.
 - Phase 2 workflow auto-emit (planned) follows the same rule.
 
-**If `should_review` is true**, fire a fresh `spawn_agent` call (NEVER `send_input`) with the prompt below. The reviewer reads the source MD + generated HTML directly; it does **not** see this skill's intermediate state.
+**If `should_review` is true**, fire a fresh `spawn_agent` call (NEVER `send_input`; pin `model: gpt-5.6-sol` + `reasoning_effort: xhigh` per `../shared-references/reviewer-routing.md`) with the prompt below. The reviewer reads the source MD + generated HTML directly; it does **not** see this skill's intermediate state.
 
 **Scope of review (narrow on purpose).** The HTML reviewer audits **render fidelity / safety / structure only** — not claim truthfulness. Claim audit belongs upstream (`/paper-claim-audit`, `/research-review`, `/result-to-claim`). Specifically the reviewer checks:
 
