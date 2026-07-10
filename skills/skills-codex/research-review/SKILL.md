@@ -32,6 +32,7 @@ Send a detailed prompt with ultra reasoning:
 
 ```
 spawn_agent:
+  model: gpt-5.6-sol
   reasoning_effort: ultra
   message: |
     [Full research context + specific questions]

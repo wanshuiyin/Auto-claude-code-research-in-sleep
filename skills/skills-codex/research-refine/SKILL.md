@@ -293,6 +293,7 @@ Send the full proposal to GPT-5.6-Sol for an **elegance-first, frontier-aware, m
 
 ```
 spawn_agent:
+  model: gpt-5.6-sol
   model: REVIEWER_MODEL
   reasoning_effort: xhigh
   message: |
@@ -476,9 +477,8 @@ Send the revised proposal back to GPT-5.6-Sol in the **same agent**:
 
 ```
 send_input:
-  id: [saved from Phase 2]
-  model: REVIEWER_MODEL
-  reasoning_effort: xhigh
+  target: [saved from Phase 2]
+  # inherits the agent's model/effort — do not re-send
   message: |
     [Round N re-evaluation]
 

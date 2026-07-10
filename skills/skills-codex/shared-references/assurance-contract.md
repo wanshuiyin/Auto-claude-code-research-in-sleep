@@ -76,8 +76,8 @@ Every mandatory audit must write a JSON artifact, and may also write a Markdown 
   },
   "trace_path": ".aris/traces/paper-claim-audit/2026-04-21_run01/",
   "agent_id": "019dae73-fc12-4ab8-...",
-  "reviewer_model": "gpt-5.6-sol",
-  "reviewer_reasoning": "xhigh",
+  "reviewer_model": "<resolved — the pair that actually ran>",
+  "reviewer_reasoning": "<resolved effort>",
   "generated_at": "2026-04-21T14:23:01Z",
   "details": {}
 }

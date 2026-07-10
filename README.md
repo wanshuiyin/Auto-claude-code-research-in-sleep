@@ -534,7 +534,7 @@ All pipeline behaviors are configurable via inline overrides — append `— key
 <details>
 <summary><b>Codex MCP config + alternative reviewer routing</b> — pin the model in <code>~/.codex/config.toml</code>; pointers to Codex+Claude-review, Codex+Gemini-review, and the Codex mirror install chain</summary>
 
-**Important:** Codex MCP uses the model from `~/.codex/config.toml`, not from skill files. Make sure it says `model = "gpt-5.6-sol"` (recommended). Other options: `gpt-5.3-codex`, `gpt-5.2-codex`, `o3`. Run `codex setup` or edit the file directly.
+**Important:** ARIS skills pin the reviewer explicitly (`model: gpt-5.6-sol` + a per-tier reasoning effort) in every fresh call — your `~/.codex/config.toml` no longer silently decides the reviewer. Still set `model = "gpt-5.6-sol"` there (recommended): it covers codex-native/mirror sessions and anything that doesn't pin. `ultra`/`max` effort needs codex-cli ≥ 0.144.1 + a session restart.
 
 **Want Codex to execute but Claude Code to review?** See [`docs/CODEX_CLAUDE_REVIEW_GUIDE.md`](docs/CODEX_CLAUDE_REVIEW_GUIDE.md). That path installs the base `skills/skills-codex/*`, then overlays `skills/skills-codex-claude-review/*`, and routes review-heavy skills through the local `claude-review` MCP bridge.
 
@@ -647,7 +647,7 @@ Real projects that used the full ARIS pipeline end-to-end. **The scores listed a
 |-------|:----------------:|-------------------|----------|-------|
 | **CS Paper Submission** | [CSPaper](https://cspaper.org/) **8/10** — AI reviewer recommendation: "Top 50% of accepted papers, clear accept" | Submitted to a CS conference; awaiting official feedback | [@DefanXue](https://github.com/DefanXue) & [@Monglitay](https://github.com/Monglitay) | Full ARIS pipeline: idea → experiments → auto-review → paper writing. The quote is from CSPaper's simulated review, not an official venue review. |
 | **AAAI 2026 Paper Submission** | [Stanford Agentic Reviewer](https://paperreview.ai/) **7/10** — AI reviewer recommendation: "Good paper, accept" | Submitted to AAAI 2026 Main Technical; awaiting official decision | [@xinbo820-web](https://github.com/xinbo820-web) | Pure **Codex CLI** (ARIS-Codex skills). The 7/10 signal comes from an AAAI-style Stanford Agentic Reviewer run, not an official AAAI acceptance result. |
-| [UAV-CC](community_papers/UAV-CC.pdf) | Under review | Submitted to IEEE TGRS | [@wxx827](https://github.com/wxx827) | UAV change captioning benchmark. Claude Opus 4.6 (executor) + Codex GPT-5.6-Sol xhigh (reviewer) + Cursor Opus 4.6 (assist). [PDF →](community_papers/UAV-CC.pdf) |
+| [UAV-CC](community_papers/UAV-CC.pdf) | Under review | Submitted to IEEE TGRS | [@wxx827](https://github.com/wxx827) | UAV change captioning benchmark. Claude Opus 4.6 (executor) + Codex GPT-5.5 xhigh (reviewer) + Cursor Opus 4.6 (assist). [PDF →](community_papers/UAV-CC.pdf) |
 
 </details>
 
@@ -1337,7 +1337,7 @@ claude   # hooks active immediately
 
 ### ⚡ Effort Levels
 
-Every skill takes `— effort: lite | balanced | max | beast` — scaling breadth/depth (papers · ideas · pilots · rounds · seeds · audit depth) from ~0.4× to ~5–8×; **`balanced` is the default** (zero change for existing users). What **never** changes at any level: Codex reasoning stays `xhigh`, DBLP/CrossRef citations on, reviewer independence on, experiment integrity on. **📖 Full spec + per-skill counts → [`effort-contract.md`](skills/shared-references/effort-contract.md)**
+Every skill takes `— effort: lite | balanced | max | beast` — scaling breadth/depth (papers · ideas · pilots · rounds · seeds · audit depth) from ~0.4× to ~5–8×; **`balanced` is the default** (zero change for existing users). What **never** changes at any level: Codex reasoning stays at its tier floor (regular `xhigh`; deep audits `ultra`), DBLP/CrossRef citations on, reviewer independence on, experiment integrity on. **📖 Full spec + per-skill counts → [`effort-contract.md`](skills/shared-references/effort-contract.md)**
 
 ### Assurance Gate (effort: max | beast)
 

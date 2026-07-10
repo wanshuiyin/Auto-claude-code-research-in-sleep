@@ -361,6 +361,7 @@ Send the slide outline + selected LaTeX frames to GPT-5.6-Sol xhigh:
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     Review this [TALK_TYPE] presentation ([TALK_MINUTES] min) for [VENUE].

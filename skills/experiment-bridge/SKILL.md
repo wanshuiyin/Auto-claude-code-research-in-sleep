@@ -117,6 +117,7 @@ Before deploying, send the experiment code to GPT-5.6-Sol xhigh for review:
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     Review the following experiment implementation for correctness.

@@ -493,7 +493,7 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 <details>
 <summary><b>Codex MCP 配置 + 替代 reviewer 路由</b> —— 在 <code>~/.codex/config.toml</code> 钉模型；Codex+Claude 审稿、Codex+Gemini 审稿、Codex mirror 安装链的入口指向</summary>
 
-**重要：** Codex MCP 使用的模型取决于 `~/.codex/config.toml`，而非 skill 文件中的设置。请确认其中写的是 `model = "gpt-5.6-sol"`（推荐）。其他可用模型：`gpt-5.3-codex`、`gpt-5.2-codex`、`o3`。运行 `codex setup` 或直接编辑该文件。
+**重要：** ARIS skill 现在在每个 fresh call 里显式钉住 reviewer（`model: gpt-5.6-sol` + 按档位的 reasoning effort）——`~/.codex/config.toml` 不再静默决定 reviewer。仍建议在其中写 `model = "gpt-5.6-sol"`：它覆盖 codex 原生/mirror 会话和任何未钉住的调用。`ultra`/`max` 档需要 codex-cli ≥ 0.144.1 并重启 session。
 
 **想让 Codex 执行、Claude Code 审稿？** 见 [`docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md`](docs/CODEX_CLAUDE_REVIEW_GUIDE_CN.md)。这条路径会先安装基础 `skills/skills-codex/*`，再叠加 `skills/skills-codex-claude-review/*`，并通过本地 `claude-review` MCP bridge 转发 review-heavy skill 的审稿请求。
 
@@ -606,7 +606,7 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**所列分数
 |------|:------------:|----------|------|------|
 | **CS 论文投稿** | [CSPaper](https://cspaper.org/) **8/10** — AI 审稿建议："Top 50% of accepted papers, clear accept" | 已投 CS 会议，等待正式审稿反馈 | [@DefanXue](https://github.com/DefanXue) & [@Monglitay](https://github.com/Monglitay) | ARIS 全流程：idea → 实验 → auto-review → 论文写作。该评价来自 CSPaper 模拟审稿，不是会议官方审稿意见。 |
 | **AAAI 2026 论文投稿** | [Stanford Agentic Reviewer](https://paperreview.ai/) **7/10** — AI 审稿建议："Good paper, accept" | 已投 AAAI 2026 Main Technical，等待官方结果 | [@xinbo820-web](https://github.com/xinbo820-web) | 纯 **Codex CLI**（ARIS-Codex skills）。7/10 来自 Stanford Agentic Reviewer 的 AAAI-style 模拟审稿，不代表 AAAI 官方审稿/录用结果。 |
-| [UAV-CC](community_papers/UAV-CC.pdf) | 审稿中 | 已投 IEEE TGRS | [@wxx827](https://github.com/wxx827) | 无人机变化描述基准。Claude Opus 4.6（执行）+ Codex GPT-5.6-Sol xhigh（审阅）+ Cursor Opus 4.6（辅助）。[PDF →](community_papers/UAV-CC.pdf) |
+| [UAV-CC](community_papers/UAV-CC.pdf) | 审稿中 | 已投 IEEE TGRS | [@wxx827](https://github.com/wxx827) | 无人机变化描述基准。Claude Opus 4.6（执行）+ Codex GPT-5.5 xhigh（审阅）+ Cursor Opus 4.6（辅助）。[PDF →](community_papers/UAV-CC.pdf) |
 
 </details>
 
@@ -1168,7 +1168,7 @@ claude   # hooks 立即生效
 
 ### ⚡ Effort Levels
 
-每个 skill 都接受 `— effort: lite | balanced | max | beast` —— 调节广度/深度(论文 · idea · pilot · 轮次 · seed · 审计深度)从 ~0.4× 到 ~5–8×;**默认 `balanced`**(老用户零变化)。任何档位都**不变**:Codex reasoning 永远 `xhigh`、DBLP 引用永远开、reviewer 独立性永远开、实验诚实度永远开。**📖 完整规范 + 各 skill 计数 → [`effort-contract.md`](skills/shared-references/effort-contract.md)**
+每个 skill 都接受 `— effort: lite | balanced | max | beast` —— 调节广度/深度(论文 · idea · pilot · 轮次 · seed · 审计深度)从 ~0.4× 到 ~5–8×;**默认 `balanced`**(老用户零变化)。任何档位都**不变**:Codex reasoning 不低于档位下限（常规 `xhigh`、深度审计 `ultra`）、DBLP 引用永远开、reviewer 独立性永远开、实验诚实度永远开。**📖 完整规范 + 各 skill 计数 → [`effort-contract.md`](skills/shared-references/effort-contract.md)**
 
 <a id="-optional-gpt-54-pro-via-oracle"></a>
 

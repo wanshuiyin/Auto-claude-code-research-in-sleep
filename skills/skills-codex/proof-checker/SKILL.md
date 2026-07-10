@@ -471,8 +471,8 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "gpt-5.6-sol",
-  "reviewer_reasoning": "xhigh",
+  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "theorems_audited": <int>,

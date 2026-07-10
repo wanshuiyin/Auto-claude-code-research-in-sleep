@@ -648,7 +648,7 @@ A deep-fix-only failure must never contaminate the default proof-check output. A
 
 Verifier gates MUST treat `unavailable` identically to the field being absent: not blocking. Do **not** add a `UNCLEAR_DEEP_FIX` (or any deep-fix-only) entry into `details.issues`, since `details.issues` is the default schema's issue list and adding deep-fix-specific failures to it would change default behavior for callers without the flag.
 
-If the augmented Phase 1 call fails so badly that the normal proof review cannot be recovered (e.g., the reviewer thread itself errored), retry once with the unaugmented prompt; if that also fails, fall through to the existing reviewer-failure path that maps to the top-level `ERROR` verdict.
+If the augmented Phase 1 call fails so badly that the normal proof review cannot be recovered (e.g., the reviewer thread itself errored), retry once with the unaugmented prompt **only when the error proves the call never executed** (schema/validation or explicit capability error per the fallback chain in `reviewer-routing.md`); on timeout, rate-limit, transport, or server errors do NOT blind-retry (the review may have run — double-running double-bills), fall through directly to the existing reviewer-failure path that maps to the top-level `ERROR` verdict.
 
 ## Key Rules
 
@@ -724,8 +724,8 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "gpt-5.6-sol",
-  "reviewer_reasoning": "ultra",
+  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "theorems_audited": <int>,

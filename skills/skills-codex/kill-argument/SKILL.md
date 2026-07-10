@@ -266,8 +266,8 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
   "agent_id": "<defense agent_id — primary; attack agent_id in details>",
-  "reviewer_model": "gpt-5.6-sol",
-  "reviewer_reasoning": "ultra",
+  "reviewer_model": "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at": "<UTC ISO-8601>",
   "details": {
     "attack_agent_id": "<agent_id 1>",

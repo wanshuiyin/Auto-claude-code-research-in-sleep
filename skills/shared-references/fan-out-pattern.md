@@ -287,7 +287,7 @@ Two invariants keep a fan-out from manufacturing or laundering errors:
 ## Cross-references
 
 - **`reviewer-routing.md`** — jury backend selection. The cross-model
-  jury step routes through Codex MCP (`gpt-5.6-sol`, `xhigh`) by default, or
+  jury step routes through Codex MCP (`gpt-5.6-sol`, at the call's tier — deep-audit `ultra` / regular `xhigh`) by default, or
   Oracle MCP (`gpt-5.5-pro`) under `— reviewer: oracle-pro`. Fan-out
   tier never changes the jury backend.
 - **`reviewer-independence.md`** — the jury call receives **file paths

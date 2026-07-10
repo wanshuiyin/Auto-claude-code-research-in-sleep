@@ -287,7 +287,7 @@ A core ARIS invariant: **the executor must not judge its own integrity**. Three 
 | 2 | [`/result-to-claim`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/result-to-claim/SKILL.md) | "Does the claim scientifically follow from the result?" | After results, before writing |
 | 3 | [`/paper-claim-audit`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/paper-claim-audit/SKILL.md) | "Does the paper *report* the numbers truthfully?" (fresh zero-context reviewer) | Before submission |
 
-Plus [`/citation-audit`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/citation-audit/SKILL.md) (4th layer): every `\cite{...}` validated for existence, metadata, **and** context-appropriateness — the most diagnostic check ("does the cited paper actually establish this claim?"). And [`/kill-argument`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/kill-argument/SKILL.md) (5th layer): two fresh codex 5.5 + xhigh threads write the strongest 200-word rejection memo and an independent adjudicator pass before submission.
+Plus [`/citation-audit`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/citation-audit/SKILL.md) (4th layer): every `\cite{...}` validated for existence, metadata, **and** context-appropriateness — the most diagnostic check ("does the cited paper actually establish this claim?"). And [`/kill-argument`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/kill-argument/SKILL.md) (5th layer): two fresh codex gpt-5.6-sol + ultra threads write the strongest 200-word rejection memo and an independent adjudicator pass before submission.
 
 ---
 

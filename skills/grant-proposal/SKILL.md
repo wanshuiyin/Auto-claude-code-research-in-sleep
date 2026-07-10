@@ -479,7 +479,7 @@ then keep the Codex MCP prompt short:
 ```
 mcp__codex__codex-reply:
   threadId: [from Phase 2]
-  config: {"model_reasoning_effort": "xhigh"}
+  # inherits the thread's model/effort — do not re-send
   prompt: |
     Read the grant review bundle at <absolute path to
     grant-proposal/codex_panel_review_bundle_round_1.md> and follow all
@@ -522,7 +522,7 @@ same short MCP prompt pattern:
 ```
 mcp__codex__codex-reply:
   threadId: [saved from Round 1]
-  config: {"model_reasoning_effort": "xhigh"}
+  # inherits the thread's model/effort — do not re-send
   prompt: |
     Read the grant review bundle at <absolute path to
     grant-proposal/codex_panel_review_bundle_round_N.md> and follow all

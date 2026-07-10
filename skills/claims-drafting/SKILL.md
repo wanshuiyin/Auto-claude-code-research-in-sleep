@@ -136,6 +136,7 @@ Call `REVIEWER_MODEL` via `mcp__codex__codex` with xhigh reasoning:
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are a senior patent examiner at the [USPTO/CNIPA/EPO].

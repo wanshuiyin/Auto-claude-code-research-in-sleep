@@ -431,6 +431,7 @@ If `/research-review` is invoked (preferred), it handles the external review int
 
 ```
 spawn_agent:
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     Review this complete [GRANT_TYPE] [GRANT_SUBTYPE] proposal draft.

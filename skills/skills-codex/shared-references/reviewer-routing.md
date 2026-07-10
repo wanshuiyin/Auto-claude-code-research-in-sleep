@@ -16,7 +16,7 @@ All reviewer-heavy Codex base skills use the same default contract:
 
 This is the base default for `skills/skills-codex/`. No ARIS `— effort:` level or unrelated parameter changes the tier (ARIS `— effort: max` ≠ `reasoning_effort: max` — pipeline workload vs reviewer reasoning are different axes).
 
-**Capability fallback (first spawn of each tier only):** if `spawn_agent` errors explicitly on the effort enum (older codex-cli), retry `reasoning_effort: xhigh`; if it errors explicitly on the model being unknown/unavailable to this account, retry `model: gpt-5.5` + `xhigh`. NEVER downgrade on timeout / rate-limit / auth / transport / server / context-length errors (risk of double-running). Never run a verdict-bearing review below `xhigh`; if no allowed pair works, report `REVIEW_UNAVAILABLE` — never substitute the executor's own judgment.
+**Capability fallback (first spawn of each tier only):** if `spawn_agent` errors explicitly on the effort enum (older codex-cli — applies only to the deep tier's `ultra`; `xhigh` predates 0.144.1), retry `reasoning_effort: xhigh`; if it errors explicitly on the model being unknown/unavailable to this account, retry `model: gpt-5.5` + `xhigh`. NEVER downgrade on timeout / rate-limit / auth / transport / server / context-length errors (risk of double-running). Never run a verdict-bearing review below `xhigh`; if no allowed pair works, report `REVIEW_UNAVAILABLE` — never substitute the executor's own judgment.
 
 > ⚠️ **Same-family by default — Type-A only, NOT a cross-family verdict.** The executor here is Codex (GPT family) and this default reviewer is a *second Codex agent* — same family. That is a valid **Type-A** review (it finds omissions, ranks weaknesses, drives the fix loop), but it is **NOT** the cross-model **Type-B acquittal** ARIS's invariant requires — one model family judging itself voids the verdict (mainline `acceptance-gate.md`). For a Type-B cross-family verdict, install the **`skills-codex-claude-review`** or **`skills-codex-gemini-review`** overlay (the only genuinely cross-family reviewers for a Codex executor). Note `oracle-pro` (gpt-5.x-pro) is **also GPT family**, so it does NOT cross the family boundary for a Codex executor either.
 
@@ -56,14 +56,14 @@ send_input:
 
 When the user explicitly passes `--reviewer: oracle-pro`, switch only the reviewer route:
 
-- default reviewer remains Codex xhigh if no reviewer is specified
+- default reviewer remains Codex at the call's declared tier (deep-audit: ultra / regular: xhigh) if no reviewer is specified
 - `oracle-pro` is optional, not the base default
 
 Routing rule:
 
 ```text
 If reviewer is omitted or reviewer=codex:
-  use spawn_agent / send_input with Codex reviewer at xhigh
+  use spawn_agent / send_input with the Codex reviewer at the call's declared tier
 
 If reviewer=oracle-pro:
   check Oracle MCP availability
@@ -71,7 +71,7 @@ If reviewer=oracle-pro:
     call mcp__oracle__consult with model gpt-5.5-pro
   if unavailable:
     print a clear warning
-    fall back to the default Codex xhigh reviewer
+    fall back to the default Codex reviewer at the call's declared tier
 ```
 
 ## Invariants

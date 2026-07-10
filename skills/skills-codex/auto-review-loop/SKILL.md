@@ -97,6 +97,7 @@ Send comprehensive context to the external reviewer:
 
 ```
 spawn_agent:
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     [Round N/MAX_ROUNDS of autonomous review loop]
@@ -326,7 +327,7 @@ When loop ends (positive assessment or max rounds):
 2. Write final summary to `review-stage/AUTO_REVIEW.md`
 3. Update project notes with conclusions
 4. **Write method/pipeline description** to `review-stage/AUTO_REVIEW.md` under a `## Method Description` section — a concise 1-2 paragraph summary of the final method, architecture, and data flow. This serves as direct input for `/paper-illustration`.
-5. **Generate claims from results** — invoke `/result-to-claim` to convert experiment results from `review-stage/AUTO_REVIEW.md` into structured paper claims. Output: `CLAIMS_FROM_RESULTS.md`. If `/result-to-claim` is unavailable, skip silently.
+5. **Generate claims from results** — invoke `/result-to-claim` to convert experiment results from `review-stage/AUTO_REVIEW.md` into structured paper claims. Output: `CLAIMS_FROM_RESULTS.md`. If `/result-to-claim` is unavailable, skip silently. If it ran but its output starts with `verdict: REVIEW_UNAVAILABLE`, keep that file AS-IS (do not overwrite or paraphrase it) and record in `AUTO_REVIEW.md` that claims are UNADJUDICATED — downstream paper stages must not treat them as validated.
 6. If stopped at max rounds without positive assessment:
    - List remaining blockers
    - Estimate effort needed for each
@@ -362,8 +363,8 @@ When loop ends (positive assessment or max rounds):
 
 ```
 send_input:
-  id: [saved from round 1]
-  reasoning_effort: xhigh
+  target: [saved from round 1]
+  # inherits the agent's model/effort — do not re-send
   message: |
     [Round N update]
 

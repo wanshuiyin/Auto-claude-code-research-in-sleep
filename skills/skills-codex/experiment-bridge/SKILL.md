@@ -115,6 +115,7 @@ Before deploying, send the experiment code to a secondary Codex reviewer with xh
 
 ```text
 spawn_agent:
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     Review the following experiment implementation for correctness.

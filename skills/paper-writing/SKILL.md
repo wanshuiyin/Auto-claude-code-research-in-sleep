@@ -195,6 +195,7 @@ contract is what gets graded.)
 
    ```
    mcp__codex__codex:
+     model: gpt-5.6-sol
      config: {"model_reasoning_effort": "xhigh"}
      prompt: |
        You are negotiating the acceptance contract for a paper BEFORE it is

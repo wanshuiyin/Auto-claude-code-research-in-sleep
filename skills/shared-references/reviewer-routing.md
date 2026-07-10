@@ -19,7 +19,7 @@ All review calls use **Codex MCP** (`mcp__codex__codex`), model **`gpt-5.6-sol`*
 
 Resolve the reviewer pair on the **first new Codex session of each tier** in a run, then reuse that resolved pair for later sessions of the same tier. Try the declared pair first (`gpt-5.6-sol` + `ultra` for deep-audit; `gpt-5.6-sol` + `xhigh` for regular). Then:
 
-- Only if the call fails **before returning a usable thread** AND the error **explicitly identifies the requested effort as unsupported** (older codex-cli): retry `gpt-5.6-sol` + `xhigh`.
+- Only if the call fails **before returning a usable thread** AND the error **explicitly identifies the requested effort as unsupported** (older codex-cli): retry `gpt-5.6-sol` + `xhigh`. (This step exists only for the deep tier's `ultra` — a regular-tier `xhigh` call skips it; `xhigh` predates 0.144.1.)
 - Only if the error **explicitly identifies `gpt-5.6-sol` as unknown or unavailable** to this account/plan: retry `gpt-5.5` + `xhigh` (skip redundant intermediate steps).
 - **NEVER downgrade on** timeout, rate-limit/capacity, authentication, transport/protocol, server, sandbox/tool, context-length, malformed-request, or response-parse errors — a blind downgrade retry there risks double-running (and double-billing) a review that may have gone through.
 - **Never run a verdict-bearing review below `xhigh`.** `gpt-5.4` is available only as an explicit user override for legacy/repro runs — it is NOT part of the automatic chain.
@@ -56,7 +56,7 @@ If `— reviewer: oracle-pro`:
         Note: Oracle may use API mode (fast, needs OPENAI_API_KEY)
               or browser mode (slow ~1-2 min, needs Chrome + ChatGPT login)
     → If NOT available:
-        Print: "⚠️ Oracle MCP not installed. Falling back to Codex xhigh."
+        Print: "⚠️ Oracle MCP not installed. Falling back to Codex at this call's declared tier."
         Use mcp__codex__codex as normal.
 ```
 
@@ -158,7 +158,7 @@ claude mcp add gemini-review --env GEMINI_REVIEW_BACKEND=agy -- python3 <path>/m
 
 ### NOT installed = ZERO impact
 
-If the gemini-review (agy) MCP isn't configured, `— reviewer: agy` gracefully falls back to Codex xhigh. No error, no breakage, just a warning.
+If the gemini-review (agy) MCP isn't configured, `— reviewer: agy` gracefully falls back to Codex at the call's declared tier (deep-audit: ultra / regular: xhigh). No error, no breakage, just a warning.
 
 ## Optional: Manual Review (any model, zero API cost)
 

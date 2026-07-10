@@ -2,7 +2,7 @@
 
 > **For AI agents reading this repo cold.** If you are a human, see [README.md](README.md) or [docs/ARIS_INTRO.html](https://wanshuiyin.github.io/Auto-claude-code-research-in-sleep/ARIS_INTRO.html).
 
-ARIS is a research harness: composable Markdown skills that orchestrate the ML research lifecycle through cross-model adversarial collaboration. Executor (Claude / Codex / Cursor / Antigravity / Copilot CLI) writes code & papers; reviewer (GPT-5.5 via Codex MCP, or Claude / Gemini via `claude-review` / `gemini-review` MCP) critiques in fresh threads.
+ARIS is a research harness: composable Markdown skills that orchestrate the ML research lifecycle through cross-model adversarial collaboration. Executor (Claude / Codex / Cursor / Antigravity / Copilot CLI) writes code & papers; reviewer (GPT-5.6-Sol via Codex MCP, or Claude / Gemini via `claude-review` / `gemini-review` MCP) critiques in fresh threads.
 
 > **Source of Truth.** This file is a *routing index*, not a specification.
 > Behavior of a skill lives in `skills/<name>/SKILL.md`. System-wide
@@ -166,7 +166,7 @@ Advisory CI lint at `.github/workflows/lint-skills-helpers.yml` flags hardcoded 
 ## Cross-Model Protocol
 
 - **Executor** (Claude / Codex / Cursor / Antigravity / Copilot): writes code, runs experiments, drafts papers
-- **Reviewer** (GPT-5.5 via Codex MCP, default; or Claude / Gemini via `*-review` MCP overlays): critiques, scores, demands revisions
+- **Reviewer** (GPT-5.6-Sol via Codex MCP, default; or Claude / Gemini via `*-review` MCP overlays): critiques, scores, demands revisions
 - **Rule**: executor and reviewer **must** be different model families. Same-family review is a non-feature.
 - **Reviewer independence**: pass file paths only, never summaries or interpretations
 - **Thread freshness**: every reviewer call uses `mcp__codex__codex` (or equivalent), **never** `codex-reply` — narrative accumulation inflates scores

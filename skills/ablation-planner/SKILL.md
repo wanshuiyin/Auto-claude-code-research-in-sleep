@@ -31,6 +31,7 @@ CC reads available project files to build the full picture:
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are a rigorous ML reviewer planning ablation studies.

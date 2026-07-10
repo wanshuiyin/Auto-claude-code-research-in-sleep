@@ -216,6 +216,7 @@ Run all lints:
 
 ```
 spawn_agent:
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     Stress-test this rebuttal draft:

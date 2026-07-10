@@ -12,7 +12,7 @@ Get a multi-round critical review of research work from an external LLM with max
 ## Constants
 
 - **REVIEWER_MODEL = `claude-review`** — Claude reviewer invoked through the local `claude-review` MCP bridge. Set `CLAUDE_REVIEW_MODEL` if you need a specific Claude model override.
-- **REVIEWER_BACKEND = `codex`** — Default: Codex ultra reviewer (deep-audit tier). Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and fall back to Codex xhigh. **Same-family note:** this default reviewer is a second Codex/GPT agent — valid for Type-A completeness/drive review, but not a cross-family Type-B verdict; install a `skills-codex-claude-review` / `skills-codex-gemini-review` overlay for a cross-family acquittal (see `shared-references/reviewer-routing.md`).
+- **REVIEWER_BACKEND = `claude-review`** — reviews route through the claude-review MCP (Claude family; cross-family for a Codex executor).
 
 ## Context: $ARGUMENTS
 
@@ -60,7 +60,7 @@ Use `mcp__claude-review__review_reply_start` with the saved completed `threadId`
 
 ```
 mcp__claude-review__review_reply_start:
-  target: [saved reviewer id from Step 2]
+  threadId: [saved reviewer id from Step 2]
   prompt: |
     Please continue the review using the revised materials below.
 
@@ -103,7 +103,7 @@ Update project memory/notes with key review conclusions.
 
 ### Step 6: Review Tracing
 
-Save a trace for every `spawn_agent`, `send_input`, or `oracle-pro` review call following `../shared-references/review-tracing.md`. Record the reviewer route, saved agent id, prompt summary, raw response path, decisions, and action items. This preserves the Claude mainline Review Tracing semantics while using Codex-native reviewer calls.
+Save a trace for every `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, or `oracle-pro` review call following `../shared-references/review-tracing.md`. Record the reviewer route, saved agent id, prompt summary, raw response path, decisions, and action items. This preserves the Claude mainline Review Tracing semantics while using Codex-native reviewer calls.
 
 ## Key Rules
 

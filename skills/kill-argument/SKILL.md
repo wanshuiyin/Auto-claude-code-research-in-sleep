@@ -272,7 +272,7 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: gpt-5.6-sol ultra, fresh threads (no codex-reply)
+**Reviewer model**: <resolved pair that actually ran — target gpt-5.6-sol ultra>, fresh threads (no codex-reply)
 **Attack thread**: <threadId 1>
 **Adjudicator thread**: <threadId 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
@@ -318,8 +318,8 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
   "thread_id": "<defense threadId — primary; attack threadId in details>",
-  "reviewer_model": "gpt-5.6-sol",
-  "reviewer_reasoning": "ultra",
+  "reviewer_model": "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at": "<UTC ISO-8601>",
   "details": {
     "attack_thread_id": "<threadId 1>",

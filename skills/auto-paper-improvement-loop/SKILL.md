@@ -430,7 +430,7 @@ Run this only if the paper is theory-heavy (≥5 `\begin{theorem}|\begin{lemma}|
 
 ```bash
 # Invoke the canonical adversarial-review primitive on the current paper.
-# /kill-argument runs two fresh-thread codex 5.5 xhigh calls and writes
+# /kill-argument runs two fresh-thread codex gpt-5.6-sol ultra calls and writes
 # KILL_ARGUMENT.{md,json} into the paper directory. It is detect-only —
 # it never edits the paper itself.
 /kill-argument "$PAPER_DIR"

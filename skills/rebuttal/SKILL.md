@@ -266,6 +266,7 @@ Use the selected backend. *For codex:*
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     Stress-test this rebuttal draft:

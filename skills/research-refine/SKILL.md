@@ -325,6 +325,7 @@ keep the MCP prompt short:
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   model: REVIEWER_MODEL
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
@@ -521,8 +522,7 @@ that bundle file.
 ```
 mcp__codex__codex-reply:
   threadId: [saved from Phase 2]
-  model: REVIEWER_MODEL
-  config: {"model_reasoning_effort": "xhigh"}
+  # inherits the thread's model/effort — do not re-send
   prompt: |
     Read the re-evaluation bundle at <absolute path to
     refine-logs/codex_round_N_review_bundle.md> and follow all instructions in

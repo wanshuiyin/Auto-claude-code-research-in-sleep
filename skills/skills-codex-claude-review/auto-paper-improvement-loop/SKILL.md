@@ -19,7 +19,7 @@ Unlike `/auto-review-loop` (which iterates on **research** — running experimen
 
 - **MAX_ROUNDS = 2** — Two rounds of review→fix→recompile. Empirically, Round 1 catches structural issues (4→6/10), Round 2 catches remaining presentation issues (6→7/10). Diminishing returns beyond 2 rounds for writing-only improvements.
 - **REVIEWER_MODEL = `claude-review`** — Claude reviewer invoked through the local `claude-review` MCP bridge. Set `CLAUDE_REVIEW_MODEL` if you need a specific Claude model override.
-- **REVIEWER_BIAS_GUARD = true** — When `true`, every review round uses a fresh `spawn_agent` reviewer with no prior review context. Do not use stale self-reported context for review rounds. Set to `false` only for deliberate debugging of the legacy behavior. **Empirical evidence:** running the same paper with continuation replies plus "since last round we did X" prompts inflated scores from real 3/10 → fake 8/10 across multiple rounds; switching to fresh threads recovered the true 3/10 assessment.
+- **REVIEWER_BIAS_GUARD = true** — When `true`, every review round uses a fresh `mcp__claude-review__review_start` reviewer with no prior review context. Do not use stale self-reported context for review rounds. Set to `false` only for deliberate debugging of the legacy behavior. **Empirical evidence:** running the same paper with continuation replies plus "since last round we did X" prompts inflated scores from real 3/10 → fake 8/10 across multiple rounds; switching to fresh threads recovered the true 3/10 assessment.
 - **REVIEW_LOG = `PAPER_IMPROVEMENT_LOG.md`** — Cumulative log of all rounds, stored in paper directory.
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review and present score + weaknesses to the user. The user can approve fixes, provide custom modification instructions, skip specific fixes, or stop early. When `false` (default), runs fully autonomously.
 - **EDIT_WHITELIST = `null`** — Optional path to a YAML/JSON whitelist file constraining which paths and operations the fix-implementation step may touch. When `null` (default), all edits proceed unconstrained. When set via `— edit-whitelist <path>` (also accepts `— edit_whitelist <path>`), the loop loads the file at startup and consults it before each edit; rejected edits are logged to `PAPER_IMPROVEMENT_LOG.md` rather than silently dropped. See "Optional: Edit Whitelist" below.
@@ -160,7 +160,7 @@ If the context window fills up mid-loop, Claude Code auto-compacts. To recover, 
 The reviewer must be context-naive on every round. Prior-round summaries, fix lists, and executor explanations are not evidence; they are a source of confirmation bias. If the reviewer is told what changed, scores tend to drift upward even when the manuscript itself has not materially improved.
 
 Rules:
-- Every round starts with a fresh `spawn_agent` reviewer call, not a stale continuation prompt.
+- Every round starts with a fresh `mcp__claude-review__review_start` reviewer call, not a stale continuation prompt.
 - Never pass a prior agent_id into the next review prompt.
 - Never include "since last round", "we fixed", "after applying", or any fix summary in the reviewer prompt.
 - The only acceptable evidence of improvement is the current `.tex` source and compiled PDF.
@@ -320,7 +320,7 @@ PY
 
 ### Step 5: Round 2 Review
 
-If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `spawn_agent` reviewer for Round 2. Do not ask the reviewer to reward the Round 1 fix summary for prompting. Save the returned agent_id only for recovery bookkeeping.
+If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__claude-review__review_start` reviewer for Round 2. Do not ask the reviewer to reward the Round 1 fix summary for prompting. Save the returned agent_id only for recovery bookkeeping.
 
 ```
 mcp__claude-review__review_start:
@@ -358,7 +358,7 @@ mcp__claude-review__review_start:
 
 After this start call, immediately save the returned `jobId` and poll `mcp__claude-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the reviewer output, and save the completed `threadId` for any follow-up round.
 
-If `REVIEWER_BIAS_GUARD = false` (legacy debugging only), use `send_input` with the saved reviewer id; this is **not** the recommended path.
+If `REVIEWER_BIAS_GUARD = false` (legacy debugging only), use `mcp__claude-review__review_reply_start` with the saved reviewer id; this is **not** the recommended path.
 
 ### Step 5.5: Kill Argument Exercise (theory / scope-heavy papers only)
 
@@ -548,8 +548,8 @@ paper/
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - **Preserve all PDF versions** — user needs to compare progression
-- **Save FULL raw review text** — do not summarize or truncate GPT-5.6-Sol responses
-- **Reviewer independence (Round 2+)**: when `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `spawn_agent` reviewer for every review round; never use stale reviewer continuation and never include "since last round" / fix summaries in the prompt. See the Reviewer Independence Protocol section above.
+- **Save FULL raw review text** — do not summarize or truncate Claude responses
+- **Reviewer independence (Round 2+)**: when `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__claude-review__review_start` reviewer for every review round; never use stale reviewer continuation and never include "since last round" / fix summaries in the prompt. See the Reviewer Independence Protocol section above.
 - **Always recompile after fixes** — verify 0 errors before proceeding
 - **Do not fabricate experimental results** — synthetic validation must describe methodology, not invent numbers
 - **Respect the paper's claims** — soften overclaims rather than adding unsupported new claims
@@ -571,4 +571,4 @@ Based on end-to-end testing on a real theory-paper run:
 
 ## Review Tracing
 
-After each `spawn_agent`, `send_input`, or adversarial reviewer call, save the trace following `../shared-references/review-tracing.md`. Write files directly to `.aris/traces/auto-paper-improvement-loop/<date>_run<NN>/`. Respect the `--- trace:` parameter when present (default: `full`).
+After each `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, or adversarial reviewer call, save the trace following `../shared-references/review-tracing.md`. Write files directly to `.aris/traces/auto-paper-improvement-loop/<date>_run<NN>/`. Respect the `--- trace:` parameter when present (default: `full`).

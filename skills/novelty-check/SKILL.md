@@ -49,6 +49,7 @@ description, core claims, candidate papers, and the exact questions below, then
 send only the file path:
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     Read the novelty dossier at <absolute path to NOVELTY_DOSSIER.md> and

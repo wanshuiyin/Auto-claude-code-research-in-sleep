@@ -51,7 +51,10 @@ if [ -n "$TRACE_HELPER" ]; then
   bash "$TRACE_HELPER" \
     --skill "<skill-name>" \
     --purpose "<purpose>" \
-    --model "<model>" \
+    --model "<model that actually ran — the RESOLVED pair, not the target>" \
+    --effort "<effort that actually ran>" \
+    --fallback-reason "<why the capability chain stepped down; empty when it didn't>" \
+    --status "<ok | fallback_used | error>" \
     --thread-id "<threadId from response>" \
     --prompt "<full prompt as sent>" \
     --response "<full response content>"

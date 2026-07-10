@@ -73,7 +73,8 @@ Only escalate to Codex when the signal is ambiguous. For clearly good or clearly
 
 ```
 mcp__codex__codex:
-  config: {"model_reasoning_effort": "high"}
+  model: gpt-5.6-sol
+  config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     TRAINING HEALTH CHECK — need your judgment on ambiguous metrics.
 

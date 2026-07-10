@@ -75,6 +75,10 @@ def normalize_description(text: str) -> str:
     text = text.replace("GPT using a secondary Codex agent", "Claude via claude-review MCP")
     text = text.replace("using a secondary Codex agent", "using Claude Code via claude-review MCP")
     text = text.replace("via GPT-5.6-Sol xhigh review", "via Claude review through claude-review MCP")
+    text = text.replace("(Codex GPT-5.6-Sol ultra)", "(Claude via claude-review MCP)")
+    text = text.replace("(Codex GPT-5.6-Sol xhigh)", "(Claude via claude-review MCP)")
+    text = text.replace("iterative GPT-5.6-Sol review", "iterative Claude review")
+    text = text.replace("GPT-5.6-Sol", "Claude")
     text = text.replace("via GPT-5.6-Sol ultra review", "via Claude review through claude-review MCP")
     text = text.replace("via GPT-5.5 xhigh review", "via Claude review through claude-review MCP")
     return text
@@ -107,6 +111,9 @@ def rewrite_send_block(match: re.Match[str]) -> str:
             out.append(line)
             continue
         if stripped.startswith("model:") or stripped.startswith("reasoning_effort:"):
+            continue
+        if stripped.startswith("target:"):
+            out.append(line.replace("target:", "threadId:", 1))
             continue
         if stripped.startswith("id:"):
             out.append(line.replace("id:", "threadId:", 1))
@@ -169,9 +176,17 @@ def transform_body(text: str) -> str:
     text = text.replace('"agent_id"', '"thread_id"')
     text = text.replace("ALWAYS use `reasoning_effort: xhigh` for reviews", "Always ask the Claude reviewer for strict, high-rigor feedback.")
     text = text.replace("ALWAYS use `reasoning_effort: xhigh` for maximum reasoning depth", "Always ask the Claude reviewer for strict, high-rigor feedback.")
-    text = text.replace("mcp__codex__codex", "mcp__claude-review__review_start")
     text = text.replace("mcp__codex__codex-reply", "mcp__claude-review__review_reply_start")
+    text = text.replace("mcp__codex__codex", "mcp__claude-review__review_start")
     text = re.sub(r"^-\s+\*{0,2}REVIEWER_MODEL.*$", REVIEWER_LINE, text, flags=re.MULTILINE)
+    text = re.sub(r"^-\s+\*{0,2}REVIEWER_BACKEND.*$",
+                  "- **REVIEWER_BACKEND = `claude-review`** — reviews route through the claude-review MCP (Claude family; cross-family for a Codex executor).",
+                  text, flags=re.MULTILINE)
+    text = text.replace("GPT-5.6-Sol", "Claude")
+    text = text.replace("gpt-5.6-sol", "the claude-review model")
+    # generic prose mop-up — AFTER all longer specific rows
+    text = text.replace("`spawn_agent`", "`mcp__claude-review__review_start`")
+    text = text.replace("`send_input`", "`mcp__claude-review__review_reply_start`")
     text = re.sub(
         r"## Prerequisites\n\n(?:- .*\n)+",
         PREREQ_BLOCK + "\n\n",

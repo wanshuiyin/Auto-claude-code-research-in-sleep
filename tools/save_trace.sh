@@ -35,7 +35,7 @@ set -euo pipefail
 
 # --- Parse arguments ---
 SKILL="" PURPOSE="" MODEL="" THREAD_ID="" PROMPT="" RESPONSE=""
-PROMPT_FILE="" RESPONSE_FILE="" TRACE_MODE="${ARIS_TRACE_MODE:-full}" EFFORT="" FALLBACK_REASON=""
+PROMPT_FILE="" RESPONSE_FILE="" TRACE_MODE="${ARIS_TRACE_MODE:-full}" EFFORT="" FALLBACK_REASON="" STATUS="ok"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -44,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     --model)       MODEL="$2";         shift 2 ;;
     --effort)      EFFORT="$2";        shift 2 ;;
     --fallback-reason) FALLBACK_REASON="$2"; shift 2 ;;
+    --status)      STATUS="$2";        shift 2 ;;
     --thread-id)   THREAD_ID="$2";     shift 2 ;;
     --prompt)      PROMPT="$2";        shift 2 ;;
     --response)    RESPONSE="$2";      shift 2 ;;
@@ -106,7 +107,7 @@ METAEOF
 fi
 
 # --- Determine call number ---
-CALL_NUM=$(ls "${RUN_DIR}/"*.request.json 2>/dev/null | wc -l | tr -d ' ')
+CALL_NUM=$(find "$RUN_DIR" -maxdepth 1 -name '*.request.json' 2>/dev/null | wc -l | tr -d ' ')
 CALL_NUM=$((CALL_NUM + 1))
 CALL_PREFIX=$(printf '%03d' $CALL_NUM)
 TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -114,53 +115,71 @@ TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # --- Write request ---
 if [[ "$TRACE_MODE" == "full" ]]; then
   # Write full prompt
-  python3 -c "
-import json, sys
+  # values pass via env — never interpolated into python source (quote/injection safety)
+  ST_CALL_NUM="$CALL_NUM" ST_PURPOSE="$PURPOSE" ST_TIMESTAMP="$TIMESTAMP" \
+  ST_MODEL="$MODEL" ST_EFFORT="$EFFORT" ST_FALLBACK="$FALLBACK_REASON" ST_STATUS="$STATUS" \
+  ST_OUT="${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.request.json" python3 -c '
+import json, os, sys
+e = os.environ
 data = {
-    'call_number': ${CALL_NUM},
-    'purpose': '${PURPOSE}',
-    'timestamp': '${TIMESTAMP}',
-    'tool': 'mcp__codex__codex',
-    'model': '${MODEL}',
-    'effort': '${EFFORT}',
-    'fallback_reason': '${FALLBACK_REASON}',
-    'prompt': sys.stdin.read()
+    "call_number": int(e["ST_CALL_NUM"]),
+    "purpose": e["ST_PURPOSE"],
+    "timestamp": e["ST_TIMESTAMP"],
+    "tool": "mcp__codex__codex",
+    "model": e["ST_MODEL"],
+    "effort": e["ST_EFFORT"],
+    "fallback_reason": e["ST_FALLBACK"],
+    "status": e["ST_STATUS"],
+    "prompt": sys.stdin.read(),
 }
-json.dump(data, open('${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.request.json', 'w'), indent=2, ensure_ascii=False)
-" <<< "$PROMPT"
+json.dump(data, open(e["ST_OUT"], "w"), indent=2, ensure_ascii=False)
+' <<< "$PROMPT"
 
   # Write full response
   printf '%s' "$RESPONSE" > "${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.response.md"
 else
   # Meta-only mode: no prompt/response content
-  python3 -c "
-import json
+  ST_CALL_NUM="$CALL_NUM" ST_PURPOSE="$PURPOSE" ST_TIMESTAMP="$TIMESTAMP" \
+  ST_MODEL="$MODEL" ST_EFFORT="$EFFORT" ST_FALLBACK="$FALLBACK_REASON" ST_STATUS="$STATUS" \
+  ST_PLEN="${#PROMPT}" ST_RLEN="${#RESPONSE}" \
+  ST_OUT="${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.request.json" python3 -c '
+import json, os
+e = os.environ
 data = {
-    'call_number': ${CALL_NUM},
-    'purpose': '${PURPOSE}',
-    'timestamp': '${TIMESTAMP}',
-    'tool': 'mcp__codex__codex',
-    'model': '${MODEL}',
-    'prompt_length': ${#PROMPT},
-    'response_length': ${#RESPONSE}
+    "call_number": int(e["ST_CALL_NUM"]),
+    "purpose": e["ST_PURPOSE"],
+    "timestamp": e["ST_TIMESTAMP"],
+    "tool": "mcp__codex__codex",
+    "model": e["ST_MODEL"],
+    "effort": e["ST_EFFORT"],
+    "fallback_reason": e["ST_FALLBACK"],
+    "status": e["ST_STATUS"],
+    "prompt_length": int(e["ST_PLEN"]),
+    "response_length": int(e["ST_RLEN"]),
 }
-json.dump(data, open('${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.request.json', 'w'), indent=2)
-"
+json.dump(data, open(e["ST_OUT"], "w"), indent=2)
+' 
 fi
 
 # --- Write response metadata ---
-python3 -c "
-import json
+ST_CALL_NUM="$CALL_NUM" ST_PURPOSE="$PURPOSE" ST_TIMESTAMP="$TIMESTAMP" \
+ST_THREAD="$THREAD_ID" ST_MODEL="$MODEL" ST_EFFORT="$EFFORT" \
+ST_FALLBACK="$FALLBACK_REASON" ST_STATUS="$STATUS" \
+ST_OUT="${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.meta.json" python3 -c '
+import json, os
+e = os.environ
 data = {
-    'call_number': ${CALL_NUM},
-    'purpose': '${PURPOSE}',
-    'timestamp': '${TIMESTAMP}',
-    'thread_id': '${THREAD_ID}',
-    'model': '${MODEL}',
-    'status': 'ok'
+    "call_number": int(e["ST_CALL_NUM"]),
+    "purpose": e["ST_PURPOSE"],
+    "timestamp": e["ST_TIMESTAMP"],
+    "thread_id": e["ST_THREAD"],
+    "model": e["ST_MODEL"],
+    "effort": e["ST_EFFORT"],
+    "fallback_reason": e["ST_FALLBACK"],
+    "status": e["ST_STATUS"],
 }
-json.dump(data, open('${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.meta.json', 'w'), indent=2)
-"
+json.dump(data, open(e["ST_OUT"], "w"), indent=2)
+' 
 
 # --- Append to events.jsonl (if it exists) ---
 EVENTS_FILE=".aris/meta/events.jsonl"

@@ -173,6 +173,7 @@ once it stops being tiny. Write the full brainstorming request to
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   model: REVIEWER_MODEL
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |

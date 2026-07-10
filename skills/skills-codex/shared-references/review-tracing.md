@@ -23,7 +23,7 @@ Do not trace purely informational agent calls that are not acting as reviewers.
 
 ## How to Trace
 
-After each reviewer call, save the trace using `save_trace.sh`,
+After each reviewer call — including every FAILED attempt in a capability-fallback chain (one entry per attempt, with status + fallback reason) — save the trace using `save_trace.sh`,
 resolved through the canonical helper chain (see
 `integration-contract.md` §2 — failure policy C, "forensic helper").
 A Codex-side SKILL must NOT hard-code `tools/save_trace.sh`; instead

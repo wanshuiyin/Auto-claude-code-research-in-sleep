@@ -18,10 +18,10 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
 - **OUTPUT_DIR = `review-stage/`** — All review-stage outputs go here. Create the directory if it doesn't exist.
 - **REVIEWER_MODEL = `claude-review`** — Claude reviewer invoked through the local `claude-review` MCP bridge. Set `CLAUDE_REVIEW_MODEL` if you need a specific Claude model override.
-- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent at xhigh reasoning. Override with `--reviewer: oracle-pro` only when the user explicitly requests Oracle; if Oracle is unavailable, warn and fall back to Codex xhigh. **Same-family note:** this default reviewer is a second Codex/GPT agent — valid for Type-A completeness/drive review, but not a cross-family Type-B verdict; install a `skills-codex-claude-review` / `skills-codex-gemini-review` overlay for a cross-family acquittal (see `shared-references/reviewer-routing.md`).
+- **REVIEWER_BACKEND = `claude-review`** — reviews route through the claude-review MCP (Claude family; cross-family for a Codex executor).
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
 - **COMPACT = false** — When `true`, (1) read `EXPERIMENT_LOG.md` and `findings.md` instead of parsing full logs on session recovery, (2) append key findings to `findings.md` after each round.
-- **REVIEWER_DIFFICULTY = medium** — Controls adversarial depth: `medium` uses normal Codex xhigh review through `spawn_agent` / `send_input`; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification by an independent reviewer.
+- **REVIEWER_DIFFICULTY = medium** — Controls adversarial depth: `medium` uses normal Codex xhigh review through `mcp__claude-review__review_start` / `mcp__claude-review__review_reply_start`; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification by an independent reviewer.
 - **RENDER_HTML = true** — When `true` (default), auto-render `review-stage/AUTO_REVIEW.md` to HTML on loop termination via `/render-html`. Uses `--no-review` (the loop itself IS the cross-model review; the HTML render is a structural conversion). Set `false` to skip, or pass `— render html: false`.
 
 > 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true, difficulty: hard`
@@ -43,7 +43,7 @@ In hard and nightmare modes, the reviewer must actively look for omissions, unsu
 For `difficulty: hard` and `nightmare`, use the **Debate Protocol** after a critical review:
 
 1. Codex writes a concise rebuttal with evidence, not spin.
-2. Send the rebuttal to the same reviewer via `send_input`.
+2. Send the rebuttal to the same reviewer via `mcp__claude-review__review_reply_start`.
 3. The reviewer rules which objections are resolved, unresolved, or newly discovered.
 4. Only mark a concern resolved when the reviewer accepts the rebuttal.
 
@@ -129,7 +129,7 @@ If this is round 2+, use `mcp__claude-review__review_reply_start` with the saved
 
 ##### Hard — Codex Review + Reviewer Memory
 
-Use the same `spawn_agent` / `send_input` route as medium, but prepend the full `review-stage/REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)` and require a `Memory update` section in the reviewer response.
+Use the same `mcp__claude-review__review_start` / `mcp__claude-review__review_reply_start` route as medium, but prepend the full `review-stage/REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)` and require a `Memory update` section in the reviewer response.
 
 ##### Nightmare — Independent Repository Review
 
@@ -192,11 +192,11 @@ After parsing the review, Codex writes a structured rebuttal for up to three hig
 - **Evidence**: [specific code, result file, log, prior-round fix, or paper section]
 ```
 
-Send the rebuttal to the same reviewer via `send_input`:
+Send the rebuttal to the same reviewer via `mcp__claude-review__review_reply_start`:
 
 ```
 mcp__claude-review__review_reply_start:
-  target: [saved reviewer id]
+  threadId: [saved reviewer id]
   prompt: |
     Please rule on the author's rebuttal below.
     For each contested weakness, decide: accepted / partially accepted / rejected.
@@ -321,7 +321,7 @@ Increment round counter → back to Phase A.
 
 ## Review Tracing
 
-After every `spawn_agent`, `send_input`, `oracle-pro`, or nightmare adversarial verification call, save a trace following `../shared-references/review-tracing.md`. Include prompt summary, reviewer route, saved agent id, raw response path, score/verdict, accepted fixes, rejected rebuttals, and the `Reviewer Memory` update if present.
+After every `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, `oracle-pro`, or nightmare adversarial verification call, save a trace following `../shared-references/review-tracing.md`. Include prompt summary, reviewer route, saved agent id, raw response path, score/verdict, accepted fixes, rejected rebuttals, and the `Reviewer Memory` update if present.
 
 ### Termination
 
@@ -331,7 +331,7 @@ When loop ends (positive assessment or max rounds):
 2. Write final summary to `review-stage/AUTO_REVIEW.md`
 3. Update project notes with conclusions
 4. **Write method/pipeline description** to `review-stage/AUTO_REVIEW.md` under a `## Method Description` section — a concise 1-2 paragraph summary of the final method, architecture, and data flow. This serves as direct input for `/paper-illustration`.
-5. **Generate claims from results** — invoke `/result-to-claim` to convert experiment results from `review-stage/AUTO_REVIEW.md` into structured paper claims. Output: `CLAIMS_FROM_RESULTS.md`. If `/result-to-claim` is unavailable, skip silently.
+5. **Generate claims from results** — invoke `/result-to-claim` to convert experiment results from `review-stage/AUTO_REVIEW.md` into structured paper claims. Output: `CLAIMS_FROM_RESULTS.md`. If `/result-to-claim` is unavailable, skip silently. If it ran but its output starts with `verdict: REVIEW_UNAVAILABLE`, keep that file AS-IS (do not overwrite or paraphrase it) and record in `AUTO_REVIEW.md` that claims are UNADJUDICATED — downstream paper stages must not treat them as validated.
 6. If stopped at max rounds without positive assessment:
    - List remaining blockers
    - Estimate effort needed for each
@@ -368,6 +368,7 @@ When loop ends (positive assessment or max rounds):
 ```
 mcp__claude-review__review_reply_start:
   threadId: [saved from round 1]
+  # inherits the agent's model/effort — do not re-send
   prompt: |
     [Round N update]
 

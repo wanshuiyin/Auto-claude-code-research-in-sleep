@@ -35,7 +35,7 @@ Existing skills cover adjacent territory but none of this exact composition: `/r
 
 ## Constants
 
-- **REVIEWER_MODEL** = inherits from `/auto-paper-improvement-loop`'s default (`gpt-5.5` via Codex MCP) unless the user passes `— reviewer-model: gpt-5.4` (legacy) or another OpenAI model. Codex reasoning effort is fixed at `xhigh` for all reviewer calls per the existing skill convention.
+- **REVIEWER_MODEL** = inherits from `/auto-paper-improvement-loop`'s default (`gpt-5.6-sol` via Codex MCP) unless the user passes `— reviewer-model: gpt-5.4` (legacy) or another OpenAI model. Codex reasoning effort is fixed at `xhigh` for all reviewer calls per the existing skill convention.
 - **ROUNDS** = 2 (default; matches `/auto-paper-improvement-loop`'s diminishing-returns line). A 3rd round only fires if Phase 2 reports non-convergence AND the user explicitly approves at the round-2 checkpoint.
 - **EFFORT** = `max` (default for resubmit; resubmit is high-stakes). The user can override with `— effort: balanced` if time is extremely tight.
 - **EDIT_WHITELIST_PATH** = `<paper-base-dir>/../<NewVenue>/.aris/edit_whitelist.yaml` (auto-generated in Phase 0; user can override with a custom path).
