@@ -39,7 +39,7 @@ For EACH core claim, search using ALL available sources:
 
 3. **Read abstracts**: For each potentially overlapping paper, WebFetch its abstract and related work section
 
-### Phase C: Cross-Model Verification
+### Phase C: Fresh-Agent Verification (same-family provisional by default)
 Call REVIEWER_MODEL via `spawn_agent` (`spawn_agent`) with xhigh reasoning:
 ```
 reasoning_effort: xhigh

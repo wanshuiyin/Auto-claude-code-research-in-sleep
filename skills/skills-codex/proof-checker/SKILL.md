@@ -1,13 +1,18 @@
 ---
 name: proof-checker
-description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (Codex GPT-5.5 xhigh), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
+description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via fresh-agent Codex GPT-5.5 xhigh review, fixes each gap with full derivations, re-reviews, and generates an audit report. Base review is same-family provisional. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
 argument-hint: [path-to-tex-file or proof-description]
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
 
-Systematically verify a mathematical proof via cross-model adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
+> **Codex assurance:** base Codex proof judgments are
+> `review_independence: same-family` and `acceptance_status: provisional`.
+> Deterministic compilation/algebra checks may be accepted; a semantic proof
+> acceptance requires a cross-family overlay. Reviewer failure emits BLOCKED.
+
+Systematically verify a mathematical proof via fresh-agent adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
 
 ## Context: $ARGUMENTS
 
@@ -121,6 +126,17 @@ When the proof invokes any of the following, require explicit verification of AL
 | **WLOG reduction** | Invariance under claimed symmetry + reduction is reversible |
 
 ## Workflow
+
+### Proof-obligation fan-out
+
+Independent sections/theorems may be extracted by fresh read-only
+`spawn_agent` shards, with a sequential fresh-context fallback. Each shard
+returns `{"shard_id": ..., "entries": [{"payload": ..., "dedup_key":
+"<theorem-or-obligation-id>"}]}` and must not declare the proof valid. The
+parent mechanically merges obligations; the fresh Codex review that evaluates
+them records `review_independence: same-family` and
+`acceptance_status: provisional`. See
+[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 
 ### Phase 0: Preparation
 
@@ -418,7 +434,7 @@ python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug "<stable-theorem-id>" \
 - **WLOG prohibition**: Every "without loss of generality" must have an explicit micro-claim proving the reduction. No free WLOGs.
 - **No silent assumption strengthening**: Any fix that adds conditions must propagate to the theorem statement.
 
-### Cross-model protocol
+### Review-independence protocol
 - **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
 - **Codex reasoning always xhigh**: Never downgrade.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
@@ -471,7 +487,12 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
+  "executor_model":   "codex-gpt-5.5",
+  "executor_family":  "openai",
   "reviewer_model":   "gpt-5.5",
+  "reviewer_family":  "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
   "reviewer_reasoning": "xhigh",
   "generated_at":     "<UTC ISO-8601>",
   "details": {

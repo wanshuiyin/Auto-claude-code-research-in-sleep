@@ -30,7 +30,7 @@ Each phase builds on the previous one's output. The final deliverables are a val
 - **COMPACT = false** — When `true`, generate compact summary files for short-context sessions and downstream skills. Writes `idea-stage/IDEA_CANDIDATES.md`.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 - **REF_PAPER = false** — Reference paper to base ideas on. Accepts a local PDF path, arXiv URL, or paper URL. When set, summarize it first and use it as idea-generation context.
-- **RENDER_HTML = true** — When `true` (default), auto-render `idea-stage/IDEA_REPORT.md` to HTML at workflow end via `/render-html`. Uses `--no-review` (source already passed novelty + cross-model review during Phase 3). Set `false` to skip, or pass `— render html: false`.
+- **RENDER_HTML = true** — When `true` (default), auto-render `idea-stage/IDEA_REPORT.md` to HTML at workflow end via `/render-html`. Uses `--no-review` because the source already received novelty + same-family provisional review. Set `false` to skip.
 
 > 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — ref paper: https://arxiv.org/abs/2406.04329` or `/idea-discovery "topic" — compact: true`.
 
@@ -113,7 +113,7 @@ Use `idea-stage/REF_PAPER_SUMMARY.md` as additional context in both Phase 1 and 
 Invoke `/research-lit` to map the research landscape:
 
 ```
-/research-lit "$ARGUMENTS"
+/research-lit "$ARGUMENTS" — composed: idea-stage/IDEA_REPORT.md
 ```
 
 **What this does:**
@@ -140,7 +140,7 @@ Does this match your understanding? Should I adjust the scope before generating 
 Invoke `/idea-creator` with the landscape context and `idea-stage/REF_PAPER_SUMMARY.md` if available:
 
 ```
-/idea-creator "$ARGUMENTS"
+/idea-creator "$ARGUMENTS" — composed: idea-stage/IDEA_REPORT.md
 ```
 
 **What this does:**
@@ -191,7 +191,7 @@ For each top idea (positive pilot signal), run a thorough novelty check:
 For the surviving top idea(s), get brutal feedback:
 
 ```
-/research-review "[top idea with hypothesis + pilot results]"
+/research-review "[top idea with hypothesis + pilot results]" — composed: idea-stage/IDEA_REPORT.md
 ```
 
 **What this does:**
@@ -200,6 +200,12 @@ For the surviving top idea(s), get brutal feedback:
 - Provides concrete feedback on experimental design
 
 **Update `idea-stage/IDEA_REPORT.md`** with reviewer feedback and revised plan.
+
+`idea-stage/IDEA_REPORT.md` is this pipeline's one canonical deliverable. The
+explicit `— composed:` signal makes each sub-skill return/fold unique findings
+instead of scattering `LIT_LANDSCAPE.md`, `RESEARCH_REVIEW.md`, or duplicate
+manifests. Without that signal, every sub-skill remains standalone. See
+[`output-composition.md`](../shared-references/output-composition.md).
 
 ### Phase 4.5: Method Refinement + Experiment Planning
 
@@ -321,7 +327,7 @@ After finalizing `idea-stage/IDEA_REPORT.md` (and the optional `IDEA_CANDIDATES.
 /render-html "idea-stage/IDEA_REPORT.md" --no-review
 ```
 
-`--no-review` is intentional: source MD already passed this skill's own novelty + cross-model review. HTML render is a structural conversion, not a new claim-audit gate.
+`--no-review` is intentional: source MD already received this skill's novelty + same-family provisional review. HTML render is a structural conversion, not a new claim-audit gate.
 
 **Non-blocking**: if `/render-html` fails (helper missing, secondary Codex agent unavailable, file write error), log the failure and continue. Skip entirely if `RENDER_HTML = false`.
 

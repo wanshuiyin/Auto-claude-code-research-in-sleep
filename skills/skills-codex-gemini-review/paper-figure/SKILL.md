@@ -7,6 +7,8 @@ description: "Generate publication-quality figures and tables from experiment re
 
 # Paper Figure: Publication-Quality Plots from Experiment Data
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Generate all figures and tables for a paper based on: **$ARGUMENTS**
 
 ## Scope: What This Skill Can and Cannot Do

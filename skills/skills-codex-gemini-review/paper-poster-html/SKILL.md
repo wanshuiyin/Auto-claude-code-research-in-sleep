@@ -9,6 +9,8 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__gemini-review__revie
 
 # Paper Poster (HTML): measurement-gated poster generation
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 One HTML file styled for an exact print canvas (`@page { size: W H }`), rendered to PDF
 via Playwright print emulation. **Iterate by measuring, not eyeballing** — the screen
 preview lies; only print emulation at the correct viewport tells the truth. Core gate

@@ -5,11 +5,14 @@ Codex-native mirror and adaptation layer for the main ARIS `skills/` package.
 ## Scope
 
 - Base mirror coverage: all `79` mainline skills under `skills/`
-- Support directory: `shared-references/`
+- Support directory: `shared-references/`, with all `30/30` mainline reference names mirrored
 - Default reviewer contract for reviewer-heavy skills:
   - round 1: `spawn_agent`
   - follow-up: `send_input`
   - reasoning effort: `xhigh`
+  - base Codex self-review: `review_independence: same-family`,
+    `acceptance_status: provisional`
+  - Claude/Gemini overlays or deterministic verification: `acceptance_status: accepted`
 - Optional overlays:
   - `skills-codex-claude-review`
   - `skills-codex-gemini-review`

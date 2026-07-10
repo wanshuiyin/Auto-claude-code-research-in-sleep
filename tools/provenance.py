@@ -11,11 +11,10 @@ This is the provenance-as-authorization-boundary pattern (adapted from
 NousResearch/hermes-agent's skill_provenance ContextVar, MIT). ARIS's increment:
 Hermes records only `created_by`, and its cross-model curator is OPTIONAL config
 (defaults to the SAME chat model). ARIS records the RICHER tuple
-{author_model, reviewer_model, verdict_id, content_hash} AND makes cross-family
-a NON-NEGOTIABLE invariant: `stamp()` REFUSES to record a provenance where the
-author and reviewer are the same model family (self-acquittal), unless the
-reviewer is a deterministic verifier (a process is not a model family). See
-shared-references/skill-governance.md.
+{author_model, reviewer_model, verdict_id, content_hash}. Strict `stamp()` keeps
+cross-family acceptance NON-NEGOTIABLE. Codex-only workflows may instead write
+an explicit same-family `stamp_provisional()` receipt; it is traceable but never
+authorizes future automatic curation. See shared-references/skill-governance.md.
 """
 
 from __future__ import annotations
@@ -104,17 +103,13 @@ def _sidecar(target: str) -> Path:
     return (p / ".provenance.json") if p.is_dir() else p.with_name(p.name + ".provenance.json")
 
 
-def stamp(target: str, author_model: str, reviewer_model: str, verdict_id: str,
-          created_by: str = "aris-auto", ts: Optional[str] = None) -> dict:
-    """Record provenance for an auto-authored artifact. REFUSES (raises) if author
-    and reviewer are the same model family, or verdict_id is empty.
-
-    The hash is of the artifact file (for a dir target, of its SKILL.md if present).
-    """
+def _stamp_record(target: str, author_model: str, reviewer_model: str,
+                  verdict_id: str, review_independence: str,
+                  acceptance_status: str, created_by: str,
+                  ts: Optional[str]) -> dict:
     if not verdict_id:
         raise ValueError("provenance requires a non-empty verdict_id (the reviewer's "
                          "thread/trace id, or the verifier report path/sha).")
-    assert_cross_family(author_model, reviewer_model)  # the structural gate
     p = Path(target)
     hash_target = (p / "SKILL.md") if p.is_dir() and (p / "SKILL.md").is_file() else p
     record = {
@@ -123,12 +118,58 @@ def stamp(target: str, author_model: str, reviewer_model: str, verdict_id: str,
         "author_family": model_family(author_model),
         "reviewer_model": reviewer_model,
         "reviewer_family": model_family(reviewer_model),
+        "review_independence": review_independence,
+        "acceptance_status": acceptance_status,
         "verdict_id": verdict_id,
         "content_hash": content_hash(str(hash_target)) if hash_target.is_file() else None,
         "stamped_at": ts or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     _sidecar(target).write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
     return record
+
+
+def stamp(target: str, author_model: str, reviewer_model: str, verdict_id: str,
+          created_by: str = "aris-auto", ts: Optional[str] = None) -> dict:
+    """Record accepted provenance for an auto-authored artifact.
+
+    REFUSES (raises) if author and reviewer are the same model family, or if the
+    verdict id is empty. Deterministic reviewers remain valid acceptance gates.
+    """
+    assert_cross_family(author_model, reviewer_model)
+    independence = (
+        "deterministic"
+        if model_family(reviewer_model) == "deterministic"
+        else "cross-family"
+    )
+    return _stamp_record(
+        target, author_model, reviewer_model, verdict_id,
+        independence, "accepted", created_by, ts,
+    )
+
+
+def stamp_provisional(target: str, author_model: str, reviewer_model: str,
+                      verdict_id: str, created_by: str = "aris-auto",
+                      ts: Optional[str] = None) -> dict:
+    """Record an explicit same-family review without granting acceptance.
+
+    Both model names must resolve to the same non-deterministic family. A
+    different-family reviewer must use :func:`stamp`; unknown model families
+    fail closed so a provisional receipt cannot conceal ambiguous provenance.
+    """
+    author_family = model_family(author_model)
+    reviewer_family = model_family(reviewer_model)
+    if author_family == "unknown" or reviewer_family == "unknown":
+        raise ValueError(
+            f"unrecognized model family for provisional author={author_model!r} "
+            f"({author_family}) / reviewer={reviewer_model!r} ({reviewer_family})")
+    if reviewer_family == "deterministic" or author_family != reviewer_family:
+        raise ValueError(
+            "stamp_provisional is only for same-family model review; use stamp "
+            "for a cross-family or deterministic acceptance gate.")
+    return _stamp_record(
+        target, author_model, reviewer_model, verdict_id,
+        "same-family", "provisional", created_by, ts,
+    )
 
 
 def read(target: str) -> Optional[dict]:
@@ -144,13 +185,34 @@ def is_auto_authored(target: str) -> bool:
     return bool(rec and rec.get("created_by") == "aris-auto")
 
 
-__all__ = ["model_family", "assert_cross_family", "content_hash", "stamp", "read", "is_auto_authored"]
+def is_auto_curatable(target: str) -> bool:
+    """Whether an auto-authored artifact carries accepted authorization.
+
+    Legacy records predate ``acceptance_status`` but were only creatable through
+    the strict cross-family ``stamp`` path, so they remain curatable. Explicit
+    provisional records are never sufficient authorization for future automatic
+    rewrites.
+    """
+    rec = read(target)
+    return bool(
+        rec
+        and rec.get("created_by") == "aris-auto"
+        and rec.get("acceptance_status", "accepted") == "accepted"
+    )
+
+
+__all__ = [
+    "model_family", "assert_cross_family", "content_hash", "stamp",
+    "stamp_provisional", "read", "is_auto_authored", "is_auto_curatable",
+]
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="ARIS provenance-as-authorization.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("stamp"); s.add_argument("target"); s.add_argument("--author", required=True)
+    s.add_argument("--reviewer", required=True); s.add_argument("--verdict-id", required=True)
+    s = sub.add_parser("stamp-provisional"); s.add_argument("target"); s.add_argument("--author", required=True)
     s.add_argument("--reviewer", required=True); s.add_argument("--verdict-id", required=True)
     s = sub.add_parser("read"); s.add_argument("target")
     s = sub.add_parser("is-auto"); s.add_argument("target")
@@ -159,6 +221,8 @@ def main() -> int:
     try:
         if a.cmd == "stamp":
             print(json.dumps(stamp(a.target, a.author, a.reviewer, a.verdict_id), ensure_ascii=False, indent=2))
+        elif a.cmd == "stamp-provisional":
+            print(json.dumps(stamp_provisional(a.target, a.author, a.reviewer, a.verdict_id), ensure_ascii=False, indent=2))
         elif a.cmd == "read":
             rec = read(a.target)
             print(json.dumps(rec, ensure_ascii=False, indent=2) if rec else "no provenance record")

@@ -7,6 +7,11 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
 
 # Result-to-Claim Gate
 
+> **Codex assurance:** deterministic evidence existence can be accepted, while
+> the base semantic claim judgment records `review_independence: same-family`
+> and `acceptance_status: provisional`. Cross-family overlays may record
+> accepted; reviewer failure emits BLOCKED.
+
 Experiments produce numbers; this gate decides what those numbers *mean*. Collect results from available sources, get a secondary Codex judgment, then auto-route based on the verdict.
 
 ## Context: $ARGUMENTS
@@ -34,6 +39,34 @@ Assemble the key information:
 - Main metrics and baseline comparisons (deltas)
 - The intended claim these experiments were designed to test
 - Any known confounds or caveats
+
+### Step 1.5: Deterministic evidence pre-check
+
+Before the reviewer call, resolve and run `evidence_check.py` per
+[`evidence-precheck.md`](../shared-references/evidence-precheck.md):
+
+```bash
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
+  ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
+fi
+EVIDENCE_CHECK=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/evidence_check.py" ] && EVIDENCE_CHECK="$ARIS_REPO/tools/evidence_check.py"
+[ -z "$EVIDENCE_CHECK" ] && [ -f tools/evidence_check.py ] && EVIDENCE_CHECK="tools/evidence_check.py"
+mkdir -p .aris
+if [ -n "$EVIDENCE_CHECK" ]; then
+  python3 "$EVIDENCE_CHECK" . --batch .aris/claims.json \
+    > .aris/evidence_precheck.json 2>.aris/evidence_precheck.err || true
+else
+  echo "WARN: evidence_check.py unresolved; semantic review will still run" >&2
+fi
+```
+
+Treat `path_missing` and `value_not_found` as unsupported evidence before the
+semantic review. `verified` means only that the cited value exists; it does not
+prove the claim. Pass the pre-check JSON path to the fresh reviewer. The Codex
+reviewer's positive result remains `review_independence: same-family` and
+`acceptance_status: provisional`; a deterministic evidence check never upgrades
+a semantic claim to accepted by itself.
 
 ### Step 2: Codex Judgment
 
@@ -196,7 +229,10 @@ if research-wiki/ exists:
 - Do not inflate claims beyond what the data supports. If Codex says "partial", do not round up to "yes".
 - A single positive result on one dataset does not support a general claim. Be honest about scope.
 - If `confidence` is low, treat the judgment as inconclusive and add experiments rather than committing to a claim.
-- If reviewer delegation is unavailable, make the best local judgment you can and mark it `[pending external review]` - do not block the pipeline.
+- If reviewer delegation is unavailable, write a traced `BLOCKED` review record
+  with the unavailable route and evidence paths; do not emit a local PASS/WARN
+  substitute or advance a submission-facing claim. The pipeline may continue
+  only in an explicitly non-submission evidence-gathering phase.
 - Always record the verdict and reasoning in findings.md, regardless of outcome.
 
 ## Review Tracing

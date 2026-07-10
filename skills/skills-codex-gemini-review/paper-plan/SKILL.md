@@ -7,6 +7,8 @@ description: "Generate a structured paper outline from review conclusions and ex
 
 # Paper Plan: From Review Conclusions to Paper Outline
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Generate a structured, section-by-section paper outline from: **$ARGUMENTS**
 
 ## Constants

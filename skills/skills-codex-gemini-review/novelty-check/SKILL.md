@@ -7,6 +7,8 @@ description: "Verify research idea novelty against recent literature. Use when u
 
 # Novelty Check Skill
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Check whether a proposed method/idea has already been done in the literature: **$ARGUMENTS**
 
 ## Constants

@@ -338,10 +338,12 @@ spawn_agent:
 
     **OVERALL SCORE** (1-10): Weighted toward Problem Fidelity, Method Specificity, Contribution Quality, and Frontier Leverage.
     Use this weighting: Problem Fidelity 15%, Method Specificity 25%, Contribution Quality 25%, Frontier Leverage 15%, Feasibility 10%, Validation Focus 5%, Venue Readiness 5%.
-    (This weighted-axis rubric is the working precedent for mainline
-    `taste-calibration.md`; if curated known-good/known-bad past proposals are
+    (Follow [`taste-calibration.md`](../shared-references/taste-calibration.md):
+    if curated known-good/known-bad past proposals are
     available, score 3 of each on these axes FIRST to anchor the scale, and
     name in the review which anchor the proposal sits closest to.)
+    Emit `CALIBRATION: anchored|none`, the weighted composite, and a GAP
+    paragraph. A fresh Codex positive review is same-family provisional.
 
     For each dimension scoring < 7, provide:
     - The specific weakness

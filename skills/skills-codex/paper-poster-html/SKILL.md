@@ -13,7 +13,7 @@ preview lies; only print emulation at the correct viewport tells the truth. Core
 machinery is adapted from [posterly](https://github.com/Chenruishuo/posterly) (MIT, ©
 2026 Ruishuo Chen — see `NOTICE.md` and `LICENSES/posterly-MIT.txt` in the mainline
 skill directory); ARIS adds style discipline gates, figure-provenance gates, the
-cross-model review loop, and the anti-patch-loop fix vocabulary.
+fresh-agent review loop (same-family provisional in the base mirror), and the anti-patch-loop fix vocabulary.
 
 ## Why this skill exists (the failure it prevents)
 
@@ -44,7 +44,7 @@ paper (.tex / PDF) ──► content plan + claim→evidence audit (fresh review
                     executor visual review (≤3 issues × ≤3 rounds, fix-vocabulary only)
                               │ score ≥ 9
                               ▼
-                    final cross-model review (fresh reviewer agent, full HTML+PDF)
+                    final fresh-agent review (same-family provisional, full HTML+PDF)
                               │ pass
                               ▼
                     verify-final → poster.pdf + GATE_REPORT.json
@@ -145,7 +145,7 @@ never reverted.
    claim/evidence pill table for numeric-heavy posters. **Do not invent an algorithm.**
    If the paper has only an objective, label the component "objective flow" or "loss
    anatomy", never "algorithm".
-2. **Cross-model content audit** (fresh reviewer agent): give it the content plan path
+2. **Fresh-agent content audit** (same-family provisional): give it the content plan path
    + paper source path(s) — paths only, no summaries — and ask for a claim→evidence
    table. Save to `poster_html/CLAIM_EVIDENCE.md`.
 
@@ -227,7 +227,8 @@ pdftoppm -r 100 poster_html/poster_preview.pdf poster_html/review_full -png -f 1
 # plus 2-4 region crops at higher res (header / one column / equations) via PIL
 ```
 
-**Calibrate first** (per mainline `taste-calibration.md`): if **human-curated**
+**Calibrate first** (per
+[`taste-calibration.md`](../shared-references/taste-calibration.md)): if **human-curated**
 `references/good/` + `references/bad/` exist under this skill dir (or the
 project supplies its own pair), score those 3+3 reference posters on the axes
 below BEFORE the target, anchoring the scale. Never select, search for, or
@@ -237,6 +238,10 @@ mark `CALIBRATION: none` — never fabricate anchor scores. Axes (weights sum
 Mapping: `SCORE = min(round(1 + 9 × COMPOSITE), lowest triggered cap)` — caps
 apply AFTER the mapping, and the loop's `Score ≥ 9` threshold always reads this
 final capped `SCORE`, never the raw composite.
+
+The visual review writes `CALIBRATION: anchored|none`, per-axis scores, and the
+mandatory GAP paragraph. A fresh Codex review may drive another layout round but
+its positive result is `acceptance_status: provisional`.
 
 Score strictly 1–10. **Critical caps** (hard floors — a calibrated composite
 never overrides them): < 2 real paper figures → ≤ 3; broken canvas /
@@ -279,7 +284,7 @@ Forbidden: new inline styles, new hex values anywhere, bespoke decorative SVG,
 per-element font-size overrides. **A new component may not be born inside the visual
 loop** — stop, get a human checkpoint, add it to `COMPONENTS.md`, re-run from Phase 3.
 
-### Phase 6 — Final review (fresh reviewer agent, cross-model)
+### Phase 6 — Final review (fresh reviewer agent, same-family provisional)
 
 All hard gates PASS + polish warnings zero-or-waived + visual ≥ 9 first. Then a fresh
 reviewer agent reviews the **final artifacts** (not the content plan) — paths only, no
@@ -337,7 +342,7 @@ every phase; enables compact-recovery resume.
   dashboard, not a poster.
 - **Fix vocabulary is closed.** If a fix isn't expressible as token / component /
   rebalance / asset / canvas, it's the wrong fix.
-- **Cross-model verdicts.** The executor drives the loop and scores visuals;
+- **Review-class verdicts.** The executor drives the loop and scores visuals;
   acceptance of content fidelity comes from the fresh reviewer agent (a loop can
   drive, never acquit).
 - **Preserve user decisions.** Re-read `design_decisions` before "improving" anything.

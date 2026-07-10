@@ -130,7 +130,7 @@ Create a preliminary mapping to verify enablement:
 
 If any element lacks specification support, add it to the specification requirements.
 
-### Step 5: Cross-Model Examiner Review
+### Step 5: Fresh-Agent Examiner Review (same-family provisional by default)
 
 Start the examiner review with a dedicated Codex reviewer agent at xhigh reasoning:
 

@@ -500,7 +500,7 @@ These are non-negotiable:
 3. **Speaker notes are preserved verbatim.** Every PPTX edit must preserve `slide.notes_slide` content. Phase 4.4 verifies this byte-for-byte against the snapshot.
 4. **No content edits.** No new claims, numbers, citations, URLs, author names, affiliations, or experiment results. No equation or figure-content changes. No paraphrasing of body text — only style/typography/box edits. If a Codex fix proposal would change content, the skill stops and reports it.
 5. **No slide reordering, addition, or deletion** unless the user passes an explicit flag (`— add-slide-K-after-J`, `— drop-slide-K`).
-6. **Cross-model independence**: per-page Codex calls are fresh `spawn_agent` calls, not `send_input`. Reviewer never sees prior fix lists. See `reviewer-independence.md`.
+6. **Fresh-context independence**: per-page Codex calls are fresh `spawn_agent` calls, not `send_input`. Reviewer never sees prior fix lists; base verdicts are same-family provisional.
 7. **Anonymity placeholders fail closed.** If a Codex fix proposes filling in a real title, count, or URL where a placeholder was, the skill rejects it and surfaces the proposal for human review. See `experiment-integrity.md`.
 8. **Page numbers stay ≤ 16pt.** Why-RF discipline; never bump them.
 9. **`reasoning_effort: xhigh`** is invariant across all `effort` levels.

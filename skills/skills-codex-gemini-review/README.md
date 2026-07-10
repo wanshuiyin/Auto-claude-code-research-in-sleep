@@ -8,6 +8,11 @@ This package is a **thin override layer** for users who want:
 
 It is designed to sit on top of the upstream Codex-native package at `skills/skills-codex/`.
 
+Because the executor is Codex and the reviewer is Gemini, overlay traces and
+audit artifacts record `review_independence: cross-family` and
+`acceptance_status: accepted`. The verifier still decides whether all required
+audits reached accepted assurance.
+
 ## What this package contains
 
 - Only the reviewer-aware skill overrides that need a different reviewer backend

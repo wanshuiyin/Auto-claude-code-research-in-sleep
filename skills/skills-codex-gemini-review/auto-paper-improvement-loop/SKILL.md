@@ -7,6 +7,8 @@ description: "Autonomously improve a generated paper via Gemini review through g
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Autonomously improve the paper at: **$ARGUMENTS**
 
 ## Context

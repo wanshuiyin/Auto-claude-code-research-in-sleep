@@ -7,6 +7,8 @@ description: "Draft a structured grant proposal from research ideas and literatu
 
 # Grant Proposal: From Research Ideas to Fundable Application
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Draft a grant proposal based on: **$ARGUMENTS**
 
 ## Overview

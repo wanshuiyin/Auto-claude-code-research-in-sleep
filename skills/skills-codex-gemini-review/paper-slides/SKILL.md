@@ -9,6 +9,8 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__gemini-review__revie
 
 # Paper Slides: From Paper to Conference Talk
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Generate conference presentation slides from: **$ARGUMENTS**
 
 ## Context

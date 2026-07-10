@@ -4,6 +4,13 @@ description: "Verify research idea novelty against recent literature. Use when u
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Novelty Check Skill
 
@@ -12,6 +19,7 @@ Check whether a proposed method/idea has already been done in the literature: **
 ## Constants
 
 - **REVIEWER_MODEL = `claude-review`** — Claude reviewer invoked through the local `claude-review` MCP bridge. Set `CLAUDE_REVIEW_MODEL` if you need a specific Claude model override.
+- **REVIEWER_BACKEND = `claude-review`** — Cross-family Claude reviewer through the local bridge; positive verdicts record accepted.
 
 ## Instructions
 
@@ -40,7 +48,7 @@ For EACH core claim, search using ALL available sources:
 
 3. **Read abstracts**: For each potentially overlapping paper, WebFetch its abstract and related work section
 
-### Phase C: Cross-Model Verification
+### Phase C: Fresh-Agent Verification (cross-family accepted by default)
 Call REVIEWER_MODEL via `mcp__claude-review__review_start` with high-rigor review:
 ```
 mcp__claude-review__review_start:
@@ -88,3 +96,7 @@ Output a structured report:
 - Check both the method AND the experimental setting for novelty
 - If the method is not novel but the FINDING would be, say so explicitly
 - Always check the most recent 6 months of arXiv — the field moves fast
+
+## Review Tracing
+
+After each `mcp__claude-review__review_start` or optional `oracle-pro` reviewer call, save the trace following `../shared-references/review-tracing.md`. Write files directly to `.aris/traces/novelty-check/<date>_run<NN>/` and record searched claims, closest papers, reviewer route, raw response, and final novelty decision. Respect the `--- trace:` parameter when present (default: `full`).

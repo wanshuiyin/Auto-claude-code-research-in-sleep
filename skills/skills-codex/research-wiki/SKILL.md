@@ -41,6 +41,29 @@ Inspired by [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6
 
 Edges are stored in `graph/edges.jsonl` only. The `## Connections` section on each page is **auto-generated** from the graph — never hand-edit it.
 
+### Capture and injection hygiene
+
+Before persisting an idea, claim, or experiment note, screen operational noise
+per [`capture-antipatterns.md`](../shared-references/capture-antipatterns.md).
+Resolve the repo from the Codex manifest, then the helper:
+
+```bash
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
+  ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
+fi
+CAPTURE_FILTER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/capture_filter.py" ] && CAPTURE_FILTER="$ARIS_REPO/tools/capture_filter.py"
+[ -z "$CAPTURE_FILTER" ] && [ -f tools/capture_filter.py ] && CAPTURE_FILTER="tools/capture_filter.py"
+```
+
+Run `python3 "$CAPTURE_FILTER" -` on the note when resolved. If it flags an
+environment failure, transient error, or negative tool-capability claim, store
+the fix/config/workaround instead, or drop the note. Warn-and-skip if the helper
+is unresolved. `research_wiki.py` itself quarantines prompt-injection patterns
+in graph evidence and query-pack rebuilds per
+[`injection-hygiene.md`](../shared-references/injection-hygiene.md); never bypass
+that writer with freehand graph edits.
+
 ## Wiki Directory Structure
 
 ```
@@ -391,7 +414,7 @@ The system suggests but does not auto-trigger. User decides.
 - **Failed ideas are the most valuable memory.** Never prune them from query_pack.
 - **query_pack.md is hard-budgeted** at 8000 chars. Deterministic generation, not open-ended summarization.
 - **Append to log.md for every mutation.** The log is the audit trail.
-- **Reviewer independence applies.** When the wiki is read by cross-model review skills, pass file paths only — do not summarize wiki content for the reviewer.
+- **Reviewer context isolation applies.** When the wiki is read by reviewer skills, pass file paths only; base Codex review is same-family provisional.
 
 ## Acknowledgements
 

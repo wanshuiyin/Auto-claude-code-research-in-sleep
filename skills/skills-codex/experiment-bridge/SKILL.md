@@ -107,7 +107,7 @@ For each milestone (in order), write the experiment scripts:
    - Does the code match FINAL_PROPOSAL.md's method description?
    - **CRITICAL**: does evaluation compare predictions against dataset ground truth, never another model's output?
 
-### Phase 2.5: Cross-Model Code Review (when CODE_REVIEW = true)
+### Phase 2.5: Fresh-Agent Code Review (same-family provisional; when CODE_REVIEW = true)
 
 Skip this step if `CODE_REVIEW` is `false`.
 
@@ -164,7 +164,7 @@ see `shared-references/review-tracing.md` § *Debugging With Traces*.) After 1�
 failed patches on the same failure, **discard and reimplement the failing
 script cleanly from the plan** — a peer move to another patch, not a last
 resort; delete only the attempt's own code, never the plan / tracker / data /
-results (per mainline `external-cadence.md`, "Let a broken attempt restart, not
+results (per [`external-cadence.md`](../shared-references/external-cadence.md), "Let a broken attempt restart, not
 just patch"). Two clean reimplements failing the same way put the plan or the
 environment in question — report that explicitly. Do not proceed to full
 deployment with broken code.

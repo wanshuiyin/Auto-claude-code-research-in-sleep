@@ -7,6 +7,8 @@ description: "Draft LaTeX paper section by section from an outline. Use when use
 
 # Paper Write: Section-by-Section LaTeX Generation
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Draft a LaTeX paper based on: **$ARGUMENTS**
 
 ## Constants

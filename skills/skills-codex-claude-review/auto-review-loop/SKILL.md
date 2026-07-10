@@ -4,8 +4,17 @@ description: "Autonomous multi-round research review loop. Repeatedly reviews us
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Auto Review Loop: Autonomous Research Improvement
+
+> **Claude overlay assurance:** this route is a different model family from the Codex executor and records `review_independence: cross-family` plus `acceptance_status: accepted`.
 
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
@@ -16,11 +25,36 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - MAX_ROUNDS = 4
 - POSITIVE_THRESHOLD: score >= 6/10 AND verdict ∈ {"ready", "almost"} — both must hold, matching the operative STOP CONDITION below. Verdict vocabulary is {"ready", "almost", "not ready"}. (Earlier wording used "or" + a stale verdict set; the AND form is authoritative.)
 - REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
-- **OUTPUT_DIR = `review-stage/`** — Directory for review output files.
+- **OUTPUT_DIR = `review-stage/`** — All review-stage outputs go here. Create the directory if it doesn't exist.
 - **REVIEWER_MODEL = `claude-review`** — Claude reviewer invoked through the local `claude-review` MCP bridge. Set `CLAUDE_REVIEW_MODEL` if you need a specific Claude model override.
+- **REVIEWER_BACKEND = `claude-review`** — Cross-family Claude reviewer through the local bridge; positive verdicts record accepted.
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
+- **COMPACT = false** — When `true`, (1) read `EXPERIMENT_LOG.md` and `findings.md` instead of parsing full logs on session recovery, (2) append key findings to `findings.md` after each round.
+- **REVIEWER_DIFFICULTY = medium** — Controls adversarial depth: `medium` uses normal Claude high-rigor review through `mcp__claude-review__review_start` / `mcp__claude-review__review_reply_start`; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification by an independent reviewer.
+- **RENDER_HTML = true** — When `true` (default), auto-render `review-stage/AUTO_REVIEW.md` to HTML on loop termination via `/render-html`. Uses `--no-review` because the loop already performed a traced cross-family accepted Claude review. Set `false` to skip.
 
-> 💡 Override: `/auto-review-loop "topic" — human checkpoint: true`
+> 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true, difficulty: hard`
+
+## Claude-Aligned Reviewer Memory and Debate
+
+For `difficulty: hard` and `difficulty: nightmare`, maintain `review-stage/REVIEWER_MEMORY.md`.
+
+- Before each reviewer call, prepend the full `REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)`.
+- Tell the reviewer to check whether prior suspicions were genuinely addressed or merely sidestepped.
+- Require a `Memory update` section in the reviewer response.
+- After Phase B, copy the `Memory update` into `REVIEWER_MEMORY.md` before writing `REVIEW_STATE.json`.
+- In `nightmare`, launch an additional fresh adversarial reviewer with direct repository/file-reading instructions. It should read `NARRATIVE_REPORT.md` or `review-stage/AUTO_REVIEW.md` for the author's claims, then verify those claims against code, logs, result files, and paper drafts instead of trusting executor summaries.
+
+## Instructions
+
+In hard and nightmare modes, the reviewer must actively look for omissions, unsupported claims, cherry-picked evidence, metric mistakes, and weaknesses the executor may have downplayed.
+
+For `difficulty: hard` and `nightmare`, use the **Debate Protocol** after a critical review:
+
+1. Codex writes a concise rebuttal with evidence, not spin.
+2. Send the rebuttal to the same reviewer via `mcp__claude-review__review_reply_start`.
+3. The reviewer rules which objections are resolved, unresolved, or newly discovered.
+4. Only mark a concern resolved when the reviewer accepts the rebuttal.
 
 ## State Persistence (Compact Recovery)
 
@@ -29,7 +63,7 @@ Long-running loops may hit the context window limit, triggering automatic compac
 ```json
 {
   "round": 2,
-  "thread_id": "019cd392-...",
+  "threadId": "019cd392-...",
   "status": "in_progress",
   "last_score": 5.0,
   "last_verdict": "not ready",
@@ -51,12 +85,12 @@ Long-running loops may hit the context window limit, triggering automatic compac
    - If it exists AND `status` is `"completed"`: **fresh start** (previous loop finished normally)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is older than 24 hours: **fresh start** (stale state from a killed/abandoned run — delete the file and start over)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is within 24 hours: **resume**
-     - Read the state file to recover `round`, `thread_id`, `last_score`, `pending_experiments`
+     - Read the state file to recover `round`, `threadId`, `last_score`, `pending_experiments`
      - Read `review-stage/AUTO_REVIEW.md` to restore full context of prior rounds *(fall back to `./AUTO_REVIEW.md`)*
      - If `pending_experiments` is non-empty, check if they have completed (e.g., check screen sessions)
      - Resume from the next round (round = saved round + 1)
      - Log: "Recovered from context compaction. Resuming at Round N."
-2. Read project narrative documents, memory files, and any prior review documents
+2. Read project narrative documents, memory files, and any prior review documents. When `COMPACT = true` and compact files exist, prefer `findings.md` + `EXPERIMENT_LOG.md` over full raw logs.
 3. Read recent experiment results (check output directories, logs)
 4. Identify current weaknesses and open TODOs from prior reviews
 5. Initialize round counter = 1 (unless recovered from state file)
@@ -66,6 +100,10 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 #### Phase A: Review
 
+**Route by REVIEWER_DIFFICULTY:**
+
+##### Medium (default) — Claude Review
+
 Send comprehensive context to the external reviewer:
 
 ```
@@ -73,22 +111,38 @@ mcp__claude-review__review_start:
   prompt: |
     [Round N/MAX_ROUNDS of autonomous review loop]
 
-    [Full research context: claims, methods, results, known weaknesses]
-    [Changes since last round, if any]
+    Review the work directly from its artifacts — executor notes are not
+    evidence, so read the files yourself rather than trusting my framing:
+    - Claims / paper draft: <path>
+    - Methods / code under review: <path(s)>
+    - Raw results (verbatim files, not a summary): <path(s)>
+    - Changed since last round: <changed-file paths> — read the diff, not my description
 
-    Please act as a senior ML reviewer (NeurIPS/ICML level).
+    Please act as a senior ML reviewer (NeurIPS/ICML level). Start from the
+    assumption that the work is broken somewhere — your job is to find where.
+    Be adversarial. Trust nothing the author tells you — verify everything
+    yourself.
 
     1. Score this work 1-10 for a top venue
     2. List remaining critical weaknesses (ranked by severity)
     3. For each weakness, specify the MINIMUM fix (experiment, analysis, or reframing)
     4. State clearly: is this READY for submission? Yes/No/Almost
 
-    Be brutally honest. If the work is ready, say so clearly.
+    Be brutally honest. If, after genuinely trying to break it, the work holds
+    up and is ready, say so clearly.
 ```
 
 After this start call, immediately save the returned `jobId` and poll `mcp__claude-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the reviewer output, and save the completed `threadId` for any follow-up round.
 
 If this is round 2+, use `mcp__claude-review__review_reply_start` with the saved completed `threadId`, then poll `mcp__claude-review__review_status` with the returned `jobId` until `done=true` to maintain continuity.
+
+##### Hard — Claude Review + Reviewer Memory
+
+Use the same `mcp__claude-review__review_start` / `mcp__claude-review__review_reply_start` route as medium, but prepend the full `review-stage/REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)` and require a `Memory update` section in the reviewer response.
+
+##### Nightmare — Independent Repository Review
+
+Use everything in hard mode, then ask an additional fresh adversarial reviewer to verify claims against repository files, logs, result files, and paper drafts instead of trusting executor summaries. Preserve the fresh review as a separate raw response and trace.
 
 #### Phase B: Parse Assessment
 
@@ -100,6 +154,73 @@ Then extract structured fields:
 - **Action items** (ranked list of fixes)
 
 **STOP CONDITION**: If score >= 6 AND verdict ∈ {"ready", "almost"} (exact match — "not ready" does NOT qualify) → stop loop, document final state.
+
+#### Phase B.5: Reviewer Memory Update (hard + nightmare only)
+
+Skip entirely if `REVIEWER_DIFFICULTY = medium`.
+
+After parsing the assessment, update `review-stage/REVIEWER_MEMORY.md`:
+
+## Your Reviewer Memory (persistent across rounds)
+
+Pass this file back to the reviewer in the next round so it can track its own suspicions.
+
+```markdown
+# Reviewer Memory
+
+## Round 1 — Score: X/10
+- **Suspicion**: [what the reviewer flagged]
+- **Unresolved**: [concerns not yet addressed]
+- **Patterns**: [recurring issues the reviewer noticed]
+
+## Round 2 — Score: X/10
+- **Previous suspicions addressed?**: [yes/no for each, with reviewer judgment]
+- **New suspicions**: [...]
+- **Unresolved**: [carried forward + new]
+```
+
+Rules:
+- Append each round; never delete prior rounds.
+- If the reviewer response includes a `Memory update` section, copy it verbatim.
+- If the score REGRESSES round-to-round, don't just write a new memory line:
+  diff the two rounds' raw `.response.md` files in `.aris/traces/` first and
+  find the exact criterion that flipped (see `shared-references/review-tracing.md`
+  § *Debugging With Traces*). The memory file is a summary; the trace is evidence.
+- This file is passed back to the reviewer in the next round's Phase A.
+
+#### Phase B.6: Debate Protocol (hard + nightmare only)
+
+Skip entirely if `REVIEWER_DIFFICULTY = medium`.
+
+After parsing the review, Codex writes a structured rebuttal for up to three high-impact weaknesses:
+
+```markdown
+### Rebuttal to Weakness #1: [title]
+- **Accept / Partially Accept / Reject**
+- **Argument**: [why this criticism is valid, invalid, already addressed, or out of scope]
+- **Evidence**: [specific code, result file, log, prior-round fix, or paper section]
+```
+
+Send the rebuttal to the same reviewer via `mcp__claude-review__review_reply_start`:
+
+```
+mcp__claude-review__review_reply_start:
+  target: [saved reviewer id]
+  prompt: |
+    Please rule on the author's rebuttal below.
+    For each contested weakness, decide: accepted / partially accepted / rejected.
+    If rejected, state the minimum evidence or change required.
+
+    [paste rebuttal + evidence]
+```
+
+After this start call, immediately save the returned `jobId` and poll `mcp__claude-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the reviewer output, and save the completed `threadId` for any follow-up round.
+
+Record a `### Debate Transcript (hard + nightmare only)` section in `review-stage/AUTO_REVIEW.md`. Only mark a weakness resolved if the reviewer accepts the rebuttal.
+
+### Debate Transcript (hard + nightmare only)
+
+In the round log, preserve the rebuttal, reviewer ruling, accepted objections, rejected objections, and any required follow-up evidence.
 
 #### Human Checkpoint (if enabled)
 
@@ -161,6 +282,7 @@ Prioritization rules:
 If experiments were launched:
 - Monitor remote sessions for completion
 - Collect results from output files and logs
+- **Training quality check** — if W&B is configured, invoke `/training-check` to verify training was healthy (no NaN, no divergence, no plateau). If W&B is not available, skip silently.
 
 #### Phase E: Document Round
 
@@ -194,9 +316,21 @@ This is the authoritative record. Do NOT truncate or paraphrase.]
 - [continuing to round N+1 / stopping]
 ```
 
-**Write `review-stage/REVIEW_STATE.json`** with current round, agent id, score, verdict, and any pending experiments.
+**Write `review-stage/REVIEW_STATE.json`** with current round, completed threadId, score, verdict, and any pending experiments.
+
+**Append to `findings.md`** (when `COMPACT = true`): one-line entry per key finding this round.
+
+```markdown
+- [Round N] [positive/negative/unexpected]: [one-sentence finding] (metric: X.XX → Y.YY)
+```
 
 Increment round counter → back to Phase A.
+
+#### Review Tracing
+
+## Review Tracing
+
+After every `mcp__claude-review__review_start`, `mcp__claude-review__review_reply_start`, `oracle-pro`, or nightmare adversarial verification call, save a trace following `../shared-references/review-tracing.md`. Include prompt summary, reviewer route, saved completed threadId, raw response path, score/verdict, accepted fixes, rejected rebuttals, and the `Reviewer Memory` update if present.
 
 ### Termination
 
@@ -205,11 +339,18 @@ When loop ends (positive assessment or max rounds):
 1. Update `review-stage/REVIEW_STATE.json` with `"status": "completed"`
 2. Write final summary to `review-stage/AUTO_REVIEW.md`
 3. Update project notes with conclusions
-4. If stopped at max rounds without positive assessment:
+4. **Write method/pipeline description** to `review-stage/AUTO_REVIEW.md` under a `## Method Description` section — a concise 1-2 paragraph summary of the final method, architecture, and data flow. This serves as direct input for `/paper-illustration`.
+5. **Generate claims from results** — invoke `/result-to-claim` to convert experiment results from `review-stage/AUTO_REVIEW.md` into structured paper claims. Output: `CLAIMS_FROM_RESULTS.md`. If `/result-to-claim` is unavailable, skip silently.
+6. If stopped at max rounds without positive assessment:
    - List remaining blockers
    - Estimate effort needed for each
    - Suggest whether to continue manually or pivot
-5. **Feishu notification** (if configured): Send `pipeline_done` with final score progression table
+7. **Feishu notification** (if configured): Send `pipeline_done` with final score progression table
+8. **Render HTML view** (if `RENDER_HTML = true`, default): invoke `/render-html` on the cumulative review log:
+   ```
+   /render-html "review-stage/AUTO_REVIEW.md" --no-review --state review-stage/REVIEW_STATE.json
+   ```
+   Pass `--state` explicitly when `REVIEW_STATE.json` exists (the helper does not auto-discover the sidecar). HTML lands at `review-stage/AUTO_REVIEW.html` with embedded source SHA256. **Non-blocking**: if `/render-html` fails, log the error and continue — the HTML is a convenience, not a termination prerequisite.
 
 ## Output Protocols
 
@@ -239,13 +380,11 @@ mcp__claude-review__review_reply_start:
   prompt: |
     [Round N update]
 
-    Since your last review, we have:
-    1. [Action 1]: [result]
-    2. [Action 2]: [result]
-    3. [Action 3]: [result]
-
-    Updated results table:
-    [paste metrics]
+    Since your last review these files changed — read them yourself; do not
+    take my word for what changed or whether it worked:
+    - Changed files: <paths>
+    - Raw diff: <path, or the `git diff` range>
+    - Updated raw results: <result-file paths> (verbatim files, not a pasted table)
 
     Please re-score and re-assess. Are the remaining concerns addressed?
     Same format: Score, Verdict, Remaining Weaknesses, Minimum Fixes.

@@ -95,8 +95,8 @@ stale_screen_detected → cleaned → pending
 > unchanged. Before handing a `stuck` batch to the human, the OPERATING AGENT
 > should check: if the same failure repeats across jobs, try ONE clean
 > reimplement of the **agent-generated wrapper/attempt script only** — never
-> user/project source, the manifest, queue state, logs, or results (per mainline
-> `external-cadence.md`, "Let a broken attempt restart, not just patch").
+> user/project source, the manifest, queue state, logs, or results (per
+> [`external-cadence.md`](../shared-references/external-cadence.md), "Let a broken attempt restart, not just patch").
 > Reserve the human handoff for contract/environment doubts, not merely broken
 > attempt code.
 

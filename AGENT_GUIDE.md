@@ -18,6 +18,12 @@ ARIS is a research harness: composable Markdown skills that orchestrate the ML r
 | Codex + Claude-review | `skills/skills-codex-claude-review/` | Overlay on top of `skills-codex/` |
 | Codex + Gemini-review | `skills/skills-codex-gemini-review/` | Same pattern, Gemini reviewer |
 
+Codex base review is a fresh same-family `spawn_agent` review. It may drive and
+complete workflows but records `review_independence: same-family` and
+`acceptance_status: provisional`. Claude/Gemini overlays or deterministic
+verifiers may record accepted; never describe base Codex self-review as
+cross-model acceptance.
+
 **Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **79 skills**, grouped by role.
 
 Invocation syntax is identical across hosts:

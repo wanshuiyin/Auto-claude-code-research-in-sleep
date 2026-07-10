@@ -260,7 +260,7 @@ If the context window compacts mid-run, the loop recovers from `DSE_STATE.json` 
 - If the same crash repeats 3 times with different configs, the harness code itself is
   the suspect — **discard and reimplement the run/parse script cleanly from the spec**
   (a peer move to another patch; delete only the script, never `dse_log.csv` /
-  `dse_results/`; per mainline `external-cadence.md`, "Let a broken attempt restart, not
+  `dse_results/`; per [`external-cadence.md`](../shared-references/external-cadence.md), "Let a broken attempt restart, not
   just patch"). **Before resuming the sweep, re-validate metric comparability**: re-parse
   one COMPLETED iteration's raw output from `dse_results/outputs/iter_N/` with the new
   parser and confirm it reproduces that row of `dse_log.csv`; on mismatch, fix the parser
@@ -283,4 +283,3 @@ If the context window compacts mid-run, the loop recovers from `DSE_STATE.json` 
 # Real-world: PDAG-SFA formal verification tuning
 /dse-loop "Run python run_bmc.py. Tune: BMC_DEPTH, ENGINE, TIMEOUT_PER_PROP. Objective: maximize properties proved. Timeout: 2h"
 ```
-

@@ -54,6 +54,10 @@ the resolver returns the empty string, write the four files inline
   "run_id": "2026-04-15_run01",
   "started_at": "2026-04-15T14:30:00+08:00",
   "executor": "codex",
+  "executor_model": "gpt-5.5",
+  "executor_family": "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
   "project_dir": "/path/to/project"
 }
 ```
@@ -84,10 +88,18 @@ the resolver returns the empty string, write the four files inline
   "timestamp": "2026-04-15T14:33:00+08:00",
   "agent_id": "019d8fe0-b25d-...",
   "model": "gpt-5.5",
+  "reviewer_family": "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
   "duration_ms": 142000,
   "status": "ok"
 }
 ```
+
+For a Claude/Gemini overlay write `review_independence: cross-family` and
+`acceptance_status: accepted`. For a deterministic verifier write
+`review_independence: deterministic` and `acceptance_status: accepted`. These
+fields describe the reviewer route; they do not rewrite the substantive verdict.
 
 ## Configuration
 

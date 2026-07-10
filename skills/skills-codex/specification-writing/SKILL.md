@@ -150,7 +150,7 @@ Verify every claim element finds support in the specification:
 
 If any element lacks support, add the necessary description before proceeding.
 
-### Step 10: Cross-Model Review
+### Step 10: Fresh-Agent Review (same-family provisional by default)
 
 Call `REVIEWER_MODEL` via a dedicated Codex reviewer agent at xhigh reasoning:
 
