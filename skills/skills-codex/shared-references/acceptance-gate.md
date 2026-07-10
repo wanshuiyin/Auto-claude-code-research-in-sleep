@@ -14,7 +14,13 @@
 **An autonomous loop's STOP/ACCEPT gate determines its assurance level. The
 thing being judged at that gate — not the loop's subject matter, not how many
 agents ran — decides whether a base Codex review is provisional or an overlay /
-deterministic route may mark it accepted.**
+deterministic route may mark it accepted.** (A deterministic verifier accepts
+only what a PROCESS can actually decide — compilation, schema validity, hash
+freshness, test suites. It can never acquit a SEMANTIC judgment — proof
+correctness, claim support, novelty — however it is labeled; see
+`skill-governance.md`, which scopes deterministic verifiers to mechanical
+checks, and the audit aggregator, which rejects deterministic labels on the
+four semantic paper audits.)
 
 ARIS has loops that keep working until a condition is met: `/auto-review-loop`,
 `/dse-loop`, the `/experiment-bridge` auto-debug cycle, the

@@ -32,7 +32,7 @@ This follows `shared-references/reviewer-independence.md` and `shared-references
 
 ## Constants
 
-- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, xhigh). Override with `— reviewer: oracle-pro` for GPT-5.6-Sol Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, ultra — deep-audit tier). Override with `— reviewer: oracle-pro` for GPT-5.5 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
 
 ## Workflow
 

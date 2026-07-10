@@ -2,7 +2,8 @@
 
 > **Codex mirror adaptation (normative).** Start Codex runs with
 > `run_state.py start ... --executor codex`. A fresh same-family Codex reviewer
-> records `mark-provisional`, which is terminal for resume but never equivalent
+> records `mark-provisional`, which may close the phase for resume ONLY under
+> the per-run policy below, and is never equivalent
 > to accepted. Cross-family overlays and deterministic checks continue to use
 > `accept`.
 
@@ -26,10 +27,10 @@ lives. The phase-status enum splits execution from acceptance:
 | `failed` | executor errored | executor (`set`) | — |
 | **`done`** | executor finished writing the artifact | executor (`set`) | **EXECUTION-completeness — safe same-model self-report** |
 | **`accepted`** | a cross-family reviewer **or** a deterministic verifier returned a positive verdict | **`accept` only** — requires a recorded verdict id + reviewer, AND the phase already `done` (use `--force` for a purely-deterministic phase with no executor step) | **QUALITY/correctness — cross-family (or a deterministic check)** |
-| **`provisional`** | a fresh same-family Codex reviewer returned a positive verdict | **`mark-provisional` only** — requires executor, reviewer, verdict id, and a completed phase | terminal for resume, but never equivalent to accepted |
+| **`provisional`** | a fresh same-family Codex reviewer returned a positive verdict | **`mark-provisional` only** — requires executor, reviewer, verdict id, and a completed phase | terminal for resume ONLY when the run was started with `--provisional-advances` (the Codex-native default recommendation); never equivalent to accepted |
 | `skipped` | the phase does not apply to this run (e.g. `paper-writing` when `AUTO_WRITE=false`) | executor (`set`) | terminal — a deterministic config decision, not a quality verdict |
 
-**Resume walks forward to the first phase that is NOT terminal ({`accepted`, `provisional`, `skipped`})** — never
+**Resume walks forward to the first phase that is NOT terminal** ({`accepted`, `skipped`}; plus `provisional` only when the run's `policy.provisional_advances` is true — Codex-native runs start with `--provisional-advances`, mainline runs keep cross-family-only advance) — never
 the first non-`done`. So a phase the executor self-considered "done" but that
 crashed *before its accepted audit* is **re-validated** on resume, never
 silently skipped. This is `acceptance-gate.md` made operational: **a loop can
@@ -56,8 +57,9 @@ Only:
 
 The **executor (Codex) must never call `accept` on its own self-report.** Marking
 your own phase done is fine (`set done`); acquitting it is not. `accept` records
-the `reviewer` and warns loudly if it looks like the executor's own family
-(a `claude*` reviewer ≈ self-acquittal). Record `verdict_id` as a **durable
+the `reviewer` and REFUSES a known same-family pair (for a Codex executor that
+means `gpt*`/`codex*` reviewers — a `claude*` or `gemini*` reviewer is exactly
+the legitimate cross-family overlay). Record `verdict_id` as a **durable
 handle** — the reviewer thread/trace id, or the path/sha of the verifier's report
 (e.g. `.aris/audit-verifier-report.json`) — not just a label, so the acceptance
 is auditable later.
@@ -82,7 +84,8 @@ resume_point(root, run_id)  # -> first NON-TERMINAL phase, or None
 ```
 python3 tools/run_state.py start  <root> <run_id> --phases "W1,W1.5,W2,W3"
 python3 tools/run_state.py set    <root> <run_id> W1 done --artifact idea-stage/IDEA_REPORT.md
-python3 "$RUN_STATE" mark-provisional <root> <run_id> W1 --verdict-id agent:019e... --reviewer gpt-5.5
+python3 "$RUN_STATE" start <root> <run_id> --phases W1,W1.5,W2 --executor codex-gpt-5.6-sol --provisional-advances
+python3 "$RUN_STATE" mark-provisional <root> <run_id> W1 --verdict-id agent:019e... --reviewer gpt-5.6-sol
 python3 "$RUN_STATE" accept <root> <run_id> W2 --verdict-id pytest:report --reviewer deterministic:pytest
 python3 tools/run_state.py resume <root> <run_id>   # prints the resume-target phase name on stdout
 python3 tools/run_state.py status <root> <run_id>

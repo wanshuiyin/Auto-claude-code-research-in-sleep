@@ -199,16 +199,39 @@ def test_mark_provisional_requires_done_and_same_family():
             assert raised, f"reviewer {reviewer!r} is not a same-family Codex review"
 
 
-def test_provisional_is_terminal_for_resume():
+def test_provisional_advances_only_under_explicit_policy():
+    # Codex-native mirror: start_run opts IN, provisional closes the phase for resume
     with _tmp() as d:
-        rs.start_run(d, "run-a", PHASES, executor="codex")
+        rs.start_run(d, "run-a", PHASES, executor="codex", provisional_advances=True)
         rs.set_status(d, "run-a", "W1", "done")
-        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-5.5")
+        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-5.6-sol")
         assert rs.resume_point(d, "run-a")["phase"] == "W1.5"
-
         for phase in PHASES[1:]:
             rs.set_status(d, "run-a", phase, "skipped")
         assert rs.resume_point(d, "run-a") is None
+
+
+def test_provisional_does_not_advance_mainline_default():
+    # mainline default policy: a same-family provisional verdict is NOT terminal —
+    # the phase remains the resume target until a cross-family acceptance lands
+    with _tmp() as d:
+        rs.start_run(d, "run-a", PHASES, executor="codex")
+        rs.set_status(d, "run-a", "W1", "done")
+        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-5.6-sol")
+        assert rs.resume_point(d, "run-a")["phase"] == "W1"
+
+
+def test_provisional_upgrades_to_accepted_by_cross_family():
+    # the monotonic path: a later Claude/Gemini overlay acquits a provisional phase
+    with _tmp() as d:
+        rs.start_run(d, "run-a", PHASES, executor="codex")
+        rs.set_status(d, "run-a", "W1", "done")
+        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-5.6-sol")
+        st = rs.accept(d, "run-a", "W1", "claude:v1", "claude-opus-4-8")
+        ph = next(p for p in st["phases"] if p["phase"] == "W1")
+        assert ph["status"] == "accepted"
+        assert ph["review_independence"] == "cross-family"
+        assert rs.resume_point(d, "run-a")["phase"] == "W1.5"
 
 
 def test_resume_none_when_all_accepted():

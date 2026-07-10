@@ -166,6 +166,14 @@ def stamp_provisional(target: str, author_model: str, reviewer_model: str,
         raise ValueError(
             "stamp_provisional is only for same-family model review; use stamp "
             "for a cross-family or deterministic acceptance gate.")
+    # MONOTONIC: a provisional receipt must never silently replace an accepted
+    # one — acceptance can only be superseded by a new accepted stamp.
+    existing = read(target)
+    if existing and _record_is_accepted(existing):
+        raise ValueError(
+            "refusing to overwrite an ACCEPTED provenance record with a "
+            "provisional one (acceptance is monotonic; re-run the cross-family "
+            "gate via stamp() if the artifact changed).")
     return _stamp_record(
         target, author_model, reviewer_model, verdict_id,
         "same-family", "provisional", created_by, ts,
@@ -185,20 +193,52 @@ def is_auto_authored(target: str) -> bool:
     return bool(rec and rec.get("created_by") == "aris-auto")
 
 
-def is_auto_curatable(target: str) -> bool:
-    """Whether an auto-authored artifact carries accepted authorization.
+def _record_is_accepted(rec: dict) -> bool:
+    """A record counts as ACCEPTED only when its own stored fields survive
+    re-verification — a sidecar is plain JSON on disk, so nothing in it is
+    trusted at face value:
 
-    Legacy records predate ``acceptance_status`` but were only creatable through
-    the strict cross-family ``stamp`` path, so they remain curatable. Explicit
-    provisional records are never sufficient authorization for future automatic
-    rewrites.
+    - families are RECOMPUTED from the stored model names (a hand-edited
+      ``reviewer_family`` cannot fake independence);
+    - the recomputed pair must be cross-family or reviewer-deterministic;
+    - ``acceptance_status`` must be explicitly "accepted", or absent
+      (legacy record — those predate the field but were only creatable via the
+      strict cross-family stamp(), and the recomputation above re-checks that);
+    - ``review_independence``, when present, must agree ("cross-family");
+    - ``verdict_id`` must be non-empty.
     """
+    if not isinstance(rec, dict):
+        return False
+    if rec.get("acceptance_status", None) not in ("accepted", None):
+        return False
+    if rec.get("review_independence") not in (None, "cross-family"):
+        return False
+    if not str(rec.get("verdict_id") or "").strip():
+        return False
+    author_family = model_family(str(rec.get("author_model") or ""))
+    reviewer_family = model_family(str(rec.get("reviewer_model") or ""))
+    if reviewer_family == "deterministic":
+        return True
+    return ("unknown" not in (author_family, reviewer_family)
+            and author_family != reviewer_family)
+
+
+def is_auto_curatable(target: str) -> bool:
+    """Whether an auto-authored artifact carries accepted authorization that
+    still HOLDS. Beyond :func:`_record_is_accepted` (fields re-verified, never
+    trusted), the stored ``content_hash`` must match the CURRENT artifact — a
+    stamp for a file that has since been edited authorizes nothing. Explicit
+    provisional records are never sufficient authorization for automatic
+    rewrites."""
     rec = read(target)
-    return bool(
-        rec
-        and rec.get("created_by") == "aris-auto"
-        and rec.get("acceptance_status", "accepted") == "accepted"
-    )
+    if not (rec and rec.get("created_by") == "aris-auto" and _record_is_accepted(rec)):
+        return False
+    p = Path(target)
+    hash_target = (p / "SKILL.md") if p.is_dir() and (p / "SKILL.md").is_file() else p
+    if not hash_target.is_file():
+        return False
+    stored = rec.get("content_hash")
+    return bool(stored) and stored == content_hash(str(hash_target))
 
 
 __all__ = [

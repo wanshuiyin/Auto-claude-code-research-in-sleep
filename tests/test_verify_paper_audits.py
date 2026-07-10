@@ -98,17 +98,61 @@ def test_same_family_green_audits_are_provisional_and_nonblocking():
     assert all(row["review_independence"] == "same-family" for row in report["audits"])
 
 
-def test_cross_family_and_deterministic_green_audits_are_accepted():
-    for independence in ("cross-family", "deterministic"):
-        result, report = _verify(independence)
-        assert result.returncode == 0, result.stderr
-        assert report["overall_assurance"] == "accepted"
-
-
-def test_deterministic_green_audits_accept_unknown_executor_tooling():
-    result, report = _verify("deterministic", executor="local-tooling")
+def test_cross_family_green_audits_are_accepted():
+    result, report = _verify("cross-family")
     assert result.returncode == 0, result.stderr
     assert report["overall_assurance"] == "accepted"
+
+
+def test_deterministic_label_cannot_acquit_semantic_audits():
+    # these four audits are SEMANTIC — a self-reported deterministic:pytest
+    # label is just metadata, not a verifier that ran; it must block, not acquit
+    result, report = _verify("deterministic")
+    assert result.returncode == 1
+    assert report["overall_assurance"] == "blocked"
+    result, report = _verify("deterministic", executor="local-tooling")
+    assert result.returncode == 1
+    assert report["overall_assurance"] == "blocked"
+
+
+def _run_on(mutate) -> tuple[subprocess.CompletedProcess[str], dict]:
+    """Like _verify('cross-family') but lets the test corrupt the paper dir first."""
+    with tempfile.TemporaryDirectory() as d:
+        paper = Path(d) / "paper"
+        paper.mkdir()
+        _write_audits(paper, "cross-family")
+        mutate(paper)
+        result = subprocess.run(
+            ["bash", str(VERIFIER), str(paper), "--assurance", "submission"],
+            cwd=REPO_ROOT, text=True, capture_output=True, check=False)
+        report = json.loads((paper / ".aris" / "audit-verifier-report.json").read_text())
+        return result, report
+
+
+def test_non_object_json_artifact_blocks():
+    # a bare [] is valid JSON but not an audit artifact — must fail CLOSED
+    def corrupt(paper):
+        (paper / sorted(AUDITS)[0]).write_text("[]", encoding="utf-8")
+    result, report = _run_on(corrupt)
+    assert result.returncode == 1
+    assert report["overall_assurance"] == "blocked"
+
+
+def test_pipe_injection_in_verdict_cannot_forge_pass():
+    # artifact text reaches bash through a |-delimited protocol; a verdict
+    # crafted with separators must not smuggle a PASS or hide issues
+    def inject(paper):
+        first = sorted(AUDITS)[0]
+        art = json.loads((paper / first).read_text())
+        art["verdict"] = "EVIL|PASS||True|cross-family"
+        (paper / first).write_text(json.dumps(art), encoding="utf-8")
+    result, report = _run_on(inject)
+    assert result.returncode == 1
+    assert report["overall_assurance"] == "blocked"
+    assert all("EVIL" not in (row.get("verdict") or "") or row["verdict"] != "PASS"
+               for row in report["audits"])
+    assert all(row.get("verdict") != "PASS" or row["audit"] != sorted(AUDITS.values())[0]
+               for row in report["audits"])
 
 
 def test_legacy_unspecified_independence_is_conservatively_provisional():

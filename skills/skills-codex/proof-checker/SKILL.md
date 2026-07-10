@@ -21,7 +21,7 @@ Systematically verify a mathematical proof via fresh-agent adversarial review, f
 - MAX_REVIEW_ROUNDS = 3
 - REVIEWER_MODEL = `gpt-5.6-sol` via Codex reviewer agent, reasoning effort
   `ultra` for this deep-audit skill (capability fallback never below `xhigh`)
-- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, xhigh). Override with `— reviewer: oracle-pro` for GPT-5.6-Sol Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, ultra — deep-audit tier). Override with `— reviewer: oracle-pro` for GPT-5.5 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
 - AUDIT_DOC: `PROOF_AUDIT.md` at the paper directory root, alongside `main.tex` (cumulative log; when invoked via `/paper-writing`, this is `paper/PROOF_AUDIT.md`)
 - REPORT_TEX: `proof_audit_report.tex` (formal before/after PDF)
 - STATE_FILE: `PROOF_CHECK_STATE.json` (for recovery)
@@ -437,7 +437,7 @@ python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug "<stable-theorem-id>" \
 
 ### Review-independence protocol
 - **Codex executor analyzes and implements; a fresh Codex reviewer provides adversarial review.** Base review remains same-family/provisional.
-- **Codex reasoning always ultra**: Never downgrade.
+- **Codex reasoning always ultra** (deep-audit tier): never below `xhigh` — only the capability fallback in `reviewer-routing.md` may step down, and only on explicit capability errors.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
 - **Fresh reviewer agents**: Save each returned `agent_id` for traceability, but launch a new `spawn_agent` for each review round. Do not use `send_input` across proof-checker rounds.
 

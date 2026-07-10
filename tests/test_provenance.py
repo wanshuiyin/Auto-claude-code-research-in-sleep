@@ -205,6 +205,56 @@ def test_is_auto_authored():
         assert pv.is_auto_curatable(str(human)) is False
 
 
+
+
+# ---- sidecar hardening: a sidecar is untrusted JSON on disk ----
+
+def test_spoofed_sidecar_status_cannot_authorize_curation():
+    import json as _json
+    with tempfile.TemporaryDirectory() as d:
+        art = Path(d) / "skill.md"
+        art.write_text("x\n", encoding="utf-8")
+        pv.stamp_provisional(str(art), "codex-gpt-5.6-sol", "gpt-5.6-sol", verdict_id="agent:1")
+        sc = Path(str(art) + ".provenance.json")
+        rec = _json.loads(sc.read_text())
+        # attack 1: flip the status field to accepted
+        rec["acceptance_status"] = "accepted"
+        sc.write_text(_json.dumps(rec))
+        assert pv.is_auto_curatable(str(art)) is False   # families re-verified
+        # attack 2: delete the field to masquerade as a legacy record
+        del rec["acceptance_status"]
+        sc.write_text(_json.dumps(rec))
+        assert pv.is_auto_curatable(str(art)) is False   # legacy re-verifies families too
+        # attack 3: also spoof the family labels (recomputation must win)
+        rec["reviewer_family"] = "anthropic"
+        rec["review_independence"] = "cross-family"
+        sc.write_text(_json.dumps(rec))
+        assert pv.is_auto_curatable(str(art)) is False
+
+
+def test_stale_stamp_after_edit_is_not_curatable():
+    with tempfile.TemporaryDirectory() as d:
+        art = Path(d) / "skill.md"
+        art.write_text("x\n", encoding="utf-8")
+        pv.stamp(str(art), "claude-opus-4-8", "gpt-5.6-sol", verdict_id="t1")
+        assert pv.is_auto_curatable(str(art)) is True
+        art.write_text("x edited after acceptance\n", encoding="utf-8")
+        assert pv.is_auto_curatable(str(art)) is False   # hash no longer matches
+
+
+def test_provisional_cannot_overwrite_accepted():
+    with tempfile.TemporaryDirectory() as d:
+        art = Path(d) / "skill.md"
+        art.write_text("x\n", encoding="utf-8")
+        pv.stamp(str(art), "claude-opus-4-8", "gpt-5.6-sol", verdict_id="t1")
+        try:
+            pv.stamp_provisional(str(art), "codex-gpt-5.6-sol", "gpt-5.6-sol", verdict_id="agent:2")
+            assert False, "provisional must not silently replace accepted"
+        except ValueError:
+            pass
+        assert pv.is_auto_curatable(str(art)) is True    # acceptance survived
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = failed = 0

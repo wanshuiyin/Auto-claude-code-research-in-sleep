@@ -675,7 +675,12 @@ bash "$AUDIT_VERIFIER" paper/ --assurance submission
 ```
 
 - **Exit 0** — All mandatory audits present, JSON schema-valid, hashes fresh,
-  no blocking verdicts. Proceed to the Final Report below.
+  no blocking verdicts. **Before writing the Final Report, read
+  `overall_assurance` from `paper/.aris/audit-verifier-report.json`** — exit 0
+  covers BOTH `accepted` (cross-family/independent review) and `provisional`
+  (same-family or legacy review that may proceed but must not claim
+  independent acceptance). The Final Report's Submission-ready line comes from
+  that field, never from the exit code alone.
 - **Exit 1** — Surface `paper/.aris/audit-verifier-report.json` to the user
   verbatim, **refuse to generate the Final Report**, and list the specific
   remediation for each failing row:
@@ -718,7 +723,7 @@ or directly if `assurance=draft`)
 **Input**: [NARRATIVE_REPORT.md or topic]
 **Venue**: [ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM/IEEE_JOURNAL/IEEE_CONF]
 **Assurance**: [draft | submission]
-**Submission-ready**: [yes | no]   <!-- yes iff assurance=submission AND verifier exit 0 -->
+**Submission-ready**: [yes | provisional | no]   <!-- yes iff assurance=submission AND verifier exit 0 AND overall_assurance=accepted; provisional iff exit 0 with overall_assurance=provisional (same-family/legacy review — do NOT present as independently accepted); no otherwise -->
 **Date**: [today]
 
 ## Pipeline Summary

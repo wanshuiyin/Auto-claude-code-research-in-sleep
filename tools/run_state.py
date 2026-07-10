@@ -59,8 +59,20 @@ except ImportError:  # pragma: no cover - Windows
     fcntl = None  # type: ignore
 
 EXECUTOR_STATUSES = {"pending", "running", "done", "failed", "skipped"}
-TERMINAL_STATUSES = {"accepted", "provisional", "skipped"}  # resume skips these
+# Statuses resume ALWAYS skips. `provisional` is deliberately NOT here: whether a
+# same-family provisional verdict may advance a run is a PER-RUN POLICY
+# (`policy.provisional_advances`, default False). The Codex-native mirror sets it
+# true at start_run; mainline runs keep the historical guarantee that only a
+# cross-family acceptance (or an explicit skip) closes a phase.
+TERMINAL_STATUSES = {"accepted", "skipped"}
 ALL_STATUSES = EXECUTOR_STATUSES | {"accepted", "provisional"}
+
+
+def _terminal_statuses(state: dict) -> set:
+    base = set(TERMINAL_STATUSES)
+    if (state.get("policy") or {}).get("provisional_advances") is True:
+        base.add("provisional")
+    return base
 
 
 def _now() -> str:
@@ -122,12 +134,16 @@ def _save(root: str, run_id: str, state: dict) -> None:
             raise
 
 
-def start_run(root: str, run_id: str, phases: list[str], executor: Optional[str] = "claude") -> dict:
+def start_run(root: str, run_id: str, phases: list[str], executor: Optional[str] = "claude",
+              provisional_advances: bool = False) -> dict:
     """Create a run with ordered phases, all `pending` (idempotent: won't clobber).
 
     ``claude`` is the historical mainline executor default. Codex-native callers
-    must record ``--executor codex-gpt-5.5`` (or their actual executor) so a
+    must record ``--executor codex-gpt-5.6-sol`` (or their actual executor) so a
     same-family review cannot be misclassified as independent acceptance.
+    ``provisional_advances`` is the per-run policy that lets a same-family
+    provisional verdict close a phase for RESUME purposes (Codex-native mirror:
+    true; mainline default: false — only cross-family acceptance advances).
     """
     with _lock(root, run_id):
         if _run_path(root, run_id).exists():
@@ -136,6 +152,7 @@ def start_run(root: str, run_id: str, phases: list[str], executor: Optional[str]
             "run_id": run_id,
             "executor_model": executor,
             "executor_family": model_family(executor) if executor else None,
+            "policy": {"provisional_advances": bool(provisional_advances)},
             "created": _now(),
             "updated": _now(),
             "phases": [{"phase": ph, "status": "pending", "artifact": None,
@@ -190,10 +207,12 @@ def accept(root: str, run_id: str, phase: str, verdict_id: str, reviewer: str, f
     with _lock(root, run_id):
         state = _load(root, run_id)
         ph = _find_phase(state, phase)
-        if not force and ph["status"] not in ("done", "accepted"):
+        if not force and ph["status"] not in ("done", "accepted", "provisional"):
             raise ValueError(
                 f"phase {phase!r} is {ph['status']!r}, not 'done' — cannot accept a phase that "
                 f"has not completed execution. Set it 'done' first, or pass force=True.")
+        # (provisional -> accepted is the intended monotonic upgrade: a later
+        # cross-family overlay acquits a phase a same-family review only drove.)
         reviewer_family = model_family(reviewer)
         # Older state files predate executor provenance. They belonged to the
         # Claude mainline, whose historical executor was Claude; retain that
@@ -281,7 +300,7 @@ def resume_point(root: str, run_id: str) -> Optional[dict]:
     """
     state = _load(root, run_id)
     for ph in state["phases"]:
-        if ph["status"] not in TERMINAL_STATUSES:
+        if ph["status"] not in _terminal_statuses(state):
             return ph
     return None
 
@@ -298,14 +317,14 @@ def _print_status(state: dict) -> None:
         elif ph["artifact"]:
             line += f"  → {ph['artifact']}"
         print(line)
-    rp = next((p for p in state["phases"] if p["status"] not in TERMINAL_STATUSES), None)
+    rp = next((p for p in state["phases"] if p["status"] not in _terminal_statuses(state)), None)
     print(f"  resume → {rp['phase'] if rp else 'COMPLETE (all phases terminal; provisional is not accepted)'}")
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="ARIS resumable run-state (done vs accepted).")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("start"); s.add_argument("root"); s.add_argument("run_id"); s.add_argument("--phases", required=True, help="comma-separated phase names"); s.add_argument("--executor", default="claude")
+    s = sub.add_parser("start"); s.add_argument("root"); s.add_argument("run_id"); s.add_argument("--phases", required=True, help="comma-separated phase names"); s.add_argument("--executor", default="claude"); s.add_argument("--provisional-advances", action="store_true", help="per-run policy: let a same-family provisional verdict close a phase for resume (Codex-native mirror only; mainline default keeps cross-family-only advance)")
     s = sub.add_parser("set"); s.add_argument("root"); s.add_argument("run_id"); s.add_argument("phase"); s.add_argument("status", choices=sorted(EXECUTOR_STATUSES)); s.add_argument("--artifact")
     s = sub.add_parser("accept"); s.add_argument("root"); s.add_argument("run_id"); s.add_argument("phase"); s.add_argument("--verdict-id", required=True); s.add_argument("--reviewer", required=True); s.add_argument("--force", action="store_true")
     s = sub.add_parser("mark-provisional"); s.add_argument("root"); s.add_argument("run_id"); s.add_argument("phase"); s.add_argument("--verdict-id", required=True); s.add_argument("--reviewer", required=True); s.add_argument("--executor")
@@ -316,7 +335,7 @@ def main() -> int:
 
     try:
         if a.cmd == "start":
-            _print_status(start_run(a.root, a.run_id, [p.strip() for p in a.phases.split(",") if p.strip()], executor=a.executor))
+            _print_status(start_run(a.root, a.run_id, [p.strip() for p in a.phases.split(",") if p.strip()], executor=a.executor, provisional_advances=a.provisional_advances))
         elif a.cmd == "set":
             _print_status(set_status(a.root, a.run_id, a.phase, a.status, a.artifact))
         elif a.cmd == "accept":
