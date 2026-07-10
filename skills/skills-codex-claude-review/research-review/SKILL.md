@@ -5,13 +5,14 @@ description: "Get a deep critical review of research from Claude via claude-revi
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
 
-# Research Review via `claude-review` MCP (high-rigor review)
+# Research Review via a Claude reviewer via `claude-review` MCP (ultra reasoning)
 
 Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
 
 ## Constants
 
 - **REVIEWER_MODEL = `claude-review`** — Claude reviewer invoked through the local `claude-review` MCP bridge. Set `CLAUDE_REVIEW_MODEL` if you need a specific Claude model override.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex ultra reviewer (deep-audit tier). Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and fall back to Codex xhigh. **Same-family note:** this default reviewer is a second Codex/GPT agent — valid for Type-A completeness/drive review, but not a cross-family Type-B verdict; install a `skills-codex-claude-review` / `skills-codex-gemini-review` overlay for a cross-family acquittal (see `shared-references/reviewer-routing.md`).
 
 ## Context: $ARGUMENTS
 
@@ -35,13 +36,16 @@ Before calling the external reviewer, compile a comprehensive briefing:
 3. Identify: core claims, methodology, key results, known weaknesses
 
 ### Step 2: Initial Review (Round 1)
-Send a detailed prompt with high-rigor review:
+Send a detailed prompt with ultra reasoning:
 
 ```
 mcp__claude-review__review_start:
   prompt: |
     [Full research context + specific questions]
-    Please act as a senior ML reviewer (NeurIPS/ICML level). Identify:
+    Please act as a senior ML reviewer (NeurIPS/ICML level). Start from the
+    assumption that the work is broken somewhere — your job is to find where.
+    Be adversarial. Trust nothing the author tells you — verify everything
+    yourself. Identify:
     1. Logical gaps or unjustified claims
     2. Missing experiments that would strengthen the story
     3. Narrative weaknesses
@@ -53,6 +57,21 @@ After this start call, immediately save the returned `jobId` and poll `mcp__clau
 
 ### Step 3: Iterative Dialogue (Rounds 2-N)
 Use `mcp__claude-review__review_reply_start` with the saved completed `threadId`, then poll `mcp__claude-review__review_status` with the returned `jobId` until `done=true` to continue the conversation:
+
+```
+mcp__claude-review__review_reply_start:
+  target: [saved reviewer id from Step 2]
+  prompt: |
+    Please continue the review using the revised materials below.
+
+    Revised files:
+    - /absolute/path/to/file1
+    - /absolute/path/to/file2
+
+    Focus on unresolved weaknesses and whether the revision actually fixed them.
+```
+
+After this start call, immediately save the returned `jobId` and poll `mcp__claude-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the reviewer output, and save the completed `threadId` for any follow-up round.
 
 For each round:
 1. **Respond** to criticisms with evidence/counterarguments
@@ -82,9 +101,13 @@ Save the full interaction and conclusions to a review document in the project ro
 
 Update project memory/notes with key review conclusions.
 
+### Step 6: Review Tracing
+
+Save a trace for every `spawn_agent`, `send_input`, or `oracle-pro` review call following `../shared-references/review-tracing.md`. Record the reviewer route, saved agent id, prompt summary, raw response path, decisions, and action items. This preserves the Claude mainline Review Tracing semantics while using Codex-native reviewer calls.
+
 ## Key Rules
 
-- Always ask the Claude reviewer for strict, high-rigor feedback.
+- **Always ask the Claude reviewer for strict, high-rigor feedback** in every review round.
 - Send comprehensive context in Round 1 — the external model cannot read your files
 - Be honest about weaknesses — hiding them leads to worse feedback
 - Push back on criticisms you disagree with, but accept valid ones

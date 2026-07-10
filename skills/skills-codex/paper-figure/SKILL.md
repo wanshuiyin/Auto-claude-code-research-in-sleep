@@ -28,7 +28,7 @@ Generate all figures and tables for a paper based on: **$ARGUMENTS**
 - **COLOR_PALETTE = `tab10`** — Default matplotlib color cycle. Options: `tab10`, `Set2`, `colorblind` (deuteranopia-safe)
 - **FONT_SIZE = 10** — Base font size (matches typical conference body text)
 - **FIG_DIR = `figures/`** — Output directory for generated figures
-- **REVIEWER_MODEL = `gpt-5.5`** — Model used via a secondary Codex agent for figure quality review.
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via a secondary Codex agent for figure quality review.
 
 ## Inputs
 
@@ -201,11 +201,11 @@ Save all snippets to `figures/latex_includes.tex` for easy copy-paste into the p
 
 ### Step 7: Figure Quality Review with REVIEWER_MODEL
 
-Send figure descriptions and captions to GPT-5.5 for review:
+Send figure descriptions and captions to GPT-5.6-Sol for review:
 
 ```
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     Review these figure/table plans for a [VENUE] submission.

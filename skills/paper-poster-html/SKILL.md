@@ -56,7 +56,7 @@ paper (.tex / PDF) ──► content plan + claim→evidence audit (codex, fresh
   ship inside this skill (Arch C). If the directory is missing the install is broken:
   abort and tell the user to re-install the skill (Policy A — the gates ARE the skill;
   never improvise replacements).
-- **REVIEWER_MODEL** = `gpt-5.5`, reasoning `xhigh`, **fresh thread per review call**
+- **REVIEWER_MODEL** = `gpt-5.6-sol`, reasoning `xhigh`, **fresh thread per review call**
   (`mcp__codex__codex`, never `codex-reply` across review boundaries).
 - **CANVAS** — from the venue's official spec, looked up live in Phase 0. Never assume.
   (Known anchor: ICLR 2026 main = 185×90 cm landscape per its official printing

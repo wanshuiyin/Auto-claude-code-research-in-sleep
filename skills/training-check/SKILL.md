@@ -23,7 +23,7 @@ Periodically read WandB metrics during training to catch problems early. Do not 
 
 - WANDB_ENTITY and WANDB_PROJECT: read from CLAUDE.md or passed as argument (format: `entity/project/run_id`)
 - CHECK_INTERVAL: starts at 10 minutes, then gradually increases if consistently healthy: 10 min → 20 min → 30 min → 60 min (cap)
-- REVIEWER_MODEL = `gpt-5.5` — used via Codex MCP for ambiguous cases only
+- REVIEWER_MODEL = `gpt-5.6-sol` — used via Codex MCP for ambiguous cases only
 
 ## When to Use
 

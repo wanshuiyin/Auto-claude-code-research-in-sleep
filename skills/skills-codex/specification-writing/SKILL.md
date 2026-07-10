@@ -13,7 +13,7 @@ Adapted from `/paper-write` for patent specifications. The specification support
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.5` — External reviewer for specification quality
+- `REVIEWER_MODEL = gpt-5.6-sol` — External reviewer for specification quality
 - `JURISDICTION = "auto"` — Inherit from pipeline or detect from args; `CN`, `US`, `EP`, `ALL`
 - `OUTPUT_FORMAT = "markdown"` — Markdown drafts; converted to filing format by `/jurisdiction-format`
 - `OUTPUT_DIR = "patent/"` — Base output directory
@@ -156,7 +156,7 @@ Call `REVIEWER_MODEL` via a dedicated Codex reviewer agent at xhigh reasoning:
 
 ```text
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     You are a patent examiner reviewing a specification for completeness.

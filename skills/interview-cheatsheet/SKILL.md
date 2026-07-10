@@ -76,7 +76,7 @@ Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide. L
 
 ### Step 3 — Cross-model math/code review (codex 5.5 xhigh, FRESH thread)
 
-Invoke `mcp__codex__codex` with `model: gpt-5.5`, `config: {model_reasoning_effort: xhigh}`, `sandbox: read-only`, fresh thread (never `codex-reply`).
+Invoke `mcp__codex__codex` with `model: gpt-5.6-sol`, `config: {model_reasoning_effort: xhigh}`, `sandbox: read-only`, fresh thread (never `codex-reply`).
 
 Reviewer prompt:
 
@@ -209,7 +209,7 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 
 | Invariant | How it's enforced |
 |---|---|
-| Executor != reviewer family | Claude drafts; gpt-5.5 reviews (math/code stage); gpt-5.5 reviews again (render stage) |
+| Executor != reviewer family | Claude drafts; gpt-5.6-sol reviews (math/code stage); gpt-5.6-sol reviews again (render stage) |
 | Fresh thread per reviewer call | Step 3 + render's own gate both use `mcp__codex__codex` not `codex-reply` |
 | Codex reasoning = xhigh | Hardcoded in Step 3 reviewer config |
 | Personal info redaction | Both math/code reviewer and render reviewer check; banlist in style guide |

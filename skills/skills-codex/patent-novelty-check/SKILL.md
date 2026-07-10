@@ -13,7 +13,7 @@ Adapted from `/novelty-check` for patent legal standards. Research novelty is NO
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.5` — Model used via Codex MCP for cross-model examiner verification
+- `REVIEWER_MODEL = gpt-5.6-sol` — Model used via Codex MCP for cross-model examiner verification
 - `NOVELTY_STANDARD = patent` — Always use legal patentability standard, not research contribution standard
 
 ## Inputs
@@ -80,7 +80,7 @@ Call `REVIEWER_MODEL` via a dedicated Codex reviewer agent at xhigh reasoning:
 
 ```text
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     You are a senior patent examiner at the [USPTO/CNIPA/EPO].
@@ -134,7 +134,7 @@ Write `patent/NOVELTY_ASSESSMENT.md`:
 [combination analysis with motivation to combine]
 
 ### Cross-Model Examiner Review
-[summary of GPT-5.5 examiner feedback]
+[summary of GPT-5.6-Sol examiner feedback]
 
 ### Recommended Claim Amendments
 [If claims need modification to overcome prior art, suggest specific amendments]

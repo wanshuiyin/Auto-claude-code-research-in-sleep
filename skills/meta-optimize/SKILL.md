@@ -259,11 +259,11 @@ For each optimization target, generate a concrete diff:
 > diff (a producer-relayed verdict would be forgeable). Record this result as
 > `advisory_screen` only.
 
-Send each patch to GPT-5.5 xhigh for adversarial review:
+Send each patch to GPT-5.6-Sol xhigh for adversarial review:
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are reviewing a proposed optimization to an ARIS SKILL.md file.

@@ -1,6 +1,6 @@
 ---
 name: "paper-figure"
-description: "Generate publication-quality figures and tables from experiment results. Use when user says \"画图\", \"作图\", \"generate figures\", \"paper figures\", or needs plots for a paper."
+description: "Generate publication-quality figures and tables from experiment results. Use when user says \\"画图\\", \\"作图\\", \\"generate figures\\", \\"paper figures\\", or needs plots for a paper."
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
@@ -179,7 +179,11 @@ for script in gen_fig*.py; do
 done
 ```
 
-Verify all output files exist and are non-empty.
+Verify all output files exist and are non-empty. Then **render-then-verify**:
+re-open each RENDERED PDF/PNG (not the script) and self-check — no clipped
+labels, no legend covering data, every number/label readable at final print
+size. This self-check happens BEFORE the Step 7 review, so the reviewer's
+budget goes to substance, not to catching clipped axes.
 
 ### Step 6: Generate LaTeX Include Snippets
 
@@ -199,7 +203,7 @@ Save all snippets to `figures/latex_includes.tex` for easy copy-paste into the p
 
 ### Step 7: Figure Quality Review with REVIEWER_MODEL
 
-Send figure descriptions and captions to the Claude reviewer for review:
+Send figure descriptions and captions to GPT-5.6-Sol for review:
 
 ```
 mcp__claude-review__review_start:
@@ -220,7 +224,35 @@ After this start call, immediately save the returned `jobId` and poll `mcp__clau
 
 ### Step 8: Quality Checklist
 
-Before finishing, verify each figure (from pedrohcgs/claude-code-my-workflow):
+The checklist is PARTITIONED (pattern from Anthropic's Claude Science
+`figure-style` skill, Apache-2.0): **correctness rules always bind** — they are
+about whether the figure tells the truth, have no aesthetic content, and no
+style choice may override them; **guidance rules are defaults** — they produce
+a clean result, but a deliberate, stated alternative may override them.
+
+**Correctness — always binds, verify against the DATA before the render:**
+
+- [ ] **Excluded data never enters summaries** — a row excluded/flagged in the
+      source either disappears entirely or is drawn visibly distinct (open /
+      hatched marker, named in the key); it never feeds a mean/CI plotted
+      alongside included rows
+- [ ] **Captions and any claim-like title text are tested against EVERY plotted
+      row** — if one category contradicts the claim, qualify it ("on 3 of 4
+      benchmarks") or downgrade to a description; a figure that overclaims is
+      wrong even if it renders beautifully
+- [ ] **Comparable conditions only** — arms measured under different N / budget
+      / protocol are not drawn as visual peers; separate them or mark the
+      difference in the caption
+- [ ] **State n and what was held fixed** — every panel with a summary mark
+      says n and the unit of replication (panel or caption)
+- [ ] **Render-then-verify** — the Step-5 self-check on the RENDERED PDF/PNG
+      (not the script) actually happened: no clipped labels, no legend covering
+      data, every number/label readable at final print size
+
+**Guidance — strong defaults (from pedrohcgs/claude-code-my-workflow), a
+deliberate stated alternative may override — EXCEPT items that Key Rules below
+make hard (vector-PDF output and no-titles-inside-figures are Key Rules: treat
+those two as binding, not overridable):**
 
 - [ ] Font size readable at printed paper size (not too small)
 - [ ] Colors distinguishable in grayscale (print-friendly)
@@ -248,13 +280,6 @@ figures/
 ├── latex_includes.tex           # LaTeX snippets for all figures
 └── TABLE_*.tex                  # standalone table LaTeX files
 ```
-
-## Output Protocols
-
-> Follow these shared protocols for all output files:
-> - **[Output Versioning Protocol](../../shared-references/output-versioning.md)** — write timestamped file first, then copy to fixed name
-> - **[Output Manifest Protocol](../../shared-references/output-manifest.md)** — log every output to MANIFEST.md
-> - **[Output Language Protocol](../../shared-references/output-language.md)** — respect the project's language setting
 
 ## Key Rules
 

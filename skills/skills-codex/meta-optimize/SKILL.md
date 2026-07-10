@@ -180,11 +180,11 @@ For each optimization target, generate a concrete diff:
 
 ### Step 4: Cross-Model Review of Patches
 
-Send each patch to GPT-5.5 xhigh for adversarial review:
+Send each patch to GPT-5.6-Sol xhigh for adversarial review:
 
 ```text
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     You are reviewing a proposed optimization to an ARIS SKILL.md file.

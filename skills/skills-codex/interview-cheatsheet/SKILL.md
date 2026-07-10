@@ -76,7 +76,7 @@ Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide. L
 
 ### Step 3 — Cross-model math/code review (codex 5.5 xhigh, FRESH thread)
 
-Invoke `spawn_agent` with `model: gpt-5.5`, `reasoning_effort: xhigh`, and a fresh thread. Do not reuse prior reviewer context.
+Invoke `spawn_agent` with `model: gpt-5.6-sol`, `reasoning_effort: xhigh`, and a fresh thread. Do not reuse prior reviewer context.
 
 Reviewer prompt:
 
@@ -209,7 +209,7 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 
 | Invariant | How it's enforced |
 |---|---|
-| Executor != reviewer family | Claude drafts; gpt-5.5 reviews (math/code stage); gpt-5.5 reviews again (render stage) |
+| Executor != reviewer family | Claude drafts; gpt-5.6-sol reviews (math/code stage); gpt-5.6-sol reviews again (render stage) |
 | Fresh agent per reviewer call | Step 3 + render's own gate both use fresh `spawn_agent` calls, not `send_input` |
 | Codex reasoning = xhigh | Hardcoded in Step 3 reviewer config |
 | Personal info redaction | Both math/code reviewer and render reviewer check; banlist in style guide |
