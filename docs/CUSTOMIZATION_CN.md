@@ -30,7 +30,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 | `ARXIV_DOWNLOAD` | false | 搜索后自动下载最相关的 arXiv PDF | → `idea-discovery` → `research-lit` |
 | `HUMAN_CHECKPOINT` | false | 设为 `true` 时每轮 review 后暂停等待确认 | → `auto-review-loop` |
 | `WANDB` | false | 自动给实验脚本加 W&B 日志 | → `experiment-bridge` → `run-experiment` |
-| `CODE_REVIEW` | true | GPT-5.5 部署前审查实验代码 | → `experiment-bridge` |
+| `CODE_REVIEW` | true | GPT-5.6-Sol 部署前审查实验代码 | → `experiment-bridge` |
 | `BASE_REPO` | false | GitHub 仓库 URL，克隆作为实验基础代码 | → `experiment-bridge` |
 | `GPU` | `local` | GPU 目标：`local`、`remote`（SSH）、或 `vast`（[Vast.ai](https://vast.ai) 按需租用） | → `experiment-bridge` → `run-experiment` |
 | `COMPACT` | false | 生成精简摘要文件，适合短 context 模型和 session 恢复 | → 所有工作流 |
@@ -76,7 +76,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 ### 实验桥接（`experiment-bridge`）
 
-调部署安全：GPT-5.5 代码审查、审查后自动部署、最小实验先跑、并行上限、W&B 日志、base repo URL。
+调部署安全：GPT-5.6-Sol 代码审查、审查后自动部署、最小实验先跑、并行上限、W&B 日志、base repo URL。
 
 行内覆盖：`/experiment-bridge — code review: false, wandb: true`
 
@@ -85,7 +85,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 | 常量 | 默认值 | 说明 |
 |------|--------|------|
-| `CODE_REVIEW` | true | GPT-5.5 xhigh 部署前审查代码。在浪费 GPU 前抓逻辑 bug |
+| `CODE_REVIEW` | true | GPT-5.6-Sol xhigh 部署前审查代码。在浪费 GPU 前抓逻辑 bug |
 | `AUTO_DEPLOY` | true | 实现 + 审查后自动部署。设 `false` 可手动检查 |
 | `BASE_REPO` | false | GitHub 仓库 URL，克隆作为实验基础代码 |
 | `SANITY_FIRST` | true | 先跑最小实验，提前发现 bug |
@@ -134,7 +134,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 ### 通用（所有使用 Codex MCP 的 skill）
 
-调所有 Codex MCP 调用使用的 reviewer 模型（默认 `gpt-5.5`），或者 fork SKILL.md 定制 prompt 模板与每个 skill 的工具白名单。
+调所有 Codex MCP 调用使用的 reviewer 模型（默认 `gpt-5.6-sol`），或者 fork SKILL.md 定制 prompt 模板与每个 skill 的工具白名单。
 
 - **Prompt 模板** — 定制评审人格和评估标准
 - **`allowed-tools`** — 限制或扩展每个 skill 可用的工具
@@ -144,7 +144,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 | 常量 | 默认值 | 说明 |
 |------|--------|------|
-| `REVIEWER_MODEL` | `gpt-5.5` | Codex MCP 调用的 OpenAI 模型。其他可选：`gpt-5.3-codex`、`gpt-5.2-codex`、`o3`。完整列表见 [supported models](https://developers.openai.com/codex/models/) |
+| `REVIEWER_MODEL` | `gpt-5.6-sol` | Codex MCP 调用的 OpenAI 模型。其他可选：`gpt-5.3-codex`、`gpt-5.2-codex`、`o3`。完整列表见 [supported models](https://developers.openai.com/codex/models/) |
 
 </details>
 

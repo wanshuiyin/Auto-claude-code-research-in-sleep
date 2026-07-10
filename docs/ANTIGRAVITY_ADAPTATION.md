@@ -68,7 +68,7 @@ cp -r skills/* /path/to/your/project/.agents/skills/
 
 ### 3.2 Set up Codex MCP in Antigravity (for review skills)
 
-ARIS uses an external LLM (GPT-5.5 via Codex) as a critical reviewer. To enable this in Antigravity:
+ARIS uses an external LLM (GPT-5.6-Sol via Codex) as a critical reviewer. To enable this in Antigravity:
 
 1. Install Codex CLI and authenticate:
    ```bash
@@ -284,7 +284,7 @@ ARIS skills reference MCP tools by name. These work identically in Antigravity o
 
 | ARIS MCP tool | What it does | Required MCP server |
 |--------------|-------------|-------------------|
-| `mcp__codex__codex` | Send prompt to GPT-5.5 | Codex |
+| `mcp__codex__codex` | Send prompt to GPT-5.6-Sol | Codex |
 | `mcp__codex__codex-reply` | Continue conversation thread | Codex |
 | `mcp__llm-chat__chat` | Send prompt to any OpenAI-compatible model | llm-chat |
 | `mcp__zotero__*` | Search Zotero library | zotero (name may vary) |

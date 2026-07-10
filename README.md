@@ -200,7 +200,7 @@ Custom [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skills for 
 >
 > 💭 **Why two models, not more?** Two is the minimum needed to break self-play blind spots, and 2-player games converge to Nash equilibrium far more efficiently than n-player ones. Adding more reviewers increases API cost and coordination overhead with diminishing returns — the biggest gain is going from 1→2, not 2→4.
 >
-> Claude Code's strength is fast, fluid execution; Codex (GPT-5.5 xhigh) is slower but more deliberate and rigorous in critique. These complementary styles — **speed × rigor** — produce better outcomes than either model talking to itself.
+> Claude Code's strength is fast, fluid execution; Codex (GPT-5.6-Sol xhigh) is slower but more deliberate and rigorous in critique. These complementary styles — **speed × rigor** — produce better outcomes than either model talking to itself.
 >
 > 🧿 **Want the strongest possible reviewer?** Add `— reviewer: oracle-pro` to any skill to route reviews through **GPT-5.5 Pro** via [Oracle MCP](https://github.com/steipete/oracle). Pro-level reasoning for proof verification, experiment auditing, and final stress tests. Works with API key or free browser mode. [Setup →](#-optional-gpt-54-pro-via-oracle)
 
@@ -271,7 +271,7 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 | `character limit` | — | **Required.** Hard character limit for rebuttal text |
 | `quick mode` | `false` | Stop after parsing + strategy (Phase 0-3). See what reviewers want before drafting |
 | `auto experiment` | `false` | Auto-run supplementary experiments via `/experiment-bridge` when reviewers ask for new evidence |
-| `max stress test rounds` | `1` | How many times GPT-5.5 xhigh stress-tests the draft |
+| `max stress test rounds` | `1` | How many times GPT-5.6-Sol xhigh stress-tests the draft |
 | `max followup rounds` | `3` | Per-reviewer follow-up round limit |
 
 </details>
@@ -289,6 +289,7 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 
 ## 2. 📢 What's New
 
+- **2026-07-10** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧠 **Reviewer default is now GPT-5.6-Sol; deep audits think at the new `ultra` level** ([#353](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/353)). codex-cli 0.144.1 added reasoning levels above `xhigh` (`max`, `ultra` — `ultra` can also delegate subtasks on its own). ARIS reviews now default to `gpt-5.6-sol`: the seven heavyweight verdicts (`/proof-checker`, `/kill-argument`, `/research-review`, `/experiment-audit`, `/paper-claim-audit`, `/result-to-claim`, `/meta-apply`) run at `ultra`, everything else stays at `xhigh`. Older codex-cli or no model access? Skills step down automatically (5.6-sol `xhigh`, then 5.5 `xhigh`) — but only on those exact errors, never on timeouts, and never below `xhigh`. Also fixed on the way: `/result-to-claim` no longer judges its own results when the reviewer is unreachable — it stops honestly. ⚠️ Upgrade codex-cli to ≥ 0.144.1, restart the session (the MCP server reloads only then), and run `bash tools/smart_update.sh --apply`.
 - **2026-07-03** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧬 **Three small updates adapted from Anthropic's Claude Science skills** ([#339](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/339), [#340](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/340), [#341](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/341); Apache-2.0). ARIS now has one shared way to describe GPU environments, so the same setup can be reused across SSH machines, Modal, and clusters, then checked by a fresh agent following the setup notes. We also added a small tool that tests whether a skill description actually makes the right skill get picked. Finally, figure and writing checks now separate facts from style: truth checks must pass, style advice stays optional. ⚠️ Run `bash tools/smart_update.sh --apply` to pull.
 - **2026-07-02** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🔁 **Ideas from Karpathy's LOOPS.md, brought into ARIS** ([#333](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/333)–[#337](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/337)). Reviewers now start by looking for what may be wrong, not by giving a polite score. If a review result looks strange, ARIS points you to the saved reviewer transcript before you ask the model again. A failed build can be restarted from the plan instead of endlessly patched, while plans, logs, and results are kept. Scoring can now use real good and bad examples, `/meta-optimize` asks what can be removed, and `/paper-writing` agrees on a clear "done" checklist before drafting starts. ⚠️ Run `bash tools/smart_update.sh --apply` to pull.
 - **2026-06-20** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 📚 **Research wiki: all four node layers now have deterministic writers — fixes "re-generated ideas not recorded"** ([#305](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/305), [#306](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/306), [#307](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/307), [#308](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/308)). A user hit a real bug — ideas recorded on the first `/idea-creator` run vanished on re-generation — because wiki pages were written **freehand**, a prose step the model skips on a re-prompt. Each layer now has a dedicated `research_wiki.py` writer joining `ingest_paper`: **`add_claim`** (claims born at [`/proof-checker`](skills/proof-checker/SKILL.md)), **`upsert_idea`** ([`/idea-creator`](skills/idea-creator/SKILL.md)), **`add_experiment`** ([`/result-to-claim`](skills/result-to-claim/SKILL.md)) — each guarded by a drift-check so it can't silently regress to dead code. A claim's `status` is now a strict **proof axis** (`verified`/`refuted`/`unproven`/…) while experiment support is carried by `supports`/`invalidates` **edges** (closing a latent contradiction the shared validator rejected), and the **Codex-CLI skill mirror is synced** to match. **Zero behavior change** when no `research-wiki/` is present.
@@ -412,7 +413,7 @@ bash tools/smart_update_codex.sh --local ~/.codex/skills --apply
 
 # 2. Set up Codex MCP (for review skills)
 npm install -g @openai/codex
-codex setup                    # set model to gpt-5.5 when prompted
+codex setup                    # set model to gpt-5.6-sol when prompted
 claude mcp add codex -s user -- codex mcp-server
 
 # 3. Use in Claude Code
@@ -500,7 +501,7 @@ All pipeline behaviors are configurable via inline overrides — append `— key
 | `sources` | `all` | Which literature sources to search: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, or `all`. Note: `semantic-scholar`, `deepxiv`, and `exa` must be explicitly listed — not included in `all` |
 | `arxiv download` | `false` | Download top relevant arXiv PDFs during literature survey. When `false`, only fetches metadata (title, abstract, authors) |
 | `DBLP_BIBTEX` | `true` | Fetch real BibTeX from [DBLP](https://dblp.org)/[CrossRef](https://www.crossref.org) instead of LLM-generated entries. Eliminates hallucinated citations. Zero install |
-| `code review` | `true` | GPT-5.5 xhigh reviews experiment code before GPU deployment. Set `false` to skip |
+| `code review` | `true` | GPT-5.6-Sol xhigh reviews experiment code before GPU deployment. Set `false` to skip |
 | `wandb` | `false` | Auto-add W&B logging to experiment scripts. Set `true` + configure `wandb_project` in CLAUDE.md. `/monitor-experiment` pulls training curves from W&B |
 | `illustration` | `gemini` | AI illustration in Workflow 3: `gemini` (default, needs `GEMINI_API_KEY`), `mermaid` (free), or `false` (skip) |
 | `venue` | `ICLR` | Target venue: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`. Determines LaTeX style file and page limit |
@@ -509,7 +510,7 @@ All pipeline behaviors are configurable via inline overrides — append `— key
 | `compact` | `false` | Generate compact summary files (`IDEA_CANDIDATES.md`, `findings.md`, `EXPERIMENT_LOG.md`) for short-context models and session recovery |
 | `ref paper` | `false` | Reference paper to build on (PDF path or arXiv URL). Summarized first, then ideas extend/improve it. Combine with `base repo` for paper+code workflows |
 | `effort` | `balanced` | Work intensity: `lite` (0.4x tokens), `balanced` (default), `max` (2.5x), `beast` (5-8x). Controls breadth/depth/iterations. Codex reasoning always `xhigh`. See [Effort Levels](#-effort-levels) |
-| `reviewer` | `codex` | Reviewer backend: `codex` (GPT-5.5 xhigh, default), `oracle-pro` (GPT-5.5 Pro via [Oracle](https://github.com/steipete/oracle) — strongest reasoning). See [Setup →](#-optional-gpt-54-pro-via-oracle) |
+| `reviewer` | `codex` | Reviewer backend: `codex` (GPT-5.6-Sol xhigh, default), `oracle-pro` (GPT-5.5 Pro via [Oracle](https://github.com/steipete/oracle) — strongest reasoning). See [Setup →](#-optional-gpt-54-pro-via-oracle) |
 | `difficulty` | `medium` | Reviewer adversarial level: `medium` (default), `hard` (+ memory + debate), `nightmare` (+ GPT reads repo via `codex exec`) |
 
 ```
@@ -533,7 +534,7 @@ All pipeline behaviors are configurable via inline overrides — append `— key
 <details>
 <summary><b>Codex MCP config + alternative reviewer routing</b> — pin the model in <code>~/.codex/config.toml</code>; pointers to Codex+Claude-review, Codex+Gemini-review, and the Codex mirror install chain</summary>
 
-**Important:** Codex MCP uses the model from `~/.codex/config.toml`, not from skill files. Make sure it says `model = "gpt-5.5"` (recommended). Other options: `gpt-5.3-codex`, `gpt-5.2-codex`, `o3`. Run `codex setup` or edit the file directly.
+**Important:** Codex MCP uses the model from `~/.codex/config.toml`, not from skill files. Make sure it says `model = "gpt-5.6-sol"` (recommended). Other options: `gpt-5.3-codex`, `gpt-5.2-codex`, `o3`. Run `codex setup` or edit the file directly.
 
 **Want Codex to execute but Claude Code to review?** See [`docs/CODEX_CLAUDE_REVIEW_GUIDE.md`](docs/CODEX_CLAUDE_REVIEW_GUIDE.md). That path installs the base `skills/skills-codex/*`, then overlays `skills/skills-codex-claude-review/*`, and routes review-heavy skills through the local `claude-review` MCP bridge.
 
@@ -549,7 +550,7 @@ See [full setup guide](#setup) for details and [alternative model combinations](
 
 ## 4. ✨ Features
 
-ARIS chains **79 composable skills** across the whole research lifecycle — literature & novelty → idea discovery → GPU experiments → autonomous review loop → paper writing → peer review — with **cross-model adversarial review** (Claude executes · GPT-5.5 xhigh reviews · optional **GPT-5.5 Pro** via Oracle), anti-hallucination DBLP/CrossRef citations, a persistent **Research Wiki**, flexible model backends, human-in-the-loop checkpoints, and optional Feishu / Zotero / Obsidian / GPU integrations.
+ARIS chains **79 composable skills** across the whole research lifecycle — literature & novelty → idea discovery → GPU experiments → autonomous review loop → paper writing → peer review — with **cross-model adversarial review** (Claude executes · GPT-5.6-Sol xhigh reviews · optional **GPT-5.5 Pro** via Oracle), anti-hallucination DBLP/CrossRef citations, a persistent **Research Wiki**, flexible model backends, human-in-the-loop checkpoints, and optional Feishu / Zotero / Obsidian / GPU integrations.
 
 🔥 *And it scales to any agent's **ultracode-style deep mode** — the breadth/firepower pass adapts to the runtime (Claude Code ultracode + workflows on Opus 4.8, Codex `spawn_agent`, or plain sequential), feeding three roles: **breadth · cross-model review → accuracy · research wiki → memory**. However a loop is driven, it reports to the same cross-model jury + research wiki — **it can drive, never acquit**.*
 
@@ -561,10 +562,10 @@ ARIS chains **79 composable skills** across the whole research lifecycle — lit
 - 💡 **Idea discovery** — literature survey → brainstorm 8-12 ideas → novelty check → GPU pilot experiments → ranked report
 - 🔄 **Auto review loop** — 4-round autonomous review, 5/10 → 7.5/10 overnight with 20+ GPU experiments
 - 📝 **Paper writing** — narrative → outline → figures → LaTeX → PDF → auto-review (4/10 → 8.5/10), one command. Anti-hallucination citations via [DBLP](https://dblp.org)/[CrossRef](https://www.crossref.org)
-- 🤖 **Cross-model collaboration** — Claude Code executes, GPT-5.5 xhigh reviews. Adversarial, not self-play. Optional: `— reviewer: oracle-pro` → **GPT-5.5 Pro** via [Oracle](https://github.com/steipete/oracle)
+- 🤖 **Cross-model collaboration** — Claude Code executes, GPT-5.6-Sol xhigh reviews. Adversarial, not self-play. Optional: `— reviewer: oracle-pro` → **GPT-5.5 Pro** via [Oracle](https://github.com/steipete/oracle)
 - 📝 **Peer review** — review others' papers as a conference reviewer, with structured scoring and meta-review
-- 🖥️ **Review-driven experiments** — when GPT-5.5 says "run an ablation", Claude auto-writes the script, rsyncs to GPU, runs in `screen`, collects results, folds back into the paper. Configure server in `CLAUDE.md` ([setup](#gpu-server-setup)), or rent from [Vast.ai](https://vast.ai) with `gpu: vast`
-- 🔀 **Flexible models** — default Claude × GPT-5.5, also supports [GLM, MiniMax, Kimi, LongCat, DeepSeek, etc.](#alternative-model-combinations) — no Claude or OpenAI API required
+- 🖥️ **Review-driven experiments** — when GPT-5.6-Sol says "run an ablation", Claude auto-writes the script, rsyncs to GPU, runs in `screen`, collects results, folds back into the paper. Configure server in `CLAUDE.md` ([setup](#gpu-server-setup)), or rent from [Vast.ai](https://vast.ai) with `gpu: vast`
+- 🔀 **Flexible models** — default Claude × GPT-5.6-Sol, also supports [GLM, MiniMax, Kimi, LongCat, DeepSeek, etc.](#alternative-model-combinations) — no Claude or OpenAI API required
 - 🛑 **Human-in-the-loop** — configurable checkpoints at key decisions. `AUTO_PROCEED=true` for full autopilot, `false` to approve each step
 - 📱 **[Feishu/Lark notifications](docs/integrations/FEISHU.md)** — three modes: **off (default, recommended)**, push-only (webhook → mobile), interactive (approve/reject in Feishu). Zero impact when off
 
@@ -646,7 +647,7 @@ Real projects that used the full ARIS pipeline end-to-end. **The scores listed a
 |-------|:----------------:|-------------------|----------|-------|
 | **CS Paper Submission** | [CSPaper](https://cspaper.org/) **8/10** — AI reviewer recommendation: "Top 50% of accepted papers, clear accept" | Submitted to a CS conference; awaiting official feedback | [@DefanXue](https://github.com/DefanXue) & [@Monglitay](https://github.com/Monglitay) | Full ARIS pipeline: idea → experiments → auto-review → paper writing. The quote is from CSPaper's simulated review, not an official venue review. |
 | **AAAI 2026 Paper Submission** | [Stanford Agentic Reviewer](https://paperreview.ai/) **7/10** — AI reviewer recommendation: "Good paper, accept" | Submitted to AAAI 2026 Main Technical; awaiting official decision | [@xinbo820-web](https://github.com/xinbo820-web) | Pure **Codex CLI** (ARIS-Codex skills). The 7/10 signal comes from an AAAI-style Stanford Agentic Reviewer run, not an official AAAI acceptance result. |
-| [UAV-CC](community_papers/UAV-CC.pdf) | Under review | Submitted to IEEE TGRS | [@wxx827](https://github.com/wxx827) | UAV change captioning benchmark. Claude Opus 4.6 (executor) + Codex GPT-5.5 xhigh (reviewer) + Cursor Opus 4.6 (assist). [PDF →](community_papers/UAV-CC.pdf) |
+| [UAV-CC](community_papers/UAV-CC.pdf) | Under review | Submitted to IEEE TGRS | [@wxx827](https://github.com/wxx827) | UAV change captioning benchmark. Claude Opus 4.6 (executor) + Codex GPT-5.6-Sol xhigh (reviewer) + Cursor Opus 4.6 (assist). [PDF →](community_papers/UAV-CC.pdf) |
 
 </details>
 
@@ -754,12 +755,12 @@ These skills compose into a full research lifecycle. Each workflow can be used i
 Don't have a concrete idea yet? Just give a research direction — `/idea-discovery` handles the rest:
 
 1. 📚 **Survey** the landscape (recent papers, open problems, recurring limitations)
-2. 🧠 **Brainstorm** 8-12 concrete ideas via GPT-5.5 xhigh
+2. 🧠 **Brainstorm** 8-12 concrete ideas via GPT-5.6-Sol xhigh
 3. 🔍 **Filter** by feasibility, compute cost, and quick novelty search
 4. 🛡️ **Validate** top ideas with deep novelty check + devil's advocate review
 5. 🧪 **Pilot** top 2-3 ideas in parallel on different GPUs (30 min - 2 hr each)
 6. 🏆 **Rank** by empirical signal — ideas with positive pilot results rise to the top
-7. 🔬 **Refine** the top idea into a problem-anchored proposal via iterative GPT-5.5 review
+7. 🔬 **Refine** the top idea into a problem-anchored proposal via iterative GPT-5.6-Sol review
 8. 🧪 **Plan** claim-driven experiments with ablations, budgets, and run order
 
 The output is a ranked `IDEA_REPORT.md` plus a refined proposal (`refine-logs/FINAL_PROPOSAL.md`) and experiment plan (`refine-logs/EXPERIMENT_PLAN.md`) for the top idea. Dead-end ideas are documented too, saving future exploration.
@@ -839,13 +840,13 @@ Already have an experiment plan (from Workflow 1 or your own)? `/experiment-brid
 
 1. 📋 **Parse** the experiment plan (`refine-logs/EXPERIMENT_PLAN.md`)
 2. 💻 **Implement** experiment scripts (reuse existing code, add proper argparse/logging/seeds)
-3. 🔍 **GPT-5.5 code review** — cross-model review catches logic bugs before wasting GPU hours (`code review: true` by default)
+3. 🔍 **GPT-5.6-Sol code review** — cross-model review catches logic bugs before wasting GPU hours (`code review: true` by default)
 4. ✅ **Sanity check** — run the smallest experiment first to catch runtime bugs
 5. 🚀 **Deploy** full experiment suite to GPU via `/run-experiment`
 6. 📊 **Collect** initial results and update the experiment tracker
 
 <details>
-<summary><b>Show W1.5 flow diagram</b> — experiment plan → Claude implements → GPT-5.5 code review → sanity check → GPU deploy → monitor → results</summary>
+<summary><b>Show W1.5 flow diagram</b> — experiment plan → Claude implements → GPT-5.6-Sol code review → sanity check → GPU deploy → monitor → results</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -855,7 +856,7 @@ Already have an experiment plan (from Workflow 1 or your own)? `/experiment-brid
 │         │                                                        │
 │         ▼                                                        │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
-│   │ Claude   │────▶│ GPT-5.5  │────▶│ Sanity   │               │
+│   │ Claude   │────▶│ GPT-5.6-Sol  │────▶│ Sanity   │               │
 │   │ Code     │     │ xhigh    │     │ Check    │               │
 │   │ writes   │     │ reviews  │     │ (1 GPU)  │               │
 │   │ code     │     │ code     │     │          │               │
@@ -885,9 +886,9 @@ Already have an experiment plan (from Workflow 1 or your own)? `/experiment-brid
 
 > **"Review my paper, fix what's wrong, repeat until it's good."**
 >
-> GPT-5.5 reviews → identifies weaknesses → suggests experiments → Claude Code writes scripts, deploys to GPU, monitors results, rewrites the paper — all while you sleep. Just add your [GPU server config](#gpu-server-setup) to `CLAUDE.md`.
+> GPT-5.6-Sol reviews → identifies weaknesses → suggests experiments → Claude Code writes scripts, deploys to GPU, monitors results, rewrites the paper — all while you sleep. Just add your [GPU server config](#gpu-server-setup) to `CLAUDE.md`.
 
-1. 🔍 **Deep review** — GPT-5.5 xhigh reviews the current paper / claims / experiments and identifies weaknesses
+1. 🔍 **Deep review** — GPT-5.6-Sol xhigh reviews the current paper / claims / experiments and identifies weaknesses
 2. 🩹 **Fix** — Claude implements the fixes (rewrites sections, adds baselines, or runs new experiments via `/run-experiment`); skips any experiment estimated > 4 GPU-hours and flags it for manual follow-up
 3. 📊 **Re-evaluate** — collect results via `/monitor-experiment`, update paper, feed back to the reviewer
 4. 🔁 **Repeat** — until score ≥ `POSITIVE_THRESHOLD` (default 6/10) or `MAX_ROUNDS` (default 4) is hit; if context window fills mid-loop, the workflow auto-resumes from `REVIEW_STATE.json`
@@ -929,7 +930,7 @@ Already have an experiment plan (from Workflow 1 or your own)? `/experiment-brid
 <details>
 <summary><b>Show W2 usage examples, reviewer difficulty levels, and full safety guarantees</b> — topic/scope arguments, medium/hard/nightmare, 6 safety rules</summary>
 
-**What to pass as argument?** A short topic or scope is enough — the skill automatically reads your project's narrative docs (`NARRATIVE_REPORT.md`), memory files, experiment results, and prior reviews to build the full context for GPT-5.5. Examples:
+**What to pass as argument?** A short topic or scope is enough — the skill automatically reads your project's narrative docs (`NARRATIVE_REPORT.md`), memory files, experiment results, and prior reviews to build the full context for GPT-5.6-Sol. Examples:
 - `/auto-review-loop "factorized gap in discrete diffusion LMs"` — broad topic, skill finds everything
 - `/auto-review-loop "focus on Section 3-5, our CRF results are weak"` — targeted scope with hints
 - `/auto-review-loop` — also works: skill reads project files and infers the topic
@@ -970,7 +971,7 @@ Already have an experiment plan (from Workflow 1 or your own)? `/experiment-brid
 3. 📊 **Figures** — `/paper-figure` generates data-driven plots and comparison tables from JSON/CSV
 4. ✍️ **Write** — `/paper-write` produces section-by-section LaTeX
 5. 🔧 **Compile** — `/paper-compile` builds the PDF, fixes errors, runs the page-limit check
-6. ✨ **Improve** — `/auto-paper-improvement-loop` runs 2 rounds of GPT-5.5 content review + final format check
+6. ✨ **Improve** — `/auto-paper-improvement-loop` runs 2 rounds of GPT-5.6-Sol content review + final format check
 
 <details>
 <summary><b>Show W3 architecture diagram and exact writing flow</b> — NARRATIVE_REPORT → /paper-plan → /paper-figure → /paper-write → /paper-compile → improvement loop</summary>
@@ -1028,7 +1029,7 @@ Already have an experiment plan (from Workflow 1 or your own)? `/experiment-brid
 - 📊 **Auto figure generation** — line plots, bar charts, comparison tables from JSON data
 - 🧹 **Clean bib** — automated filtering removes uncited entries (948→215 lines in testing). Real BibTeX from [DBLP](https://dblp.org)/[CrossRef](https://www.crossref.org) instead of LLM-generated entries
 - 📄 **Flexible sections** — 5-8 sections depending on paper type (theory papers often need 7)
-- 🔍 **GPT-5.5 review** — each step optionally reviewed by external LLM
+- 🔍 **GPT-5.6-Sol review** — each step optionally reviewed by external LLM
 - ✂️ **De-AI polish** — removes AI writing patterns (delve, pivotal, landscape...)
 - 🎯 **Page verification** — `pdftotext`-based precise check that main body fits page limit
 
@@ -1042,7 +1043,7 @@ Already have an experiment plan (from Workflow 1 or your own)? `/experiment-brid
 
 #### Auto Paper Improvement Loop ✨
 
-After Workflow 3 generates the paper, `/auto-paper-improvement-loop` runs 2 rounds of GPT-5.5 xhigh content review → fix → recompile, plus a final format compliance check, autonomously polishing the paper from rough draft to a reviewer-scored draft. Whether the result is tagged `submission-ready` is decided separately by the Phase 6 assurance gate (see [Assurance Gate](#assurance-gate-effort-max--beast)).
+After Workflow 3 generates the paper, `/auto-paper-improvement-loop` runs 2 rounds of GPT-5.6-Sol xhigh content review → fix → recompile, plus a final format compliance check, autonomously polishing the paper from rough draft to a reviewer-scored draft. Whether the result is tagged `submission-ready` is decided separately by the Phase 6 assurance gate (see [Assurance Gate](#assurance-gate-effort-max--beast)).
 
 <details>
 <summary><b>Show auto-paper-improvement benchmark</b> — Score Progression on a real ICLR 2026 theory paper (4/10 → 8.5/10), plus Round 1/2/3 fix details</summary>
@@ -1108,12 +1109,12 @@ Got reviews back? `/rebuttal` parses them, builds a strategy, and drafts a venue
 4. 🧪 **Evidence sprint** — if `auto experiment: true`, auto-run supplementary experiments via `/experiment-bridge`
 5. ✍️ **Draft** — global opener + numbered per-reviewer responses + closing for meta-reviewer
 6. 🛡️ **Safety check** — 6 lints: coverage, provenance, commitment, tone, consistency, limit
-7. 🔬 **GPT-5.5 stress test** — internal skeptical review of the draft
+7. 🔬 **GPT-5.6-Sol stress test** — internal skeptical review of the draft
 8. 📄 **Finalize** — two outputs: `PASTE_READY.txt` (exact character count) + `REBUTTAL_DRAFT_rich.md` (extended version for manual editing)
 9. 🔄 **Follow-up rounds** — delta replies for reviewer discussions, technically escalating
 
 <details>
-<summary><b>Show W4 rebuttal flow diagram</b> — parse reviews → strategy → optional evidence sprint → draft → GPT-5.5 stress test → finalize 2 versions → follow-up rounds</summary>
+<summary><b>Show W4 rebuttal flow diagram</b> — parse reviews → strategy → optional evidence sprint → draft → GPT-5.6-Sol stress test → finalize 2 versions → follow-up rounds</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1130,7 +1131,7 @@ Got reviews back? `/rebuttal` parses them, builds a strategy, and drafts a venue
 │                                          │                       │
 │                                          ▼                       │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
-│   │ Finalize │◀────│ GPT-5.5  │◀────│ Draft    │               │
+│   │ Finalize │◀────│ GPT-5.6-Sol  │◀────│ Draft    │               │
 │   │ 2 versions│    │ stress   │     │ rebuttal │               │
 │   │          │     │ test     │     │          │               │
 │   └──────────┘     └──────────┘     └──────────┘               │
@@ -1287,11 +1288,11 @@ claude   # hooks active immediately
    - Review score plateaus (convergence rules too loose/tight)
    - Manual corrections users make (skill gaps)
 3. 🩹 **Patch proposal** — generates minimal diffs to target SKILL.md files with data-backed justifications
-4. 🔬 **Reviewer gate** — GPT-5.5 xhigh reviews each patch: does the evidence support it? could it hurt other users?
+4. 🔬 **Reviewer gate** — GPT-5.6-Sol xhigh reviews each patch: does the evidence support it? could it hurt other users?
 5. ✅ **User approval** — only applied with explicit user consent. All changes are logged and reversible.
 
 <details>
-<summary><b>Show Workflow M diagram and "what gets optimized" component table</b> — event logs → SKILL.md patches → GPT-5.5 review → user approval; prompts / defaults / convergence / error handling</summary>
+<summary><b>Show Workflow M diagram and "what gets optimized" component table</b> — event logs → SKILL.md patches → GPT-5.6-Sol review → user approval; prompts / defaults / convergence / error handling</summary>
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -1304,7 +1305,7 @@ claude   # hooks active immediately
 │         │                                                        │
 │         ▼                                                        │
 │   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
-│   │ Analyze  │────▶│ Propose  │────▶│ GPT-5.5  │               │
+│   │ Analyze  │────▶│ Propose  │────▶│ GPT-5.6-Sol  │               │
 │   │ patterns │     │ SKILL.md │     │ reviews  │               │
 │   │          │     │ patches  │     │ patch    │               │
 │   └──────────┘     └──────────┘     └──────────┘               │

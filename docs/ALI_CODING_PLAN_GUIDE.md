@@ -275,7 +275,7 @@ claude
 | | 默认方案 | **本方案（Coding Plan）** | MiniMax 方案 | GLM + DeepSeek |
 |---|---|---|---|---|
 | 执行器 | Claude Opus/Sonnet | kimi-k2.5 / qwen3.5-plus | GLM-5 (Z.ai) | GLM-5 (Z.ai) |
-| 审查器 | GPT-5.5 (Codex MCP) | glm-5 / MiniMax-M3 | MiniMax-M3 | DeepSeek |
+| 审查器 | GPT-5.6-Sol (Codex MCP) | glm-5 / MiniMax-M3 | MiniMax-M3 | DeepSeek |
 | 需要 Claude API | 是 | **否** | 否 | 否 |
 | 需要 OpenAI API | 是 | **否** | 否 | 否 |
 | API Key 数量 | 2 个 | **1 个** | 2 个 | 2 个 |

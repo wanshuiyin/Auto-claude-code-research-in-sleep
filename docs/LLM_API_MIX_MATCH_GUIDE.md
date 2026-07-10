@@ -151,7 +151,7 @@
 
 ## 改写所有 Skills（重要！）
 
-`auto-review-loop-llm` 只是一个 skill 的通用 LLM 版。项目中有 **12 个 skill** 使用 Codex MCP (`mcp__codex__codex`) 调用 GPT-5.5 做审查。如果你想全面切换到其他模型，需要让 Claude Code 把它们全部改写。
+`auto-review-loop-llm` 只是一个 skill 的通用 LLM 版。项目中有 **12 个 skill** 使用 Codex MCP (`mcp__codex__codex`) 调用 GPT-5.6-Sol 做审查。如果你想全面切换到其他模型，需要让 Claude Code 把它们全部改写。
 
 安装完 `llm-chat` MCP 服务器后，在 Claude Code 对话中执行：
 

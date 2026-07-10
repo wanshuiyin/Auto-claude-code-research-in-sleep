@@ -2,7 +2,7 @@
 
 > [← 返回 README](../README_CN.md#gpu-server-setup) · 在 CLAUDE.md 里声明 GPU 服务器,让 ARIS 帮你跑实验。
 
-当 GPT-5.5 审稿说"需要补一个消融实验"或"加一个 baseline 对比"时，Claude Code 会自动写实验脚本并部署到你的 GPU 服务器。为此，Claude Code 需要知道你的服务器环境。
+当 GPT-5.6-Sol 审稿说"需要补一个消融实验"或"加一个 baseline 对比"时，Claude Code 会自动写实验脚本并部署到你的 GPU 服务器。为此，Claude Code 需要知道你的服务器环境。
 
 在项目的 `CLAUDE.md` 中添加服务器信息：
 
@@ -17,7 +17,7 @@
 - 后台运行用 `screen`：`screen -dmS exp0 bash -c '...'`
 ```
 
-Claude Code 读到这些就知道怎么 SSH、激活环境、启动实验。GPT-5.5（审稿人）只决定**做什么实验**——Claude Code 根据你的 `CLAUDE.md` 搞定**怎么跑**。
+Claude Code 读到这些就知道怎么 SSH、激活环境、启动实验。GPT-5.6-Sol（审稿人）只决定**做什么实验**——Claude Code 根据你的 `CLAUDE.md` 搞定**怎么跑**。
 
 如果你已经在 GPU 服务器上，可以添加以下到你的 `CLAUDE.md`：
 ```markdown

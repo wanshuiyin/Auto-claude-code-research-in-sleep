@@ -208,7 +208,7 @@ claude
 | | 默认方案 | Coding Plan | ModelScope | **OpenRouter** |
 |---|---|---|---|---|
 | 执行者 | Claude Opus | kimi-k2.5 | DeepSeek-V3 | 200+ 模型可选 |
-| 审稿人 | GPT-5.5 xhigh fresh thread | glm-5 | DeepSeek-R1 | 200+ 固定模型可选 |
+| 审稿人 | GPT-5.6-Sol xhigh fresh thread | glm-5 | DeepSeek-R1 | 200+ 固定模型可选 |
 | 免费选项 | 无 | 无 | **有，2000 次/天，受当前 ModelScope 政策限制**（[来源](https://developer.aliyun.com/article/1644361)） | **有，免费模型受 OpenRouter 限额影响** |
 | API Key 数量 | 2 个 | 1 个 | 1 个 | **1 个** |
 | 模型选择 | 受限 | 4 种 | 1000+ 种 | **200+ 种** |

@@ -2,7 +2,7 @@
 
 > [← back to README](../README.md#gpu-server-setup) · declare your GPU server in CLAUDE.md so ARIS can run experiments for you.
 
-When GPT-5.5 says "run an ablation study" or "add a baseline comparison", Claude Code automatically writes the experiment script and deploys it to your GPU server. For this to work, Claude Code needs to know your server environment.
+When GPT-5.6-Sol says "run an ablation study" or "add a baseline comparison", Claude Code automatically writes the experiment script and deploys it to your GPU server. For this to work, Claude Code needs to know your server environment.
 
 Three GPU modes are supported — pick one and add it to your project's `CLAUDE.md`:
 
@@ -19,7 +19,7 @@ Three GPU modes are supported — pick one and add it to your project's `CLAUDE.
 - Use `screen` for background jobs: `screen -dmS exp0 bash -c '...'`
 ```
 
-Claude Code reads this and knows how to SSH in, activate the environment, and launch experiments. GPT-5.5 (the reviewer) only decides **what** experiments to run — Claude Code figures out **how** based on your `CLAUDE.md`.
+Claude Code reads this and knows how to SSH in, activate the environment, and launch experiments. GPT-5.6-Sol (the reviewer) only decides **what** experiments to run — Claude Code figures out **how** based on your `CLAUDE.md`.
 
 #### Option B: Local GPU (`gpu: local`)
 

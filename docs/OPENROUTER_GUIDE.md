@@ -208,7 +208,7 @@ claude
 | | Default | Coding Plan | ModelScope | **OpenRouter** |
 |---|---|---|---|---|
 | Executor | Claude Opus | kimi-k2.5 | DeepSeek-V3 | 200+ models available |
-| Reviewer | GPT-5.5 xhigh fresh thread | glm-5 | DeepSeek-R1 | 200+ pinned models available |
+| Reviewer | GPT-5.6-Sol xhigh fresh thread | glm-5 | DeepSeek-R1 | 200+ pinned models available |
 | Free Options | No | No | **Yes, 2000/day subject to current ModelScope policy** ([source](https://developer.aliyun.com/article/1644361)) | **Yes, free models subject to OpenRouter limits** |
 | API Key Count | 2 | 1 | 1 | **1** |
 | Model Selection | Limited | 4 types | 1000+ types | **200+ types** |

@@ -68,7 +68,7 @@ cp -r skills/* /path/to/your/project/.agents/skills/
 
 ### 3.2 配置 Codex 审阅 MCP（用于审阅技能）
 
-ARIS 使用外部 LLM（GPT-5.5 via Codex）作为审阅者。在 Antigravity 中启用：
+ARIS 使用外部 LLM（GPT-5.6-Sol via Codex）作为审阅者。在 Antigravity 中启用：
 
 1. 安装并认证 Codex CLI：
    ```bash
@@ -269,7 +269,7 @@ Antigravity 通过 `SKILL.md` 中的 YAML `description` 字段自动发现 ARIS 
 
 | ARIS MCP 工具 | 作用 | 需要的 MCP Server |
 |--------------|------|------------------|
-| `mcp__codex__codex` | 发审阅请求到 GPT-5.5 | codex |
+| `mcp__codex__codex` | 发审阅请求到 GPT-5.6-Sol | codex |
 | `mcp__codex__codex-reply` | 续接审阅线程 | codex |
 | `mcp__llm-chat__chat` | 发请求到兼容 OpenAI API 模型 | llm-chat |
 | `mcp__zotero__*` | 搜索 Zotero 文献库 | zotero |

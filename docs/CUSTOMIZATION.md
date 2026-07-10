@@ -30,7 +30,7 @@ Override inline: `/research-pipeline "topic" — auto proceed: false, illustrati
 | `ARXIV_DOWNLOAD` | false | Download top arXiv PDFs after literature search | → `idea-discovery` → `research-lit` |
 | `HUMAN_CHECKPOINT` | false | When `true`, pause after each review round for approval | → `auto-review-loop` |
 | `WANDB` | false | Auto-add W&B logging to experiments | → `experiment-bridge` → `run-experiment` |
-| `CODE_REVIEW` | true | GPT-5.5 reviews experiment code before deployment | → `experiment-bridge` |
+| `CODE_REVIEW` | true | GPT-5.6-Sol reviews experiment code before deployment | → `experiment-bridge` |
 | `BASE_REPO` | false | GitHub repo URL to clone as base codebase for experiments | → `experiment-bridge` |
 | `GPU` | `local` | GPU target: `local`, `remote` (SSH), or `vast` ([Vast.ai](https://vast.ai) on-demand rental) | → `experiment-bridge` → `run-experiment` |
 | `COMPACT` | false | Generate compact summary files for short-context models and session recovery | → all workflows |
@@ -76,7 +76,7 @@ Override inline: `/idea-discovery "topic" — pilot budget: 4h per idea, sources
 
 ### Experiment Bridge (`experiment-bridge`)
 
-Tune deployment safety: GPT-5.5 code review, auto-deploy after review, sanity-test smallest experiment first, parallel run cap, W&B logging, and base-repo URL.
+Tune deployment safety: GPT-5.6-Sol code review, auto-deploy after review, sanity-test smallest experiment first, parallel run cap, W&B logging, and base-repo URL.
 
 Override inline: `/experiment-bridge — base repo: https://github.com/org/project`
 
@@ -85,7 +85,7 @@ Override inline: `/experiment-bridge — base repo: https://github.com/org/proje
 
 | Constant | Default | Description |
 |----------|---------|-------------|
-| `CODE_REVIEW` | true | GPT-5.5 xhigh reviews code before deployment. Catches logic bugs before wasting GPU hours |
+| `CODE_REVIEW` | true | GPT-5.6-Sol xhigh reviews code before deployment. Catches logic bugs before wasting GPU hours |
 | `AUTO_DEPLOY` | true | Automatically deploy experiments after implementation + review. Set `false` to manually inspect |
 | `SANITY_FIRST` | true | Run smallest experiment first to catch setup bugs before full deployment |
 | `MAX_PARALLEL_RUNS` | 4 | Maximum experiments to deploy in parallel (limited by available GPUs) |
@@ -134,7 +134,7 @@ Override inline: `/paper-write — target venue: NeurIPS, illustration: mermaid`
 
 ### General (all skills using Codex MCP)
 
-Tune the reviewer model used by every Codex MCP call (default `gpt-5.5`), or fork the SKILL.md to customize prompt templates and the per-skill tool allowlist.
+Tune the reviewer model used by every Codex MCP call (default `gpt-5.6-sol`), or fork the SKILL.md to customize prompt templates and the per-skill tool allowlist.
 
 - **Prompt templates** — tailor the review persona and evaluation criteria
 - **`allowed-tools`** — restrict or expand what each skill can do
@@ -144,7 +144,7 @@ Tune the reviewer model used by every Codex MCP call (default `gpt-5.5`), or for
 
 | Constant | Default | Description |
 |----------|---------|-------------|
-| `REVIEWER_MODEL` | `gpt-5.5` | OpenAI model used via Codex MCP. Also available: `gpt-5.3-codex`, `gpt-5.2-codex`, `o3`. See [supported models](https://developers.openai.com/codex/models/) for full list. |
+| `REVIEWER_MODEL` | `gpt-5.6-sol` | OpenAI model used via Codex MCP. Also available: `gpt-5.3-codex`, `gpt-5.2-codex`, `o3`. See [supported models](https://developers.openai.com/codex/models/) for full list. |
 
 </details>
 
