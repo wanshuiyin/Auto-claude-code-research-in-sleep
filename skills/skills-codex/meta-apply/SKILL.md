@@ -37,7 +37,7 @@ never silently apply:
    or `all`); default to applying nothing.
 2. **Fresh cross-model jury PASS, obtained now.** Spawn a fresh reviewer via `spawn_agent`
    (a **different model family** from the executor running this skill; `reasoning_effort:
-   xhigh`, read-only, paths-only per
+   ultra`, read-only, paths-only per
    [`reviewer-independence.md`](../shared-references/reviewer-independence.md)) on the
    staged `.diff` + its target. Ask: *does this change improve the harness without
    regressions; PASS or KILL + one-line reason.* **KILL ⇒ refuse.** The human cannot

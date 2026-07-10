@@ -5,7 +5,7 @@ argument-hint: [topic-or-scope]
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
-# Research Review via External Reviewer Backend (xhigh reasoning)
+# Research Review via External Reviewer Backend (ultra reasoning)
 
 > 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
 > verdict-bearing — it produces a cross-model review verdict, multi-round with
@@ -19,8 +19,8 @@ Get a multi-round critical review of research work from the selected external re
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-5.5` — Default model for the Codex backend. Must be an OpenAI model (e.g., `gpt-5.5`, `o3`, `gpt-4o`). Manual backend uses whatever model the user chooses.
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier). Must be an OpenAI model (e.g., `gpt-5.6-sol`, `gpt-5.5`, `o3`). Manual backend uses whatever model the user chooses.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 
 ## Reviewer Calling Convention
 
@@ -65,7 +65,7 @@ Before calling the external reviewer, compile a comprehensive briefing:
 3. Identify: core claims, methodology, key results, known weaknesses
 
 ### Step 2: Initial Review (Round 1)
-Send a detailed prompt with xhigh reasoning, using the selected backend. For
+Send a detailed prompt with ultra reasoning, using the selected backend. For
 the `codex` backend, keep the MCP payload short: write the full briefing to
 `RESEARCH_REVIEW_REQUEST.md`, then point Codex at that file.
 
@@ -73,7 +73,8 @@ the `codex` backend, keep the MCP payload short: write the full briefing to
 
 ```
 mcp__codex__codex:
-  config: {"model_reasoning_effort": "xhigh"}
+  model: gpt-5.6-sol
+  config: {"model_reasoning_effort": "ultra"}
   prompt: |
     Read the review brief at <absolute path to RESEARCH_REVIEW_REQUEST.md>.
     Executor notes are not evidence beyond the files they cite, so verify the
@@ -108,7 +109,7 @@ only the path:
 ```text
 mcp__codex__codex-reply:
   threadId: [saved reviewer threadId from Step 2]
-  config: {"model_reasoning_effort": "xhigh"}
+  # replies inherit the thread's model/effort (gpt-5.6-sol ultra)
   prompt: |
     Read the updated review brief at <absolute path to
     RESEARCH_REVIEW_ROUND_2.md>.
@@ -158,7 +159,7 @@ Update project memory/notes with key review conclusions.
 
 ## Key Rules
 
-- ALWAYS use `config: {"model_reasoning_effort": "xhigh"}` for reviews
+- ALWAYS pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` for reviews (deep-audit tier; capability fallback per `reviewer-routing.md`, never below `xhigh`)
 - Put comprehensive context in the review brief. Codex can read local files
   when you pass an absolute path; manual reviewers usually cannot, so attach or
   paste the same brief there.

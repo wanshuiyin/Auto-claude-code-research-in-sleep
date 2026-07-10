@@ -41,7 +41,8 @@ Send the collected results to a secondary Codex agent for objective evaluation:
 
 ```text
 spawn_agent:
-  reasoning_effort: xhigh
+  model: gpt-5.6-sol
+  reasoning_effort: ultra
   message: |
     RESULT-TO-CLAIM EVALUATION
 
@@ -196,7 +197,7 @@ if research-wiki/ exists:
 - Do not inflate claims beyond what the data supports. If Codex says "partial", do not round up to "yes".
 - A single positive result on one dataset does not support a general claim. Be honest about scope.
 - If `confidence` is low, treat the judgment as inconclusive and add experiments rather than committing to a claim.
-- If reviewer delegation is unavailable, make the best local judgment you can and mark it `[pending external review]` - do not block the pipeline.
+- **Fail closed if the reviewer is unavailable.** If `spawn_agent` fails, walk the capability fallback in `shared-references/reviewer-routing.md` (`gpt-5.6-sol`+`ultra` → `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh`, capability errors only). If no allowed pair succeeds, record `verdict: REVIEW_UNAVAILABLE` and STOP — the executor never substitutes its own claim judgment (a loop can drive, never acquit). Downstream steps must not consume a run without a reviewer verdict.
 - Always record the verdict and reasoning in findings.md, regardless of outcome.
 
 ## Review Tracing

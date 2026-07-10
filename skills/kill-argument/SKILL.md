@@ -51,7 +51,7 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 
 ## Constants
 
-- **REVIEWER_MODEL** = `gpt-5.5` (default; specify `gpt-5.4` if you want to fall back to the legacy default).  Reviewer reasoning effort = `xhigh`.
+- **REVIEWER_MODEL** = `gpt-5.6-sol` (default; `gpt-5.5` is the capability fallback, `gpt-5.4` only as an explicit legacy override).  Reviewer reasoning effort = `ultra` for the attack / defense / adjudication threads (deep-audit tier; capability fallback per `shared-references/reviewer-routing.md`, never below `xhigh`).  Beast-mode axis probes stay at `xhigh`.
 - **CONTEXT_POLICY** = `fresh` (REVIEWER_BIAS_GUARD).  Each thread is a fresh `mcp__codex__codex` call.  **Never** use `mcp__codex__codex-reply`.  No prior review summary, fix list, or executor explanation enters either prompt.
 - **ATTACK_LENGTH** = approximately 200 words (do not exceed 250).  Single coherent argument, not a list.
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
@@ -88,8 +88,8 @@ Invoke `mcp__codex__codex` (NOT `codex-reply`) with the following prompt structu
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
-  config: {"model_reasoning_effort": "xhigh"}
+  model: gpt-5.6-sol
+  config: {"model_reasoning_effort": "ultra"}
   sandbox: read-only
   cwd: <paper directory>
   prompt: |
@@ -159,7 +159,9 @@ without diluting the commitment:
    validity / assumption-vs-claim / missing obligation / limit-order /
    claim-vs-evidence / scope-overclaim) as **separate fresh-codex probes**,
    each asked for the strongest ~120-word thrust *on that axis alone*. These
-   are evidence-gathering, not the verdict.
+   are evidence-gathering, not the verdict. Probes run at `xhigh` (not
+   `ultra`) — six serial delegating calls would multiply cost for evidence
+   that the ultra-tier commit re-judges anyway.
    - **These are NOT Claude subagents, and there is deliberately NO `Agent`
      grant.** Each probe is a fresh `mcp__codex__codex` call — the adversary
      must be cross-model (non-Claude). Codex MCP is **serial** (concurrent
@@ -186,8 +188,8 @@ Invoke a second `mcp__codex__codex` call (still NOT `codex-reply` — Thread 2 i
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
-  config: {"model_reasoning_effort": "xhigh"}
+  model: gpt-5.6-sol
+  config: {"model_reasoning_effort": "ultra"}
   sandbox: read-only
   cwd: <paper directory>
   prompt: |
@@ -270,7 +272,7 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: gpt-5.5 xhigh, fresh threads (no codex-reply)
+**Reviewer model**: gpt-5.6-sol ultra, fresh threads (no codex-reply)
 **Attack thread**: <threadId 1>
 **Adjudicator thread**: <threadId 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
@@ -316,8 +318,8 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
   "thread_id": "<defense threadId — primary; attack threadId in details>",
-  "reviewer_model": "gpt-5.5",
-  "reviewer_reasoning": "xhigh",
+  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_reasoning": "ultra",
   "generated_at": "<UTC ISO-8601>",
   "details": {
     "attack_thread_id": "<threadId 1>",
