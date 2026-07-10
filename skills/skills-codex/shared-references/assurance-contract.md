@@ -100,6 +100,11 @@ Field rules:
   `thread_id` remains accepted for MCP overlays. At least one is required.
 - `reviewer_model` and `reviewer_reasoning` document the reviewer route.
 - `review_independence` is `same-family`, `cross-family`, or `deterministic`.
+  `deterministic` is valid ONLY for what a process can actually decide
+  (compilation, schema validity, hash freshness, test suites) — the audit
+  aggregator REJECTS a deterministic label on the four semantic paper audits
+  (proof / claims / citations / attack); only a cross-family model review can
+  accept those.
 - `acceptance_status` is `provisional` for the base Codex route and `accepted`
   for a cross-family overlay or deterministic verifier.
 - `generated_at` is UTC ISO-8601.

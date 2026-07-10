@@ -82,7 +82,7 @@ resume_point(root, run_id)  # -> first NON-TERMINAL phase, or None
 ```
 
 ```
-python3 tools/run_state.py start  <root> <run_id> --phases "W1,W1.5,W2,W3"
+python3 tools/run_state.py start  <root> <run_id> --phases "W1,W1.5,W2,W3" --executor codex-gpt-5.6-sol --provisional-advances
 python3 tools/run_state.py set    <root> <run_id> W1 done --artifact idea-stage/IDEA_REPORT.md
 python3 "$RUN_STATE" start <root> <run_id> --phases W1,W1.5,W2 --executor codex-gpt-5.6-sol --provisional-advances
 python3 "$RUN_STATE" mark-provisional <root> <run_id> W1 --verdict-id agent:019e... --reviewer gpt-5.6-sol

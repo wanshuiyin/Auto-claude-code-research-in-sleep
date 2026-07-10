@@ -255,6 +255,23 @@ def test_provisional_cannot_overwrite_accepted():
         assert pv.is_auto_curatable(str(art)) is True    # acceptance survived
 
 
+def test_legitimate_deterministic_stamp_still_curatable():
+    # regression guard: hardening must not reject a REAL deterministic verifier
+    with tempfile.TemporaryDirectory() as d:
+        art = Path(d) / "skill.md"
+        art.write_text("x\n", encoding="utf-8")
+        pv.stamp(str(art), "claude-opus-4-8", "deterministic:pytest", verdict_id="report:tests")
+        assert pv.is_auto_curatable(str(art)) is True
+        # but a deterministic LABEL on a model reviewer is rejected
+        import json as _json
+        sc = Path(str(art) + ".provenance.json")
+        rec = _json.loads(sc.read_text())
+        rec["reviewer_model"] = "gpt-5.6-sol"
+        rec["review_independence"] = "deterministic"
+        sc.write_text(_json.dumps(rec))
+        assert pv.is_auto_curatable(str(art)) is False
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = failed = 0

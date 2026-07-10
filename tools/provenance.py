@@ -204,19 +204,22 @@ def _record_is_accepted(rec: dict) -> bool:
     - ``acceptance_status`` must be explicitly "accepted", or absent
       (legacy record — those predate the field but were only creatable via the
       strict cross-family stamp(), and the recomputation above re-checks that);
-    - ``review_independence``, when present, must agree ("cross-family");
+    - ``review_independence``, when present, must agree with the RECOMPUTED
+      families ("cross-family", or "deterministic" for a deterministic reviewer);
     - ``verdict_id`` must be non-empty.
     """
     if not isinstance(rec, dict):
         return False
     if rec.get("acceptance_status", None) not in ("accepted", None):
         return False
-    if rec.get("review_independence") not in (None, "cross-family"):
+    if rec.get("review_independence") not in (None, "cross-family", "deterministic"):
         return False
     if not str(rec.get("verdict_id") or "").strip():
         return False
     author_family = model_family(str(rec.get("author_model") or ""))
     reviewer_family = model_family(str(rec.get("reviewer_model") or ""))
+    if rec.get("review_independence") == "deterministic" and reviewer_family != "deterministic":
+        return False   # a label cannot make a model deterministic
     if reviewer_family == "deterministic":
         return True
     return ("unknown" not in (author_family, reviewer_family)

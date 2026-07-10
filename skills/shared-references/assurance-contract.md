@@ -135,6 +135,11 @@ Field semantics:
 - **`reviewer_model`** + **`reviewer_reasoning`** — proves cross-family review
   invariant was honored.
 - **`review_independence`** — `same-family`, `cross-family`, or `deterministic`.
+  `deterministic` is valid ONLY for what a process can actually decide
+  (compilation, schema validity, hash freshness, test suites) — the audit
+  aggregator REJECTS a deterministic label on the four semantic paper audits
+  (proof / claims / citations / attack), which only a cross-family model
+  review can accept.
   **`acceptance_status`** is `provisional` for same-family review and
   `accepted` for cross-family/deterministic review; neither field rewrites the
   substantive verdict.

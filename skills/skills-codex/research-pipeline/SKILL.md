@@ -65,7 +65,7 @@ WATCHDOG=""
 Warn-and-skip state tracking if `RUN_STATE` cannot be resolved; never pretend it
 was persisted. Phases are `idea-discovery,experiment-bridge,auto-review-loop,summary,paper-writing`.
 
-- New run: `python3 "$RUN_STATE" start . "$RUN_ID" --executor codex --phases "idea-discovery,experiment-bridge,auto-review-loop,summary,paper-writing"`.
+- New run: `python3 "$RUN_STATE" start . "$RUN_ID" --executor codex-gpt-5.6-sol --provisional-advances --phases "idea-discovery,experiment-bridge,auto-review-loop,summary,paper-writing"` (the `--provisional-advances` policy is what lets a same-family provisional verdict close a phase for resume — without it, mainline semantics apply and provisional phases stay open).
 - Resume: `python3 "$RUN_STATE" resume . "$RUN_ID"`; restart the returned phase.
 - Each phase: mark `running`, then `done --artifact <path>`.
 - A fresh Codex reviewer PASS uses `mark-provisional --reviewer gpt-5.6-sol
