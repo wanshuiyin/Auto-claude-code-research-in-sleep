@@ -501,6 +501,8 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 
 **想走 Codex mirror 安装链？** 项目级受管安装用 `tools/install_aris_codex.sh`，copy 安装更新用 `tools/smart_update_codex.sh`。Claude 脚本仍然是 Claude 主线入口。
 
+Codex 基础镜像默认由新的 Codex `spawn_agent` 自审：流程可以继续，但结果明确记录为 `same-family / provisional`。只有 Claude/Gemini overlay 或确定性验证才能记录 `accepted`；投稿报告会据此输出 `submission-ready: provisional | yes | no`。
+
 </details>
 
 详见[完整安装指南](#setup)和[替代模型组合](#alternative-model-combinations)（无需 Claude/OpenAI API）。

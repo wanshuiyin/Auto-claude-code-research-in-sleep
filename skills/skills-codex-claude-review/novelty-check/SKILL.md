@@ -4,6 +4,13 @@ description: "Verify research idea novelty against recent literature. Use when u
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Novelty Check Skill
 
@@ -41,7 +48,7 @@ For EACH core claim, search using ALL available sources:
 
 3. **Read abstracts**: For each potentially overlapping paper, WebFetch its abstract and related work section
 
-### Phase C: Cross-Model Verification
+### Phase C: Fresh-Agent Verification (cross-family accepted by default)
 Call REVIEWER_MODEL via `mcp__claude-review__review_start` with high-rigor review:
 ```
 mcp__claude-review__review_start:

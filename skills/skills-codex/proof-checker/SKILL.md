@@ -1,21 +1,27 @@
 ---
 name: proof-checker
-description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (Codex GPT-5.6-Sol ultra), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
+description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via fresh-agent Codex GPT-5.6-Sol ultra review, fixes each gap with full derivations, re-reviews, and generates an audit report. Base review is same-family provisional. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
 argument-hint: [path-to-tex-file or proof-description]
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
 
-Systematically verify a mathematical proof via cross-model adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
+> **Codex assurance:** base Codex proof judgments are
+> `review_independence: same-family` and `acceptance_status: provisional`.
+> Deterministic compilation/algebra checks may be accepted; a semantic proof
+> acceptance requires a cross-family overlay. Reviewer failure emits BLOCKED.
+
+Systematically verify a mathematical proof via fresh-agent adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
 
 ## Context: $ARGUMENTS
 
 ## Constants
 
 - MAX_REVIEW_ROUNDS = 3
-- REVIEWER_MODEL = `gpt-5.6-sol` via Codex reviewer agent, reasoning effort `ultra` (deep-audit tier; capability fallback per `shared-references/reviewer-routing.md`, never below `xhigh`)
-- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, ultra). Override with `— reviewer: oracle-pro` for GPT-5.5 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- REVIEWER_MODEL = `gpt-5.6-sol` via Codex reviewer agent, reasoning effort
+  `ultra` for this deep-audit skill (capability fallback never below `xhigh`)
+- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, xhigh). Override with `— reviewer: oracle-pro` for GPT-5.6-Sol Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
 - AUDIT_DOC: `PROOF_AUDIT.md` at the paper directory root, alongside `main.tex` (cumulative log; when invoked via `/paper-writing`, this is `paper/PROOF_AUDIT.md`)
 - REPORT_TEX: `proof_audit_report.tex` (formal before/after PDF)
 - STATE_FILE: `PROOF_CHECK_STATE.json` (for recovery)
@@ -121,6 +127,17 @@ When the proof invokes any of the following, require explicit verification of AL
 | **WLOG reduction** | Invariance under claimed symmetry + reduction is reversible |
 
 ## Workflow
+
+### Proof-obligation fan-out
+
+Independent sections/theorems may be extracted by fresh read-only
+`spawn_agent` shards, with a sequential fresh-context fallback. Each shard
+returns `{"shard_id": ..., "entries": [{"payload": ..., "dedup_key":
+"<theorem-or-obligation-id>"}]}` and must not declare the proof valid. The
+parent mechanically merges obligations; the fresh Codex review that evaluates
+them records `review_independence: same-family` and
+`acceptance_status: provisional`. See
+[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 
 ### Phase 0: Preparation
 
@@ -418,9 +435,9 @@ python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug "<stable-theorem-id>" \
 - **WLOG prohibition**: Every "without loss of generality" must have an explicit micro-claim proving the reduction. No free WLOGs.
 - **No silent assumption strengthening**: Any fix that adds conditions must propagate to the theorem statement.
 
-### Cross-model protocol
-- **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
-- **Codex reasoning always ultra** (deep-audit tier): never below `xhigh` — only the capability fallback in `reviewer-routing.md` may step down, on explicit capability errors.
+### Review-independence protocol
+- **Codex executor analyzes and implements; a fresh Codex reviewer provides adversarial review.** Base review remains same-family/provisional.
+- **Codex reasoning always ultra**: Never downgrade.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
 - **Fresh reviewer agents**: Save each returned `agent_id` for traceability, but launch a new `spawn_agent` for each review round. Do not use `send_input` across proof-checker rounds.
 
@@ -471,8 +488,13 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
-  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
+  "executor_model":   "codex-gpt-5.6-sol",
+  "executor_family":  "openai",
+  "reviewer_model":   "gpt-5.6-sol",
+  "reviewer_family":  "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "reviewer_reasoning": "ultra",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "theorems_audited": <int>,

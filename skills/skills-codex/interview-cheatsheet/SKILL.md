@@ -7,7 +7,7 @@ allowed-tools: Bash(*), Read, Write, Edit, spawn_agent
 
 # /interview-cheatsheet — long-form Chinese ML/LLM interview prep
 
-Generate one comprehensive Chinese cheat sheet per invocation: formulas + derivations + from-scratch code + 25 高频题. Output passes cross-model math/code review before rendering. **Detect-only by default: never auto-commits.**
+Generate one comprehensive Chinese cheat sheet per invocation: formulas + derivations + from-scratch code + 25 高频题. Output receives fresh-agent same-family provisional math/code review before rendering. **Detect-only by default: never auto-commits.**
 
 ## Inputs
 
@@ -74,7 +74,7 @@ If the topic is too broad to fit in one cheat sheet, **stop and ask the user to 
 
 Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide. Length target: 600 lines (balanced) or 1000 lines (max), ±20%.
 
-### Step 3 — Cross-model math/code review (codex gpt-5.6-sol xhigh, FRESH thread)
+### Step 3 — Fresh-agent math/code review (Codex GPT-5.6-Sol xhigh, same-family provisional)
 
 Invoke `spawn_agent` with `model: gpt-5.6-sol`, `reasoning_effort: xhigh`, and a fresh thread. Do not reuse prior reviewer context.
 
@@ -209,7 +209,7 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 
 | Invariant | How it's enforced |
 |---|---|
-| Executor != reviewer family | Claude drafts; gpt-5.6-sol reviews (math/code stage); gpt-5.6-sol reviews again (render stage) |
+| Executor/reviewer family | Codex drafts; fresh gpt-5.6-sol reviews (math/code stage and render stage), same-family provisional |
 | Fresh agent per reviewer call | Step 3 + render's own gate both use fresh `spawn_agent` calls, not `send_input` |
 | Codex reasoning = xhigh | Hardcoded in Step 3 reviewer config |
 | Personal info redaction | Both math/code reviewer and render reviewer check; banlist in style guide |
@@ -242,4 +242,4 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 
 ## Provenance
 
-Extracted from the two pilot tutorials (Attention + Flow Matching, May 2026). Both passed cross-model review; the attention tutorial required 3 review rounds — catching a table-pipe collision and a callout-list collision that were not obvious from the rendered output. Those lessons are now baked into the style guide and reviewer checks 5+6 so future tutorials don't repeat them.
+Extracted from the two pilot tutorials (Attention + Flow Matching, May 2026). Both passed fresh-agent review; that review is same-family provisional in the base Codex mirror. The attention tutorial required 3 rounds and caught a table-pipe collision plus a callout-list collision.

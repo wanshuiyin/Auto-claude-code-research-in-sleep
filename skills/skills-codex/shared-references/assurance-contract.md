@@ -76,8 +76,13 @@ Every mandatory audit must write a JSON artifact, and may also write a Markdown 
   },
   "trace_path": ".aris/traces/paper-claim-audit/2026-04-21_run01/",
   "agent_id": "019dae73-fc12-4ab8-...",
-  "reviewer_model": "<resolved — the pair that actually ran>",
-  "reviewer_reasoning": "<resolved effort>",
+  "executor_model": "codex-gpt-5.6-sol",
+  "executor_family": "openai",
+  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_family": "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "reviewer_reasoning": "xhigh",
   "generated_at": "2026-04-21T14:23:01Z",
   "details": {}
 }
@@ -91,8 +96,12 @@ Field rules:
 - In-paper paths are relative to the paper directory passed to the verifier.
 - Files outside the paper directory may use absolute paths.
 - `trace_path` points to the saved reviewer trace.
-- `agent_id` is the Codex reviewer id when a reviewer agent was used.
+- `agent_id` is the Codex reviewer id when a reviewer agent was used;
+  `thread_id` remains accepted for MCP overlays. At least one is required.
 - `reviewer_model` and `reviewer_reasoning` document the reviewer route.
+- `review_independence` is `same-family`, `cross-family`, or `deterministic`.
+- `acceptance_status` is `provisional` for the base Codex route and `accepted`
+  for a cross-family overlay or deterministic verifier.
 - `generated_at` is UTC ISO-8601.
 
 ## Verifier Contract
@@ -105,6 +114,10 @@ Field rules:
 4. Recompute `audited_input_hashes` and flag stale artifacts.
 5. Verify `trace_path` exists when required.
 6. Exit 0 only when all mandatory audits are green.
+
+The report emits `overall_assurance: blocked | provisional | accepted`.
+Provisional remains exit 0 so the Final Report can be generated, but the report
+must say `submission-ready: provisional`, never `yes`.
 
 At `assurance: submission`, `paper-writing` must treat verifier exit 1 as blocking.
 

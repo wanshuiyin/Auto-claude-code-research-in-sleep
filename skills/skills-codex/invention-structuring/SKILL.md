@@ -108,7 +108,7 @@ Dependent Claim 4 → depends on 2, adds optional feature D
 Dependent Claim 5 → alternative implementation of feature A
 ```
 
-### Step 6: Cross-Model Validation
+### Step 6: Fresh-Agent Validation (same-family provisional by default)
 
 Call `REVIEWER_MODEL` via a dedicated Codex reviewer agent at xhigh reasoning:
 

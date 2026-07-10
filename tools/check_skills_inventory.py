@@ -119,6 +119,8 @@ def check_inventory() -> list[str]:
     main = skill_names(SKILLS_ROOT)
     codex = skill_names(CODEX_ROOT)
     catalog = catalog_names()
+    main_refs = {path.name for path in (SKILLS_ROOT / "shared-references").glob("*.md")}
+    codex_refs = {path.name for path in (CODEX_ROOT / "shared-references").glob("*.md")}
 
     missing_codex = sorted(main - codex)
     extra_codex = sorted(codex - main)
@@ -127,6 +129,16 @@ def check_inventory() -> list[str]:
 
     require(not missing_codex, f"missing Codex mirrors: {', '.join(missing_codex)}", failures)
     require(not extra_codex, f"unexpected Codex-only skills: {', '.join(extra_codex)}", failures)
+    require(
+        not (main_refs - codex_refs),
+        f"missing Codex shared references: {', '.join(sorted(main_refs - codex_refs))}",
+        failures,
+    )
+    require(
+        not (codex_refs - main_refs),
+        f"unexpected Codex-only shared references: {', '.join(sorted(codex_refs - main_refs))}",
+        failures,
+    )
     require(not missing_catalog, f"missing catalog entries: {', '.join(missing_catalog)}", failures)
     require(not extra_catalog, f"catalog entries without mainline skills: {', '.join(extra_catalog)}", failures)
 

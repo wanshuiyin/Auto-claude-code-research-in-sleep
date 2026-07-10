@@ -122,6 +122,8 @@ def test_stamp_and_read_roundtrip():
                        reviewer_model="gpt-5.5", verdict_id="codex_thread_abc",
                        ts="2026-05-29T00:00:00Z")
         assert rec["created_by"] == "aris-auto"
+        assert rec["review_independence"] == "cross-family"
+        assert rec["acceptance_status"] == "accepted"
         assert rec["author_family"] == "anthropic"
         assert rec["reviewer_family"] == "openai"
         assert rec["content_hash"] == pv.content_hash(str(f))
@@ -130,6 +132,43 @@ def test_stamp_and_read_roundtrip():
         # tamper-evidence: edit the file → hash no longer matches the stamped record
         f.write_text("tampered\n", encoding="utf-8")
         assert pv.content_hash(str(f)) != back["content_hash"]
+
+
+def test_stamp_provisional_records_same_family_without_auto_curation_authority():
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "node.md"
+        f.write_text("same-family reviewed content\n", encoding="utf-8")
+
+        rec = pv.stamp_provisional(
+            str(f),
+            author_model="codex-gpt-5.5",
+            reviewer_model="gpt-5.5",
+            verdict_id="agent_019f",
+            ts="2026-07-10T00:00:00Z",
+        )
+
+        assert rec["author_family"] == "openai"
+        assert rec["reviewer_family"] == "openai"
+        assert rec["review_independence"] == "same-family"
+        assert rec["acceptance_status"] == "provisional"
+        assert pv.is_auto_authored(str(f)) is True
+        assert pv.is_auto_curatable(str(f)) is False
+
+
+def test_stamp_provisional_refuses_cross_family_and_unknown_models():
+    with tempfile.TemporaryDirectory() as d:
+        f = Path(d) / "node.md"
+        f.write_text("content\n", encoding="utf-8")
+        for author, reviewer in [
+            ("codex-gpt-5.5", "gemini-3.1-pro"),
+            ("unknown-executor", "gpt-5.5"),
+        ]:
+            try:
+                pv.stamp_provisional(str(f), author, reviewer, verdict_id="agent_1")
+                raise AssertionError(f"should reject provisional route {author}/{reviewer}")
+            except ValueError:
+                pass
+        assert pv.read(str(f)) is None
 
 
 def test_stamp_dir_hashes_skill_md():
@@ -149,11 +188,13 @@ def test_is_auto_authored():
         auto.write_text("x\n", encoding="utf-8")
         pv.stamp(str(auto), "claude-opus-4-8", "gpt-5.5", verdict_id="t1")
         assert pv.is_auto_authored(str(auto)) is True
+        assert pv.is_auto_curatable(str(auto)) is True
 
         # a hand-written / canonical artifact has NO provenance → off-limits to curation
         canonical = Path(d) / "canonical.md"
         canonical.write_text("hand-written\n", encoding="utf-8")
         assert pv.is_auto_authored(str(canonical)) is False
+        assert pv.is_auto_curatable(str(canonical)) is False
 
         # a record with created_by != aris-auto is also not auto-curatable
         human = Path(d) / "human.md"
@@ -161,6 +202,7 @@ def test_is_auto_authored():
         pv.stamp(str(human), "claude-opus-4-8", "gpt-5.5", verdict_id="t2",
                  created_by="human")
         assert pv.is_auto_authored(str(human)) is False
+        assert pv.is_auto_curatable(str(human)) is False
 
 
 if __name__ == "__main__":

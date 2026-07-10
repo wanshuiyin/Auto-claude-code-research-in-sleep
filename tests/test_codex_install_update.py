@@ -92,6 +92,9 @@ def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
     assert "$1==repo_root" not in agents_text
     assert (project / ".agents" / "skills" / "alpha").is_symlink()
     assert (project / ".agents" / "skills" / "beta").resolve() == (repo / "skills" / "skills-codex" / "beta")
+    assert (project / ".agents" / "skills" / "shared-references").resolve() == (
+        repo / "skills" / "skills-codex" / "shared-references"
+    )
 
     run(
         [

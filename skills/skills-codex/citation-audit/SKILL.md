@@ -7,6 +7,11 @@ allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, WebSearch, WebFetch
 
 # Citation Audit
 
+> **Codex assurance:** base audit artifacts record
+> `review_independence: same-family` and `acceptance_status: provisional`.
+> Cross-family overlays or deterministic metadata checks may record accepted;
+> unavailable semantic review emits BLOCKED.
+
 Verify every `\cite{...}` in a paper against three independent layers:
 
 1. **Existence** — the cited paper actually exists at the claimed arXiv ID / DOI / venue.
@@ -38,7 +43,7 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Used via Codex MCP. Default for cross-model review with web access.
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Fresh Codex reviewer with web access; same-family provisional in the base mirror.
 - **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Continue only with `send_input` when explicitly resuming the same audit.
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
@@ -73,7 +78,7 @@ If the user passed `--uncited`, also compute the set difference `bib_keys \ cite
 
 Save the extracted contexts to `paper/.aris/citation-audit/contexts.txt` so the reviewer can read it directly. Use the paper-dir-relative path `.aris/citation-audit/contexts.txt` when recording the file in `audited_input_hashes`; do not stage under `/tmp` or other transient locations that the verifier cannot rehash later.
 
-### Step 3: Send each entry to fresh cross-model reviewer
+### Step 3: Send each entry to a fresh reviewer (same-family provisional by default)
 
 For each **cited** bib entry — i.e., each key in `cited_keys` with at least one extracted citation context — launch a fresh Codex reviewer agent. Do not reuse the same reviewer across entries. Do **not** spawn an agent for entries in `bib_keys \ cited_keys`; those are detect-only and surface only when `--uncited` is explicitly enabled (see "Uncited Entry Detection" below).
 
@@ -287,7 +292,7 @@ If the bib file cannot be read well enough to audit even the cited entries, fall
 | `/paper-claim-audit` | Numerical claims in manuscript | Number inflation, best-seed cherry-pick, config mismatch |
 | `/citation-audit` | Bibliographic entries | Hallucinated refs, wrong-context citations, metadata errors |
 
-Together: code → result → numerical claim → cited claim. Each layer has cross-family review with no executor in the validator path.
+Together: code → result → numerical claim → cited claim. Each layer uses a fresh validator context; base Codex results are same-family provisional and overlays may be cross-family accepted.
 
 ## Known Limitations
 
@@ -414,8 +419,13 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/citation-audit/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
-  "reviewer_reasoning": "<resolved — the effort that actually ran (target: xhigh)>",
+  "executor_model":   "codex-gpt-5.6-sol",
+  "executor_family":  "openai",
+  "reviewer_model":   "gpt-5.6-sol",
+  "reviewer_family":  "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "reviewer_reasoning": "xhigh",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "total_entries":  <int>,                 // count of audited cited entries (= |cited_keys|), NOT the bib-file size

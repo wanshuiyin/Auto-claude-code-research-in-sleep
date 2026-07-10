@@ -7,6 +7,8 @@ description: "Workflow 3: Full paper writing pipeline. Orchestrates paper-plan \
 
 # Workflow 3: Paper Writing Pipeline
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Orchestrate a complete paper writing workflow for: **$ARGUMENTS**
 
 ## Overview

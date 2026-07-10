@@ -7,6 +7,8 @@ description: "Get a deep critical review of research from Gemini via gemini-revi
 
 # Research Review via `gemini-review` MCP (high-rigor review)
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
 
 ## Constants

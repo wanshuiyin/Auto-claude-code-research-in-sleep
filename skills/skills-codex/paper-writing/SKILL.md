@@ -7,6 +7,11 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill
 
 # Workflow 3: Paper Writing Pipeline
 
+> **Codex assurance:** every base semantic audit is same-family provisional.
+> The pipeline still completes when all mandatory audits are green, but the
+> Final Report must say `Submission-ready: provisional`; only cross-family or
+> deterministic accepted audit coverage may say `yes`.
+
 Orchestrate a complete paper writing workflow for: **$ARGUMENTS**
 
 ## Overview
@@ -414,7 +419,7 @@ After the final paper-claim-audit passes, run `/citation-audit` to verify every 
 ```
 if paper/references.bib (or paper.bib) exists and contains entries cited from sec/*.tex:
     Run /citation-audit "paper/"
-    Fresh cross-family reviewer (gpt-5.6-sol via Codex MCP) with web/DBLP/arXiv lookup
+    Fresh Codex reviewer (`spawn_agent`, same-family provisional) with web/DBLP/arXiv lookup
     verifies each entry:
       (i)   EXISTENCE — paper resolves at claimed arXiv ID / DOI / venue
       (ii)  METADATA — author names, year, venue, title match canonical sources
@@ -548,19 +553,20 @@ if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
 fi
 AUDIT_VERIFIER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/verify_paper_audits.sh" ] && AUDIT_VERIFIER="$ARIS_REPO/tools/verify_paper_audits.sh"
-[ -z "$AUDIT_VERIFIER" ] && [ -f tools/verify_paper_audits.sh ] && AUDIT_VERIFIER="tools/verify_paper_audits.sh"
-[ -z "$AUDIT_VERIFIER" ] && [ -f ~/.codex/skills/paper-writing/verify_paper_audits.sh ] && AUDIT_VERIFIER="$HOME/.codex/skills/paper-writing/verify_paper_audits.sh"
 [ -z "$AUDIT_VERIFIER" ] && {
-  echo "ERROR: verify_paper_audits.sh not resolved at \$ARIS_REPO/tools/, tools/, or ~/.codex/skills/paper-writing/." >&2
+  echo "ERROR: verify_paper_audits.sh not resolved at \$ARIS_REPO/tools/." >&2
   echo "       assurance=submission requires the verifier; aborting Final Report." >&2
   exit 1
 }
 
 bash "$AUDIT_VERIFIER" paper/ --assurance submission
+OVERALL_ASSURANCE=$(python3 -c 'import json; print(json.load(open("paper/.aris/audit-verifier-report.json"))["overall_assurance"])')
 ```
 
 - **Exit 0** — All mandatory audits present, JSON schema-valid, hashes fresh,
-  no blocking verdicts. Proceed to the Final Report below.
+  no blocking verdicts. Proceed to the Final Report below. If
+  `OVERALL_ASSURANCE=provisional`, the report MUST say
+  `Submission-ready: provisional`; only `accepted` may say `yes`.
 - **Exit 1** — Surface `paper/.aris/audit-verifier-report.json` to the user
   verbatim, **refuse to generate the Final Report**, and list the specific
   remediation for each failing row:
@@ -603,7 +609,7 @@ or directly if `assurance=draft`)
 **Input**: [NARRATIVE_REPORT.md or topic]
 **Venue**: [ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM/IEEE_JOURNAL/IEEE_CONF]
 **Assurance**: [draft | submission]
-**Submission-ready**: [yes | no]   <!-- yes iff assurance=submission AND verifier exit 0 -->
+**Submission-ready**: [yes | provisional | no]   <!-- yes iff overall_assurance=accepted; provisional iff same-family review passed -->
 **Date**: [today]
 
 ## Pipeline Summary
@@ -620,7 +626,7 @@ or directly if `assurance=draft`)
 | 4.5 Proof Audit | [PASS\|WARN\|FAIL\|NOT_APPLICABLE\|BLOCKED\|ERROR] | PROOF_AUDIT.{md,json} |
 | 5.5 Paper Claim Audit | [PASS\|WARN\|FAIL\|NOT_APPLICABLE\|BLOCKED\|ERROR] | PAPER_CLAIM_AUDIT.{md,json} |
 | 5.8 Citation Audit | [PASS\|WARN\|FAIL\|NOT_APPLICABLE\|BLOCKED\|ERROR] | CITATION_AUDIT.{md,json} |
-| 6.0 Assurance Verifier | [OK\|STALE\|BLOCKING_VERDICT\|HAS_ISSUES\|SCHEMA_INVALID\|MISSING] per audit; exit [0\|1] overall (N/A if draft) | .aris/audit-verifier-report.json |
+| 6.0 Assurance Verifier | [accepted\|provisional\|blocked]; exit [0\|1] overall (N/A if draft) | .aris/audit-verifier-report.json |
 
 ## Improvement Scores
 | Round | Score | Key Changes |

@@ -542,6 +542,8 @@ All pipeline behaviors are configurable via inline overrides — append `— key
 
 **Want the Codex mirror install chain?** Use `tools/install_aris_codex.sh` for managed project installs and `tools/smart_update_codex.sh` for copied Codex installs. The Claude scripts remain the mainline entry points for Claude projects.
 
+The base Codex mirror reviews through a fresh Codex `spawn_agent`: workflows may continue, but results are explicitly `same-family / provisional`. Only a Claude/Gemini overlay or deterministic verifier records `accepted`; submission reports therefore expose `submission-ready: provisional | yes | no`.
+
 </details>
 
 See [full setup guide](#setup) for details and [alternative model combinations](#alternative-model-combinations) if you don't have Claude/OpenAI API.

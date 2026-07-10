@@ -7,6 +7,8 @@ description: "Turn a vague research direction into a problem-anchored, elegant, 
 
 # Research Refine: Problem-Anchored, Elegant, Frontier-Aware Plan Refinement
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Refine and concretize: **$ARGUMENTS**
 
 ## Overview

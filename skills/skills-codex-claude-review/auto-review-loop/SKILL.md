@@ -4,8 +4,17 @@ description: "Autonomous multi-round research review loop. Repeatedly reviews us
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Auto Review Loop: Autonomous Research Improvement
+
+> **Claude overlay assurance:** this route is a different model family from the Codex executor and records `review_independence: cross-family` plus `acceptance_status: accepted`.
 
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
@@ -22,7 +31,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
 - **COMPACT = false** — When `true`, (1) read `EXPERIMENT_LOG.md` and `findings.md` instead of parsing full logs on session recovery, (2) append key findings to `findings.md` after each round.
 - **REVIEWER_DIFFICULTY = medium** — Controls adversarial depth: `medium` uses a normal high-rigor Claude review through `mcp__claude-review__review_start` / `mcp__claude-review__review_reply_start`; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification by an independent reviewer.
-- **RENDER_HTML = true** — When `true` (default), auto-render `review-stage/AUTO_REVIEW.md` to HTML on loop termination via `/render-html`. Uses `--no-review` (the loop itself IS the cross-model review; the HTML render is a structural conversion). Set `false` to skip, or pass `— render html: false`.
+- **RENDER_HTML = true** — When `true` (default), auto-render `review-stage/AUTO_REVIEW.md` to HTML on loop termination via `/render-html`. Uses `--no-review` because the loop already performed a traced cross-family accepted Claude review. Set `false` to skip.
 
 > 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true, difficulty: hard`
 
@@ -54,7 +63,7 @@ Long-running loops may hit the context window limit, triggering automatic compac
 ```json
 {
   "round": 2,
-  "thread_id": "019cd392-...",
+  "threadId": "019cd392-...",
   "status": "in_progress",
   "last_score": 5.0,
   "last_verdict": "not ready",
@@ -76,7 +85,7 @@ Long-running loops may hit the context window limit, triggering automatic compac
    - If it exists AND `status` is `"completed"`: **fresh start** (previous loop finished normally)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is older than 24 hours: **fresh start** (stale state from a killed/abandoned run — delete the file and start over)
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is within 24 hours: **resume**
-     - Read the state file to recover `round`, `thread_id`, `last_score`, `pending_experiments`
+     - Read the state file to recover `round`, `threadId`, `last_score`, `pending_experiments`
      - Read `review-stage/AUTO_REVIEW.md` to restore full context of prior rounds *(fall back to `./AUTO_REVIEW.md`)*
      - If `pending_experiments` is non-empty, check if they have completed (e.g., check screen sessions)
      - Resume from the next round (round = saved round + 1)
@@ -307,7 +316,7 @@ This is the authoritative record. Do NOT truncate or paraphrase.]
 - [continuing to round N+1 / stopping]
 ```
 
-**Write `review-stage/REVIEW_STATE.json`** with current round, agent id, score, verdict, and any pending experiments.
+**Write `review-stage/REVIEW_STATE.json`** with current round, completed threadId, score, verdict, and any pending experiments.
 
 **Append to `findings.md`** (when `COMPACT = true`): one-line entry per key finding this round.
 

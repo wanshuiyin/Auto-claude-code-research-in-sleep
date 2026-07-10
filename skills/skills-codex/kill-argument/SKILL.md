@@ -7,6 +7,11 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, spawn_agent
 
 # Kill Argument Exercise: Adversarial Attack-Defense Review
 
+> **Codex assurance:** both fresh agents are OpenAI-family, so the base JSON
+> records `review_independence: same-family` and
+> `acceptance_status: provisional`. The mechanical count mapping may drive the
+> next step, but it is not cross-family acceptance. Call failure emits ERROR.
+
 Stress-test the headline claims of a paper against the strongest possible rejection argument: **$ARGUMENTS**
 
 ## Why This Exists
@@ -43,7 +48,7 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 
 ## Constants
 
-- **REVIEWER_MODEL** = `gpt-5.6-sol` (default; `gpt-5.5` is the capability fallback, `gpt-5.4` only as an explicit legacy override).  Reviewer reasoning effort = `ultra` for the attack / defense / adjudication agents (deep-audit tier; capability fallback per `shared-references/reviewer-routing.md`, never below `xhigh`).
+- **REVIEWER_MODEL** = `gpt-5.6-sol` (default; specify `gpt-5.4` if you want to fall back to the legacy default). Reviewer reasoning effort = `ultra` for the deep-audit core threads (capability fallback never below `xhigh`).
 - **CONTEXT_POLICY** = `fresh` (REVIEWER_BIAS_GUARD).  Each thread is a fresh `spawn_agent` call.  **Never** use `send_input`.  No prior review summary, fix list, or executor explanation enters either prompt.
 - **ATTACK_LENGTH** = approximately 200 words (do not exceed 250).  Single coherent argument, not a list.
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
@@ -52,6 +57,14 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 - **RENDER_HTML = true** — When `true` (default), auto-render `KILL_ARGUMENT.md` to HTML after writing the report via `/render-html "<paper-dir>/KILL_ARGUMENT.md" --json "<paper-dir>/KILL_ARGUMENT.json"`. Uses **full review gate** (audit-class artifact). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: failures don't invalidate the kill-argument verdict.
 
 ## Workflow
+
+The attack and adjudication calls are fresh, read-only Codex shards. They return
+structured per-point records with stable `dedup_key` identifiers; neither call
+writes the paper or emits cross-family acceptance. The parent computes the
+top-level mapping mechanically and records a same-family provisional verdict.
+If `spawn_agent` is unavailable, use fresh sequential contexts where supported;
+otherwise emit `BLOCKED` rather than inventing a verdict. See
+[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 
 ### Step 1: Discover paper files
 
@@ -220,7 +233,7 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: <resolved pair that actually ran — target gpt-5.6-sol ultra>, fresh agents (no send_input)
+**Reviewer model**: gpt-5.6-sol ultra, fresh agents (no send_input)
 **Attack agent**: <agent_id 1>
 **Adjudicator agent**: <agent_id 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
@@ -266,8 +279,13 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
   "agent_id": "<defense agent_id — primary; attack agent_id in details>",
-  "reviewer_model": "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
-  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
+  "executor_model": "codex-gpt-5.6-sol",
+  "executor_family": "openai",
+  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_family": "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "reviewer_reasoning": "ultra",
   "generated_at": "<UTC ISO-8601>",
   "details": {
     "attack_agent_id": "<agent_id 1>",

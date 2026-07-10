@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 from tools.check_skills_inventory import check_inventory
@@ -38,16 +39,19 @@ def test_codex_skill_set_matches_mainline() -> None:
     assert main_names == codex_names
 
 
+def test_codex_shared_reference_set_matches_mainline() -> None:
+    main_refs = {p.name for p in (MAIN_SKILLS / "shared-references").glob("*.md")}
+    codex_refs = {p.name for p in (CODEX_SKILLS / "shared-references").glob("*.md")}
+    assert len(main_refs) == 30
+    assert codex_refs == main_refs
+
+
 def test_codex_mirror_shared_reference_links_resolve() -> None:
     """Every `shared-references/<name>.md` PATH reference in a mirror or overlay
     SKILL.md must resolve to a file that exists in the mirror's own
-    shared-references/. The mirror is an appendage and does not carry every
-    mainline shared-reference; skills that mean the mainline copy must qualify
-    the mention with the word "mainline" (prose, e.g. "per mainline
-    `skill-governance.md`") rather than a bare `shared-references/…` path — that
-    prose form is intentionally NOT matched here. Guards against the dangling
-    reference class (mirror meta-apply once cited a non-existent
-    skill-governance.md)."""
+    shared-references/. The mirror now carries the complete mainline reference
+    name set, with Codex-specific normative adaptation notes. This guards against
+    the dangling-reference class while the set-equality test guards omissions."""
     ref_re = re.compile(r"shared-references/([a-z0-9-]+\.md)")
     mirror_refs = {p.name for p in (CODEX_SKILLS / "shared-references").glob("*.md")}
     roots = [CODEX_SKILLS, CLAUDE_OVERLAY, GEMINI_OVERLAY]
@@ -99,7 +103,7 @@ def test_skill_inventory_check_passes() -> None:
 
 def test_skill_inventory_check_is_cli_runnable() -> None:
     result = subprocess.run(
-        ["python", "tools/check_skills_inventory.py"],
+        [sys.executable, "tools/check_skills_inventory.py"],
         cwd=REPO_ROOT,
         text=True,
         capture_output=True,
@@ -154,6 +158,89 @@ def test_codex_reviewer_contract_partition() -> None:
         text = read(CODEX_SKILLS / name / "SKILL.md")
         assert not has_spawn_agent_block(text)
         assert not has_send_input_block(text)
+
+
+def test_codex_review_assurance_is_explicit_and_honest() -> None:
+    routing = read(CODEX_SKILLS / "shared-references" / "reviewer-routing.md")
+    tracing = read(CODEX_SKILLS / "shared-references" / "review-tracing.md")
+    assert "review_independence: same-family" in routing
+    assert "acceptance_status: provisional" in routing
+    assert '"review_independence": "same-family"' in tracing
+    assert '"acceptance_status": "provisional"' in tracing
+
+    forbidden = (
+        "fresh cross-family Codex",
+        "Cross-model Codex review",
+        "Cross-model math/code review (codex",
+        "already cross-model-reviewed",
+        "Cross-model independence",
+        "cross-model review (Codex",
+    )
+    offenders: list[str] = []
+    for skill_file in CODEX_SKILLS.glob("*/SKILL.md"):
+        text = read(skill_file)
+        for phrase in forbidden:
+            if phrase.lower() in text.lower():
+                offenders.append(f"{skill_file.relative_to(REPO_ROOT)}: {phrase}")
+    assert not offenders, "Codex base mirror falsely claims cross-family review:\n" + "\n".join(offenders)
+
+    provisional_skills = {
+        "auto-review-loop", "research-review", "paper-writing", "render-html",
+        "proof-checker", "paper-claim-audit", "citation-audit", "kill-argument",
+        "experiment-audit", "result-to-claim", "meta-apply",
+    }
+    for skill in provisional_skills:
+        text = read(CODEX_SKILLS / skill / "SKILL.md")
+        assert "provisional" in text, f"{skill} must document same-family provisional output"
+
+    experiment_audit = read(CODEX_SKILLS / "experiment-audit" / "SKILL.md")
+    for field in (
+        "executor_model", "executor_family", "reviewer_model", "reviewer_family",
+        "review_independence", "acceptance_status", "trace_path", "verdict_id",
+    ):
+        assert field in experiment_audit, f"experiment-audit must emit {field}"
+    assert "Executor — Claude" not in experiment_audit
+
+    result_to_claim = read(CODEX_SKILLS / "result-to-claim" / "SKILL.md")
+    assert "traced `BLOCKED` review record" in result_to_claim
+    assert "do not block the pipeline" not in result_to_claim
+
+    shared_reference_text = "\n".join(
+        read(CODEX_SKILLS / "shared-references" / name)
+        for name in ("acceptance-gate.md", "fan-out-pattern.md", "evidence-precheck.md", "external-cadence.md")
+    )
+    for stale_claim in (
+        "**codex** assigns score & verdict",
+        "**codex (GPT xhigh)** review",
+        "jury here is cross-model by construction",
+        "The cross-model jury step routes through Codex MCP",
+        "identical cross-model jury step",
+        "CROSS-MODEL JURY",
+        "score and the verdict both come from the cross-model reviewer",
+        "Every Type-B gate routes to a cross-model verdict",
+    ):
+        assert stale_claim.lower() not in shared_reference_text.lower(), \
+            f"Codex mirror retains false cross-model claim: {stale_claim}"
+
+    for overlay in (CLAUDE_OVERLAY, GEMINI_OVERLAY):
+        for skill_file in overlay.glob("*/SKILL.md"):
+            text = read(skill_file)
+            assert "review_independence: cross-family" in text
+            assert "acceptance_status: accepted" in text
+            assert "acceptance_status: provisional" not in text
+
+    for skill_file in CLAUDE_OVERLAY.glob("*/SKILL.md"):
+        text = read(skill_file)
+        assert "spawn_agent" not in text, \
+            f"{skill_file.relative_to(REPO_ROOT)} leaked the base Codex reviewer route"
+        assert "send_input" not in text, \
+            f"{skill_file.relative_to(REPO_ROOT)} leaked the base Codex continuation route"
+        assert "agent_id" not in text, \
+            f"{skill_file.relative_to(REPO_ROOT)} must persist Claude threadId, not Codex agent_id"
+        assert "GPT-5.5" not in text and "Codex/GPT" not in text, \
+            f"{skill_file.relative_to(REPO_ROOT)} must not retain a non-Claude reviewer identity"
+        assert "mcp__claude-review__review_start" in text
+        assert "mcp__claude-review__review_status" in text
 
 
 def test_overlay_boundaries_are_exact() -> None:
@@ -289,7 +376,7 @@ def test_codex_high_risk_skills_preserve_claude_semantics() -> None:
             "rescue",
             "second opinion",
             "CODE_REVIEW",
-            "Cross-Model Code Review",
+            "Fresh-Agent Code Review",
         ],
         "run-experiment": [
             "Vast.ai",

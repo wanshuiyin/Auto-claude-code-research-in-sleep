@@ -70,6 +70,18 @@ Examples:
 
 ## Workflow
 
+### Per-source/per-paper fan-out
+
+Retrieval and extraction are breadth-bound. Use fresh `spawn_agent` shards when
+delegation is available, or the same work sequentially otherwise. Every shard
+is read-only and returns
+`{"shard_id": ..., "entries": [{"payload": ..., "dedup_key": "<DOI/arXiv/id>"}]}`.
+The parent invokes every resolved source, unions results, mechanically dedups on
+canonical IDs, and writes once. Shards do not rank paper quality. Source
+verification remains deterministic; optional Codex synthesis review is
+same-family provisional. See
+[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
+
 ### Step 0a: Search Zotero Library (if available)
 
 **If the user explicitly requested Zotero and the Zotero MCP is not configured, stop and ask the user to configure it. Otherwise skip this step entirely.**
@@ -329,6 +341,12 @@ If Zotero BibTeX was exported, include a `references.bib` snippet for direct use
 - Save paper PDFs to `literature/` or `papers/`
 - Update related work notes in project memory
 - If Obsidian is available, optionally create a literature review note in the vault
+
+If `— composed: <canonical-report-path>` is present, return/fold the table,
+landscape, and gaps into that report instead of writing a standalone literature
+summary. Standalone remains the default; `— standalone` wins and an existing
+report never activates composed mode. Keep reusable PDFs/BibTeX and traces. See
+[`output-composition.md`](../shared-references/output-composition.md).
 
 ### Step 6: Update Research Wiki
 

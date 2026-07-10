@@ -23,7 +23,7 @@ Do not trace purely informational agent calls that are not acting as reviewers.
 
 ## How to Trace
 
-After each reviewer call — including every FAILED attempt in a capability-fallback chain (one entry per attempt, with status + fallback reason) — save the trace using `save_trace.sh`,
+After each reviewer call, save the trace using `save_trace.sh`,
 resolved through the canonical helper chain (see
 `integration-contract.md` §2 — failure policy C, "forensic helper").
 A Codex-side SKILL must NOT hard-code `tools/save_trace.sh`; instead
@@ -54,6 +54,10 @@ the resolver returns the empty string, write the four files inline
   "run_id": "2026-04-15_run01",
   "started_at": "2026-04-15T14:30:00+08:00",
   "executor": "codex",
+  "executor_model": "gpt-5.6-sol",
+  "executor_family": "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
   "project_dir": "/path/to/project"
 }
 ```
@@ -84,10 +88,18 @@ the resolver returns the empty string, write the four files inline
   "timestamp": "2026-04-15T14:33:00+08:00",
   "agent_id": "019d8fe0-b25d-...",
   "model": "gpt-5.6-sol",
+  "reviewer_family": "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
   "duration_ms": 142000,
   "status": "ok"
 }
 ```
+
+For a Claude/Gemini overlay write `review_independence: cross-family` and
+`acceptance_status: accepted`. For a deterministic verifier write
+`review_independence: deterministic` and `acceptance_status: accepted`. These
+fields describe the reviewer route; they do not rewrite the substantive verdict.
 
 ## Configuration
 

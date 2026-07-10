@@ -30,7 +30,10 @@ SEND_BLOCK_RE = re.compile(r"```(?:yaml|text)?\nsend_input:\n([\s\S]*?)```")
 
 OVERRIDE_NOTE = (
     "> Override for Codex users who want **Claude Code**, not a second Codex agent, "
-    "to act as the reviewer. Install this package **after** `skills/skills-codex/*`."
+    "to act as the reviewer. Install this package **after** `skills/skills-codex/*`.\n>\n"
+    "> This reviewer is a different model family from the Codex executor. Every "
+    "overlay trace/audit records:\n>\n> ```yaml\n> review_independence: cross-family\n"
+    "> acceptance_status: accepted\n> ```"
 )
 
 REVIEWER_LINE = (
@@ -81,6 +84,7 @@ def normalize_description(text: str) -> str:
     text = text.replace("GPT-5.6-Sol", "Claude")
     text = text.replace("via GPT-5.6-Sol ultra review", "via Claude review through claude-review MCP")
     text = text.replace("via GPT-5.5 xhigh review", "via Claude review through claude-review MCP")
+    text = text.replace("GPT-5.5", "Claude through claude-review MCP")
     return text
 
 
@@ -151,6 +155,14 @@ def append_async_notes(text: str) -> str:
 
 
 def transform_body(text: str) -> str:
+    text = re.sub(
+        r"> \*\*Codex assurance:\*\*[\s\S]*?(?=\n\n)",
+        "> **Claude overlay assurance:** this route is a different model family "
+        "from the Codex executor and records `review_independence: cross-family` "
+        "plus `acceptance_status: accepted`.",
+        text,
+        count=1,
+    )
     text = text.replace("secondary Codex agent", "Claude reviewer via `claude-review` MCP")
     text = text.replace("via a Claude reviewer via `claude-review` MCP (xhigh reasoning)", "via `claude-review` MCP (high-rigor review)")
     text = text.replace("secondary Codex agent (xhigh reasoning)", "Claude reviewer via `claude-review` MCP")
@@ -175,6 +187,16 @@ def transform_body(text: str) -> str:
     text = text.replace("- **Save `agent_id` from Phase 2** and use `send_input` for later rounds.", "- **Save the completed `threadId` from Phase 2** and use `mcp__claude-review__review_reply_start` plus `mcp__claude-review__review_status` for later rounds.")
     text = text.replace("- **Use `send_input`** for Round 2 to maintain conversation context", "- **Use `mcp__claude-review__review_reply_start` plus `mcp__claude-review__review_status`** for Round 2 to maintain conversation context")
     text = text.replace("GPT-5.5 responses", "Claude reviewer responses")
+    text = text.replace("same-family provisional review", "cross-family accepted Claude review")
+    text = text.replace("same-family provisional", "cross-family accepted")
+    text = text.replace("A fresh Codex positive review", "A fresh Claude positive review")
+    text = re.sub(
+        r"^- \*\*REVIEWER_BACKEND = `codex`\*\*.*$",
+        "- **REVIEWER_BACKEND = `claude-review`** — Cross-family Claude reviewer "
+        "through the local bridge; positive verdicts record accepted.",
+        text,
+        flags=re.MULTILINE,
+    )
     text = text.replace("`agent_id`", "`thread_id`")
     text = text.replace('"agent_id"', '"thread_id"')
     text = text.replace("ALWAYS use `reasoning_effort: xhigh` for reviews", "Always ask the Claude reviewer for strict, high-rigor feedback.")
@@ -211,6 +233,20 @@ def transform_body(text: str) -> str:
         "```\nreasoning_effort: xhigh\n```",
         "```\nmcp__claude-review__review_start:\n  prompt: |\n    [Full novelty briefing + prior work list + specific novelty questions]\n```",
     )
+    # New base-skill prose can mention Codex-native routes outside fenced tool
+    # examples. Normalize those residual references after rewriting the blocks so
+    # generated overlays never instruct users to mix Codex agents with Claude MCP.
+    text = text.replace("Codex xhigh review", "Claude high-rigor review")
+    text = text.replace("Codex Review", "Claude Review")
+    text = text.replace("Codex/GPT-5.5", "Claude reviewer")
+    text = text.replace("GPT-5.5", "the Claude reviewer")
+    text = text.replace("spawn_agent", "mcp__claude-review__review_start")
+    text = text.replace("send_input", "mcp__claude-review__review_reply_start")
+    text = text.replace("agent_id", "threadId")
+    text = text.replace("thread_id", "threadId")
+    text = text.replace("agent id", "completed threadId")
+    text = text.replace("agent ID", "completed threadId")
+    text = text.replace("same agent", "same completed threadId")
     return append_async_notes(text)
 
 

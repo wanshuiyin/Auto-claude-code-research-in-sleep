@@ -4,6 +4,13 @@ description: "Turn a vague research direction into a problem-anchored, elegant, 
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Research Refine: Problem-Anchored, Elegant, Frontier-Aware Plan Refinement
 
@@ -26,7 +33,7 @@ User input (PROBLEM + vague APPROACH)
   -> Phase 1 (Local step): Scan grounding papers -> identify technical gap -> choose the sharpest route -> write focused proposal
   -> Phase 2 (Codex/Claude): Review for fidelity, specificity, contribution quality, and frontier leverage
   -> Phase 3 (Local step): Anchor check + simplicity check -> revise method -> rewrite full proposal
-  -> Phase 4 (Codex, same agent): Re-evaluate revised proposal
+  -> Phase 4 (Codex, same completed threadId): Re-evaluate revised proposal
   -> Repeat Phase 3-4 until OVERALL SCORE >= 9 or MAX_ROUNDS reached
   -> Phase 5: Save full history to refine-logs/
   -> Optional handoff: /experiment-plan for a detailed execution-ready experiment roadmap
@@ -53,7 +60,7 @@ Long-running refinement sessions may fail mid-way (API timeout, context compacti
 {
   "phase": "review",
   "round": 1,
-  "thread_id": "019cd392-...",
+  "threadId": "019cd392-...",
   "last_score": 6.5,
   "last_verdict": "REVISE",
   "status": "in_progress",
@@ -95,7 +102,7 @@ Before starting any phase, check whether a previous run left a checkpoint:
    - If it exists and `status` is `"in_progress"` within 24 hours → resume
 2. **On resume**:
    - Read all existing `refine-logs/round-*.md` files and `score-history.md`
-   - Recover `thread_id` for reviewer continuity
+   - Recover `threadId` for reviewer continuity
    - Resume from the next phase based on the saved `phase`
 3. **On fresh start**, ensure `refine-logs/` exists and proceed to Phase 0.
 
@@ -113,7 +120,7 @@ Write:
 
 If later reviewer feedback would change the problem being solved, mark that as **drift** and push back or adapt carefully.
 
-**Checkpoint:** Write `refine-logs/REFINE_STATE.json` with `{"phase": "anchor", "round": 0, "thread_id": null, "last_score": null, "last_verdict": null, "status": "in_progress", "timestamp": "<now>"}`.
+**Checkpoint:** Write `refine-logs/REFINE_STATE.json` with `{"phase": "anchor", "round": 0, "threadId": null, "last_score": null, "last_verdict": null, "status": "in_progress", "timestamp": "<now>"}`.
 
 ### Phase 1: Build the Initial Proposal
 
@@ -338,10 +345,12 @@ mcp__claude-review__review_start:
 
     **OVERALL SCORE** (1-10): Weighted toward Problem Fidelity, Method Specificity, Contribution Quality, and Frontier Leverage.
     Use this weighting: Problem Fidelity 15%, Method Specificity 25%, Contribution Quality 25%, Frontier Leverage 15%, Feasibility 10%, Validation Focus 5%, Venue Readiness 5%.
-    (This weighted-axis rubric is the working precedent for mainline
-    `taste-calibration.md`; if curated known-good/known-bad past proposals are
+    (Follow [`taste-calibration.md`](../shared-references/taste-calibration.md):
+    if curated known-good/known-bad past proposals are
     available, score 3 of each on these axes FIRST to anchor the scale, and
     name in the review which anchor the proposal sits closest to.)
+    Emit `CALIBRATION: anchored|none`, the weighted composite, and a GAP
+    paragraph. A fresh Claude positive review is cross-family accepted.
 
     For each dimension scoring < 7, provide:
     - The specific weakness
@@ -368,7 +377,7 @@ After this start call, immediately save the returned `jobId` and poll `mcp__clau
 
 Save review to `refine-logs/round-1-review.md` with the raw response in a `<details>` block.
 
-**Checkpoint:** Update `refine-logs/REFINE_STATE.json` with `{"phase": "review", "round": 1, "thread_id": "<saved>", "last_score": <parsed>, "last_verdict": "<parsed>", ...}`.
+**Checkpoint:** Update `refine-logs/REFINE_STATE.json` with `{"phase": "review", "round": 1, "threadId": "<saved>", "last_score": <parsed>, "last_verdict": "<parsed>", ...}`.
 
 ### Phase 3: Parse Feedback and Revise the Method
 
@@ -474,7 +483,7 @@ Save to `refine-logs/round-N-refinement.md`:
 
 ### Phase 4: Re-evaluation (Round 2+)
 
-Send the revised proposal back to Claude in the **same agent**:
+Send the revised proposal back to Claude in the **same completed threadId**:
 
 ```
 mcp__claude-review__review_reply_start:
@@ -512,7 +521,7 @@ After this start call, immediately save the returned `jobId` and poll `mcp__clau
 
 Save review to `refine-logs/round-N-review.md`.
 
-**Checkpoint:** Update `refine-logs/REFINE_STATE.json` with `{"phase": "review", "round": N, "thread_id": "<saved>", "last_score": <parsed>, "last_verdict": "<parsed>", ...}`.
+**Checkpoint:** Update `refine-logs/REFINE_STATE.json` with `{"phase": "review", "round": N, "threadId": "<saved>", "last_score": <parsed>, "last_verdict": "<parsed>", ...}`.
 
 Then return to Phase 3 until:
 

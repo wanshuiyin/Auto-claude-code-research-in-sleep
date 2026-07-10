@@ -1,11 +1,16 @@
 ---
 name: paper-claim-audit
-description: "Zero-context verification that every number, comparison, and scope claim in the paper matches raw result files. Uses a fresh cross-model reviewer with NO prior context to prevent confirmation bias. Use when user says \"审查论文数据\", \"check paper claims\", \"verify numbers\", \"论文数字核对\", or before submission to ensure paper-to-evidence fidelity."
+description: "Zero-context verification that every number, comparison, and scope claim in the paper matches raw result files. Uses a fresh Codex reviewer with no prior context; base output is same-family provisional. Use when user says \"审查论文数据\", \"check paper claims\", \"verify numbers\", \"论文数字核对\", or before submission to ensure paper-to-evidence fidelity."
 argument-hint: [paper-directory]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob
 ---
 
 # Paper Claim Audit: Zero-Context Evidence Verification
+
+> **Codex assurance:** write `review_independence: same-family` and
+> `acceptance_status: provisional` into base audit JSON. A fresh Codex PASS may
+> advance the pipeline but cannot produce submission-ready yes. Missing/failed
+> review emits BLOCKED; overlay/deterministic acceptance uses accepted.
 
 Verify that every claim in the paper matches raw evidence for: **$ARGUMENTS**
 
@@ -46,7 +51,7 @@ This is **stricter than reviewer-independence** — it's zero-context evidence a
 
 ## Workflow
 
-### Step 1: Collect Files (Executor — Claude)
+### Step 1: Collect Files (Executor — Codex)
 
 Locate paper and result files WITHOUT reading or interpreting them.
 
@@ -155,7 +160,7 @@ spawn_agent:
     Overall verdict: PASS | WARN | FAIL
 ```
 
-### Step 3: Write Report (Executor — Claude)
+### Step 3: Write Report (Executor — Codex)
 
 Parse the reviewer's response and write `PAPER_CLAIM_AUDIT.md`:
 
@@ -242,7 +247,7 @@ After writing `paper/PAPER_CLAIM_AUDIT.md` and `paper/PAPER_CLAIM_AUDIT.json`, i
 /render-html "paper/PAPER_CLAIM_AUDIT.md" --json "paper/PAPER_CLAIM_AUDIT.json"
 ```
 
-Uses **full review gate** (audit-class artifact — render-fidelity check matches the skill's zero-context cross-model audit invariant). Output: `paper/PAPER_CLAIM_AUDIT.html` with embedded source SHA256 + `.review.json` sidecar.
+Uses **full review gate** (audit-class artifact; base Codex review is fresh same-family provisional). Output: `paper/PAPER_CLAIM_AUDIT.html` with embedded source SHA256 + `.review.json` sidecar.
 
 **Non-blocking**: if `/render-html` fails (helper missing, secondary Codex agent unavailable, file write error), log the failure and treat the audit as complete — the JSON + MD verdict files are canonical; the HTML view is a human-reader convenience.
 
@@ -254,7 +259,7 @@ Skip if `RENDER_HTML = false` is set in `AGENTS.md` / `CLAUDE.md` or passed as `
 - **Zero executor interpretation.** Only file paths. No summaries.
 - **Only raw results.** No EXPERIMENT_LOG, no AUTO_REVIEW, no human summaries.
 - **Rounding rule.** Only standard rounding to displayed precision. 84.7% → 84.7% or 85% is OK. 84.7% → 85.3% is NOT OK.
-- **Cross-model.** Reviewer must be a different model family from executor.
+- **Review class.** Base Codex reviewer is same-family provisional; only an overlay may record cross-family accepted.
 
 ## Review Tracing
 
@@ -284,8 +289,13 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/paper-claim-audit/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
-  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
+  "executor_model":   "codex-gpt-5.6-sol",
+  "executor_family":  "openai",
+  "reviewer_model":   "gpt-5.6-sol",
+  "reviewer_family":  "openai",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "reviewer_reasoning": "ultra",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "total_claims":   <int>,

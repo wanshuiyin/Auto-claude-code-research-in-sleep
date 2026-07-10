@@ -31,7 +31,7 @@ allowed-tools: Bash(*), Read, Write, spawn_agent
 ## Core invariants
 
 - **MD / JSON is canonical, HTML is generated view.** Edit the source, then re-render. Do not hand-edit the HTML.
-- **Cross-model review at the artifact boundary** (ARIS invariant). Academic-template HTML — used for the artifacts humans actually read (IDEA_REPORT, AUTO_REVIEW, KILL_ARGUMENT, PAPER_PLAN) — is reviewed by a fresh cross-family Codex thread before being claimed as a finished view. Dashboard-template HTML (cockpit / debug views) skips review by default but accepts `--review` to force it. See § *HTML Review Gate* below.
+- **Fresh review at the artifact boundary.** Academic-template HTML is reviewed by a fresh Codex `spawn_agent`. In the base mirror this is same-family and the result is provisional; an overlay may provide cross-family accepted review. Dashboard HTML skips review by default but accepts `--review`.
 - **Drift detection.** Every rendered HTML embeds the source path, SHA256, and generation timestamp in `<meta>` tags AND in the visible page header. If the HTML and source diverge, the meta tells you which version of the source produced it.
 - **Single-file output.** No build system, no separate CSS, no `node_modules`. Just one `.html`.
 - **CDN-friendly default, `--offline` fallback.** MathJax 3 and highlight.js load from `cdn.jsdelivr.net` by default. Pass `--offline` to skip both — math will appear as raw `$x$`, code blocks won't get syntax highlighting, but everything stays readable.
@@ -125,9 +125,13 @@ From `$ARGUMENTS`, determine what to render. Common patterns:
 
 Use the resolver above to get `$RENDER_HTML`, then invoke. The script writes the HTML alongside the source by default (or wherever `--out` says) and prints a one-line confirmation including the source SHA256 prefix.
 
-### Step 4: HTML Review Gate (cross-model)
+### Step 4: HTML Review Gate (same-family provisional by default)
 
-**Decide whether to run review.** Per ARIS invariant "executor must not judge its own output", the academic-template HTML is reviewed by a fresh cross-family Codex thread before being claimed as a delivered view. Resolution:
+**Decide whether to run review.** Academic-template HTML is reviewed by a fresh
+Codex agent with no author context before being claimed as reviewed. The base
+route records `review_independence: same-family` and
+`acceptance_status: provisional`; an overlay records cross-family accepted.
+Resolution:
 
 ```
 should_review = explicit --review present
@@ -183,6 +187,8 @@ Return STRICT JSON first, then a short prose note:
 
 {
   "verdict": "PASS|WARN|FAIL|ERROR",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
   "checks": {
     "source_hash_match": "pass|warn|fail|unknown",
     "information_fidelity": "pass|warn|fail",
@@ -292,7 +298,7 @@ For deck / poster / Xiaohongshu card / tweet card / data report style outputs, p
 
 - **Do not auto-render every Markdown file.** Only artifacts on the whitelist above. File proliferation is the main anti-pattern.
 - **Do not hand-edit the generated HTML.** Edit the source, then re-render. The embedded SHA256 in the HTML meta tells you if the source has changed since render.
-- **academic-template HTML is a reviewed artifact**, not raw output. Cross-model Codex review (fresh thread) gates the academic deliverables — the same way `/proof-checker`, `/paper-claim-audit`, `/citation-audit`, `/kill-argument` gate their respective products. `--no-review` exists for fast iteration but should not be the way you ship.
+- **academic-template HTML is a reviewed artifact**, not raw output. Base Codex review is fresh but same-family provisional; never call it cross-model acceptance. `--no-review` exists for fast iteration but should not be the way you ship.
 - **The reviewer audits rendering, not research.** Claim truthfulness is owned upstream by `/paper-claim-audit`, `/result-to-claim`, `/research-review`. The HTML reviewer asks: "did the renderer faithfully + safely convert this source?" — nothing more.
 - **CDN dependency is opt-out, not opt-in.** Most users have internet; `--offline` is for air-gapped runs / archival.
 - **The default style is academic-newspaper, not marketing-flashy.** Match the existing ARIS tonal voice. If you want decks/posters/social cards, point users to html-anything.

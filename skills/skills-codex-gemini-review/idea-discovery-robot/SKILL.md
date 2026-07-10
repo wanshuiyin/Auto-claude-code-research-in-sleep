@@ -7,6 +7,8 @@ description: "Workflow 1 adaptation for robotics and embodied AI. Orchestrates r
 
 # Robotics Idea Discovery Pipeline
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Orchestrate a robotics-specific idea discovery workflow for: **$ARGUMENTS**
 
 ## Overview

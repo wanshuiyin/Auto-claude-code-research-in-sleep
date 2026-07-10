@@ -36,7 +36,7 @@ These are non-negotiable across all phases:
 3. **Speaker notes are byte-stable.** Polish must not change `slide.notes_slide` content. Phase 4 verifies this.
 4. **No new content anywhere in the pipeline.** All slide text, speaker notes, talk script, Q&A answers, claims, numbers, citations, URLs, author names, affiliations, anonymity placeholders, and experiment results must be either paper-grounded (extracted from `PAPER_DIR/` artefacts) or explicitly user-provided. The pipeline never invents content during outline, build, polish, audit, or export. Phase-4 anonymity scan + claim audit verify this end-to-end.
 5. **No slide reordering.** Add / drop / reorder requires explicit user flags.
-6. **Cross-model independence.** Per-page Codex calls in `/slides-polish` use fresh `spawn_agent` calls (no `send_input`). See `../shared-references/reviewer-independence.md`.
+6. **Fresh-context independence.** Per-page Codex calls in `/slides-polish` use fresh `spawn_agent` calls (no `send_input`) and are same-family provisional in the base mirror.
 7. **Anonymity fail-closed.** If any audit (or any Codex fix proposal) would replace a placeholder with a real title / count / URL, the workflow halts and surfaces the proposal for human review. See `../shared-references/experiment-integrity.md`.
 8. **Style references are guidance, not text source.** A `— reference:` PDF or `— style:` preset informs visual weight and structural rhythm; never copy prose, examples, slide titles, or speaker-note text from the reference.
 9. **Final report cannot be `conference-ready` unless required audits pass.** Phase 6 verifies and downgrades verdict if audits fail.

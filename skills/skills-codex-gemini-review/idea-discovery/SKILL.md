@@ -7,6 +7,8 @@ description: "Workflow 1: Full idea discovery pipeline. Orchestrates research-li
 
 # Workflow 1: Idea Discovery Pipeline
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Orchestrate a complete idea discovery workflow for: **$ARGUMENTS**
 
 ## Overview

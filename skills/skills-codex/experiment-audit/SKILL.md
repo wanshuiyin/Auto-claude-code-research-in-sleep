@@ -1,11 +1,16 @@
 ---
 name: experiment-audit
-description: "Audit experiment integrity before claiming results. Uses cross-model review (GPT-5.6-Sol) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
+description: "Audit experiment integrity before claiming results. Uses fresh-agent GPT-5.6-Sol review (same-family provisional in the base Codex mirror) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
 argument-hint: [experiment-dir-or-results-path]
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob
 ---
 
-# Experiment Audit: Cross-Model Integrity Verification
+# Experiment Audit: Fresh-Agent Integrity Verification
+
+> **Codex assurance:** base semantic audit results record
+> `review_independence: same-family` and `acceptance_status: provisional`.
+> Deterministic evidence checks may be accepted; unavailable reviewer calls emit
+> BLOCKED/ERROR rather than a provisional PASS.
 
 Audit experiment integrity for: **$ARGUMENTS**
 
@@ -21,17 +26,17 @@ These are NOT intentional deception — they are failure modes of optimizing age
 
 ## Core Principle
 
-**The executor (Claude) collects file paths. The reviewer (GPT-5.6-Sol) reads code and judges integrity. The executor does NOT participate in integrity judgment.**
+**The executor (Codex) collects file paths. A fresh Codex reviewer reads code and judges integrity. The executor does NOT participate in integrity judgment; this base route is same-family/provisional.**
 
 This follows `shared-references/reviewer-independence.md` and `shared-references/experiment-integrity.md`.
 
 ## Constants
 
-- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, ultra). Override with `— reviewer: oracle-pro` for GPT-5.5 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex reviewer agent (`spawn_agent`, xhigh). Override with `— reviewer: oracle-pro` for GPT-5.6-Sol Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
 
 ## Workflow
 
-### Step 1: Collect Artifacts (Executor — Claude)
+### Step 1: Collect Artifacts (Executor — Codex)
 
 Locate and list these files WITHOUT reading or summarizing their content:
 
@@ -127,7 +132,7 @@ spawn_agent:
     Be thorough. Read every eval script line by line.
 ```
 
-### Step 3: Parse and Write Report (Executor — Claude)
+### Step 3: Parse and Write Report (Executor — Codex)
 
 Parse the reviewer's response and write `EXPERIMENT_AUDIT.md`:
 
@@ -135,7 +140,7 @@ Parse the reviewer's response and write `EXPERIMENT_AUDIT.md`:
 # Experiment Audit Report
 
 **Date**: [today]
-**Auditor**: GPT-5.6-Sol ultra (cross-model, read-only)
+**Auditor**: GPT-5.6-Sol ultra (fresh same-family agent, read-only, provisional)
 **Project**: [project name]
 
 ## Overall Verdict: [PASS | WARN | FAIL]
@@ -174,6 +179,22 @@ Also write `EXPERIMENT_AUDIT.json` for machine consumption:
 
 ```json
 {
+  "audit_skill": "experiment-audit",
+  "verdict": "WARN",
+  "reason_code": "scope_exceeds_evidence",
+  "summary": "Two-scene evaluation supports a qualified claim only.",
+  "audited_input_hashes": {"results/eval.json": "sha256:<hash>"},
+  "trace_path": ".aris/traces/experiment-audit/2026-04-10_run01/",
+  "agent_id": "agent_019f...",
+  "verdict_id": "agent_019f...",
+  "executor_model": "codex-gpt-5.6-sol",
+  "executor_family": "openai",
+  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_family": "openai",
+  "reviewer_reasoning": "ultra",
+  "review_independence": "same-family",
+  "acceptance_status": "provisional",
+  "generated_at": "2026-04-10T00:00:00Z",
   "date": "2026-04-10",
   "auditor": "gpt-5.6-sol-ultra",
   "overall_verdict": "warn",
@@ -253,7 +274,7 @@ if EXPERIMENT_AUDIT.json exists AND integrity_status == "fail":
 - **Reviewer independence**: executor collects paths, reviewer judges. Period.
 - **Never block**: warn loudly, never halt the pipeline.
 - **File-as-switch**: no EXPERIMENT_AUDIT.md = skill was never run = zero impact on existing behavior.
-- **Cross-model**: the reviewer MUST be a different model family from the executor.
+- **Review class**: base Codex is same-family provisional; only an overlay may claim cross-family accepted.
 - **Honest about limits**: the audit catches common patterns, not all possible fraud. It is a safety net, not a guarantee.
 
 ## Acknowledgements

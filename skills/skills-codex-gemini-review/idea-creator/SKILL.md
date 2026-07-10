@@ -7,6 +7,8 @@ description: "Generate and rank research ideas given a broad direction. Use when
 
 # Research Idea Creator
 
+> **Gemini overlay assurance:** `review_independence: cross-family` and `acceptance_status: accepted`.
+
 Generate publishable research ideas for: $ARGUMENTS
 
 ## Overview

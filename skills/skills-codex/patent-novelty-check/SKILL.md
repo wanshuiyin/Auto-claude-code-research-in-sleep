@@ -13,7 +13,7 @@ Adapted from `/novelty-check` for patent legal standards. Research novelty is NO
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.6-sol` — Model used via Codex MCP for cross-model examiner verification
+- `REVIEWER_MODEL = gpt-5.6-sol` — Fresh Codex examiner; same-family provisional in the base mirror
 - `NOVELTY_STANDARD = patent` — Always use legal patentability standard, not research contribution standard
 
 ## Inputs
@@ -74,7 +74,7 @@ Format as a matrix:
 |-------------|---------|-----------|-----------------|----------------------|----------|
 | Ref1 + Ref2 | Ref1 | Ref2 | Feature D | Same field, similar problem | Yes/No |
 
-### Step 4: Cross-Model Examiner Verification
+### Step 4: Fresh-Agent Examiner Verification (same-family provisional)
 
 Call `REVIEWER_MODEL` via a dedicated Codex reviewer agent at xhigh reasoning:
 
@@ -133,7 +133,7 @@ Write `patent/NOVELTY_ASSESSMENT.md`:
 ### Obviousness Analysis
 [combination analysis with motivation to combine]
 
-### Cross-Model Examiner Review
+### Review-Independence Metadata
 [summary of GPT-5.6-Sol examiner feedback]
 
 ### Recommended Claim Amendments

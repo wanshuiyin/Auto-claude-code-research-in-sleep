@@ -5,6 +5,11 @@ description: "Get a deep critical review of research from GPT using a secondary 
 
 # Research Review via a secondary Codex agent (ultra reasoning)
 
+> **Codex assurance:** the fresh base reviewer is same-family. Record
+> `review_independence: same-family` and `acceptance_status: provisional` in
+> traces and deliverables. A Claude/Gemini overlay may record cross-family
+> accepted; an unavailable reviewer is BLOCKED, never a fabricated PASS.
+
 Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
 
 ## Constants
@@ -90,6 +95,13 @@ Save the full interaction and conclusions to a review document in the project ro
 - Paper outline if discussed
 
 Update project memory/notes with key review conclusions.
+
+If `— composed: <canonical-report-path>` is explicitly present, fold consensus,
+claims matrix, TODOs, and trace links into that report instead of writing a
+standalone review document. Without the directive, write the standalone review
+as documented; never infer composed mode from an existing file. `— standalone`
+always wins. See
+[`output-composition.md`](../shared-references/output-composition.md).
 
 ### Step 6: Review Tracing
 

@@ -5,6 +5,11 @@ description: "Autonomous multi-round research review loop. Repeatedly reviews us
 
 # Auto Review Loop: Autonomous Research Improvement
 
+> **Codex assurance:** every base reviewer result records
+> `review_independence: same-family` and `acceptance_status: provisional` in its
+> trace/state artifact. A positive provisional verdict may drive fixes and stop
+> the loop, but is never cross-family accepted. Reviewer failure emits BLOCKED.
+
 Autonomously iterate: review → implement fixes → re-review, until the external reviewer gives a positive assessment or MAX_ROUNDS is reached.
 
 ## Context: $ARGUMENTS
@@ -20,7 +25,7 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
 - **COMPACT = false** — When `true`, (1) read `EXPERIMENT_LOG.md` and `findings.md` instead of parsing full logs on session recovery, (2) append key findings to `findings.md` after each round.
 - **REVIEWER_DIFFICULTY = medium** — Controls adversarial depth: `medium` uses normal Codex xhigh review through `spawn_agent` / `send_input`; `hard` adds Reviewer Memory and Debate Protocol; `nightmare` adds direct repository-reading adversarial verification by an independent reviewer.
-- **RENDER_HTML = true** — When `true` (default), auto-render `review-stage/AUTO_REVIEW.md` to HTML on loop termination via `/render-html`. Uses `--no-review` (the loop itself IS the cross-model review; the HTML render is a structural conversion). Set `false` to skip, or pass `— render html: false`.
+- **RENDER_HTML = true** — When `true` (default), auto-render `review-stage/AUTO_REVIEW.md` to HTML on loop termination via `/render-html`. Uses `--no-review` because the loop already performed a traced same-family provisional review. Set `false` to skip.
 
 > 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true, difficulty: hard`
 

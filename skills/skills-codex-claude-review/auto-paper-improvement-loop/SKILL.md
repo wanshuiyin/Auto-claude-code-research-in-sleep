@@ -4,6 +4,13 @@ description: "Autonomously improve a generated paper via Claude review through c
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
 
@@ -144,7 +151,7 @@ If the context window fills up mid-loop, Claude Code auto-compacts. To recover, 
 ```json
 {
   "current_round": 1,
-  "thread_id": "019ce736-...",
+  "threadId": "019ce736-...",
   "last_score": 6,
   "status": "in_progress",
   "timestamp": "2026-03-13T21:00:00"

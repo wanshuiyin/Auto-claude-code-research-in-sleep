@@ -4,6 +4,13 @@ description: "Generate a structured paper outline from review conclusions and ex
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Paper Plan: From Review Conclusions to Paper Outline
 

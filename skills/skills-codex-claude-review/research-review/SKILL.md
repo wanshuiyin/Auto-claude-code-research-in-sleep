@@ -4,8 +4,17 @@ description: "Get a deep critical review of research from Claude via claude-revi
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.
+>
+> This reviewer is a different model family from the Codex executor. Every overlay trace/audit records:
+>
+> ```yaml
+> review_independence: cross-family
+> acceptance_status: accepted
+> ```
 
 # Research Review via `claude-review` MCP (high-rigor review)
+
+> **Claude overlay assurance:** this route is a different model family from the Codex executor and records `review_independence: cross-family` plus `acceptance_status: accepted`.
 
 Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
 
@@ -100,6 +109,13 @@ Save the full interaction and conclusions to a review document in the project ro
 - Paper outline if discussed
 
 Update project memory/notes with key review conclusions.
+
+If `— composed: <canonical-report-path>` is explicitly present, fold consensus,
+claims matrix, TODOs, and trace links into that report instead of writing a
+standalone review document. Without the directive, write the standalone review
+as documented; never infer composed mode from an existing file. `— standalone`
+always wins. See
+[`output-composition.md`](../shared-references/output-composition.md).
 
 ### Step 6: Review Tracing
 
