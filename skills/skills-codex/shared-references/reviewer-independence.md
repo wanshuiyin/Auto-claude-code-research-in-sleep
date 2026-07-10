@@ -24,7 +24,7 @@ The reviewer must judge primary artifacts directly. The executor can define the 
 
 ```text
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     Review the project as a senior ML reviewer.
@@ -40,7 +40,7 @@ spawn_agent:
 
 ```text
 spawn_agent:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   reasoning_effort: xhigh
   message: |
     The main contribution is a new loss function that improves by 15%.

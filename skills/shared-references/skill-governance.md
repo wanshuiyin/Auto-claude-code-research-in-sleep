@@ -24,8 +24,8 @@ it *is* the authorization to auto-curate.
 
 - **A provenance record cannot be same-family.** `stamp()` calls
   `assert_cross_family(author, reviewer)` and **refuses (raises)** if the author and
-  the reviewer are the same model family — e.g. `claude`+`sonnet`, or `gpt-5.5`+`codex`,
-  or the trap `gpt-5.5`+`oracle-pro` (oracle routes to a GPT-Pro tier, so it is the
+  the reviewer are the same model family — e.g. `claude`+`sonnet`, or `gpt-5.6-sol`+`codex`,
+  or the trap `gpt-5.6-sol`+`oracle-pro` (oracle routes to a GPT-Pro tier, so it is the
   **openai** family, not a separate one). You therefore *cannot produce* a valid
   authorization for a self-acquitted artifact. This is the structural form of the
   cross-model invariant from [`reviewer-independence.md`](reviewer-independence.md)
@@ -54,7 +54,7 @@ it *is* the authorization to auto-curate.
   "created_by": "aris-auto",
   "author_model": "claude-opus-4-8",
   "author_family": "anthropic",
-  "reviewer_model": "gpt-5.5",
+  "reviewer_model": "gpt-5.6-sol",
   "reviewer_family": "openai",
   "verdict_id": "codex_thread_abc123",
   "content_hash": "<sha256 of the artifact>",

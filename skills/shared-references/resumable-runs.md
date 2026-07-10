@@ -38,7 +38,7 @@ recording who acquitted it. (A `done`-but-never-`accepted` phase is therefore
 
 Only:
 - a **cross-model reviewer** verdict (codex/gemini, per `reviewer-independence.md`)
-  — `reviewer="codex-gpt-5.5"`, `verdict_id=<thread/trace id>`; or
+  — `reviewer="codex-gpt-5.6-sol"`, `verdict_id=<thread/trace id>`; or
 - a **deterministic verifier** — `verify_papers.py`, a passing test suite, a
   compile that exits 0, a file-exists check for a purely mechanical phase.
   Record it as `reviewer="deterministic:verify_papers.py"` so the audit trail
@@ -72,7 +72,7 @@ resume_point(root, run_id)  # -> first NON-TERMINAL phase ({accepted,skipped} sk
 ```
 python3 tools/run_state.py start  <root> <run_id> --phases "W1,W1.5,W2,W3"
 python3 tools/run_state.py set    <root> <run_id> W1 done --artifact idea-stage/IDEA_REPORT.md
-python3 tools/run_state.py accept <root> <run_id> W1 --verdict-id codex:019e... --reviewer codex-gpt-5.5
+python3 tools/run_state.py accept <root> <run_id> W1 --verdict-id codex:019e... --reviewer codex-gpt-5.6-sol
 python3 tools/run_state.py resume <root> <run_id>   # prints the resume-target phase name on stdout
 python3 tools/run_state.py status <root> <run_id>
 ```

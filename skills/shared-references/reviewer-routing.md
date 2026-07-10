@@ -2,9 +2,35 @@
 
 ## Default (NEVER changes without explicit user request)
 
-All review calls use **Codex MCP** (`mcp__codex__codex`, default model `gpt-5.5`) with `reasoning_effort: xhigh`.
+All review calls use **Codex MCP** (`mcp__codex__codex`), model **`gpt-5.6-sol`** (GPT-5.6-Sol), with a **two-tier reasoning-effort policy** (since 2026-07-10; `ultra`/`max` need codex-cli ≥ 0.144.1):
 
-This is the default for ALL skills. No parameter, no config, no effort level changes this.
+| Tier | `model_reasoning_effort` | Which calls |
+|------|--------------------------|-------------|
+| **Deep-audit** | `ultra` | `/proof-checker` · `/kill-argument` (attack / defense / adjudication threads; beast-mode extra axis probes stay `xhigh`) · `/research-review` · `/experiment-audit` · `/paper-claim-audit` · `/result-to-claim` · `/meta-apply` |
+| **Regular** | `xhigh` | every other reviewer call — including ALL rounds of `/auto-review-loop` and other multi-round loops (a `codex-reply` cannot change model/effort mid-thread), and per-item fan-outs like `/citation-audit` (per-entry fresh calls would multiply `ultra`'s delegation cost for no verdict gain) |
+
+**Always pin BOTH `model` and `config.model_reasoning_effort` explicitly in the first call of every thread.** Do not rely on the user's `~/.codex/config.toml`: the catalog default effort for gpt-5.6-sol is `low`, far below the review floor.
+
+`ultra` = deepest reasoning + automatic task delegation — right for one-shot verdict-bearing audits, wrong for per-item loops (slower, pricier). Effort enums accepted by codex-cli ≥ 0.144.1: `none / minimal / low / medium / high / xhigh / max / ultra`.
+
+> **Do not confuse the two "max"es.** ARIS's `— effort: lite|balanced|max|beast` ([effort-contract.md](effort-contract.md)) sets how much WORK the pipeline does; Codex's `model_reasoning_effort: …|max|ultra` sets how hard the REVIEWER thinks. `— effort: max` does NOT imply `model_reasoning_effort: max`.
+
+### Codex capability fallback (new reviewer sessions only)
+
+Resolve the reviewer pair on the **first new Codex session of each tier** in a run, then reuse that resolved pair for later sessions of the same tier. Try the declared pair first (`gpt-5.6-sol` + `ultra` for deep-audit; `gpt-5.6-sol` + `xhigh` for regular). Then:
+
+- Only if the call fails **before returning a usable thread** AND the error **explicitly identifies the requested effort as unsupported** (older codex-cli): retry `gpt-5.6-sol` + `xhigh`.
+- Only if the error **explicitly identifies `gpt-5.6-sol` as unknown or unavailable** to this account/plan: retry `gpt-5.5` + `xhigh` (skip redundant intermediate steps).
+- **NEVER downgrade on** timeout, rate-limit/capacity, authentication, transport/protocol, server, sandbox/tool, context-length, malformed-request, or response-parse errors — a blind downgrade retry there risks double-running (and double-billing) a review that may have gone through.
+- **Never run a verdict-bearing review below `xhigh`.** `gpt-5.4` is available only as an explicit user override for legacy/repro runs — it is NOT part of the automatic chain.
+- Replies (`codex-reply`) inherit the successful session's model and effort — pass only the saved `threadId` plus the message.
+- Trace every attempt, the resolved pair, and the fallback reason (see `review-tracing.md`); the trace records the pair that actually ran, not the target pair.
+- If no allowed pair succeeds, emit `REVIEW_UNAVAILABLE` (or, for a mandatory audit gate, `ERROR`) — never a substantive verdict.
+- This automatic chain applies only when no explicit reviewer-model override was supplied.
+
+### After upgrading codex-cli
+
+MCP servers are spawned per session: after upgrading codex-cli (e.g. to 0.144.1 for `ultra`/`max`), **restart the Claude Code session** so `codex mcp-server` runs the new binary — an old server process rejects the new effort enums even though the CLI on disk is new.
 
 ## Optional: GPT-5.5 Pro via Oracle
 
@@ -16,7 +42,8 @@ When the user explicitly passes `— reviewer: oracle-pro`, route the review thr
 Parse $ARGUMENTS for `— reviewer:` directive.
 
 If not specified OR `— reviewer: codex`:
-    → Use mcp__codex__codex with reasoning_effort: xhigh
+    → Use mcp__codex__codex with model: gpt-5.6-sol at the tier's effort
+      (deep-audit: ultra / regular: xhigh — see the Default table above).
     → This is the DEFAULT. No change from current behavior.
 
 If `— reviewer: oracle-pro`:

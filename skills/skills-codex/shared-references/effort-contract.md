@@ -16,7 +16,7 @@ Default: `balanced` (current behavior, zero change for existing users).
 
 | Setting | Value | Why |
 |---------|-------|-----|
-| Codex reasoning_effort | **xhigh** | Reviewer quality is non-negotiable |
+| Codex reasoning_effort | **≥ xhigh** (deep-audit skills run `ultra` — tier table in `reviewer-routing.md`) | Reviewer quality is non-negotiable. `effort` never moves the reviewer tier in either direction — and ARIS `— effort: max` is NOT Codex `reasoning_effort: max` (different axes: pipeline workload vs reviewer reasoning depth) |
 | DBLP/CrossRef citations | **on** | Citation integrity is non-negotiable |
 | Reviewer independence | **on** | Cross-model protocol is non-negotiable |
 | Experiment integrity | **on** | Fraud prevention is non-negotiable |
@@ -119,7 +119,7 @@ Adjust constants:
 Every skill should print its effort configuration at the start:
 
 ```
-⚡ [effort: max] papers=25, ideas=16, rounds=6 | Codex: xhigh (always)
+⚡ [effort: max] papers=25, ideas=16, rounds=6 | Codex: tier per reviewer-routing.md (floor xhigh)
 ```
 
 ## Precedence
