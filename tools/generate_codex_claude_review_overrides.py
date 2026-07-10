@@ -74,6 +74,8 @@ def normalize_description(text: str) -> str:
     text = text or "Claude-review override for a Codex-native ARIS skill."
     text = text.replace("GPT using a secondary Codex agent", "Claude via claude-review MCP")
     text = text.replace("using a secondary Codex agent", "using Claude Code via claude-review MCP")
+    text = text.replace("via GPT-5.6-Sol xhigh review", "via Claude review through claude-review MCP")
+    text = text.replace("via GPT-5.6-Sol ultra review", "via Claude review through claude-review MCP")
     text = text.replace("via GPT-5.5 xhigh review", "via Claude review through claude-review MCP")
     return text
 
@@ -142,6 +144,8 @@ def transform_body(text: str) -> str:
     text = text.replace("secondary Codex agent", "Claude reviewer via `claude-review` MCP")
     text = text.replace("via a Claude reviewer via `claude-review` MCP (xhigh reasoning)", "via `claude-review` MCP (high-rigor review)")
     text = text.replace("secondary Codex agent (xhigh reasoning)", "Claude reviewer via `claude-review` MCP")
+    text = text.replace("GPT-5.6-Sol xhigh", "Claude review")
+    text = text.replace("GPT-5.6-Sol ultra", "Claude review")
     text = text.replace("GPT-5.5 xhigh", "Claude review")
     text = text.replace("Send the full paper text to GPT-5.5 xhigh:", "Send the full paper text to Claude through `claude-review`:")
     text = text.replace("Send the complete outline to GPT-5.5 xhigh for feedback:", "Send the complete outline to Claude for feedback:")
@@ -157,6 +161,7 @@ def transform_body(text: str) -> str:
     text = text.replace("Save the agent id for Round 2.", "Save the completed `threadId` for Round 2.")
     text = text.replace("**CRITICAL: Save the `agent_id`** from this call for all later rounds.", "**CRITICAL: Save the returned `jobId`**, poll `mcp__claude-review__review_status` until `done=true`, then save the completed `threadId` from the status result for all later rounds.")
     text = text.replace("- **ALWAYS use `reasoning_effort: xhigh`** for all Codex review calls.", "- **Always ask the Claude reviewer for strict, high-rigor feedback** in every review round.")
+    text = text.replace("- ALWAYS use `model: gpt-5.6-sol` + `reasoning_effort: ultra` for reviews (deep-audit tier; capability fallback per `reviewer-routing.md`, never below `xhigh`)", "- **Always ask the Claude reviewer for strict, high-rigor feedback** in every review round.")
     text = text.replace("- **Save `agent_id` from Phase 2** and use `send_input` for later rounds.", "- **Save the completed `threadId` from Phase 2** and use `mcp__claude-review__review_reply_start` plus `mcp__claude-review__review_status` for later rounds.")
     text = text.replace("- **Use `send_input`** for Round 2 to maintain conversation context", "- **Use `mcp__claude-review__review_reply_start` plus `mcp__claude-review__review_status`** for Round 2 to maintain conversation context")
     text = text.replace("GPT-5.5 responses", "Claude reviewer responses")

@@ -34,11 +34,16 @@ REPLACEMENTS_TEXT: list[tuple[str, str]] = [
     ("mcp__codex__codex-reply", "mcp__llm-chat__chat"),
     ("mcp__codex__codex", "mcp__llm-chat__chat"),
     # Description text
+    ("via GPT-5.6-Sol xhigh review", "via llm-chat MCP review"),
+    ("via GPT-5.6-Sol ultra review", "via llm-chat MCP review"),
+    ("GPT-5.6-Sol xhigh", "LLM reviewer"),
+    ("GPT-5.6-Sol ultra", "LLM reviewer"),
     ("via GPT-5.5 xhigh review", "via llm-chat MCP review"),
     ("GPT-5.5 xhigh", "LLM reviewer"),
     ("secondary Codex agent", "LLM reviewer via llm-chat MCP"),
     ("Codex agent", "LLM reviewer"),
     ("a second Codex agent", "an LLM via llm-chat MCP"),
+    ("reasoning_effort: ultra", "# (reasoning effort not supported by llm-chat)"),
     ("reasoning_effort: xhigh", "# (reasoning effort not supported by llm-chat)"),
     ("reasoning_effort: high", "# (reasoning effort not supported by llm-chat)"),
 ]

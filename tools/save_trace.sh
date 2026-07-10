@@ -15,7 +15,8 @@
 #   bash tools/save_trace.sh \
 #     --skill "auto-review-loop" \
 #     --purpose "round-1-review" \
-#     --model "gpt-5.5" \
+#     --model "gpt-5.6-sol" \
+#     --effort "ultra" \
 #     --thread-id "019d8fe0-..." \
 #     --prompt-file /tmp/prompt.txt \
 #     --response-file /tmp/response.txt
@@ -24,7 +25,8 @@
 #   bash tools/save_trace.sh \
 #     --skill "experiment-audit" \
 #     --purpose "code-audit" \
-#     --model "gpt-5.5" \
+#     --model "gpt-5.6-sol" \
+#     --effort "ultra" \
 #     --thread-id "019d8fe0-..." \
 #     --prompt "Review this code..." \
 #     --response "Score: 7/10..."
@@ -33,13 +35,15 @@ set -euo pipefail
 
 # --- Parse arguments ---
 SKILL="" PURPOSE="" MODEL="" THREAD_ID="" PROMPT="" RESPONSE=""
-PROMPT_FILE="" RESPONSE_FILE="" TRACE_MODE="${ARIS_TRACE_MODE:-full}"
+PROMPT_FILE="" RESPONSE_FILE="" TRACE_MODE="${ARIS_TRACE_MODE:-full}" EFFORT="" FALLBACK_REASON=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skill)       SKILL="$2";         shift 2 ;;
     --purpose)     PURPOSE="$2";       shift 2 ;;
     --model)       MODEL="$2";         shift 2 ;;
+    --effort)      EFFORT="$2";        shift 2 ;;
+    --fallback-reason) FALLBACK_REASON="$2"; shift 2 ;;
     --thread-id)   THREAD_ID="$2";     shift 2 ;;
     --prompt)      PROMPT="$2";        shift 2 ;;
     --response)    RESPONSE="$2";      shift 2 ;;
@@ -118,6 +122,8 @@ data = {
     'timestamp': '${TIMESTAMP}',
     'tool': 'mcp__codex__codex',
     'model': '${MODEL}',
+    'effort': '${EFFORT}',
+    'fallback_reason': '${FALLBACK_REASON}',
     'prompt': sys.stdin.read()
 }
 json.dump(data, open('${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}.request.json', 'w'), indent=2, ensure_ascii=False)

@@ -17,6 +17,7 @@ def test_model_family_mapping():
     assert pv.model_family("claude-opus-4-8") == "anthropic"
     assert pv.model_family("Sonnet") == "anthropic"
     assert pv.model_family("gpt-5.5") == "openai"
+    assert pv.model_family("gpt-5.6-sol") == "openai"     # current default reviewer (2026-07)
     assert pv.model_family("codex") == "openai"
     # CRITICAL: oracle-pro routes to GPT-Pro → it is the OPENAI family, not its own.
     assert pv.model_family("oracle-pro") == "openai"
