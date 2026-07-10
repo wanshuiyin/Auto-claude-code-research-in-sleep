@@ -293,7 +293,6 @@ Send the full proposal to GPT-5.6-Sol for an **elegance-first, frontier-aware, m
 
 ```
 spawn_agent:
-  model: gpt-5.6-sol
   model: REVIEWER_MODEL
   reasoning_effort: xhigh
   message: |

@@ -96,14 +96,14 @@ mkdir -p "$RUN_DIR"
 
 # --- Create run.meta.json if it doesn't exist ---
 if [[ ! -f "${RUN_DIR}/run.meta.json" ]]; then
-  cat > "${RUN_DIR}/run.meta.json" << METAEOF
-{
-  "skill": "${SKILL}",
-  "run_id": "${RUN_ID}",
-  "started_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "project_dir": "$(pwd)"
-}
-METAEOF
+  ST_SKILL="$SKILL" ST_RUN_ID="$RUN_ID" ST_STARTED="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  ST_PROJ="$(pwd)" ST_OUT="${RUN_DIR}/run.meta.json" python3 -c '
+import json, os
+e = os.environ
+json.dump({"skill": e["ST_SKILL"], "run_id": e["ST_RUN_ID"],
+           "started_at": e["ST_STARTED"], "project_dir": e["ST_PROJ"]},
+          open(e["ST_OUT"], "w"), indent=2)
+'
 fi
 
 # --- Determine call number ---
@@ -158,7 +158,7 @@ data = {
     "response_length": int(e["ST_RLEN"]),
 }
 json.dump(data, open(e["ST_OUT"], "w"), indent=2)
-' 
+'
 fi
 
 # --- Write response metadata ---
@@ -179,24 +179,26 @@ data = {
     "status": e["ST_STATUS"],
 }
 json.dump(data, open(e["ST_OUT"], "w"), indent=2)
-' 
+'
 
 # --- Append to events.jsonl (if it exists) ---
 EVENTS_FILE=".aris/meta/events.jsonl"
 if [[ -d ".aris/meta" ]]; then
-  python3 -c "
-import json
+  ST_SKILL="$SKILL" ST_PURPOSE="$PURPOSE" ST_THREAD="$THREAD_ID" \
+  ST_TRACE="${RUN_DIR}/" ST_STATUS="$STATUS" ST_EVENTS="$EVENTS_FILE" python3 -c '
+import json, os
+e = os.environ
 evt = {
-    'event': 'review_trace',
-    'skill': '${SKILL}',
-    'purpose': '${PURPOSE}',
-    'thread_id': '${THREAD_ID}',
-    'trace_path': '${RUN_DIR}/',
-    'status': 'ok'
+    "event": "review_trace",
+    "skill": e["ST_SKILL"],
+    "purpose": e["ST_PURPOSE"],
+    "thread_id": e["ST_THREAD"],
+    "trace_path": e["ST_TRACE"],
+    "status": e["ST_STATUS"],
 }
-with open('${EVENTS_FILE}', 'a') as f:
-    f.write(json.dumps(evt) + '\n')
-" 2>/dev/null || true
+with open(e["ST_EVENTS"], "a") as f:
+    f.write(json.dumps(evt) + "\n")
+' 2>/dev/null || true
 fi
 
 echo "Trace saved: ${RUN_DIR}/${CALL_PREFIX}-${PURPOSE}" >&2

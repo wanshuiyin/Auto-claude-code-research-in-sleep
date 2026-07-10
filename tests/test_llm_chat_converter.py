@@ -24,8 +24,10 @@ FIXTURES = [
     "skills/research-review/SKILL.md",
     "skills/result-to-claim/SKILL.md",
     "skills/kill-argument/SKILL.md",
+    "skills/interview-cheatsheet/SKILL.md",
+    "skills/patent-review/SKILL.md",
 ]
-FORBIDDEN = re.compile(r"mcp__codex__|model_reasoning_effort|model:\s*[\"'`]?gpt-")
+FORBIDDEN = re.compile(r"mcp__codex__|model_reasoning_effort|model_#|model:\s*[\"'`]?gpt-|model:\s*REVIEWER_MODEL")
 
 
 def offending_lines(path):

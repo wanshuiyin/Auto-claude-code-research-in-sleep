@@ -137,7 +137,7 @@ If `— reviewer: agy`:
         For long paper/project reviews (avoid the ~120s MCP tool timeout):
           mcp__gemini_review__review_start + mcp__gemini_review__review_status (async).
     → If NOT available:
-        Print: "⚠️ gemini-review (agy) MCP not configured. Falling back to Codex xhigh."
+        Print: "⚠️ gemini-review (agy) MCP not configured. Falling back to Codex at this call's declared tier."
         Use mcp__codex__codex as normal.
 ```
 

@@ -80,7 +80,6 @@ Use a secondary Codex agent for divergent thinking:
 
 ```
 spawn_agent:
-  model: gpt-5.6-sol
   model: REVIEWER_MODEL
   reasoning_effort: xhigh
   message: |

@@ -220,7 +220,7 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: gpt-5.6-sol ultra, fresh agents (no send_input)
+**Reviewer model**: <resolved pair that actually ran — target gpt-5.6-sol ultra>, fresh agents (no send_input)
 **Attack agent**: <agent_id 1>
 **Adjudicator agent**: <agent_id 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)

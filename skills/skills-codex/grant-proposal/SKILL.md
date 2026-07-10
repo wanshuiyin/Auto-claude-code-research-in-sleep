@@ -462,7 +462,7 @@ If MAX_REVIEW_ROUNDS > 1 and revisions were applied:
 
 ```
 send_input:
-  agent_id: [saved from Round 1]
+  target: [saved from Round 1]
   message: |
     [Round N review of revised [GRANT_TYPE] [GRANT_SUBTYPE] proposal]
 

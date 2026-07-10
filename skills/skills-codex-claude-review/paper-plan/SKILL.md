@@ -39,7 +39,7 @@ Keep the existing workflow and outputs, but use the shared references below to i
 
 ### Step 1: Extract Claims and Evidence
 
-**First check for `CLAIMS_FROM_RESULTS.md`** — if its first line is `verdict: REVIEW_UNAVAILABLE`, STOP at `assurance: submission` (the claims were never adjudicated — rerun `/result-to-claim` first); at `assurance: draft`, continue but tag every claim `[unadjudicated]`. Otherwise, if it exists, use it as the starting point for claims and merge it with any additional evidence from the narrative documents below.
+**First check for `CLAIMS_FROM_RESULTS.md`** — if its first line is `verdict: REVIEW_UNAVAILABLE`, treat the file as ABSENT for claim extraction (fall through to the narrative documents below) and then: under `— assurance: submission` (`shared-references/assurance-contract.md`; implied by `— effort: max|beast`) STOP — the claims were never adjudicated, rerun `/result-to-claim` first; under `assurance: draft` continue but tag every claim `[unadjudicated]`. Otherwise, if it exists, use it as the starting point for claims and merge it with any additional evidence from the narrative documents below.
 
 Read all available narrative documents and extract:
 

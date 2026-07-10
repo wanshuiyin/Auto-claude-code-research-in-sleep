@@ -161,11 +161,11 @@ The reviewer must be context-naive on every round. Prior-round summaries, fix li
 
 Rules:
 - Every round starts with a fresh `mcp__claude-review__review_start` reviewer call, not a stale continuation prompt.
-- Never pass a prior agent_id into the next review prompt.
+- Never pass a prior threadId into the next review prompt.
 - Never include "since last round", "we fixed", "after applying", or any fix summary in the reviewer prompt.
 - The only acceptable evidence of improvement is the current `.tex` source and compiled PDF.
 - If a fix cannot be observed in the files, the reviewer should not be told it happened.
-- If recovery metadata is needed, store the returned agent_id for crash recovery only; do not use it to preserve review context.
+- If recovery metadata is needed, store the returned threadId for crash recovery only; do not use it to preserve review context.
 
 Set `REVIEWER_BIAS_GUARD = false` only if you explicitly want the legacy, context-carrying behavior for debugging.
 
@@ -227,7 +227,7 @@ mcp__claude-review__review_start:
 
 After this start call, immediately save the returned `jobId` and poll `mcp__claude-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the reviewer output, and save the completed `threadId` for any follow-up round.
 
-Save the agent_id for Round 2.
+Save the completed threadId for Round 2.
 
 ### Step 2b: Human Checkpoint (if enabled)
 
@@ -320,7 +320,7 @@ PY
 
 ### Step 5: Round 2 Review
 
-If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__claude-review__review_start` reviewer for Round 2. Do not ask the reviewer to reward the Round 1 fix summary for prompting. Save the returned agent_id only for recovery bookkeeping.
+If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__claude-review__review_start` reviewer for Round 2. Do not ask the reviewer to reward the Round 1 fix summary for prompting. Save the returned threadId only for recovery bookkeeping.
 
 ```
 mcp__claude-review__review_start:
@@ -486,7 +486,7 @@ Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
 ## Round 1 Review & Fixes
 
 <details>
-<summary>Claude review Review (Round 1)</summary>
+<summary>Claude Review (Round 1)</summary>
 
 [Full raw review text, verbatim]
 
@@ -500,7 +500,7 @@ Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
 ## Round 2 Review & Fixes
 
 <details>
-<summary>Claude review Review (Round 2)</summary>
+<summary>Claude Review (Round 2)</summary>
 
 [Full raw review text, verbatim]
 

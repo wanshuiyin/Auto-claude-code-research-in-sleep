@@ -21,7 +21,7 @@ import sys
 
 REPO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 FLOOR = {"xhigh", "max", "ultra"}
-MODEL_RE = re.compile(r"^\s*(?:- )?`?[\"']?model[\"']?`?:\s*[\"'`]?gpt-", re.M)
+MODEL_RE = re.compile(r"^\s*(?:- )?`?[\"']?model[\"']?`?:\s*(?:[\"'`]?gpt-|REVIEWER_MODEL)", re.M)
 EFFORT_RE = re.compile(r"(?:model_)?reasoning_effort[\"'`]?:\s*[\"'`]?([a-z]+)")
 
 # Generated/derived packs are validated by their own generators, and the
@@ -69,7 +69,9 @@ def check_repo(root=REPO):
                 if not MODEL_RE.search(block):
                     problems.append(f"{rel}: fresh reviewer block lacks a model pin ({head})")
                 m = EFFORT_RE.search(block)
-                if m and m.group(1) not in FLOOR:
+                if m is None:
+                    problems.append(f"{rel}: fresh reviewer block lacks an effort pin ({head})")
+                elif m.group(1) not in FLOOR:
                     problems.append(f"{rel}: effort '{m.group(1)}' below review floor ({head})")
     return problems
 

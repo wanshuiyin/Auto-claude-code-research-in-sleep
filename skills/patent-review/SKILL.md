@@ -129,13 +129,12 @@ For each fix:
 
 ### Step 4: Round 2 — Follow-Up Review
 
-Use `mcp__codex__codex` with the threadId from Round 1:
+Use `mcp__codex__codex-reply` with the threadId from Round 1:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+mcp__codex__codex-reply:
   threadId: [from Round 1]
+  # inherits the thread's model/effort — do not re-send
   prompt: |
     Here is the revised patent application after addressing your office action.
 

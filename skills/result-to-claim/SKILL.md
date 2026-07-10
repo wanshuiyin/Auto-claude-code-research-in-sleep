@@ -109,7 +109,7 @@ gate DRIVES, it does not ACQUIT).
 
 ### Step 2: Codex Judgment
 
-Send the collected results to Codex for objective evaluation:
+Send the collected results to Codex for objective evaluation. Include ONLY claims that passed the Step 1.5 pre-check — claims already terminally rejected (`evidence_not_found`) keep their deterministic verdict and are NOT re-litigated here:
 
 ```
 mcp__codex__codex:

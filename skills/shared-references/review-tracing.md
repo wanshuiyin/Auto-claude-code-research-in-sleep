@@ -31,7 +31,7 @@ Do NOT trace: purely informational LLM calls (e.g., `codex exec` for code genera
 
 ## How to Trace
 
-After each reviewer MCP call, save the trace using `save_trace.sh`,
+After each reviewer MCP call — including every FAILED attempt in a capability-fallback chain (one trace entry per attempt: `--status error` + `--fallback-reason`; the successful entry records the RESOLVED pair) — save the trace using `save_trace.sh`,
 resolved through the canonical helper chain (see
 `integration-contract.md` §2 — failure policy C, "forensic helper").
 The full invocation:

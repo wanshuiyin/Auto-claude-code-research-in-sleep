@@ -56,6 +56,14 @@ REPLACEMENTS_TEXT: list[tuple[str, str]] = [
     ("a second Codex agent", "an LLM via llm-chat MCP"),
     ("secondary Codex agent", "LLM reviewer via llm-chat MCP"),
     ("Codex agent", "LLM reviewer"),
+    ("with `model: gpt-5.6-sol`, `config: {model_reasoning_effort: xhigh}`, `sandbox: read-only`, fresh thread",
+     "with a fresh thread"),
+    ("with `model: gpt-5.6-sol`, `config: {model_reasoning_effort: ultra}`, `sandbox: read-only`, fresh thread",
+     "with a fresh thread"),
+    ("model_reasoning_effort: \"ultra\"", "# (reasoning effort not supported by llm-chat)"),
+    ("model_reasoning_effort: \"xhigh\"", "# (reasoning effort not supported by llm-chat)"),
+    ("model_reasoning_effort: ultra", "# (reasoning effort not supported by llm-chat)"),
+    ("model_reasoning_effort: xhigh", "# (reasoning effort not supported by llm-chat)"),
     ("reasoning_effort: ultra", "# (reasoning effort not supported by llm-chat)"),
     ("reasoning_effort: xhigh", "# (reasoning effort not supported by llm-chat)"),
     ("reasoning_effort: high", "# (reasoning effort not supported by llm-chat)"),
@@ -67,7 +75,7 @@ CONFIG_LINE_RE = re.compile(
     re.MULTILINE,
 )
 MODEL_LINE_RE = re.compile(
-    r'^(\s*)(?:- )?`?"?model"?`?:\s*["\'`]?gpt-[^\s"\'`]+["\'`]?\s*$',
+    r'^(\s*)(?:- )?`?"?model"?`?:\s*(?:["\'`]?gpt-[^\s"\'`]+["\'`]?|REVIEWER_MODEL)\s*$',
     re.MULTILINE,
 )
 THREAD_ID_LINE_RE = re.compile(
@@ -221,7 +229,8 @@ def main() -> None:
     # the Codex-native sources (this exact accident has happened). Convert INTO
     # a separate --target, or pass --force-in-place if you really mean it.
     canonical = (repo_root / "skills").resolve()
-    if target_dir.resolve() == canonical and source_dir.resolve() == canonical \
+    tgt = target_dir.resolve()
+    if (tgt == canonical or canonical in tgt.parents) \
             and not args.dry_run and not args.force_in_place:
         print("Error: refusing to convert the repo's canonical skills/ tree in place.")
         print("Pass --target <dir> (recommended) or --force-in-place to override.")

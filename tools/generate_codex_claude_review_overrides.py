@@ -115,6 +115,9 @@ def rewrite_send_block(match: re.Match[str]) -> str:
         if stripped.startswith("target:"):
             out.append(line.replace("target:", "threadId:", 1))
             continue
+        if stripped.startswith("agent_id:"):
+            out.append(line.replace("agent_id:", "threadId:", 1))
+            continue
         if stripped.startswith("id:"):
             out.append(line.replace("id:", "threadId:", 1))
             continue
@@ -184,6 +187,12 @@ def transform_body(text: str) -> str:
                   text, flags=re.MULTILINE)
     text = text.replace("GPT-5.6-Sol", "Claude")
     text = text.replace("gpt-5.6-sol", "the claude-review model")
+    text = text.replace("uses normal Codex xhigh review through", "uses a normal high-rigor Claude review through")
+    text = text.replace("Claude review Review (Round", "Claude Review (Round")
+    text = text.replace("Never pass a prior agent_id into", "Never pass a prior threadId into")
+    text = text.replace("store the returned agent_id for crash recovery only", "store the returned threadId for crash recovery only")
+    text = text.replace("Save the agent_id for Round 2.", "Save the completed threadId for Round 2.")
+    text = text.replace("Save the returned agent_id only for recovery bookkeeping.", "Save the returned threadId only for recovery bookkeeping.")
     # generic prose mop-up — AFTER all longer specific rows
     text = text.replace("`spawn_agent`", "`mcp__claude-review__review_start`")
     text = text.replace("`send_input`", "`mcp__claude-review__review_reply_start`")
