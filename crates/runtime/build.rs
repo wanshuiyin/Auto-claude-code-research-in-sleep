@@ -6,8 +6,11 @@ use std::path::Path;
 use walkdir::WalkDir;
 
 const MAX_FILE_SIZE: u64 = 512 * 1024;
+// v0.4.22: "txt" added for skills/paper-poster-html/LICENSES/posterly-MIT.txt —
+// the vendored posterly (MIT) license text that its NOTICE.md points at; shipping
+// the vendored scripts without the license text is an attribution gap.
 const ALLOWED_EXTS: &[&str] = &[
-    "md", "py", "sh", "tex", "cls", "bst", "toml", "yaml", "yml", "json", "html",
+    "md", "py", "sh", "tex", "cls", "bst", "toml", "yaml", "yml", "json", "html", "txt",
 ];
 /// Skill directory name prefixes to exclude from bundling. v0.4.12 changed
 /// from exact-match list to `starts_with` semantics so future variants like
