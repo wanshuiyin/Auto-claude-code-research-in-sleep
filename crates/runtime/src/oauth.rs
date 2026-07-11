@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
-use std::fs::{self, File};
-use std::io::{self, Read};
+use std::fs;
+use std::io;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -317,9 +317,15 @@ pub fn parse_oauth_callback_query(query: &str) -> Result<OAuthCallbackParams, St
     })
 }
 
+/// v0.4.22 C4: fill from the OS CSPRNG via `getrandom` (the 0.3 API is
+/// `fill`, not the 0.2-era `getrandom()` function). Replaces the previous
+/// direct `/dev/urandom` read, which failed file-not-found on Windows and
+/// broke `aris login`. The crate's `std` feature provides
+/// `From<getrandom::Error> for std::io::Error`, so `?` keeps the
+/// `io::Result` signature — encoding and everything downstream unchanged.
 fn generate_random_token(bytes: usize) -> io::Result<String> {
     let mut buffer = vec![0_u8; bytes];
-    File::open("/dev/urandom")?.read_exact(&mut buffer)?;
+    getrandom::fill(&mut buffer)?;
     Ok(base64url_encode(&buffer))
 }
 
@@ -454,11 +460,14 @@ fn decode_hex(byte: u8) -> Result<u8, String> {
 mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
+    use sha2::{Digest, Sha256};
+
     use super::{
-        clear_oauth_credentials, code_challenge_s256, credentials_path, generate_pkce_pair,
-        generate_state, load_oauth_credentials, loopback_redirect_uri, parse_oauth_callback_query,
-        parse_oauth_callback_request_target, save_oauth_credentials, OAuthAuthorizationRequest,
-        OAuthConfig, OAuthRefreshRequest, OAuthTokenExchangeRequest, OAuthTokenSet,
+        base64url_encode, clear_oauth_credentials, code_challenge_s256, credentials_path,
+        generate_pkce_pair, generate_random_token, generate_state, load_oauth_credentials,
+        loopback_redirect_uri, parse_oauth_callback_query, parse_oauth_callback_request_target,
+        save_oauth_credentials, OAuthAuthorizationRequest, OAuthConfig, OAuthRefreshRequest,
+        OAuthTokenExchangeRequest, OAuthTokenSet,
     };
 
     fn sample_config() -> OAuthConfig {
@@ -502,6 +511,49 @@ mod tests {
         assert!(!pair.verifier.is_empty());
         assert!(!pair.challenge.is_empty());
         assert!(!state.is_empty());
+    }
+
+    /// v0.4.22 C4 — token shape contract: 32 random bytes encode to
+    /// EXACTLY 43 base64url chars (10 full 3-byte blocks -> 40 chars,
+    /// 2 trailing bytes -> 3 chars), with no '=' padding and only chars
+    /// from the URL-safe alphabet [A-Za-z0-9_-] (RFC 7636 verifier-legal).
+    #[test]
+    fn pkce_token_shape() {
+        let token = generate_random_token(32).expect("random token");
+        assert_eq!(
+            token.len(),
+            43,
+            "32 bytes must encode to exactly 43 unpadded base64url chars"
+        );
+        assert!(!token.contains('='), "base64url must carry no '=' padding");
+        assert!(
+            token
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'),
+            "token must only contain [A-Za-z0-9_-], got: {token}"
+        );
+    }
+
+    /// v0.4.22 C4 — two independently generated tokens must differ
+    /// (CSPRNG sanity: a zeroed/constant buffer regression fails here).
+    #[test]
+    fn pkce_token_unique() {
+        let first = generate_random_token(32).expect("first token");
+        let second = generate_random_token(32).expect("second token");
+        assert_ne!(first, second, "two generated tokens must differ");
+    }
+
+    /// v0.4.22 C4 — S256 correspondence: the pair's challenge equals
+    /// base64url(sha256(verifier)), recomputed independently here from
+    /// the module's own sha2 import.
+    #[test]
+    fn pkce_token_challenge_corresponds() {
+        let pair = generate_pkce_pair().expect("pkce pair");
+        let recomputed = base64url_encode(&Sha256::digest(pair.verifier.as_bytes()));
+        assert_eq!(
+            pair.challenge, recomputed,
+            "challenge must equal base64url(sha256(verifier))"
+        );
     }
 
     #[test]

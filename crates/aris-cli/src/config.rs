@@ -27,6 +27,20 @@ enum ApplyMode {
     ForceExecutorOnly,
 }
 
+/// v0.4.22 (C7/Δ-C7): a single config-diagnosis finding, with severity.
+///
+/// `Problem` = the config is broken or ignored (malformed JSON, misplaced
+/// file) — doctor flips `all_ok`. `Warning` = the config parsed fine but
+/// something looks off (e.g. unrecognized top-level keys, possibly from a
+/// newer ARIS version or a nested structure) — doctor prints it but does
+/// NOT flip `all_ok`. Before v0.4.22 both classes came back as a flat
+/// `Option<String>`, so every hint flipped `all_ok` (main.rs doctor).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ConfigDiagnostic {
+    Problem(String),
+    Warning(String),
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ArisConfig {
     /// "anthropic" or "openai"
@@ -66,6 +80,26 @@ pub struct ArisConfig {
     pub meta_logging: Option<String>,
 }
 
+/// v0.4.22 (C7/Δ-C7): every serde field name of [`ArisConfig`], used by
+/// `diagnose_misconfig_in` to flag unrecognized top-level keys in
+/// `config.json` as a soft [`ConfigDiagnostic::Warning`]. MUST stay in sync
+/// with the struct above — the `known_config_keys_match_aris_config_fields`
+/// test serializes `ArisConfig::default()` and asserts key-set equality, so
+/// adding a field without extending this list fails the build's tests.
+const KNOWN_CONFIG_KEYS: &[&str] = &[
+    "executor_provider",
+    "executor_api_key",
+    "executor_base_url",
+    "executor_model",
+    "reviewer_provider",
+    "reviewer_api_key",
+    "reviewer_base_url",
+    "reviewer_model",
+    "reviewer_fallback_provider",
+    "language",
+    "meta_logging",
+];
+
 impl ArisConfig {
     fn config_path() -> PathBuf {
         let home = runtime::home_dir();
@@ -83,9 +117,13 @@ impl ArisConfig {
             .unwrap_or_default()
     }
 
-    /// v0.4.18 (#259): detect the two silent-misconfiguration traps and return a
-    /// one-line human hint, or `None` when the config is fine (including the
-    /// normal first-run "no config" case — so this never nags new users).
+    /// v0.4.18 (#259): detect the two silent-misconfiguration traps.
+    /// v0.4.22 (C7/Δ-C7): returns a list of [`ConfigDiagnostic`]s instead of a
+    /// flat `Option<String>` so doctor can distinguish hard `Problem`s
+    /// (malformed / misplaced config — flips `all_ok`) from soft `Warning`s
+    /// (unrecognized top-level keys — printed only). Empty vec = config fine,
+    /// including the normal first-run "no config" case — so this never nags
+    /// new users.
     ///
     /// `load()` swallows a malformed config via `unwrap_or_default()`, and ARIS
     /// reads only `~/.config/aris/config.json` (flat JSON) — so a user who put
@@ -94,30 +132,38 @@ impl ArisConfig {
     /// diagnostic: it never mutates anything and `load()` stays unchanged, so
     /// callers still get a valid `ArisConfig` on every path.
     #[must_use]
-    pub fn diagnose_misconfig() -> Option<String> {
+    pub(crate) fn diagnose_misconfig() -> Vec<ConfigDiagnostic> {
         Self::diagnose_misconfig_in(&runtime::home_dir())
     }
 
     /// Home-parameterized core of [`diagnose_misconfig`] so it can be unit-tested
     /// against a temp directory without mutating the process `$HOME`.
-    fn diagnose_misconfig_in(home: &str) -> Option<String> {
+    fn diagnose_misconfig_in(home: &str) -> Vec<ConfigDiagnostic> {
         let path = PathBuf::from(home).join(CONFIG_DIR).join(CONFIG_FILE);
         if path.exists() {
             // File present — is it parseable as our flat JSON shape?
-            let parses = fs::read_to_string(&path)
-                .ok()
-                .and_then(|content| serde_json::from_str::<Self>(&content).ok())
+            let content = fs::read_to_string(&path).ok();
+            let parses = content
+                .as_deref()
+                .and_then(|content| serde_json::from_str::<Self>(content).ok())
                 .is_some();
             if parses {
-                return None;
+                // v0.4.22 (C7/Δ-C7): the typed parse SUCCEEDED (serde ignores
+                // unknown fields), but unrecognized top-level keys usually mean
+                // a nested structure or a newer ARIS's config — surface them as
+                // a soft Warning so the user learns why a setting is ignored.
+                if let Some(warning) = content.as_deref().and_then(Self::unknown_key_warning) {
+                    return vec![ConfigDiagnostic::Warning(warning)];
+                }
+                return Vec::new();
             }
-            return Some(format!(
+            return vec![ConfigDiagnostic::Problem(format!(
                 "found {} but could not parse it as ARIS's flat JSON config — ignoring it. \
                  Expected top-level keys like executor_provider / executor_api_key / \
                  executor_model / executor_base_url / reviewer_provider / language. \
                  Run `aris setup` to rewrite it.",
                 path.display()
-            ));
+            ))];
         }
         // Real config absent — look for a misplaced / wrong-format stray so the
         // user isn't left wondering why their settings are ignored.
@@ -133,15 +179,56 @@ impl ArisConfig {
         for rel in strays {
             let candidate = PathBuf::from(home).join(rel);
             if candidate.exists() {
-                return Some(format!(
+                return vec![ConfigDiagnostic::Problem(format!(
                     "found {} but ARIS reads {} (flat JSON, not YAML or nested keys). \
                      Run `aris setup` to generate the correct file.",
                     candidate.display(),
                     path.display()
-                ));
+                ))];
             }
         }
-        None
+        Vec::new()
+    }
+
+    /// v0.4.22 (C7/Δ-C7): given the raw text of a config.json whose TYPED parse
+    /// succeeded, re-parse it as a `serde_json::Value` and compare top-level
+    /// keys against [`KNOWN_CONFIG_KEYS`]. Unknown keys produce ONE warning
+    /// message; `None` when the value is not an object or every key is known.
+    ///
+    /// Display discipline (v0.4.17 `sanitize_for_display` class of bug — key
+    /// names come from a user-editable file, so they are terminal-injection
+    /// surface): keys are sorted, control-char-stripped, capped at 40 chars
+    /// each, at most 5 are listed ("… and N more" after that), and the whole
+    /// message is capped at ~300 chars.
+    fn unknown_key_warning(content: &str) -> Option<String> {
+        const MAX_KEYS_SHOWN: usize = 5;
+        const MAX_MESSAGE_CHARS: usize = 300;
+        let value: serde_json::Value = serde_json::from_str(content).ok()?;
+        let obj = value.as_object()?;
+        let mut unknown: Vec<String> = obj
+            .keys()
+            .filter(|k| !KNOWN_CONFIG_KEYS.contains(&k.as_str()))
+            .map(|k| sanitize_config_key(k))
+            .collect();
+        if unknown.is_empty() {
+            return None;
+        }
+        unknown.sort();
+        let total = unknown.len();
+        let mut list = unknown[..total.min(MAX_KEYS_SHOWN)].join(", ");
+        if total > MAX_KEYS_SHOWN {
+            use std::fmt::Write as _;
+            let _ = write!(list, " … and {} more", total - MAX_KEYS_SHOWN);
+        }
+        let mut msg = format!(
+            "config.json contains unrecognized top-level keys (possibly from a newer \
+             ARIS version, or a nested structure — ARIS expects flat top-level keys): {list}"
+        );
+        if msg.chars().count() > MAX_MESSAGE_CHARS {
+            msg = msg.chars().take(MAX_MESSAGE_CHARS - 1).collect();
+            msg.push('…');
+        }
+        Some(msg)
     }
 
     pub fn save(&self) -> io::Result<()> {
@@ -150,7 +237,7 @@ impl ArisConfig {
             fs::create_dir_all(parent)?;
         }
         let json = serde_json::to_string_pretty(self)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(io::Error::other)?;
         fs::write(&path, json)
     }
 
@@ -354,9 +441,22 @@ impl ArisConfig {
     }
 
     /// Returns the executor model from config, or None.
+    ///
+    /// v0.4.22 (Δ-C2): a blank (empty or whitespace-only) saved model is
+    /// treated as ABSENT — consumers get `None`, never `Some("")`, so a blank
+    /// custom/OpenAI model can no longer masquerade as a configured one.
     pub fn executor_model(&self) -> Option<&str> {
-        self.executor_model.as_deref()
+        self.executor_model
+            .as_deref()
+            .filter(|m| !m.trim().is_empty())
     }
+}
+
+/// v0.4.22 (C7/Δ-C7): sanitize a config.json top-level key name for terminal
+/// display — strip control characters (ANSI/terminal injection guard, same
+/// discipline as v0.4.17's sanitize_for_display) and cap at 40 chars.
+fn sanitize_config_key(key: &str) -> String {
+    key.chars().filter(|c| !c.is_control()).take(40).collect()
 }
 
 /// v0.4.17 (T10/P1.2): map a reviewer provider string to the env var its API
@@ -628,6 +728,34 @@ pub fn run_interactive_setup() -> io::Result<ArisConfig> {
         println!("  \x1b[2mModel: {}\x1b[0m", exec_info.4);
     }
 
+    // v0.4.22 (Δ5-4): an OpenAI/custom executor with a blank model MUST be
+    // rejected HERE, at the executor step — before the reviewer step (which
+    // set_vars reviewer keys into the live env) and before save(). A later
+    // check could not restore that state. Re-prompt until a non-blank model
+    // id arrives; on EOF / non-interactive stdin, abort the wizard with an
+    // error WITHOUT saving (env, runtime, and config file all untouched).
+    while executor_model_required(
+        target_provider,
+        config.executor_model.as_deref().unwrap_or(""),
+    ) {
+        println!("  \x1b[33m⚠ an OpenAI/custom executor requires an explicit model id.\x1b[0m");
+        match prompt_line_eof_aware("  Model name (required)")? {
+            Some(model) if !model.trim().is_empty() => {
+                config.executor_model = Some(model.trim().to_string());
+            }
+            Some(_) => {
+                // Blank again — loop back and re-prompt.
+            }
+            None => {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "setup aborted: an OpenAI/custom executor requires an explicit model id, \
+                     but stdin closed before one was provided — nothing was saved",
+                ));
+            }
+        }
+    }
+
     // ── Step 4: Reviewer ──
     println!("\n\x1b[1m[2/3] Reviewer (for cross-model review)\x1b[0m");
     println!(
@@ -884,25 +1012,56 @@ fn default_reviewer_choice(provider: Option<&str>) -> &'static str {
 ///    no fallback, `reviewer_provider` is `"codex-mcp"`, `reviewer_fallback_provider`
 ///    is cleared, and the stale HTTP-reviewer fields are cleared so nothing
 ///    bogus is exported.
+#[allow(clippy::too_many_lines)]
 fn configure_codex_mcp_reviewer(config: &mut ArisConfig) -> io::Result<()> {
     println!("\n  \x1b[1mCodex MCP reviewer\x1b[0m");
 
-    // Step 1: detect the codex CLI.
-    let codex_found = which_codex();
-    if codex_found {
-        println!("  \x1b[2m✓ found `codex` on PATH\x1b[0m");
-    } else {
-        println!("  \x1b[33m⚠ `codex` not found on PATH.\x1b[0m");
-        println!(
-            "  \x1b[2mInstall it with `npm i -g @openai/codex` (or your platform's package),\x1b[0m"
-        );
-        println!("  \x1b[2mthen sign in once with `codex` so the MCP server can start.\x1b[0m");
-        let go_on = prompt_with_default("  Write the MCP config anyway? [Y/n]", "y")?;
-        if go_on.trim().eq_ignore_ascii_case("n") {
-            println!("  \x1b[2mSkipped Codex MCP config; reviewer unchanged.\x1b[0m");
-            // Leave reviewer_provider untouched (do NOT set codex-mcp without a
-            // server entry, which would advertise a reviewer that can't run).
-            return Ok(());
+    // Step 1: detect the codex CLI. v0.4.22 (Δ4-4/C6): three-state — a native
+    // executable, a script shim `where` resolves but the MCP client cannot
+    // spawn, or missing entirely.
+    match probe_codex() {
+        CodexProbe::NativeExe(_) => {
+            println!("  \x1b[2m✓ found `codex` on PATH (native executable)\x1b[0m");
+        }
+        CodexProbe::ScriptShim(path) => {
+            // Deliberately NO checkmark: the resolved candidate is a .cmd/.bat
+            // script shim. ARIS's MCP client spawns `codex` as a plain command
+            // (mcp_stdio.rs) and cannot spawn a script shim directly in
+            // v0.4.22, so the configured server would fail to start.
+            // (Making the MCP spawn shim-aware is deferred.)
+            println!(
+                "  \x1b[33m⚠ found `codex` only as a script shim ({}).\x1b[0m",
+                path.display()
+            );
+            println!(
+                "  \x1b[2mARIS's MCP client spawns `codex` directly and cannot launch a .cmd/.bat\x1b[0m"
+            );
+            println!(
+                "  \x1b[2mshim in v0.4.22 — install the native `codex` binary (e.g. Homebrew or a\x1b[0m"
+            );
+            println!("  \x1b[2mGitHub release), then re-run setup.\x1b[0m");
+            let go_on = prompt_with_default("  Write the Codex MCP config anyway? [y/N]", "n")?;
+            if !go_on.trim().eq_ignore_ascii_case("y") {
+                println!("  \x1b[2mSkipped Codex MCP config; reviewer unchanged.\x1b[0m");
+                // Leave reviewer_provider untouched (do NOT set codex-mcp
+                // without a spawnable server, which would advertise a reviewer
+                // that can't run).
+                return Ok(());
+            }
+        }
+        CodexProbe::Missing => {
+            println!("  \x1b[33m⚠ `codex` not found on PATH.\x1b[0m");
+            println!(
+                "  \x1b[2mInstall it with `npm i -g @openai/codex` (or your platform's package),\x1b[0m"
+            );
+            println!("  \x1b[2mthen sign in once with `codex` so the MCP server can start.\x1b[0m");
+            let go_on = prompt_with_default("  Write the MCP config anyway? [Y/n]", "y")?;
+            if go_on.trim().eq_ignore_ascii_case("n") {
+                println!("  \x1b[2mSkipped Codex MCP config; reviewer unchanged.\x1b[0m");
+                // Leave reviewer_provider untouched (do NOT set codex-mcp without a
+                // server entry, which would advertise a reviewer that can't run).
+                return Ok(());
+            }
         }
     }
 
@@ -1032,7 +1191,7 @@ fn configure_codex_mcp_reviewer(config: &mut ArisConfig) -> io::Result<()> {
 /// (`$USERPROFILE/.claude` on Windows), else `.claude`. This is what makes the
 /// `setup` write land in the SAME file the runtime later reads (otherwise a
 /// `CLAUDE_CONFIG_HOME` user would get a config written where it's never read).
-fn claude_config_home() -> PathBuf {
+pub(crate) fn claude_config_home() -> PathBuf {
     std::env::var_os("CLAUDE_CONFIG_HOME")
         .map(PathBuf::from)
         .or_else(|| {
@@ -1043,30 +1202,97 @@ fn claude_config_home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(".claude"))
 }
 
-/// v0.4.17 (T10): is the `codex` CLI on PATH? Uses `which`/`where` so the check
-/// matches what the MCP runtime would spawn. Best-effort: a spawn error counts
-/// as "not found".
-fn which_codex() -> bool {
+/// v0.4.22 (Δ4-4/C6): three-state result of probing for the `codex` CLI.
+///
+/// The old bool `which_codex()` conflated "found a native executable" with
+/// "found an npm `.cmd`/`.bat` shim" — `where` resolves the shim, but ARIS's
+/// MCP client spawns `codex` as a plain command and cannot start a script
+/// shim directly, so setup used to bless configs that could never run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CodexProbe {
+    /// A native executable the MCP client can spawn directly. On Windows:
+    /// the first `.exe` candidate in PATH order (even when a script shim
+    /// shadows it earlier); on Unix: the `which`-resolved path.
+    NativeExe(PathBuf),
+    /// Only script shims resolved (`.cmd`/`.bat`/`.com`/…) — carries the
+    /// first candidate in PATH order.
+    ScriptShim(PathBuf),
+    /// No candidates at all.
+    Missing,
+}
+
+/// Pure classifier over `where`/`which` output. `windows` selects the rule set.
+///
+/// Lines are trimmed (CRLF-safe: `\r` is stripped too) and empty lines —
+/// including leading blanks — are skipped. Unix (`windows == false`): first
+/// non-empty line → `NativeExe` (byte-identical semantics to the pre-v0.4.22
+/// probe), none → `Missing`. Windows (`windows == true`): ALL candidates are
+/// scanned in PATH order with CASE-INSENSITIVE extension compare — the FIRST
+/// `.exe` wins → `NativeExe`; candidates but no `.exe` → `ScriptShim(first)`;
+/// none → `Missing`.
+pub(crate) fn classify_codex_candidates(raw: &str, windows: bool) -> CodexProbe {
+    let mut candidates = raw.lines().map(str::trim).filter(|line| !line.is_empty());
+    if !windows {
+        return match candidates.next() {
+            Some(path) => CodexProbe::NativeExe(PathBuf::from(path)),
+            None => CodexProbe::Missing,
+        };
+    }
+    let candidates: Vec<&str> = candidates.collect();
+    for candidate in &candidates {
+        // Extension of the last path component, extracted textually so the
+        // classifier stays a pure function of its input on every host (a
+        // `\`-separated Windows path is one opaque component to a Unix
+        // `std::path::Path`, which would mis-split dotted directory names).
+        let file_name = candidate
+            .rsplit(['\\', '/'])
+            .next()
+            .unwrap_or(candidate);
+        let is_exe = file_name
+            .rsplit_once('.')
+            .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("exe"));
+        if is_exe {
+            return CodexProbe::NativeExe(PathBuf::from(*candidate));
+        }
+    }
+    match candidates.first() {
+        Some(first) => CodexProbe::ScriptShim(PathBuf::from(*first)),
+        None => CodexProbe::Missing,
+    }
+}
+
+/// v0.4.22 (Δ4-4/C6): probe PATH for the `codex` CLI via `where` (Windows) /
+/// `which` (Unix) and classify the candidates — see [`classify_codex_candidates`].
+/// Best-effort: a spawn error or non-zero exit counts as [`CodexProbe::Missing`],
+/// matching the old `which_codex` status-based semantics.
+pub(crate) fn probe_codex() -> CodexProbe {
     let probe = if cfg!(windows) { "where" } else { "which" };
-    std::process::Command::new(probe)
+    match std::process::Command::new(probe)
         .arg("codex")
-        .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .output()
+    {
+        Ok(out) if out.status.success() => {
+            classify_codex_candidates(&String::from_utf8_lossy(&out.stdout), cfg!(windows))
+        }
+        _ => CodexProbe::Missing,
+    }
 }
 
 /// v0.4.17 (T10): the JSON object written for `mcpServers.codex`.
 ///
-/// v0.4.18: the spawned server is pinned to `model_reasoning_effort="xhigh"`
-/// via `-c` (parsed as TOML by `codex mcp-server`, so the value must be a
-/// quoted TOML string). This makes ARIS's cross-model reviewer run at xhigh
-/// deterministically — independent of the user's `~/.codex/config.toml` — so
-/// even a bare `mcp__codex__codex` call that omits a per-call `config` arg
-/// reviews at full reasoning. Per-call `config` (which ARIS skills pass)
-/// still overrides upward. Only NEW setups get this (the merge is idempotent
-/// and never clobbers an existing `mcpServers.codex`).
+/// v0.4.22 (B2): the v0.4.18 server-level `-c model_reasoning_effort="xhigh"`
+/// pin stays, as the xhigh FLOOR (`-c` is parsed as TOML by `codex
+/// mcp-server`, so the value must be a quoted TOML string) — independent of
+/// the user's `~/.codex/config.toml`, even a bare `mcp__codex__codex` call
+/// that omits a per-call `config` arg reviews at xhigh. ARIS skills now
+/// explicitly pin `model: gpt-5.6-sol` plus a per-call effort on every fresh
+/// call (deep audits "ultra", regular review "xhigh"), and per-call `config`
+/// overrides the server `-c` upward (v0.4.18-verified precedence) — so the
+/// two-tier doctrine is satisfied WITHOUT a server-level model pin. Do not
+/// add one: a `-c model=` pin here would hard-break codex-cli < 0.144.1
+/// (which does not know gpt-5.6-sol). Only NEW setups get this entry (the
+/// merge is idempotent and never clobbers an existing `mcpServers.codex`).
 fn codex_mcp_server_entry(trust: bool) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     obj.insert("command".into(), serde_json::Value::String("codex".into()));
@@ -1257,6 +1483,32 @@ fn prompt_with_default(prompt: &str, default: &str) -> io::Result<String> {
     } else {
         Ok(trimmed)
     }
+}
+
+/// v0.4.22 (Δ5-4): like [`prompt_with_default`] but distinguishes EOF from an
+/// empty line — `read_line` returning 0 bytes means stdin is exhausted
+/// (non-interactive run / ^D), which comes back as `Ok(None)` so a re-prompt
+/// loop can abort instead of spinning forever on a closed stdin.
+/// `prompt_with_default` can't express this: it maps both cases to the default.
+fn prompt_line_eof_aware(prompt: &str) -> io::Result<Option<String>> {
+    print!("{prompt}: ");
+    io::stdout().flush()?;
+    let mut input = String::new();
+    if io::stdin().read_line(&mut input)? == 0 {
+        return Ok(None);
+    }
+    Ok(Some(input.trim().to_string()))
+}
+
+/// v0.4.22 (Δ5-4): pure decision behind the wizard's executor-step gate — does
+/// this (provider, model) pair still REQUIRE a model id before the wizard may
+/// proceed? OpenAI/custom executors send the model id verbatim to an
+/// OpenAI-compatible endpoint, so a blank (empty / whitespace-only, matching
+/// `executor_model()`'s Δ-C2 trim semantics) model must be rejected at the
+/// executor step. Anthropic-family providers fall back to the built-in
+/// default model and never require one here.
+fn executor_model_required(provider: &str, model: &str) -> bool {
+    matches!(provider, "openai" | "custom") && model.trim().is_empty()
 }
 
 #[cfg(test)]
@@ -1966,8 +2218,10 @@ mod tests {
     // v0.4.18 (#259): diagnose_misconfig must (a) stay silent on a clean
     // first-run and a valid config, (b) flag a malformed config at the right
     // path, and (c) flag a misplaced/wrong-format stray when the real config is
-    // absent. Filesystem-only (passes an explicit home) so it never touches the
-    // process $HOME and is parallel-safe.
+    // absent. v0.4.22 (C7/Δ-C7): return type is now Vec<ConfigDiagnostic>;
+    // (b) and (c) are Problems (doctor flips all_ok). Filesystem-only (passes
+    // an explicit home) so it never touches the process $HOME and is
+    // parallel-safe.
     #[test]
     fn diagnose_misconfig_detects_malformed_and_misplaced() {
         let home = codex_mcp_test_root();
@@ -1976,31 +2230,174 @@ mod tests {
         let cfg = cfg_dir.join("config.json");
 
         // (a) nothing anywhere → first-run, no nag.
-        assert!(ArisConfig::diagnose_misconfig_in(home_str).is_none());
+        assert!(ArisConfig::diagnose_misconfig_in(home_str).is_empty());
 
         // (a) valid flat-JSON config → fine.
         fs::create_dir_all(&cfg_dir).expect("mkdir");
         fs::write(&cfg, r#"{"language":"en"}"#).expect("write valid");
-        assert!(ArisConfig::diagnose_misconfig_in(home_str).is_none());
+        assert!(ArisConfig::diagnose_misconfig_in(home_str).is_empty());
 
         // (b) malformed config AT the right path (e.g. YAML pasted into the
-        // .json file) → parse-failure hint pointing at `aris setup`.
+        // .json file) → parse-failure Problem pointing at `aris setup`.
         fs::write(&cfg, "executor:\n  provider: anthropic\n").expect("write malformed");
-        let hint = ArisConfig::diagnose_misconfig_in(home_str).expect("malformed => hint");
+        let diags = ArisConfig::diagnose_misconfig_in(home_str);
+        assert_eq!(diags.len(), 1, "malformed => exactly one diagnostic");
+        let ConfigDiagnostic::Problem(hint) = &diags[0] else {
+            panic!("malformed config must be a Problem, got: {:?}", diags[0]);
+        };
         assert!(
             hint.contains("could not parse") && hint.contains("aris setup"),
             "malformed hint wrong: {hint}"
         );
 
-        // (c) real config absent + a misplaced YAML stray → misplaced hint.
+        // (c) real config absent + a misplaced YAML stray → misplaced Problem.
         fs::remove_file(&cfg).expect("rm");
         let stray = home.join(".aris/config.yaml");
         fs::create_dir_all(stray.parent().unwrap()).expect("mkdir stray");
         fs::write(&stray, "executor:\n  provider: anthropic\n").expect("write stray");
-        let hint = ArisConfig::diagnose_misconfig_in(home_str).expect("misplaced => hint");
+        let diags = ArisConfig::diagnose_misconfig_in(home_str);
+        assert_eq!(diags.len(), 1, "misplaced => exactly one diagnostic");
+        let ConfigDiagnostic::Problem(hint) = &diags[0] else {
+            panic!("misplaced stray must be a Problem, got: {:?}", diags[0]);
+        };
         assert!(
             hint.contains("config.yaml") && hint.contains("flat JSON"),
             "misplaced hint wrong: {hint}"
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    /// v0.4.22 (C7/Δ-C7): KNOWN_CONFIG_KEYS must stay in sync with the serde
+    /// field names of ArisConfig. Serializing the default config yields every
+    /// field as a top-level key (all fields are plain `Option`s, no
+    /// `skip_serializing_if`), so the two sets must be EQUAL — a new struct
+    /// field without a matching const entry (or vice versa) fails here.
+    #[test]
+    fn known_config_keys_match_aris_config_fields() {
+        let value = serde_json::to_value(ArisConfig::default()).expect("serialize default");
+        let obj = value.as_object().expect("ArisConfig serializes to an object");
+        let mut struct_keys: Vec<&str> = obj.keys().map(String::as_str).collect();
+        struct_keys.sort_unstable();
+        let mut const_keys: Vec<&str> = KNOWN_CONFIG_KEYS.to_vec();
+        const_keys.sort_unstable();
+        assert_eq!(
+            struct_keys, const_keys,
+            "KNOWN_CONFIG_KEYS is out of sync with ArisConfig's serde fields"
+        );
+    }
+
+    /// v0.4.22 (C7/Δ-C7): a NESTED config (`{"executor": {...}}`) parses fine
+    /// as the typed struct (serde ignores unknown fields) but every setting in
+    /// it is silently ignored — diagnose must return exactly ONE Warning (not
+    /// a Problem: doctor must not flip all_ok) naming the unknown key.
+    #[test]
+    fn diagnose_misconfig_nested_executor_object_warns() {
+        let home = codex_mcp_test_root();
+        let home_str = home.to_str().expect("utf8 path");
+        let cfg_dir = home.join(".config/aris");
+        fs::create_dir_all(&cfg_dir).expect("mkdir");
+        fs::write(
+            cfg_dir.join("config.json"),
+            r#"{"executor": {"provider": "openai", "model": "gpt-5.5"}}"#,
+        )
+        .expect("write nested");
+
+        let diags = ArisConfig::diagnose_misconfig_in(home_str);
+        assert_eq!(diags.len(), 1, "nested config => exactly one diagnostic");
+        let ConfigDiagnostic::Warning(msg) = &diags[0] else {
+            panic!("nested config must be a Warning, got: {:?}", diags[0]);
+        };
+        assert!(
+            msg.contains("unrecognized top-level keys") && msg.contains("executor"),
+            "nested-config warning wrong: {msg}"
+        );
+        assert!(
+            msg.contains("flat top-level keys"),
+            "warning must explain ARIS expects flat keys: {msg}"
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    /// v0.4.22 (C7/Δ-C7): a single unknown top-level key next to valid known
+    /// keys → one Warning naming it; the known keys are not listed.
+    #[test]
+    fn diagnose_misconfig_single_unknown_key_warns() {
+        let home = codex_mcp_test_root();
+        let home_str = home.to_str().expect("utf8 path");
+        let cfg_dir = home.join(".config/aris");
+        fs::create_dir_all(&cfg_dir).expect("mkdir");
+        fs::write(
+            cfg_dir.join("config.json"),
+            r#"{"language": "en", "executor_modle": "gpt-5.5"}"#,
+        )
+        .expect("write typo config");
+
+        let diags = ArisConfig::diagnose_misconfig_in(home_str);
+        assert_eq!(diags.len(), 1, "one unknown key => exactly one diagnostic");
+        let ConfigDiagnostic::Warning(msg) = &diags[0] else {
+            panic!("unknown key must be a Warning, got: {:?}", diags[0]);
+        };
+        assert!(
+            msg.contains("executor_modle"),
+            "warning must name the unknown key: {msg}"
+        );
+        assert!(
+            !msg.contains("language"),
+            "known keys must not be listed as unrecognized: {msg}"
+        );
+
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    /// v0.4.22 (C7/Δ-C7): unknown-key list display discipline — sorted, at
+    /// most 5 keys shown then "… and N more", control chars stripped, each
+    /// key capped at 40 chars, total message capped at ~300 chars.
+    #[test]
+    fn diagnose_misconfig_unknown_key_list_sorted_capped_sanitized() {
+        let home = codex_mcp_test_root();
+        let home_str = home.to_str().expect("utf8 path");
+        let cfg_dir = home.join(".config/aris");
+        fs::create_dir_all(&cfg_dir).expect("mkdir");
+        // 7 unknown keys, inserted out of order; one carries a control char,
+        // one is 60 chars long. serde_json's BTreeMap already sorts, but the
+        // message contract is sorted regardless of map backend.
+        let long_key = "a".repeat(60);
+        fs::write(
+            cfg_dir.join("config.json"),
+            format!(
+                r#"{{"zeta": 1, "beta": 1, "delta": 1, "epsilon": 1, "gamma": 1, "e\u0007vil": 1, "{long_key}": 1}}"#
+            ),
+        )
+        .expect("write many unknown keys");
+
+        let diags = ArisConfig::diagnose_misconfig_in(home_str);
+        assert_eq!(diags.len(), 1, "many unknown keys => ONE Warning, not many");
+        let ConfigDiagnostic::Warning(msg) = &diags[0] else {
+            panic!("unknown keys must be a Warning, got: {:?}", diags[0]);
+        };
+        // Cap: 7 unknown → 5 shown + "… and 2 more".
+        assert!(msg.contains("… and 2 more"), "count tail missing: {msg}");
+        // Sorted: the 60×'a' key sorts first; capped to 40 chars.
+        assert!(
+            msg.contains(&"a".repeat(40)),
+            "long key must appear (40-char capped): {msg}"
+        );
+        assert!(
+            !msg.contains(&"a".repeat(41)),
+            "long key must be capped at 40 chars: {msg}"
+        );
+        // Control char stripped from "e\u{7}vil".
+        assert!(msg.contains("evil"), "sanitized key missing: {msg}");
+        assert!(!msg.contains('\u{7}'), "control char must be stripped: {msg}");
+        // "zeta" sorts last of the 7 → beyond the 5 shown.
+        assert!(!msg.contains("zeta"), "keys beyond the first 5 must be elided: {msg}");
+        // Total message cap.
+        assert!(
+            msg.chars().count() <= 300,
+            "message must be capped at ~300 chars, got {}: {msg}",
+            msg.chars().count()
         );
 
         let _ = fs::remove_dir_all(&home);
@@ -2345,5 +2742,147 @@ mod tests {
         // Never set for a normal provider.
         assert!(std::env::var("ARIS_REVIEWER_FALLBACK_PROVIDER").is_err());
         assert!(std::env::var("GEMINI_API_KEY").is_err());
+    }
+
+    // ── v0.4.22 (Δ4-4/C6): codex probe three-state classifier ────────────────
+    //
+    // Pure-function tests over `classify_codex_candidates` — no PATH probing,
+    // no process spawns, so they run identically on every host (the Windows
+    // rule set is selected by the `windows` flag, not cfg!).
+
+    /// Uppercase extensions must classify case-insensitively: .EXE is still a
+    /// native executable, .CMD/.BAT are still script shims.
+    #[test]
+    fn classify_codex_windows_uppercase_extensions() {
+        assert_eq!(
+            classify_codex_candidates("C:\\tools\\CODEX.EXE\r\n", true),
+            CodexProbe::NativeExe(PathBuf::from("C:\\tools\\CODEX.EXE"))
+        );
+        assert_eq!(
+            classify_codex_candidates("C:\\nodejs\\codex.CMD\r\nC:\\nodejs\\codex.BAT\r\n", true),
+            CodexProbe::ScriptShim(PathBuf::from("C:\\nodejs\\codex.CMD"))
+        );
+    }
+
+    /// Leading blank lines (and blank separators) are tolerated — the first
+    /// real candidate wins, on both rule sets.
+    #[test]
+    fn classify_codex_tolerates_leading_blank_lines() {
+        assert_eq!(
+            classify_codex_candidates("\r\n\r\nC:\\tools\\codex.exe\r\n", true),
+            CodexProbe::NativeExe(PathBuf::from("C:\\tools\\codex.exe"))
+        );
+        assert_eq!(
+            classify_codex_candidates("\n\n/usr/local/bin/codex\n", false),
+            CodexProbe::NativeExe(PathBuf::from("/usr/local/bin/codex"))
+        );
+    }
+
+    /// CRLF endings must not leak a trailing `\r` into the classified path.
+    #[test]
+    fn classify_codex_windows_crlf_endings() {
+        let probe = classify_codex_candidates(
+            "C:\\Program Files\\Codex\\codex.exe\r\nC:\\nodejs\\codex.cmd\r\n",
+            true,
+        );
+        assert_eq!(
+            probe,
+            CodexProbe::NativeExe(PathBuf::from("C:\\Program Files\\Codex\\codex.exe"))
+        );
+    }
+
+    /// The Δ4-4 core rule: a .cmd shim EARLIER in PATH order must NOT hide a
+    /// native .exe later in the list — the first .exe wins.
+    #[test]
+    fn classify_codex_windows_shim_first_native_later_prefers_exe() {
+        let raw = "C:\\nodejs\\codex.cmd\r\nC:\\tools\\codex.exe\r\nC:\\other\\codex.exe\r\n";
+        assert_eq!(
+            classify_codex_candidates(raw, true),
+            CodexProbe::NativeExe(PathBuf::from("C:\\tools\\codex.exe")),
+            "the FIRST .exe in PATH order must win over an earlier shim"
+        );
+    }
+
+    /// Candidates but no .exe at all (here: only .com) → ScriptShim carrying
+    /// the first candidate.
+    #[test]
+    fn classify_codex_windows_only_com_is_script_shim() {
+        assert_eq!(
+            classify_codex_candidates("C:\\legacy\\codex.com\r\n", true),
+            CodexProbe::ScriptShim(PathBuf::from("C:\\legacy\\codex.com"))
+        );
+    }
+
+    /// Empty / whitespace-only `where` output → Missing.
+    #[test]
+    fn classify_codex_windows_empty_is_missing() {
+        assert_eq!(classify_codex_candidates("", true), CodexProbe::Missing);
+        assert_eq!(
+            classify_codex_candidates("\r\n  \r\n", true),
+            CodexProbe::Missing
+        );
+    }
+
+    /// Unix `which`: a single plain path is always NativeExe (byte-identical
+    /// to the pre-v0.4.22 "found" semantics — no extension inspection).
+    #[test]
+    fn classify_codex_unix_single_path_native() {
+        assert_eq!(
+            classify_codex_candidates("/opt/homebrew/bin/codex\n", false),
+            CodexProbe::NativeExe(PathBuf::from("/opt/homebrew/bin/codex"))
+        );
+    }
+
+    /// Unix `which` with no output → Missing.
+    #[test]
+    fn classify_codex_unix_empty_is_missing() {
+        assert_eq!(classify_codex_candidates("", false), CodexProbe::Missing);
+        assert_eq!(classify_codex_candidates("\n\n", false), CodexProbe::Missing);
+    }
+
+    // ── v0.4.22 (Δ-C2/Δ5-4): blank executor model handling ──────────────────
+
+    /// Δ-C2: a blank / whitespace-only saved executor model must read back as
+    /// ABSENT (None); real values still come through.
+    #[test]
+    fn executor_model_blank_or_whitespace_is_none() {
+        let blank = ArisConfig {
+            executor_model: Some(String::new()),
+            ..Default::default()
+        };
+        assert_eq!(blank.executor_model(), None);
+
+        let whitespace = ArisConfig {
+            executor_model: Some("   \t ".into()),
+            ..Default::default()
+        };
+        assert_eq!(whitespace.executor_model(), None);
+
+        let unset = ArisConfig::default();
+        assert_eq!(unset.executor_model(), None);
+
+        let real = ArisConfig {
+            executor_model: Some("gpt-5.5".into()),
+            ..Default::default()
+        };
+        assert_eq!(real.executor_model(), Some("gpt-5.5"));
+    }
+
+    /// Δ5-4: the pure decision behind the wizard's executor-step gate — an
+    /// OpenAI/custom executor with a blank (trim-empty) model requires one;
+    /// Anthropic-family providers and non-blank models never do.
+    #[test]
+    fn executor_model_required_only_for_blank_openai_or_custom() {
+        // Blank model + OpenAI-transport providers → required.
+        assert!(executor_model_required("openai", ""));
+        assert!(executor_model_required("openai", "   "));
+        assert!(executor_model_required("custom", ""));
+        assert!(executor_model_required("custom", " \t "));
+        // A real model id satisfies the gate.
+        assert!(!executor_model_required("openai", "gpt-5.5"));
+        assert!(!executor_model_required("custom", "my-model"));
+        // Anthropic-family providers have a built-in default → never required.
+        assert!(!executor_model_required("anthropic", ""));
+        assert!(!executor_model_required("anthropic-compat", ""));
     }
 }

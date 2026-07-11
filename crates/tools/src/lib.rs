@@ -493,7 +493,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "LlmReview",
-            description: "Send content to an external LLM reviewer for independent critical review. Supports OpenAI, Gemini, GLM, MiniMax, Kimi, and Anthropic-compatible endpoints. Routes by model name. Prefer omitting `model` and letting ARIS use the user's configured reviewer.",
+            description: "Send content to an external LLM reviewer for independent critical review. Supports OpenAI, Gemini, GLM, MiniMax, Kimi, and Anthropic-compatible endpoints. Routes by model name. Prefer omitting `model` and letting ARIS use the user's configured reviewer. gpt-5.6-sol is allowed as an explicit value but experimental — not yet verified with reasoning_effort on chat-completions; use only when the user explicitly requests it.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -503,7 +503,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
                     },
                     "model": {
                         "type": "string",
-                        "description": "Optional model override. Prefer omitting this — ARIS will use the user's configured reviewer (ARIS_REVIEWER_MODEL). Only specify a model if you have a specific reason and know the corresponding API key is set. Examples: gpt-5.5, gemini-2.5-pro, GLM-5, MiniMax-M2.7, kimi-k2.5, claude-sonnet-4-6. If the specified model's API key is missing, ARIS falls back to the configured reviewer."
+                        "description": "Optional model override. Prefer omitting this — ARIS will use the user's configured reviewer (ARIS_REVIEWER_MODEL). Only specify a model if you have a specific reason and know the corresponding API key is set. Examples: gpt-5.5, gpt-5.6-sol (experimental — not yet verified with reasoning_effort on chat-completions; use only when the user explicitly requests it), gemini-2.5-pro, GLM-5, MiniMax-M2.7, kimi-k2.5, claude-sonnet-4-6. If the specified model's API key is missing, ARIS falls back to the configured reviewer."
                     }
                 },
                 "required": ["prompt"],
@@ -2938,7 +2938,7 @@ fn execute_notebook_edit(input: NotebookEditInput) -> Result<NotebookEditOutput,
     let cell_id = match edit_mode {
         NotebookEditMode::Insert => {
             let resolved_cell_type = resolved_cell_type.expect("insert cell type");
-            let new_id = make_cell_id(cells.len());
+            let new_id = unused_cell_id(cells);
             let new_cell = build_notebook_cell(&new_id, resolved_cell_type, &new_source);
             let insert_at = target_index.map_or(cells.len(), |index| index + 1);
             cells.insert(insert_at, new_cell);
@@ -3480,6 +3480,20 @@ fn detect_powershell_shell() -> std::io::Result<&'static str> {
 }
 
 fn command_exists(command: &str) -> bool {
+    // v0.4.22 (C5): Windows probes via `where.exe` ONLY — never spawn the
+    // target program itself (an argument-less python/pwsh can enter
+    // interactive mode and hang). Runtime `cfg!` branch (not item-level
+    // #[cfg]) so the unix `sh -lc` login-shell PATH semantics — which the
+    // PowerShell stub-shell tests rely on — stay byte-identical.
+    if cfg!(windows) {
+        return std::process::Command::new("where.exe")
+            .arg(command)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+    }
     std::process::Command::new("sh")
         .arg("-lc")
         .arg(format!("command -v {command} >/dev/null 2>&1"))
@@ -3663,6 +3677,28 @@ fn format_notebook_edit_mode(mode: NotebookEditMode) -> String {
 
 fn make_cell_id(index: usize) -> String {
     format!("cell-{}", index + 1)
+}
+
+/// v0.4.22 (C8): mint a collision-free id for an inserted cell.
+/// `make_cell_id(cells.len())` alone collides after delete-then-insert
+/// ([cell-1, cell-3] has len 2, so it would mint "cell-3" again), and the
+/// first-match lookup in `resolve_cell_index` would then edit the WRONG cell.
+/// Collect the existing id set and probe cell-{len+1}, cell-{len+2}, … until
+/// an unused id is found. Existing cells' ids are never rewritten; non-numeric
+/// ids (e.g. "cell-a", UUIDs) simply occupy the set.
+fn unused_cell_id(cells: &[serde_json::Value]) -> String {
+    let existing: std::collections::HashSet<&str> = cells
+        .iter()
+        .filter_map(|cell| cell.get("id").and_then(serde_json::Value::as_str))
+        .collect();
+    let mut index = cells.len();
+    loop {
+        let candidate = make_cell_id(index);
+        if !existing.contains(candidate.as_str()) {
+            return candidate;
+        }
+        index += 1;
+    }
 }
 
 fn parse_skill_description(contents: &str) -> Option<String> {
@@ -5556,6 +5592,128 @@ mod tests {
         let _ = fs::remove_file(empty_notebook);
     }
 
+    /// v0.4.22 (C8): the exact delete-then-insert repro. `cell-{len+1}` minting
+    /// collides ([cell-1, cell-3] has len 2 → mints "cell-3" again) and the
+    /// first-match lookup then edits the WRONG cell. The probe must skip taken
+    /// ids (len+1=3 → "cell-3" taken → "cell-4") and the output must report
+    /// the id actually stored.
+    #[test]
+    fn notebook_edit_insert_mints_collision_free_cell_id() {
+        let path = temp_path("collision.ipynb");
+        std::fs::write(
+            &path,
+            r#"{
+  "cells": [
+    {"cell_type": "code", "id": "cell-1", "metadata": {}, "source": ["print(1)\n"], "outputs": [], "execution_count": null},
+    {"cell_type": "code", "id": "cell-2", "metadata": {}, "source": ["print(2)\n"], "outputs": [], "execution_count": null},
+    {"cell_type": "code", "id": "cell-3", "metadata": {}, "source": ["print(3)\n"], "outputs": [], "execution_count": null}
+  ],
+  "metadata": {"kernelspec": {"language": "python"}},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}"#,
+        )
+        .expect("write notebook");
+
+        execute_tool(
+            "NotebookEdit",
+            &json!({
+                "notebook_path": path.display().to_string(),
+                "cell_id": "cell-2",
+                "edit_mode": "delete"
+            }),
+        )
+        .expect("NotebookEdit delete should succeed");
+
+        let inserted = execute_tool(
+            "NotebookEdit",
+            &json!({
+                "notebook_path": path.display().to_string(),
+                "new_source": "print(4)\n",
+                "edit_mode": "insert"
+            }),
+        )
+        .expect("NotebookEdit insert should succeed");
+        let inserted_output: serde_json::Value = serde_json::from_str(&inserted).expect("json");
+        assert_eq!(inserted_output["cell_id"], "cell-4");
+
+        // A follow-up edit via the returned id must hit the NEW cell, not the
+        // pre-existing cell-3.
+        let replaced = execute_tool(
+            "NotebookEdit",
+            &json!({
+                "notebook_path": path.display().to_string(),
+                "cell_id": inserted_output["cell_id"].as_str().expect("cell id"),
+                "new_source": "print(99)\n",
+                "edit_mode": "replace"
+            }),
+        )
+        .expect("NotebookEdit replace via returned id should succeed");
+        let replaced_output: serde_json::Value = serde_json::from_str(&replaced).expect("json");
+        assert_eq!(replaced_output["cell_id"], "cell-4");
+
+        let final_notebook: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("read notebook"))
+                .expect("valid notebook json");
+        let cells = final_notebook["cells"].as_array().expect("cells array");
+        assert_eq!(cells.len(), 3);
+        let source_of = |id: &str| -> serde_json::Value {
+            cells
+                .iter()
+                .find(|cell| cell.get("id").and_then(serde_json::Value::as_str) == Some(id))
+                .unwrap_or_else(|| panic!("cell {id} should exist"))["source"]
+                .clone()
+        };
+        assert_eq!(source_of("cell-3"), json!(["print(3)\n"]));
+        assert_eq!(source_of("cell-4"), json!(["print(99)\n"]));
+        let _ = std::fs::remove_file(path);
+    }
+
+    /// v0.4.22 (C8): non-numeric ids (e.g. "cell-a", UUIDs) must not panic —
+    /// they simply occupy the id set, and the insert returns a fresh unique id.
+    #[test]
+    fn notebook_edit_insert_with_non_numeric_ids_returns_fresh_unique_id() {
+        let path = temp_path("non-numeric-ids.ipynb");
+        std::fs::write(
+            &path,
+            r#"{
+  "cells": [
+    {"cell_type": "code", "id": "cell-a", "metadata": {}, "source": ["print(1)\n"], "outputs": [], "execution_count": null},
+    {"cell_type": "code", "id": "3f2b8c1e-4d5a-4b6c-8d7e-9f0a1b2c3d4e", "metadata": {}, "source": ["print(2)\n"], "outputs": [], "execution_count": null}
+  ],
+  "metadata": {"kernelspec": {"language": "python"}},
+  "nbformat": 4,
+  "nbformat_minor": 5
+}"#,
+        )
+        .expect("write notebook");
+
+        let inserted = execute_tool(
+            "NotebookEdit",
+            &json!({
+                "notebook_path": path.display().to_string(),
+                "new_source": "print(3)\n",
+                "edit_mode": "insert"
+            }),
+        )
+        .expect("NotebookEdit insert with non-numeric ids should succeed");
+        let inserted_output: serde_json::Value = serde_json::from_str(&inserted).expect("json");
+        assert_eq!(inserted_output["cell_id"], "cell-3");
+
+        let final_notebook: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("read notebook"))
+                .expect("valid notebook json");
+        let cells = final_notebook["cells"].as_array().expect("cells array");
+        assert_eq!(cells.len(), 3);
+        let ids: BTreeSet<&str> = cells
+            .iter()
+            .filter_map(|cell| cell.get("id").and_then(serde_json::Value::as_str))
+            .collect();
+        assert_eq!(ids.len(), 3, "all cell ids must be unique");
+        assert!(ids.contains("cell-3"));
+        let _ = std::fs::remove_file(path);
+    }
+
     #[test]
     fn bash_tool_reports_success_exit_failure_timeout_and_background() {
         let success = execute_tool("bash", &json!({ "command": "printf 'hello'" }))
@@ -5987,6 +6145,21 @@ printf 'pwsh:%s' "$1"
         let _ = std::fs::remove_dir_all(empty_dir);
 
         assert!(err.contains("PowerShell executable not found"));
+    }
+
+    /// v0.4.22 (C5): on Windows the probe routes through `where.exe` (the unix
+    /// `sh -lc` path is dead on stock Windows). These run in the Windows CI
+    /// job — a build-only gate would never execute the branch.
+    #[cfg(windows)]
+    #[test]
+    fn command_exists_probe_finds_cmd() {
+        assert!(super::command_exists("cmd"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn command_exists_probe_rejects_garbage() {
+        assert!(!super::command_exists("aris-definitely-not-a-real-cmd-xyz"));
     }
 
     struct TestServer {

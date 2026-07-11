@@ -66,8 +66,9 @@ impl UsageCostEstimate {
 /// major OpenAI / Gemini / DeepSeek / GLM / MiniMax / Kimi / Xiaomi /
 /// Qwen / Doubao families that ARIS-Code already routes to. Prices are
 /// USD per million tokens, sourced from each provider's published list
-/// at the time of bundling (2026-05). They will drift; treat `/cost`
-/// as a rough estimate, not billing-grade.
+/// at the time of bundling (2026-05; the GPT-5.6 family was added
+/// 2026-07 against the then-current official list). They will drift;
+/// treat `/cost` as a rough estimate, not billing-grade.
 ///
 /// Cache-tier handling per provider:
 /// - **Anthropic**: distinct cache_creation (1.25x input) and cache_read
@@ -134,8 +135,27 @@ pub fn pricing_for_model(model: &str) -> Option<ModelPricing> {
     }
 
     // ── OpenAI families ──────────────────────────────────────────
-    // Public price list as of 2026-05. cache_read = 10% of input
-    // (OpenAI's documented automatic-prefix-cache discount).
+    // Public price list as of 2026-05 (GPT-5.6 family added 2026-07).
+    // cache_read = 10% of input (OpenAI's documented automatic-
+    // prefix-cache discount).
+    //
+    // GPT-5.6 family — WebFetch-verified against the official OpenAI
+    // pricing page 2026-07-11 (gpt-5.6-sol $5/$0.50/$30, terra
+    // $2.50/$0.25/$15, luna $1/$0.10/$6). ORDER-SENSITIVE: the
+    // terra/luna sub-SKUs MUST precede the bare `gpt-5.6` check,
+    // which covers gpt-5.6-sol AND bare gpt-5.6 (both flagship tier).
+    // Like the gpt-5.5 arm below, `contains` would also match a
+    // hypothetical "gpt-5.60" — inherent to this file's contains
+    // style, accepted.
+    if m.contains("gpt-5.6-terra") {
+        return Some(openai_pricing(2.5, 15.0));
+    }
+    if m.contains("gpt-5.6-luna") {
+        return Some(openai_pricing(1.0, 6.0));
+    }
+    if m.contains("gpt-5.6") {
+        return Some(openai_pricing(5.0, 30.0));
+    }
     if m.contains("gpt-5.5") {
         return Some(openai_pricing(5.0, 30.0));
     }
@@ -718,6 +738,67 @@ mod tests {
     // ── OpenAI GPT families (`contains`, ORDER-SENSITIVE) ───────────────
     // openai_pricing(input, output): cache_creation = input,
     // cache_read = input * 0.1 (10% prefix-cache discount).
+
+    /// v0.4.22 B4 — gpt-5.6 flagship: `contains("gpt-5.6")` covers the
+    /// -sol SKU (and bare gpt-5.6, pinned below). WebFetch-verified against
+    /// the official OpenAI pricing page 2026-07-11: $5/$30, cr = 5.0*0.1
+    /// = 0.5.
+    #[test]
+    fn price_gpt56_sol_flagship_tier() {
+        assert_pricing("gpt-5.6-sol", 5.0, 30.0, 5.0, 0.5);
+    }
+
+    /// v0.4.22 B4 — ORDER-SENSITIVE: `gpt-5.6-terra` MUST be checked
+    /// BEFORE `gpt-5.6` (which `contains` would also match). If reordered,
+    /// this $2.50 model gets billed at $5 = 2x. cr = 2.5*0.1 = 0.25.
+    #[test]
+    fn price_gpt56_terra_order_before_base() {
+        assert_pricing("gpt-5.6-terra", 2.5, 15.0, 2.5, 0.25);
+    }
+
+    /// v0.4.22 B4 — ORDER-SENSITIVE: `gpt-5.6-luna` before `gpt-5.6`.
+    /// cr = 1.0*0.1 = 0.10.
+    #[test]
+    fn price_gpt56_luna_order_before_base() {
+        assert_pricing("gpt-5.6-luna", 1.0, 6.0, 1.0, 0.10);
+    }
+
+    /// v0.4.22 B4 — bare `gpt-5.6` (no SKU suffix) prices at the flagship
+    /// tier, same as -sol.
+    #[test]
+    fn price_gpt56_bare_flagship_tier() {
+        assert_pricing("gpt-5.6", 5.0, 30.0, 5.0, 0.5);
+    }
+
+    /// v0.4.22 B4 — provider-prefixed `openai/gpt-5.6-sol` still routes to
+    /// the flagship tier (`contains` ignores the provider segment).
+    #[test]
+    fn price_gpt56_provider_prefixed_sol() {
+        assert_pricing("openai/gpt-5.6-sol", 5.0, 30.0, 5.0, 0.5);
+    }
+
+    /// v0.4.22 B4 — near-miss `gpt-5.7` matches NO branch (not 5.6, not
+    /// 5.5, not 5.4) -> None -> callers fall back to default_sonnet_tier
+    /// with the `pricing=estimated-default` marker (same fallthrough
+    /// contract as matrix[67]).
+    #[test]
+    fn price_gpt57_near_miss_falls_through_to_default() {
+        assert!(
+            pricing_for_model("gpt-5.7").is_none(),
+            "gpt-5.7 must NOT match any gpt-5.x arm (near-miss falls through)"
+        );
+        let usage = TokenUsage {
+            input_tokens: 100,
+            output_tokens: 100,
+            cache_creation_input_tokens: 0,
+            cache_read_input_tokens: 0,
+        };
+        let lines = usage.summary_lines_for_model("usage", Some("gpt-5.7"));
+        assert!(
+            lines[0].contains("pricing=estimated-default"),
+            "gpt-5.7 summary must carry the estimated-default marker"
+        );
+    }
 
     /// matrix[42] price_gpt55 — `contains("gpt-5.5")`. cr = 5.0*0.1 = 0.5.
     #[test]

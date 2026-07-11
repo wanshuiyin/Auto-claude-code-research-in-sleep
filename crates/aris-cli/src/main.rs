@@ -216,12 +216,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Load saved ARIS config and apply to env (env vars always take priority)
     let saved_config = config::ArisConfig::load();
     saved_config.apply_to_env();
-    // v0.4.18 (#259): surface a silently-ignored / misplaced ARIS config so the
-    // user isn't left wondering why their settings had no effect. Stderr only,
-    // so `--print` / JSON stdout stays clean; `None` on the normal no-config
-    // first run (never nags new users).
-    if let Some(hint) = config::ArisConfig::diagnose_misconfig() {
-        eprintln!("\x1b[33mwarning:\x1b[0m {hint}");
+    // v0.4.18 (#259) → v0.4.22 (C7): surface a silently-ignored / misplaced /
+    // partially-ignored ARIS config so the user isn't left wondering why their
+    // settings had no effect. Stderr only, so `--print` / JSON stdout stays
+    // clean; empty on the normal no-config first run (never nags new users).
+    // Problems and Warnings both print here; only doctor distinguishes them.
+    for diag in config::ArisConfig::diagnose_misconfig() {
+        match diag {
+            config::ConfigDiagnostic::Problem(hint) => {
+                eprintln!("\x1b[33mwarning:\x1b[0m {hint}");
+            }
+            config::ConfigDiagnostic::Warning(hint) => {
+                eprintln!("\x1b[33mnote:\x1b[0m {hint}");
+            }
+        }
     }
     init_aris_tasks_env();
 
@@ -234,6 +242,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     // (shell env var or saved OAuth credentials) would be wrongly routed through
     // setup, and force_apply_to_env() would erase their shell-provided key.
     let needs_api_key = matches!(action, CliAction::Repl { .. } | CliAction::Prompt { .. });
+    let mut saved_config = saved_config;
     if needs_api_key && !has_any_executor_auth() {
         println!("\x1b[1;33mNo API key found.\x1b[0m Let's set up ARIS first.\n");
         let new_config = config::run_interactive_setup()?;
@@ -245,6 +254,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // would wipe a reviewer key the user set in their shell but did not
         // retype during the wizard.
         new_config.force_apply_executor_env();
+        // v0.4.22 (C2, gate round-2 BLOCKER): the wizard's config is the
+        // ACTIVE config from here on. Without this, resolve_startup_model
+        // below still read the pre-wizard saved_config — a clean first run
+        // that just configured an OpenAI-family executor immediately failed
+        // "no model configured" (the model it had just saved was invisible),
+        // and an anthropic-compat first run could adopt a stale model.
+        saved_config = adopt_wizard_config(saved_config, Some(new_config));
     }
 
     match action {
@@ -266,13 +282,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         // v0.4.17 (T5): one-shot `--print`/prompt is non-interactive, so MCP
         // approval may NOT prompt (untrusted MCP calls are denied here).
         {
-            // v0.4.20 (#1): honor the saved executor model here too — previously
-            // ONLY the REPL applied it, so `aris "prompt"` / `aris --print` with a
-            // configured OpenAI/custom executor sent the Anthropic default model
-            // to that endpoint (→ model-not-found).
-            let model = effective_model(model, &saved_config);
-            LiveCli::new(model, true, allowed_tools, permission_mode, false)?
-                .run_turn_with_output(&prompt, output_format)?
+            // v0.4.20 (#1) → v0.4.22 (C1/C2): shared startup model resolution —
+            // explicit --model wins; the saved model applies only on a matching
+            // provider family; OpenAI transport with no model source fails fast.
+            let (model, model_source) = resolve_startup_model(model, &saved_config)?;
+            LiveCli::new(
+                model,
+                model_source,
+                true,
+                allowed_tools,
+                permission_mode,
+                false,
+            )?
+            .run_turn_with_output(&prompt, output_format)?;
         }
         CliAction::Login => run_login()?,
         CliAction::Logout => run_logout()?,
@@ -282,10 +304,10 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             allowed_tools,
             permission_mode,
         } => {
-            // Use saved model from config if user didn't specify --model
-            // (v0.4.20 #1: shared with the one-shot Prompt path via effective_model).
-            let model = effective_model(model, &saved_config);
-            run_repl(model, allowed_tools, permission_mode)?;
+            // v0.4.20 (#1) → v0.4.22 (C1/C2): shared with the one-shot Prompt
+            // path via resolve_startup_model.
+            let (model, model_source) = resolve_startup_model(model, &saved_config)?;
+            run_repl(model, model_source, allowed_tools, permission_mode)?;
         }
         CliAction::Help => print_help(),
         CliAction::Setup => {
@@ -311,7 +333,10 @@ enum CliAction {
     },
     Prompt {
         prompt: String,
-        model: String,
+        /// v0.4.22 (C1): the RAW `--model` value, `None` when the flag was not
+        /// passed. Alias resolution happens exactly once, AFTER the final
+        /// provider env is settled (post-wizard), in `resolve_startup_model`.
+        model: Option<String>,
         output_format: CliOutputFormat,
         allowed_tools: Option<AllowedToolSet>,
         permission_mode: PermissionMode,
@@ -320,7 +345,8 @@ enum CliAction {
     Logout,
     Init,
     Repl {
-        model: String,
+        /// v0.4.22 (C1): raw `--model` value; see `CliAction::Prompt::model`.
+        model: Option<String>,
         allowed_tools: Option<AllowedToolSet>,
         permission_mode: PermissionMode,
     },
@@ -350,7 +376,10 @@ impl CliOutputFormat {
 
 #[allow(clippy::too_many_lines)]
 fn parse_args(args: &[String]) -> Result<CliAction, String> {
-    let mut model = DEFAULT_MODEL.to_string();
+    // v0.4.22 (C1): None = --model not passed. The raw value is preserved
+    // verbatim (no alias resolution here — the wizard can still change
+    // EXECUTOR_PROVIDER after parsing, and resolve_model_alias reads it).
+    let mut model: Option<String> = None;
     let mut output_format = CliOutputFormat::Text;
     let mut permission_mode = default_permission_mode();
     let mut wants_version = false;
@@ -368,11 +397,11 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 let value = args
                     .get(index + 1)
                     .ok_or_else(|| "missing value for --model".to_string())?;
-                model = resolve_model_alias(value).to_string();
+                model = Some(value.clone());
                 index += 2;
             }
             flag if flag.starts_with("--model=") => {
-                model = resolve_model_alias(&flag[8..]).to_string();
+                model = Some(flag[8..].to_string());
                 index += 1;
             }
             "--output-format" => {
@@ -409,7 +438,9 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 }
                 return Ok(CliAction::Prompt {
                     prompt,
-                    model: resolve_model_alias(&model).to_string(),
+                    // v0.4.22 (C1): raw value; the (single) alias resolution
+                    // happens in resolve_startup_model after the final env.
+                    model,
                     output_format,
                     allowed_tools: normalize_allowed_tools(&allowed_tool_values)?,
                     permission_mode,
@@ -495,20 +526,206 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
     }
 }
 
-/// v0.4.20 (#1): resolve the model the session should actually run. When the
-/// user did NOT pass `--model` (so `requested` is still `DEFAULT_MODEL`), honor
-/// the executor model persisted by `aris setup` (`saved_config.executor_model`).
-/// Applied by BOTH the REPL and the one-shot prompt path so they can't diverge;
-/// previously only the REPL did this, leaving `aris "prompt"` on the Anthropic
-/// default even when the user had configured an OpenAI/custom executor.
-fn effective_model(requested: String, saved_config: &config::ArisConfig) -> String {
-    if requested == DEFAULT_MODEL {
-        saved_config
-            .executor_model()
-            .map(|m| resolve_model_alias(m).to_string())
-            .unwrap_or(requested)
+/// v0.4.22 (C1): where the session's model came from. Decides whether the
+/// saved executor model applies and whether the v0.4.18 availability fallback
+/// (4.8 → 4.7) is allowed to fire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModelSource {
+    /// `--model` on the command line — a reproducibility contract; never
+    /// silently substituted (neither by the saved model nor by the
+    /// availability fallback, even when it names the default id).
+    CliExplicit,
+    /// Chosen interactively via `/model` in the REPL — same contract as
+    /// `CliExplicit`; selecting it also re-arms the availability fallback.
+    ReplExplicit,
+    /// Adopted from the saved `aris setup` config (`executor_model`).
+    /// The availability fallback may fire.
+    Configured,
+    /// Nothing requested and nothing saved → `DEFAULT_MODEL`. The
+    /// availability fallback may fire.
+    BuiltInDefault,
+}
+
+impl ModelSource {
+    /// v0.4.22 (C1): only non-explicit sources may silently fall back
+    /// 4.8 → 4.7 on account unavailability.
+    fn allows_availability_fallback(self) -> bool {
+        matches!(self, Self::Configured | Self::BuiltInDefault)
+    }
+}
+
+/// v0.4.20 (#1) → v0.4.22 (C1+C2): resolve the model the session should run,
+/// AFTER the final provider env is settled (post `apply_to_env` + wizard).
+///
+/// - `requested = Some(raw)` (an explicit `--model`) wins unconditionally
+///   (C1); the raw value gets its single alias resolution here.
+/// - Otherwise the saved executor model applies ONLY when the saved provider's
+///   transport family matches the effective transport (C2): saved
+///   `None`/`anthropic`/`anthropic-compat`/unknown → the Anthropic transport;
+///   saved `openai`/`custom` → the `OpenAI` transport; the effective transport
+///   is `OpenAI` iff the FINAL env `EXECUTOR_PROVIDER` is exactly "openai"
+///   (v0.4.21 gate semantics). A mismatched saved model previously leaked (e.g.
+///   shell `EXECUTOR_PROVIDER=anthropic` + a saved `OpenAI` config sent
+///   `gpt-5.5` to the Anthropic API → model-not-found).
+/// - Reverse fail-fast (C2/Δ4-5): when the effective transport is `OpenAI`
+///   and no model source remains (no `--model`, saved model absent/blank or
+///   from the wrong family), do NOT send the Claude default id to an `OpenAI`
+///   endpoint — error out asking for `--model` or `aris setup`.
+fn resolve_startup_model(
+    requested: Option<String>,
+    saved_config: &config::ArisConfig,
+) -> Result<(String, ModelSource), String> {
+    if let Some(raw) = requested {
+        return Ok((
+            resolve_model_alias(&raw).to_string(),
+            ModelSource::CliExplicit,
+        ));
+    }
+
+    let effective_openai = std::env::var("EXECUTOR_PROVIDER").as_deref() == Ok("openai");
+    let saved_openai_family = matches!(
+        saved_config.executor_provider.as_deref(),
+        Some("openai" | "custom")
+    );
+
+    // executor_model() treats blank/whitespace as absent (Δ-C2, config.rs).
+    if let Some(saved_model) = saved_config.executor_model() {
+        if saved_openai_family == effective_openai {
+            return Ok((
+                resolve_model_alias(saved_model).to_string(),
+                ModelSource::Configured,
+            ));
+        }
+    }
+
+    if effective_openai {
+        return Err(
+            "the effective executor transport is OpenAI-compatible, but no model is \
+             configured for it (the saved model is absent, blank, or belongs to a \
+             different provider family). Refusing to send the Anthropic default model \
+             to an OpenAI endpoint — pass --model <id> or run `aris setup`. Note: a \
+             same-family endpoint override (e.g. a custom base URL) can still carry a \
+             stale saved model; see the v0.4.22 CHANGELOG."
+                .to_string(),
+        );
+    }
+
+    Ok((DEFAULT_MODEL.to_string(), ModelSource::BuiltInDefault))
+}
+
+/// v0.4.22 (C2, gate round-2): the startup config seam — when the mid-launch
+/// wizard ran, ITS config becomes the active one for model resolution;
+/// otherwise the loaded config stands. Trivial by construction, extracted so
+/// the wiring point is lockable by a test (the round-2 blocker was exactly
+/// this wiring being absent).
+/// v0.4.22 (Δ4-5): validate a wizard-returned config against its TARGET
+/// transport BEFORE any live env/runtime mutation (the caller invokes this
+/// ahead of `force_apply_to_env`, so an `Err` leaves env, runtime, model and
+/// provenance untouched by construction). The wizard itself refuses blank
+/// OpenAI/custom models at the executor step (Δ5-4); this is the in-session
+/// belt to that suspender.
+fn inline_setup_guard(new_config: &config::ArisConfig) -> Result<(), String> {
+    let openai_family = matches!(
+        new_config.executor_provider.as_deref(),
+        Some("openai" | "custom")
+    );
+    if openai_family && new_config.executor_model().is_none() {
+        return Err(
+            "setup saved an OpenAI/custom executor without a model id; refusing to \
+             switch the live session to it. Re-run /setup and enter an explicit model."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+fn adopt_wizard_config(
+    saved: config::ArisConfig,
+    wizard_result: Option<config::ArisConfig>,
+) -> config::ArisConfig {
+    wizard_result.unwrap_or(saved)
+}
+
+/// v0.4.22 (B5): pure three-state reviewer display (unit-testable without env).
+/// (1) Codex MCP primary, no fallback → the Codex-pinned reality only.
+/// (2) Codex MCP + HTTP fallback → primary first, fallback labeled as such.
+/// (3) non-Codex → the HTTP reviewer model, as before.
+fn reviewer_display_for(
+    primary_provider: Option<&str>,
+    fallback_provider: Option<&str>,
+    http_reviewer_model: &str,
+) -> String {
+    if primary_provider == Some("codex-mcp") {
+        match fallback_provider.filter(|s| !s.trim().is_empty()) {
+            Some(provider) => format!(
+                "Codex MCP · gpt-5.6-sol preferred (HTTP fallback: {provider} · {http_reviewer_model})"
+            ),
+            None => "Codex MCP · gpt-5.6-sol preferred".to_string(),
+        }
     } else {
-        requested
+        http_reviewer_model.to_string()
+    }
+}
+
+/// v0.4.22 (Δ4-3, gate round-2): the `/reviewer` command's four-state gate,
+/// pure over (primary, fallback, explicit-model) so each state is lockable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReviewerCmdGate {
+    /// Codex primary, no HTTP fallback, bare `/reviewer` → print status only.
+    PureCodexStatus,
+    /// Codex primary, no HTTP fallback, `/reviewer <model>` → refuse with
+    /// /setup guidance (there is no HTTP reviewer to configure).
+    PureCodexRefuseExplicit,
+    /// Codex primary + known-provider fallback, explicit model from another
+    /// family → reject (never produce fallback=gemini + model=gpt-*).
+    CrossFamilyReject,
+    /// Proceed (menu or accepted explicit model).
+    Allow,
+}
+
+fn reviewer_command_gate(
+    primary: Option<&str>,
+    fallback: Option<&str>,
+    explicit_model: Option<&str>,
+) -> ReviewerCmdGate {
+    let codex_primary = primary == Some("codex-mcp");
+    let fallback = fallback.filter(|s| !s.trim().is_empty());
+    if codex_primary && fallback.is_none() {
+        return if explicit_model.is_some() {
+            ReviewerCmdGate::PureCodexRefuseExplicit
+        } else {
+            ReviewerCmdGate::PureCodexStatus
+        };
+    }
+    if codex_primary {
+        if let (Some(provider), Some(model)) = (fallback, explicit_model) {
+            if !reviewer_model_matches_provider(provider, model) {
+                return ReviewerCmdGate::CrossFamilyReject;
+            }
+        }
+    }
+    ReviewerCmdGate::Allow
+}
+
+/// v0.4.22 (Δ4-3/Δ5-3): loose catalog-family check for `/reviewer <model>`
+/// when Codex MCP is primary and the command therefore edits the HTTP
+/// FALLBACK provider's model. Known providers reject obviously-cross-family
+/// ids (never produce fallback=gemini + model=gpt-*); "custom" has no catalog
+/// and accepts any non-blank explicit model; unknown labels are permissive.
+fn reviewer_model_matches_provider(provider: &str, model: &str) -> bool {
+    let m = model.trim();
+    if m.is_empty() {
+        return false;
+    }
+    let lower = m.to_ascii_lowercase();
+    match provider {
+        // "custom" (no catalog) and unknown labels are both permissive.
+        "gemini" => lower.starts_with("gemini"),
+        "openai" => lower.starts_with("gpt-") || lower.starts_with('o'),
+        "glm" => lower.starts_with("glm"),
+        "minimax" => lower.starts_with("minimax"),
+        "kimi" => lower.starts_with("kimi") || lower.starts_with("moonshot"),
+        _ => true,
     }
 }
 
@@ -1187,11 +1404,12 @@ fn run_resume_command(
 
 fn run_repl(
     model: String,
+    model_source: ModelSource,
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
 ) -> Result<(), Box<dyn std::error::Error>> {
     // v0.4.17 (T5): the REPL is interactive, so MCP approval may prompt.
-    let mut cli = LiveCli::new(model, true, allowed_tools, permission_mode, true)?;
+    let mut cli = LiveCli::new(model, model_source, true, allowed_tools, permission_mode, true)?;
     let mut editor = input::LineEditor::new(
         "\x1b[38;5;74m❯\x1b[0m ",
         slash_command_completion_candidates(),
@@ -1302,8 +1520,23 @@ struct ManagedSessionSummary {
     message_count: usize,
 }
 
+/// v0.4.22 (B5): the startup banner's 6 center lines — every line must be
+/// EXACTLY 34 visible chars once ANSI escapes are stripped (the pixel sprites
+/// on either side assume it; locked by `banner_center_lines_are_34_visible_chars`).
+const BANNER_CENTER: [&str; 6] = [
+    "\x1b[2m  ──────────────────────────────  \x1b[0m",
+    "\x1b[1;38;5;45m       A     R     I     S        \x1b[0m",
+    "\x1b[38;5;45m      Auto Research in Sleep      \x1b[0m",
+    "\x1b[2m    adversarial | multi-agent     \x1b[0m",
+    "  \x1b[38;5;45mClaude\x1b[0m x \x1b[38;5;71mGPT-5.6-Sol · tiered\x1b[0m   ",
+    "\x1b[2m  ──────────────────────────────  \x1b[0m",
+];
+
 struct LiveCli {
     model: String,
+    /// v0.4.22 (C1): provenance of `model` — gates the saved-model
+    /// substitution (startup) and the availability fallback (latch).
+    model_source: ModelSource,
     reviewer_model: String,
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
@@ -1339,6 +1572,7 @@ struct PlanModeState {
 impl LiveCli {
     fn new(
         model: String,
+        model_source: ModelSource,
         enable_tools: bool,
         allowed_tools: Option<AllowedToolSet>,
         permission_mode: PermissionMode,
@@ -1360,25 +1594,29 @@ impl LiveCli {
             mcp.clone(),
             may_prompt,
         )?;
-        // Determine default reviewer model. saved_config.apply_to_env() runs
-        // BEFORE this point in run(), so when a user has persisted
-        // reviewer_model in config.json we read it back via the
-        // ARIS_REVIEWER_MODEL env var. The fallback only fires when no model
-        // has been persisted (first run / config load failed).
+        // Determine the default HTTP reviewer model (this is the LlmReview /
+        // HTTP-fallback STATE, exported as ARIS_REVIEWER_MODEL — NOT a display
+        // string; the Codex-MCP primary is described separately by
+        // reviewer_display, Δ4-2). saved_config.apply_to_env() runs BEFORE
+        // this point in run(), so a persisted reviewer_model is read back via
+        // the env var. The fallback only fires when nothing was persisted.
         //
-        // v0.4.8: when the user has a Custom reviewer provider configured
-        // (ARIS_REVIEWER_PROVIDER=custom + auth token), don't fall back to
-        // gpt-5.5 — that's surely the wrong default for a custom proxy. Warn
-        // and leave the field empty so LlmReview's Custom branch hard-errors
-        // with a clear message instead of silently routing to gpt-5.5.
-        let has_custom_reviewer_provider = std::env::var("ARIS_REVIEWER_PROVIDER").as_deref()
-            == Ok("custom")
-            && std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_ok();
+        // v0.4.8 → v0.4.22 (Δ4-2/Δ5-3): when the EFFECTIVE reviewer provider
+        // is Custom — either primary "custom" OR "codex-mcp" with
+        // reviewer_fallback_provider "custom" — don't inject gpt-5.5 (surely
+        // wrong for a custom proxy). The rule is the provider formula ONLY;
+        // never inferred from ARIS_REVIEWER_AUTH_TOKEN presence (credential
+        // errors and missing models must fail loud separately).
+        let reviewer_primary = std::env::var("ARIS_REVIEWER_PROVIDER").ok();
+        let reviewer_fallback = std::env::var("ARIS_REVIEWER_FALLBACK_PROVIDER").ok();
+        let effective_custom_reviewer = reviewer_primary.as_deref() == Some("custom")
+            || (reviewer_primary.as_deref() == Some("codex-mcp")
+                && reviewer_fallback.as_deref() == Some("custom"));
         let reviewer_model = std::env::var("ARIS_REVIEWER_MODEL")
             .ok()
-            .filter(|s| !s.is_empty())
+            .filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| {
-                if has_custom_reviewer_provider {
+                if effective_custom_reviewer {
                     eprintln!(
                         "\x1b[33mwarning:\x1b[0m custom reviewer provider configured but \
                          model name is empty in config. Run /setup or /reviewer <model-name>."
@@ -1393,6 +1631,7 @@ impl LiveCli {
         std::env::set_var("ARIS_REVIEWER_MODEL", &reviewer_model);
         let cli = Self {
             model,
+            model_source,
             reviewer_model,
             allowed_tools,
             permission_mode,
@@ -1406,6 +1645,21 @@ impl LiveCli {
         };
         cli.persist_session()?;
         Ok(cli)
+    }
+
+    /// v0.4.22 (B5/Δ4-2): honest three-state reviewer description. The HTTP
+    /// model (`self.reviewer_model` / ARIS_REVIEWER_MODEL) is fallback STATE,
+    /// not the primary — with Codex MCP configured, presenting the HTTP model
+    /// as "the Reviewer" misled users (e.g. option 10 + Gemini fallback showed
+    /// "Reviewer  gemini-2.5-pro" while every skill review ran through Codex).
+    fn reviewer_display(&self) -> String {
+        reviewer_display_for(
+            std::env::var("ARIS_REVIEWER_PROVIDER").ok().as_deref(),
+            std::env::var("ARIS_REVIEWER_FALLBACK_PROVIDER")
+                .ok()
+                .as_deref(),
+            &self.reviewer_model,
+        )
     }
 
     fn startup_banner(&self) -> String {
@@ -1490,20 +1744,16 @@ impl LiveCli {
         let right = render(&GPT);
 
         // Center text: 6 lines, ALL exactly 34 visible chars
-        // 0: 2sp + 30 dashes + 2sp                            = 34
+        // (locked by test `banner_center_lines_are_34_visible_chars`)
+        // 0: 2sp + 30 dashes + 2sp                              = 34
         // 1: 7sp + "A     R     I     S" (19) + 8sp             = 34
-        // 2: 6sp + "Auto Research in Sleep" (22) + 6sp        = 34
-        // 3: 4sp + "adversarial | multi-agent" (25) + 5sp     = 34
-        // 4: 6sp + "Claude x GPT-5.5 xhigh" (22) + 6sp       = 34
-        // 5: same as 0                                        = 34
-        let center = [
-            "\x1b[2m  ──────────────────────────────  \x1b[0m",
-            "\x1b[1;38;5;45m       A     R     I     S        \x1b[0m",
-            "\x1b[38;5;45m      Auto Research in Sleep      \x1b[0m",
-            "\x1b[2m    adversarial | multi-agent     \x1b[0m",
-            "      \x1b[38;5;45mClaude\x1b[0m x \x1b[38;5;71mGPT-5.5 xhigh\x1b[0m      ",
-            "\x1b[2m  ──────────────────────────────  \x1b[0m",
-        ];
+        // 2: 6sp + "Auto Research in Sleep" (22) + 6sp          = 34
+        // 3: 4sp + "adversarial | multi-agent" (25) + 5sp       = 34
+        // 4: 2sp + "Claude x GPT-5.6-Sol · tiered" (29) + 3sp   = 34
+        //    (v0.4.22 B5: "tiered" — deep audits ultra, floor xhigh; avoids
+        //     implying every review runs at one effort)
+        // 5: same as 0                                          = 34
+        let center = BANNER_CENTER;
 
         // Build sprite lines
         let mut sprite_lines: Vec<String> = Vec::new();
@@ -1554,7 +1804,7 @@ impl LiveCli {
                 "\x1b[2mExecutor\x1b[0m     {executor_label} · {}",
                 self.model
             ),
-            format!("\x1b[2mReviewer\x1b[0m     {}", self.reviewer_model),
+            format!("\x1b[2mReviewer\x1b[0m     {}", self.reviewer_display()),
             format!(
                 "\x1b[2mPermissions\x1b[0m  {}",
                 self.permission_mode.as_str()
@@ -1688,12 +1938,21 @@ impl LiveCli {
     /// `self.model`/`self.system_prompt` and retries. Returns `false` (no state
     /// change) otherwise — including after a fallback already happened (latched
     /// by `self.model_fell_back`, which also prevents a retry loop), and for an
-    /// explicitly-chosen non-default model (the user owns that choice).
+    /// explicitly-chosen model (the user owns that choice).
+    ///
+    /// v0.4.22 (C1): "explicitly-chosen" now includes an explicit `--model`
+    /// or `/model` selection that NAMES the default id — an explicit choice is
+    /// a reproducibility contract, so only `Configured`/`BuiltInDefault`
+    /// sources may silently fall back (`ModelSource::allows_availability_fallback`).
     fn fall_back_default_model_if_needed(
         &mut self,
         error: &RuntimeError,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        if !error.is_model_unavailable() || self.model != DEFAULT_MODEL || self.model_fell_back {
+        if !error.is_model_unavailable()
+            || self.model != DEFAULT_MODEL
+            || self.model_fell_back
+            || !self.model_source.allows_availability_fallback()
+        {
             return Ok(false);
         }
         self.model_fell_back = true;
@@ -1737,8 +1996,16 @@ impl LiveCli {
                 // instead so the JSON stream is never polluted by a prompt).
                 false,
             )?;
-            let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
-            match runtime.run_turn(input, Some(&mut permission_prompter)) {
+            // v0.4.22 (C3): the GENERIC permission gate must not prompt either.
+            // Passing a real CliPermissionPrompter here printed "Permission
+            // approval required" + a [y/N] read to STDOUT under
+            // `--output-format json --permission-mode workspace-write` with a
+            // danger-tier tool (bash) — blocking on stdin and breaking the
+            // single-JSON-document contract. With `None`, permissions.rs
+            // yields a clean structured Deny ("requires approval to
+            // escalate…"), the tool errors, the turn continues, and stdout
+            // stays exactly one JSON document.
+            match runtime.run_turn(input, None) {
                 Ok(summary) => {
                     self.runtime = runtime;
                     break summary;
@@ -2028,6 +2295,13 @@ impl LiveCli {
         };
 
         if model == self.model {
+            // v0.4.22 (C1): re-selecting the CURRENT model via /model is still
+            // an explicit choice — mark it and re-arm the availability
+            // fallback latch (covers "4.8 fell back to 4.7, user explicitly
+            // re-selects 4.7/4.8": the old early-return kept the stale latch
+            // and the stale Configured/BuiltInDefault source forever).
+            self.model_source = ModelSource::ReplExplicit;
+            self.model_fell_back = false;
             println!(
                 "{}",
                 format_model_report(
@@ -2057,6 +2331,9 @@ impl LiveCli {
         )?;
         self.system_prompt = new_system_prompt;
         self.model.clone_from(&model);
+        // v0.4.22 (C1): /model is an explicit choice; re-arm the latch.
+        self.model_source = ModelSource::ReplExplicit;
+        self.model_fell_back = false;
         println!(
             "{}",
             format_model_switch_report(&previous, &model, message_count)
@@ -2065,23 +2342,93 @@ impl LiveCli {
     }
 
     fn set_reviewer(&mut self, model: Option<String>) -> Result<bool, Box<dyn std::error::Error>> {
+        // v0.4.22 (Δ4-3): `/reviewer` controls the HTTP (LlmReview) reviewer
+        // ONLY. With Codex MCP as the primary, the skills pin gpt-5.6-sol per
+        // call — this command NEVER changes that, and it must say so instead
+        // of pretending to switch the reviewer.
+        let primary_provider = std::env::var("ARIS_REVIEWER_PROVIDER").ok();
+        let fallback_provider = std::env::var("ARIS_REVIEWER_FALLBACK_PROVIDER")
+            .ok()
+            .filter(|s| !s.trim().is_empty());
+        let codex_primary = primary_provider.as_deref() == Some("codex-mcp");
+
+        // v0.4.22 (Δ4-3, gate round-2): the four-state decision is the pure
+        // `reviewer_command_gate` (locked by reviewer_command_gate_four_states);
+        // this fn only renders the outcome.
+        match reviewer_command_gate(
+            primary_provider.as_deref(),
+            fallback_provider.as_deref(),
+            model.as_deref(),
+        ) {
+            ReviewerCmdGate::PureCodexStatus | ReviewerCmdGate::PureCodexRefuseExplicit => {
+                // Pure Codex: no HTTP reviewer exists to configure.
+                println!(
+                    "\x1b[1mReviewer\x1b[0m  Codex MCP · gpt-5.6-sol preferred \
+                     \x1b[2m(skill-pinned per call; deep audits ultra, floor xhigh)\x1b[0m"
+                );
+                if model.is_some() {
+                    println!(
+                        "  `/reviewer <model>` controls the HTTP fallback only, and no HTTP \
+                         fallback is configured. Run /setup to add one first."
+                    );
+                } else {
+                    println!(
+                        "  \x1b[2mNo HTTP fallback configured. This picker controls the HTTP \
+                         fallback only — run /setup to add one.\x1b[0m"
+                    );
+                }
+                return Ok(false);
+            }
+            ReviewerCmdGate::CrossFamilyReject => {
+                let provider = fallback_provider.as_deref().unwrap_or("?");
+                let m = model.as_deref().unwrap_or("?");
+                println!(
+                    "'{m}' does not look like a \x1b[1m{provider}\x1b[0m model — your \
+                     HTTP fallback provider is {provider}, and `/reviewer` changes the \
+                     fallback MODEL only (primary stays Codex MCP · gpt-5.6-sol). To \
+                     switch the fallback provider, run /setup."
+                );
+                return Ok(false);
+            }
+            ReviewerCmdGate::Allow => {}
+        }
+        // When Codex MCP is primary WITH an HTTP fallback, /reviewer edits
+        // ONLY that fallback provider's model.
+        let restrict_to_provider: Option<String> = if codex_primary {
+            fallback_provider.clone()
+        } else {
+            None
+        };
+
         let model = match model {
             Some(m) => m,
             None => {
+                if let Some(provider) = restrict_to_provider.as_deref() {
+                    println!(
+                        "\x1b[2mPrimary reviewer: Codex MCP · gpt-5.6-sol (skill-pinned). This \
+                         picker controls the HTTP fallback ({provider}) only.\x1b[0m"
+                    );
+                }
                 let has_gemini = std::env::var("GEMINI_API_KEY").is_ok();
                 let has_openai = std::env::var("OPENAI_API_KEY").is_ok();
-                // Custom OpenAI-compatible reviewer: API key lives in
-                // ARIS_REVIEWER_AUTH_TOKEN (not OPENAI_API_KEY, deliberately
-                // separate to avoid colliding with the executor's key). The
-                // bare `/reviewer` menu used to miss this entirely and tell
-                // users "No reviewer API key found" even when they had just
-                // configured a custom provider.
-                let has_custom_reviewer = std::env::var("ARIS_REVIEWER_PROVIDER").as_deref()
-                    == Ok("custom")
-                    && std::env::var("ARIS_REVIEWER_AUTH_TOKEN").is_ok();
+                // Custom OpenAI-compatible reviewer (Δ5-3): effective when the
+                // PRIMARY is custom, or when codex-mcp has a custom FALLBACK.
+                // Determined by the provider formula only — never inferred
+                // from ARIS_REVIEWER_AUTH_TOKEN presence (credential errors
+                // fail loud separately in LlmReview).
+                let has_custom_reviewer = primary_provider.as_deref() == Some("custom")
+                    || (codex_primary && fallback_provider.as_deref() == Some("custom"));
+                // Provider gate for the menu: no restriction (non-codex
+                // primary) → every provider with a key; restricted → only the
+                // fallback provider's catalog.
+                let provider_allowed = |p: &str| {
+                    restrict_to_provider
+                        .as_deref()
+                        .map_or(true, |only| only == p)
+                };
 
                 let mut items: Vec<input::SelectItem> = Vec::new();
-                if has_gemini {
+                if has_gemini && provider_allowed("gemini") {
                     for (name, desc) in [
                         ("gemini-2.5-pro", "Google · Most capable, deep reasoning"),
                         ("gemini-2.5-flash", "Google · Fast and efficient"),
@@ -2095,7 +2442,7 @@ impl LiveCli {
                     }
                 }
                 // GLM models
-                if std::env::var("GLM_API_KEY").is_ok() {
+                if std::env::var("GLM_API_KEY").is_ok() && provider_allowed("glm") {
                     for (name, desc) in [
                         ("GLM-5", "Zhipu · Most capable"),
                         ("GLM-5-Turbo", "Zhipu · Fast"),
@@ -2109,7 +2456,7 @@ impl LiveCli {
                     }
                 }
                 // MiniMax models
-                if std::env::var("MINIMAX_API_KEY").is_ok() {
+                if std::env::var("MINIMAX_API_KEY").is_ok() && provider_allowed("minimax") {
                     for (name, desc) in [
                         (
                             "MiniMax-M2.7",
@@ -2126,7 +2473,7 @@ impl LiveCli {
                     }
                 }
                 // Kimi models
-                if std::env::var("KIMI_API_KEY").is_ok() {
+                if std::env::var("KIMI_API_KEY").is_ok() && provider_allowed("kimi") {
                     for (name, desc) in [("kimi-k2.5", "Kimi · K2.5 reasoning")] {
                         items.push(input::SelectItem {
                             label: name.to_string(),
@@ -2135,11 +2482,17 @@ impl LiveCli {
                         });
                     }
                 }
-                if has_openai {
+                if has_openai && provider_allowed("openai") {
                     for (name, desc) in [
                         (
                             "gpt-5.5",
                             "OpenAI · Best intelligence for reviews (xhigh reasoning)",
+                        ),
+                        // v0.4.22 (Δ4-1/Δ-B5): opt-in only — endpoint-listed but
+                        // not yet smoked with reasoning_effort on chat-completions.
+                        (
+                            "gpt-5.6-sol",
+                            "OpenAI · EXPERIMENTAL for HTTP reviews (unverified with reasoning_effort)",
                         ),
                         ("gpt-5.4", "OpenAI · Previous flagship"),
                         ("gpt-5.4-mini", "OpenAI · Strong and affordable"),
@@ -2159,10 +2512,17 @@ impl LiveCli {
                         // Custom provider is configured but we can't enumerate
                         // its model catalog. Show the current model and tell
                         // the user how to change it (`/reviewer <model-name>`).
+                        // v0.4.22 (Δ5-3, gate round-2): a blank custom model
+                        // must read "(not configured)", never a blank line;
+                        // blank checks use trim().
                         let current = std::env::var("ARIS_REVIEWER_MODEL")
                             .ok()
-                            .filter(|s| !s.is_empty())
-                            .unwrap_or_else(|| self.reviewer_model.clone());
+                            .filter(|s| !s.trim().is_empty())
+                            .or_else(|| {
+                                Some(self.reviewer_model.clone())
+                                    .filter(|s| !s.trim().is_empty())
+                            })
+                            .unwrap_or_else(|| "(not configured)".to_string());
                         let base_url = std::env::var("ARIS_REVIEWER_BASE_URL")
                             .ok()
                             .unwrap_or_else(|| "(not set)".to_string());
@@ -2171,6 +2531,16 @@ impl LiveCli {
                         );
                         println!(
                             "  \x1b[2mType '/reviewer <model-name>' to change, or '/setup' to re-enter API key / endpoint.\x1b[0m"
+                        );
+                        return Ok(false);
+                    }
+                    if let Some(provider) = restrict_to_provider.as_deref() {
+                        // Codex primary + a configured fallback whose API key
+                        // is missing from the env — say that, not "no key".
+                        println!(
+                            "HTTP fallback provider \x1b[1m{provider}\x1b[0m is configured but \
+                             its API key is not present in the environment. Run /setup to \
+                             re-enter it. (Primary reviewer stays Codex MCP · gpt-5.6-sol.)"
                         );
                         return Ok(false);
                     }
@@ -2205,6 +2575,17 @@ impl LiveCli {
 
     fn run_inline_setup(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let new_config = config::run_interactive_setup()?;
+
+        // v0.4.22 (Δ4-5): validate the executor model against the TARGET
+        // transport BEFORE mutating the live env/runtime — the same resolver
+        // the startup path uses. Without this, an OpenAI/custom setup whose
+        // model somehow ended up absent would keep the stale (possibly Claude)
+        // self.model and rebuild the runtime against the new OpenAI env. The
+        // wizard itself now refuses blank OpenAI/custom models (Δ5-4), so this
+        // is the belt to that suspender. The check runs against the CANDIDATE
+        // env (the wizard's saved provider), not the live one, so failure
+        // leaves env/runtime/model/provenance untouched.
+        inline_setup_guard(&new_config)?;
         new_config.force_apply_to_env();
 
         // Resolve the effective executor model after /setup. If the config
@@ -2253,6 +2634,17 @@ impl LiveCli {
             self.model.clone_from(&effective_model);
             println!("  Executor model: {previous_model} → \x1b[1;32m{effective_model}\x1b[0m");
         }
+        // v0.4.22 (Δ4-5/C1): a successful /setup re-establishes the model's
+        // provenance and UNCONDITIONALLY re-arms the availability-fallback
+        // latch — even when the model string did not change (covers "4.8 fell
+        // back to 4.7 mid-session, user re-selects 4.8 via /setup": the stale
+        // latch would otherwise block the retry-and-fallback path forever).
+        self.model_source = if new_config.executor_model().is_some() {
+            ModelSource::Configured
+        } else {
+            ModelSource::BuiltInDefault
+        };
+        self.model_fell_back = false;
 
         // Update reviewer model
         if let Some(new_reviewer) = &new_config.reviewer_model {
@@ -3854,7 +4246,9 @@ fn git_status_ok(args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn command_exists(name: &str) -> bool {
-    Command::new("which")
+    // v0.4.22 (C6): `which` does not exist on stock Windows — use `where`.
+    let finder = if cfg!(windows) { "where" } else { "which" };
+    Command::new(finder)
         .arg(name)
         .output()
         .map(|output| output.status.success())
@@ -4021,62 +4415,73 @@ fn resolve_export_path(
 
 /// Pure (I/O-free) reviewer-routing nudge used in the system prompt.
 ///
-/// v0.4.17 (T10/P1-2): when the user picked the Codex MCP reviewer
-/// (`reviewer_provider == "codex-mcp"`), the cross-model review goes through
-/// Claude Code's own `mcp__codex__codex` channel — so do NOT push the "use
-/// `LlmReview` instead" override (which would contradict the user's chosen
-/// reviewer). For every other reviewer the override stands: skills' MCP review
-/// calls are redirected to `LlmReview`, which hits the configured API reviewer
-/// directly without MCP.
+/// v0.4.22 (B1): rewritten for the GPT-5.6-Sol two-tier doctrine that the
+/// synced skills now carry (main 6142715 / reviewer-routing.md). The v0.4.17
+/// blanket "never pass a model" rule contradicted the skills' explicit
+/// `model: gpt-5.6-sol` pins — obeying it would silently strip deep audits
+/// down from ultra. The rules below mirror the canonical capability-only
+/// fallback chain and add the transport-safety rules (approval-policy /
+/// sandbox / `LlmReview` parameter stripping) from the v0.4.22 design.
 ///
-/// Three states (both codex-mcp states tell the model NOT to pass a `model`
-/// parameter — Codex uses the account default gpt-5.5+xhigh; v0.4.17 BUG B):
-///   - `codex-mcp` + fallback configured → use the Codex MCP channel (no `model`),
-///     and mention `LlmReview` as a fallback if the MCP channel is unavailable.
-///   - `codex-mcp` + no fallback         → use the Codex MCP channel (no `model`);
-///     no `LlmReview` path is advertised (pure MCP).
-///   - any other provider                → push the "use `LlmReview` instead" override.
+/// Three states:
+///   - `codex-mcp` + fallback configured → Codex MCP primary + the
+///     `LlmReview` HTTP fallback, PRE-DISPATCH-ONLY (Δ5-1).
+///   - `codex-mcp` + no fallback         → pure Codex MCP.
+///   - any other provider                → the "use `LlmReview` instead"
+///     override, with Codex-parameter stripping (Δ4-1).
 ///
 /// Extracted as a pure fn (codex R11) so its output across all three states is
 /// unit-testable without the filesystem I/O that `build_system_prompt` performs.
 fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Vec<String> {
+    // Shared Codex-MCP call discipline (both codex-mcp states).
+    const CODEX_RULES: &str = "ARIS's preferred reviewer is gpt-5.6-sol; skills pin the model and \
+         reasoning effort explicitly per fresh call — pass them through exactly as the skill \
+         specifies (per-call `config: {\"model_reasoning_effort\": ...}`; deep audits \"ultra\", \
+         regular reviews \"xhigh\"; never below xhigh for verdict-bearing review). If a skill uses \
+         the legacy `reasoning: ultra` shorthand, translate it to \
+         `config: {\"model_reasoning_effort\": \"ultra\"}` — never send an unknown `reasoning` \
+         field. Capability fallback (in order, capability errors ONLY): (1) run as pinned; \
+         (2) if the EFFORT is explicitly unsupported, retry the SAME model at \"xhigh\" — this \
+         applies only to deep-tier calls, a regular xhigh call is never retried with the same \
+         params; (3) if the MODEL is explicitly unknown/unavailable, retry as explicit gpt-5.5 + \
+         \"xhigh\"; (4) NEVER auto-degrade on timeouts, rate limits, auth, transport, sandbox, or \
+         parse errors. When THIS review call carries an explicit user-chosen reviewer-model \
+         override (an explicit model parameter on the call itself), the automatic capability \
+         chain is DISABLED for that call — surface the capability error instead of substituting \
+         a different model; the user owns an explicit choice. ARIS's /reviewer command is NOT \
+         such an override — it controls the HTTP fallback exclusively and never disables this \
+         chain. On every FRESH `mcp__codex__codex` call also pass \
+         `approval-policy: \"never\"` and an explicit `sandbox` (default \"read-only\" for review; \
+         wider only when the skill needs writes) — ARIS cannot service Codex's interactive \
+         escalation requests, so an approval prompt would stall the call. `mcp__codex__codex-reply` \
+         takes ONLY the thread id and prompt (it inherits the thread's model/effort).";
+
     if reviewer_provider == "codex-mcp" {
-        // Codex MCP is the PRIMARY reviewer. Keep using the `mcp__codex__codex`
-        // channel; do NOT push the "use LlmReview instead" override.
-        //
-        // v0.4.17 push-gate (BUG B): the model would sometimes pass an explicit
-        // `model` parameter to mcp__codex__codex (e.g. `gpt-5.2`), which a
-        // ChatGPT-account Codex rejects ("model not supported with ChatGPT
-        // account") — the first call then fails until the model retries without
-        // it. Both codex-mcp states now tell the model NOT to pass a `model`
-        // parameter: Codex uses the account default model and runs at xhigh
-        // reasoning (v0.4.18 pins the spawned server to xhigh via the
-        // `mcpServers.codex` args for new setups; ARIS skills also pass it
-        // per-call). When a fallback HTTP reviewer is configured
-        // (ARIS_REVIEWER_FALLBACK_PROVIDER) we additionally mention that
-        // LlmReview is available if the MCP channel is unavailable.
-        match fallback.filter(|s| !s.is_empty()) {
+        match fallback.filter(|s| !s.trim().is_empty()) {
             Some(fallback) => vec![format!(
                 "IMPORTANT: Your external LLM reviewer is Codex MCP — use `mcp__codex__codex` / \
-                 `mcp__codex__codex-reply` as instructed by skills. Do NOT pass a `model` \
-                 parameter: Codex uses your account default (gpt-5.5 with xhigh reasoning). \
-                 If that MCP channel is unavailable, you may fall back to the `LlmReview` tool, \
-                 which calls the configured HTTP fallback reviewer ({fallback}) directly."
+                 `mcp__codex__codex-reply` as instructed by skills. {CODEX_RULES} HTTP fallback: \
+                 ONLY when the Codex MCP channel is already known absent BEFORE dispatch (the tool \
+                 is missing from the catalog or discovery failed) may you use the `LlmReview` tool, \
+                 which calls the configured HTTP fallback reviewer ({fallback}) directly. Once a \
+                 Codex call has been dispatched, never re-target it to HTTP on any error. When \
+                 using LlmReview, pass ONLY the review `prompt` — never forward the skill's Codex \
+                 `model`, `config`, `sandbox`, or `approval-policy` parameters; pass a `model` to \
+                 LlmReview only when the user explicitly chose an HTTP reviewer model."
             )],
-            None => vec![
+            None => vec![format!(
                 "IMPORTANT: Your external LLM reviewer is Codex MCP — use the `mcp__codex__codex` / \
-                 `mcp__codex__codex-reply` tools as instructed by skills. Do NOT pass a `model` \
-                 parameter: Codex uses your account default model and runs at xhigh reasoning. \
-                 Passing an unsupported model name causes a ChatGPT-account rejection."
-                    .to_string(),
-            ],
+                 `mcp__codex__codex-reply` tools as instructed by skills. {CODEX_RULES}"
+            )],
         }
     } else {
         vec![
             "IMPORTANT: When a skill instructs you to use `mcp__codex__codex` or `mcp__codex__codex-reply` \
              for external LLM review, use the `LlmReview` tool instead. The LlmReview tool calls \
              Gemini or OpenAI directly (via GEMINI_API_KEY or OPENAI_API_KEY) without needing MCP. \
-             Pass the full review prompt as the `prompt` parameter to LlmReview."
+             Pass ONLY the full review prompt as the `prompt` parameter — never forward the skill's \
+             Codex `model`, `config`, `sandbox`, or `approval-policy` parameters into LlmReview; \
+             pass a `model` only when the user explicitly chose an HTTP reviewer model."
                 .to_string(),
         ]
     }
@@ -6304,15 +6709,37 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
         println!("Anthropic (default)");
     }
 
-    // Check 0b: ARIS config health (#259) — flag a silently-ignored malformed
-    // config or a misplaced/wrong-format stray (YAML / wrong path).
+    // Check 0b: ARIS config health (#259) → v0.4.22 (C7): structured severity.
+    // Problems (malformed/misplaced config) flip all_ok; Warnings (unrecognized
+    // top-level keys — possibly a newer-version config or a nested structure)
+    // print as NOTE and deliberately do NOT fail doctor (forward compat).
     print!("  ARIS config:  ");
-    if let Some(hint) = config::ArisConfig::diagnose_misconfig() {
+    let diags = config::ArisConfig::diagnose_misconfig();
+    let problems: Vec<&String> = diags
+        .iter()
+        .filter_map(|d| match d {
+            config::ConfigDiagnostic::Problem(h) => Some(h),
+            config::ConfigDiagnostic::Warning(_) => None,
+        })
+        .collect();
+    let warnings: Vec<&String> = diags
+        .iter()
+        .filter_map(|d| match d {
+            config::ConfigDiagnostic::Warning(h) => Some(h),
+            config::ConfigDiagnostic::Problem(_) => None,
+        })
+        .collect();
+    if !problems.is_empty() {
         println!("PROBLEM");
-        println!("                {hint}");
+        for hint in problems {
+            println!("                {hint}");
+        }
         all_ok = false;
     } else {
         println!("OK (~/.config/aris/config.json — flat JSON, or defaults)");
+    }
+    for hint in warnings {
+        println!("                NOTE: {hint}");
     }
 
     // Check 1: API auth
@@ -6367,13 +6794,32 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
         println!("OK ({})", found.join(", "));
     }
 
-    // Check 3: Codex CLI
+    // Check 3: Codex CLI — v0.4.22 (C6/Δ4-4): three-state classification; a
+    // .cmd/.bat shim resolves on `where` but the MCP client spawns `codex`
+    // directly, so a shim must not read as a clean "OK". v0.4.22 (B6/Δ4-6):
+    // soft version + stale-entry notes; neither flips all_ok.
     print!("  Codex CLI:    ");
-    match which_codex() {
-        Some(path) => println!("OK ({})", path.display()),
-        None => {
+    match config::probe_codex() {
+        config::CodexProbe::NativeExe(path) => {
+            println!("OK ({})", path.display());
+            if let Some(note) = codex_version_note(&path) {
+                println!("                NOTE: {note}");
+            }
+        }
+        config::CodexProbe::ScriptShim(path) => {
+            println!("FOUND AS SCRIPT SHIM ({})", path.display());
+            println!(
+                "                NOTE: ARIS's MCP client spawns `codex` directly and cannot \
+                 spawn a .cmd/.bat shim in v0.4.22 — install the native codex binary if \
+                 `mcp__codex__codex` fails to start."
+            );
+        }
+        config::CodexProbe::Missing => {
             println!("NOT FOUND (optional)");
         }
+    }
+    if let Some(note) = stale_codex_entry_note() {
+        println!("                NOTE: {note}");
     }
 
     // Check 4 (v0.4.12 #238): Sandbox effective config
@@ -6510,17 +6956,96 @@ fn find_skill_content(name: &str) -> Option<String> {
         .map(|(_, content)| (*content).to_string())
 }
 
-fn which_codex() -> Option<PathBuf> {
-    let output = Command::new("which").arg("codex").output().ok()?;
-    if output.status.success() {
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if path.is_empty() {
-            None
-        } else {
-            Some(PathBuf::from(path))
-        }
-    } else {
+// v0.4.22 (C6): the old `which`-only probe lived here; doctor now uses
+// config::probe_codex() — the shared three-state classifier (NativeExe /
+// ScriptShim / Missing, `where` on Windows, CRLF-safe, .exe-preferring).
+
+/// v0.4.22 (B6): run `--version` via the RESOLVED codex path and return a
+/// doctor NOTE when the version is too old / unclassifiable. `None` = supported
+/// (or the probe itself failed — the presence check already reported).
+fn codex_version_note(path: &Path) -> Option<String> {
+    let output = Command::new(path).arg("--version").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let raw = String::from_utf8_lossy(&output.stdout);
+    codex_version_support_note(raw.trim())
+}
+
+/// v0.4.22 (B6/Δ4-6): deterministic version oracle over `codex --version`
+/// output (real shape: "codex-cli 0.144.1"; bare semver also accepted).
+/// `None` = supported (>= 0.144.1 stable). Old stable → old-version note.
+/// Prerelease → conservative treat-as-old note. Malformed → "unknown
+/// version" note (DECIDED: note, not silent). Never a Problem; the doctor
+/// prints these as NOTE and never flips all_ok.
+fn codex_version_support_note(raw: &str) -> Option<String> {
+    const UPGRADE_HINT: &str = "'ultra' reasoning effort and gpt-5.6-sol may be unavailable — \
+         deep-audit skills degrade to xhigh per the fallback chain. Upgrade codex-cli and \
+         restart the session.";
+    let Some(token) = raw
+        .split_whitespace()
+        .find(|t| t.chars().next().is_some_and(|c| c.is_ascii_digit()))
+    else {
+        return Some(format!("codex-cli version unrecognized ({raw:.40}) — {UPGRADE_HINT}"));
+    };
+    if token.contains('-') {
+        // Prerelease (e.g. 0.144.1-beta.2): conservatively treat as pre-0.144.1.
+        return Some(format!("codex-cli {token} is a prerelease — treating as pre-0.144.1: {UPGRADE_HINT}"));
+    }
+    let mut parts = token.split('.').map(str::parse::<u64>);
+    let (Some(Ok(major)), Some(Ok(minor)), Some(Ok(patch))) =
+        (parts.next(), parts.next(), parts.next())
+    else {
+        return Some(format!("codex-cli version unrecognized ({token:.40}) — {UPGRADE_HINT}"));
+    };
+    if (major, minor, patch) >= (0, 144, 1) {
         None
+    } else {
+        Some(format!("codex-cli {token} < 0.144.1: {UPGRADE_HINT}"))
+    }
+}
+
+/// v0.4.22 (B6, gate round-2): does this `mcpServers.codex` entry carry the
+/// v0.4.18 xhigh server floor? Pure over the JSON entry so both failure
+/// shapes are covered: (a) args MISSING or not an array — the classic
+/// pre-v0.4.18 entry, which the first cut wrongly skipped via `?`; (b) args
+/// present but pinning a DIFFERENT effort (e.g. "medium"), which a bare
+/// `contains("model_reasoning_effort")` wrongly accepted as the floor.
+fn codex_entry_has_xhigh_floor(entry: &serde_json::Value) -> bool {
+    entry
+        .get("args")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|args| {
+            args.iter().any(|a| {
+                a.as_str().is_some_and(|s| {
+                    s.contains("model_reasoning_effort") && s.contains("xhigh")
+                })
+            })
+        })
+}
+
+/// v0.4.22 (B6): pre-v0.4.18 `mcpServers.codex` entries were written without
+/// the `-c model_reasoning_effort="xhigh"` server floor and are never migrated
+/// (the option-10 merge is deliberately non-clobbering). Reads the SAME
+/// settings.json that option 10 writes and the runtime reads
+/// (`CLAUDE_CONFIG_HOME` or `~/.claude`) — NOT the legacy `~/.claude.json`. Soft
+/// note only; absent file/entry → None.
+fn stale_codex_entry_note() -> Option<String> {
+    let path = config::claude_config_home().join("settings.json");
+    let content = fs::read_to_string(path).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
+    let entry = json.get("mcpServers")?.get("codex")?;
+    if codex_entry_has_xhigh_floor(entry) {
+        None
+    } else {
+        Some(
+            "your mcpServers.codex entry predates v0.4.18 and lacks the \
+             `-c model_reasoning_effort=\"xhigh\"` server floor — bare codex calls may run \
+             below xhigh. Edit settings.json to add args [\"mcp-server\", \"-c\", \
+             \"model_reasoning_effort=\\\"xhigh\\\"\"] or remove the entry and re-run \
+             `aris setup` (option 10)."
+                .to_string(),
+        )
     }
 }
 
@@ -6593,15 +7118,16 @@ fn discover_all_skills() -> Vec<(String, String, &'static str)> {
 #[cfg(test)]
 mod tests {
     use super::{
-        deploy_meta_opt_hooks_to, effective_model, filter_tool_specs, format_compact_report,
-        format_cost_report, format_model_report, format_model_switch_report,
-        format_permissions_report, format_permissions_switch_report, format_resume_report,
-        format_status_report, format_tool_call_start, format_tool_result, normalize_permission_mode,
-        parse_args, parse_git_status_metadata, print_help_to, push_output_block,
-        render_config_report, render_memory_report, render_repl_help, resolve_model_alias,
-        response_to_events, resume_supported_slash_commands, reviewer_routing_nudge, status_context,
-        turn_has_visible_assistant_text, CliAction, CliOutputFormat, SlashCommand, StatusUsage,
-        DEFAULT_MODEL,
+        codex_version_support_note, deploy_meta_opt_hooks_to, filter_tool_specs,
+        format_compact_report, format_cost_report, format_model_report,
+        format_model_switch_report, format_permissions_report, format_permissions_switch_report,
+        format_resume_report, format_status_report, format_tool_call_start, format_tool_result,
+        normalize_permission_mode, parse_args, parse_git_status_metadata, print_help_to,
+        push_output_block, render_config_report, render_memory_report, render_repl_help,
+        resolve_model_alias, resolve_startup_model, response_to_events,
+        resume_supported_slash_commands, reviewer_display_for, reviewer_model_matches_provider,
+        reviewer_routing_nudge, status_context, turn_has_visible_assistant_text, CliAction,
+        CliOutputFormat, ModelSource, SlashCommand, StatusUsage, BANNER_CENTER, DEFAULT_MODEL,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
     use runtime::{
@@ -6611,25 +7137,301 @@ mod tests {
     use serde_json::json;
     use std::path::PathBuf;
 
-    // v0.4.20 (#1): the one-shot prompt path and the REPL share effective_model,
-    // which applies the saved executor model ONLY when the user didn't pass
-    // --model (i.e. it's still DEFAULT_MODEL).
+    // v0.4.20 (#1) → v0.4.22 (C1/C2): startup model resolution. Explicit
+    // --model wins (even naming the default); the saved model applies only on
+    // a matching transport family; OpenAI transport with no model source
+    // fails fast. Env-dependent → serialized via the crate-wide env guard.
     #[test]
-    fn effective_model_applies_saved_model_only_for_the_default() {
-        let cfg = crate::config::ArisConfig {
+    fn resolve_startup_model_matrix() {
+        let _g = crate::env_test_guard();
+        let cfg_openai = crate::config::ArisConfig {
+            executor_provider: Some("openai".to_string()),
             executor_model: Some("gpt-5.5".to_string()),
             ..Default::default()
         };
-        // No --model (still DEFAULT_MODEL) → use the saved executor model.
-        assert_eq!(effective_model(DEFAULT_MODEL.to_string(), &cfg), "gpt-5.5");
-        // Explicit --model is respected, never overridden by the saved model.
-        assert_eq!(
-            effective_model("claude-sonnet-4-6".to_string(), &cfg),
-            "claude-sonnet-4-6"
-        );
-        // No saved model → keep the requested default.
+        let cfg_anthropic_saved = crate::config::ArisConfig {
+            executor_model: Some("claude-sonnet-4-6".to_string()),
+            ..Default::default()
+        };
         let empty = crate::config::ArisConfig::default();
-        assert_eq!(effective_model(DEFAULT_MODEL.to_string(), &empty), DEFAULT_MODEL);
+
+        // ── Anthropic transport (EXECUTOR_PROVIDER unset) ──
+        std::env::remove_var("EXECUTOR_PROVIDER");
+        // v0.4.20 lock: no --model + family-matching saved model → Configured.
+        assert_eq!(
+            resolve_startup_model(None, &cfg_anthropic_saved).unwrap(),
+            (
+                "claude-sonnet-4-6".to_string(),
+                ModelSource::Configured
+            )
+        );
+        // C1: explicit --model beats the saved model — including the alias
+        // and the FULL default id (a reproducibility contract).
+        assert_eq!(
+            resolve_startup_model(Some("opus".to_string()), &cfg_anthropic_saved).unwrap(),
+            (DEFAULT_MODEL.to_string(), ModelSource::CliExplicit)
+        );
+        assert_eq!(
+            resolve_startup_model(Some(DEFAULT_MODEL.to_string()), &cfg_anthropic_saved).unwrap(),
+            (DEFAULT_MODEL.to_string(), ModelSource::CliExplicit)
+        );
+        // C2: saved OpenAI-family model must NOT leak onto the Anthropic
+        // transport (shell EXECUTOR_PROVIDER=anthropic overrode a saved
+        // OpenAI config) → BuiltInDefault, not gpt-5.5.
+        assert_eq!(
+            resolve_startup_model(None, &cfg_openai).unwrap(),
+            (DEFAULT_MODEL.to_string(), ModelSource::BuiltInDefault)
+        );
+        // Nothing anywhere → BuiltInDefault.
+        assert_eq!(
+            resolve_startup_model(None, &empty).unwrap(),
+            (DEFAULT_MODEL.to_string(), ModelSource::BuiltInDefault)
+        );
+
+        // ── OpenAI transport ──
+        std::env::set_var("EXECUTOR_PROVIDER", "openai");
+        // v0.4.20 lock: saved openai config still applies its model.
+        assert_eq!(
+            resolve_startup_model(None, &cfg_openai).unwrap(),
+            ("gpt-5.5".to_string(), ModelSource::Configured)
+        );
+        // C2 reverse fail-fast: OpenAI transport + Anthropic-family/no saved
+        // model → error (never send the Claude default to an OpenAI endpoint).
+        assert!(resolve_startup_model(None, &cfg_anthropic_saved).is_err());
+        assert!(resolve_startup_model(None, &empty).is_err());
+        // Explicit --model bypasses the fail-fast (user owns the choice); on
+        // the OpenAI transport aliases pass through unresolved.
+        assert_eq!(
+            resolve_startup_model(Some("gpt-5.6-sol".to_string()), &empty).unwrap(),
+            ("gpt-5.6-sol".to_string(), ModelSource::CliExplicit)
+        );
+        std::env::remove_var("EXECUTOR_PROVIDER");
+    }
+
+    // v0.4.22 (C1): only non-explicit sources may silently fall back 4.8→4.7.
+    #[test]
+    fn model_source_gates_availability_fallback() {
+        assert!(ModelSource::Configured.allows_availability_fallback());
+        assert!(ModelSource::BuiltInDefault.allows_availability_fallback());
+        assert!(!ModelSource::CliExplicit.allows_availability_fallback());
+        assert!(!ModelSource::ReplExplicit.allows_availability_fallback());
+    }
+
+    // v0.4.22 (C2, gate round-2 BLOCKER lock): the wizard's config must become
+    // the active config for startup model resolution.
+    #[test]
+    fn wizard_config_becomes_active_config() {
+        use super::adopt_wizard_config;
+        let old = crate::config::ArisConfig {
+            executor_provider: Some("openai".to_string()),
+            executor_model: Some("stale-model".to_string()),
+            ..Default::default()
+        };
+        let wizard = crate::config::ArisConfig {
+            executor_model: Some("deepseek-v4-pro".to_string()),
+            ..Default::default()
+        };
+        // Wizard ran → its config wins (the round-2 blocker was resolving
+        // against the stale pre-wizard config).
+        assert_eq!(
+            adopt_wizard_config(old.clone(), Some(wizard.clone())).executor_model(),
+            Some("deepseek-v4-pro")
+        );
+        // No wizard → the loaded config stands.
+        assert_eq!(
+            adopt_wizard_config(old, None).executor_model(),
+            Some("stale-model")
+        );
+    }
+
+    // v0.4.22 (B6, gate round-2): the xhigh-floor predicate covers BOTH stale
+    // shapes — args missing entirely (the classic pre-v0.4.18 entry) and args
+    // pinning a different effort.
+    #[test]
+    fn codex_entry_xhigh_floor_predicate() {
+        use super::codex_entry_has_xhigh_floor;
+        // Real v0.4.18+ entry → has the floor.
+        assert!(codex_entry_has_xhigh_floor(&json!({
+            "command": "codex",
+            "args": ["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""]
+        })));
+        // Pre-v0.4.18 entry: NO args at all → lacks the floor (the first cut
+        // returned None here via `?` and never noted exactly this case).
+        assert!(!codex_entry_has_xhigh_floor(&json!({ "command": "codex" })));
+        // args present but a DIFFERENT effort pinned → lacks the xhigh floor
+        // (a bare contains("model_reasoning_effort") wrongly passed this).
+        assert!(!codex_entry_has_xhigh_floor(&json!({
+            "command": "codex",
+            "args": ["mcp-server", "-c", "model_reasoning_effort=\"medium\""]
+        })));
+        // args not an array → lacks the floor.
+        assert!(!codex_entry_has_xhigh_floor(&json!({
+            "command": "codex",
+            "args": "mcp-server"
+        })));
+    }
+
+    // v0.4.22 (Δ4-3, gate round-2): the /reviewer command's four states.
+    #[test]
+    fn reviewer_command_gate_four_states() {
+        use super::{reviewer_command_gate, ReviewerCmdGate};
+        // (1) Pure Codex, bare /reviewer → status display only.
+        assert_eq!(
+            reviewer_command_gate(Some("codex-mcp"), None, None),
+            ReviewerCmdGate::PureCodexStatus
+        );
+        // Blank fallback counts as none.
+        assert_eq!(
+            reviewer_command_gate(Some("codex-mcp"), Some("  "), None),
+            ReviewerCmdGate::PureCodexStatus
+        );
+        // (2) Pure Codex, /reviewer <model> → refuse with /setup guidance.
+        assert_eq!(
+            reviewer_command_gate(Some("codex-mcp"), None, Some("gpt-5.5")),
+            ReviewerCmdGate::PureCodexRefuseExplicit
+        );
+        // (3) Codex + known-provider fallback: cross-family explicit model is
+        // rejected; same-family proceeds; custom accepts any non-blank model.
+        assert_eq!(
+            reviewer_command_gate(Some("codex-mcp"), Some("gemini"), Some("gpt-5.5")),
+            ReviewerCmdGate::CrossFamilyReject
+        );
+        assert_eq!(
+            reviewer_command_gate(Some("codex-mcp"), Some("gemini"), Some("gemini-2.5-pro")),
+            ReviewerCmdGate::Allow
+        );
+        assert_eq!(
+            reviewer_command_gate(Some("codex-mcp"), Some("custom"), Some("my-proxy-model")),
+            ReviewerCmdGate::Allow
+        );
+        // Menu form with a fallback → proceeds (restricted menu).
+        assert_eq!(
+            reviewer_command_gate(Some("codex-mcp"), Some("openai"), None),
+            ReviewerCmdGate::Allow
+        );
+        // (4) Non-Codex primary → current behavior, no gating.
+        assert_eq!(
+            reviewer_command_gate(Some("openai"), None, Some("gemini-2.5-pro")),
+            ReviewerCmdGate::Allow
+        );
+        assert_eq!(reviewer_command_gate(None, None, None), ReviewerCmdGate::Allow);
+    }
+
+    // v0.4.22 (Δ4-5, gate round-2): the inline /setup guard runs BEFORE any
+    // env/runtime mutation; it must reject an OpenAI/custom config whose model
+    // is absent/blank and pass everything else. (The fn touches no env/runtime
+    // by construction — the caller sequences it ahead of force_apply_to_env.)
+    #[test]
+    fn inline_setup_guard_rejects_blank_openai_model() {
+        use super::inline_setup_guard;
+        let blank_openai = crate::config::ArisConfig {
+            executor_provider: Some("openai".to_string()),
+            executor_model: Some("   ".to_string()),
+            ..Default::default()
+        };
+        assert!(inline_setup_guard(&blank_openai).is_err());
+        let missing_custom = crate::config::ArisConfig {
+            executor_provider: Some("custom".to_string()),
+            ..Default::default()
+        };
+        assert!(inline_setup_guard(&missing_custom).is_err());
+        let ok_openai = crate::config::ArisConfig {
+            executor_provider: Some("openai".to_string()),
+            executor_model: Some("gpt-5.5".to_string()),
+            ..Default::default()
+        };
+        assert!(inline_setup_guard(&ok_openai).is_ok());
+        // Anthropic-family configs never need an explicit model.
+        let anthropic_blank = crate::config::ArisConfig::default();
+        assert!(inline_setup_guard(&anthropic_blank).is_ok());
+    }
+
+    // v0.4.22 (B5): three-state reviewer display — the HTTP fallback model is
+    // never presented as the Codex primary.
+    #[test]
+    fn reviewer_display_three_states() {
+        assert_eq!(
+            reviewer_display_for(Some("codex-mcp"), None, "gpt-5.5"),
+            "Codex MCP · gpt-5.6-sol preferred"
+        );
+        assert_eq!(
+            reviewer_display_for(Some("codex-mcp"), Some("gemini"), "gemini-2.5-pro"),
+            "Codex MCP · gpt-5.6-sol preferred (HTTP fallback: gemini · gemini-2.5-pro)"
+        );
+        // Blank fallback provider counts as none.
+        assert_eq!(
+            reviewer_display_for(Some("codex-mcp"), Some("  "), "gpt-5.5"),
+            "Codex MCP · gpt-5.6-sol preferred"
+        );
+        assert_eq!(reviewer_display_for(Some("openai"), None, "gpt-5.5"), "gpt-5.5");
+        assert_eq!(reviewer_display_for(None, None, "gpt-5.5"), "gpt-5.5");
+    }
+
+    // v0.4.22 (Δ4-3/Δ5-3): catalog-family check for `/reviewer <model>` under
+    // a Codex-primary + HTTP-fallback setup.
+    #[test]
+    fn reviewer_model_provider_catalog_check() {
+        // Known providers reject cross-family ids.
+        assert!(!reviewer_model_matches_provider("gemini", "gpt-5.5"));
+        assert!(reviewer_model_matches_provider("gemini", "gemini-2.5-pro"));
+        assert!(reviewer_model_matches_provider("openai", "gpt-5.6-sol"));
+        assert!(reviewer_model_matches_provider("openai", "o4-mini"));
+        assert!(!reviewer_model_matches_provider("openai", "gemini-2.5-pro"));
+        assert!(reviewer_model_matches_provider("glm", "GLM-5"));
+        assert!(reviewer_model_matches_provider("minimax", "MiniMax-M2.7"));
+        assert!(reviewer_model_matches_provider("kimi", "kimi-k2.5"));
+        // Custom has no catalog: any non-blank explicit model is accepted.
+        assert!(reviewer_model_matches_provider("custom", "my-proxy-model"));
+        assert!(!reviewer_model_matches_provider("custom", "   "));
+        // Unknown provider labels are permissive.
+        assert!(reviewer_model_matches_provider("someday", "anything"));
+    }
+
+    // v0.4.22 (B5): every banner center line is exactly 34 visible chars once
+    // ANSI escapes are stripped (the pixel sprites on either side assume it).
+    #[test]
+    fn banner_center_lines_are_34_visible_chars() {
+        for (i, line) in BANNER_CENTER.iter().enumerate() {
+            // Strip CSI sequences: ESC '[' ... final byte in @-~.
+            let mut visible = 0usize;
+            let mut chars = line.chars().peekable();
+            while let Some(c) = chars.next() {
+                if c == '\u{1b}' {
+                    if chars.peek() == Some(&'[') {
+                        chars.next();
+                        for esc in chars.by_ref() {
+                            if ('@'..='~').contains(&esc) {
+                                break;
+                            }
+                        }
+                    }
+                    continue;
+                }
+                visible += 1;
+            }
+            assert_eq!(visible, 34, "banner center line {i} is {visible} visible chars: {line:?}");
+        }
+    }
+
+    // v0.4.22 (B6/Δ4-6): deterministic codex version oracle, real output shape.
+    #[test]
+    fn codex_version_oracle_truth_table() {
+        // Supported: >= 0.144.1 stable (real "codex-cli X" shape + bare semver).
+        assert!(codex_version_support_note("codex-cli 0.144.1").is_none());
+        assert!(codex_version_support_note("0.144.1").is_none());
+        assert!(codex_version_support_note("codex-cli 0.145.0").is_none());
+        assert!(codex_version_support_note("codex-cli 1.0.0").is_none());
+        // Old stable → old-version note.
+        assert!(codex_version_support_note("codex-cli 0.144.0")
+            .is_some_and(|n| n.contains("< 0.144.1")));
+        // Prerelease → conservative note.
+        assert!(codex_version_support_note("codex-cli 0.144.1-beta.2")
+            .is_some_and(|n| n.contains("prerelease")));
+        // Malformed → unknown-version note (decided: note, not silent).
+        assert!(codex_version_support_note("weird output")
+            .is_some_and(|n| n.contains("unrecognized")));
+        assert!(codex_version_support_note("codex-cli 0.x")
+            .is_some_and(|n| n.contains("unrecognized")));
     }
 
     // v0.4.20 (#299): the spinner-finish choice keys off whether the turn
@@ -6672,7 +7474,7 @@ mod tests {
         assert_eq!(
             parse_args(&[]).expect("args should parse"),
             CliAction::Repl {
-                model: DEFAULT_MODEL.to_string(),
+                model: None,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
             }
@@ -6690,7 +7492,7 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Prompt {
                 prompt: "hello world".to_string(),
-                model: DEFAULT_MODEL.to_string(),
+                model: None,
                 output_format: CliOutputFormat::Text,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -6711,7 +7513,8 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Prompt {
                 prompt: "explain this".to_string(),
-                model: "claude-opus".to_string(),
+                // v0.4.22 (C1): parse_args preserves the RAW value.
+                model: Some("claude-opus".to_string()),
                 output_format: CliOutputFormat::Json,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -6731,8 +7534,11 @@ mod tests {
             parse_args(&args).expect("args should parse"),
             CliAction::Prompt {
                 prompt: "explain this".to_string(),
-                // v0.4.18: `--model opus` alias now resolves to Opus 4.8.
-                model: "claude-opus-4-8".to_string(),
+                // v0.4.22 (C1): the alias is NO LONGER resolved at parse time
+                // (the wizard can still change EXECUTOR_PROVIDER after this);
+                // resolve_startup_model resolves it exactly once — covered by
+                // resolve_startup_model_matrix.
+                model: Some("opus".to_string()),
                 output_format: CliOutputFormat::Text,
                 allowed_tools: None,
                 permission_mode: PermissionMode::DangerFullAccess,
@@ -6766,7 +7572,7 @@ mod tests {
         assert_eq!(
             parse_args(&args).expect("args should parse"),
             CliAction::Repl {
-                model: DEFAULT_MODEL.to_string(),
+                model: None,
                 allowed_tools: None,
                 permission_mode: PermissionMode::ReadOnly,
             }
@@ -6783,7 +7589,7 @@ mod tests {
         assert_eq!(
             parse_args(&args).expect("args should parse"),
             CliAction::Repl {
-                model: DEFAULT_MODEL.to_string(),
+                model: None,
                 allowed_tools: Some(
                     ["glob_search", "read_file", "write_file"]
                         .into_iter()
@@ -8359,6 +9165,69 @@ mod tests {
     // /setup; the fix rebuilds the system prompt unconditionally, so the
     // *content* this helper produces per state must stay correct.
 
+    /// Shared v0.4.22 (B1) contract locks for BOTH codex-mcp states: the
+    /// two-tier gpt-5.6-sol doctrine, the canonical capability-only fallback
+    /// chain, the legacy-shorthand translation, transport-safety params, the
+    /// codex-reply shape, and the Δ5-2 /reviewer scoping.
+    fn assert_codex_rules_contract(line: &str) {
+        assert!(
+            line.contains("gpt-5.6-sol"),
+            "must name the preferred reviewer gpt-5.6-sol, got: {line}"
+        );
+        assert!(
+            line.contains("skills pin the model and") && line.contains("exactly as the skill"),
+            "must pass through the skills' explicit model+effort pins, got: {line}"
+        );
+        assert!(
+            !line.contains("Do NOT pass a `model` parameter"),
+            "the v0.4.17 blanket no-model rule must be GONE (it contradicts the \
+             synced skills' pins), got: {line}"
+        );
+        // Canonical capability-only chain (reviewer-routing.md:20-29).
+        assert!(
+            line.contains("retry the SAME model at \"xhigh\"")
+                && line.contains("only to deep-tier calls"),
+            "effort downgrade must be same-model and deep-tier-only, got: {line}"
+        );
+        assert!(
+            line.contains("explicit gpt-5.5"),
+            "model-unknown fallback must be the EXPLICIT gpt-5.5 (never an \
+             ambient default), got: {line}"
+        );
+        assert!(
+            line.contains("NEVER auto-degrade on timeouts"),
+            "transport/limit errors must never degrade, got: {line}"
+        );
+        // Δ4-1 legacy shorthand translation.
+        assert!(
+            line.contains("legacy `reasoning: ultra` shorthand")
+                && line.contains("never send an unknown `reasoning` field"),
+            "must translate the legacy shorthand instead of forwarding it, got: {line}"
+        );
+        // Approval/sandbox on every FRESH call; reply inherits.
+        assert!(
+            line.contains("approval-policy: \"never\"")
+                && line.contains("explicit `sandbox`")
+                && line.contains("FRESH `mcp__codex__codex` call"),
+            "must pin approval-policy/sandbox on fresh calls, got: {line}"
+        );
+        assert!(
+            line.contains("ONLY the thread id and prompt"),
+            "codex-reply must carry only thread id + prompt, got: {line}"
+        );
+        // Gate round-2 BLOCKER: an explicit call-level model override must
+        // DISABLE the automatic chain (explicit choice = contract)...
+        assert!(
+            line.contains("chain is DISABLED for that call"),
+            "explicit call-level override must disable the auto chain, got: {line}"
+        );
+        // ...while Δ5-2 keeps /reviewer OUT of that definition.
+        assert!(
+            line.contains("controls the HTTP fallback exclusively"),
+            "must scope explicit-override to the call, not /reviewer, got: {line}"
+        );
+    }
+
     #[test]
     fn reviewer_nudge_codex_mcp_with_fallback_mentions_llmreview_fallback() {
         let out = reviewer_routing_nudge("codex-mcp", Some("openai"));
@@ -8370,10 +9239,20 @@ mod tests {
                 && line.contains("mcp__codex__codex"),
             "must instruct the model to use the Codex MCP channel, got: {line}"
         );
+        assert_codex_rules_contract(line);
+        // Δ5-1: fallback is PRE-DISPATCH-ONLY.
         assert!(
-            line.contains("fall back to the `LlmReview` tool")
-                && line.contains("openai"),
+            line.contains("BEFORE dispatch") && line.contains("never re-target"),
+            "HTTP fallback must be pre-dispatch-only, got: {line}"
+        );
+        assert!(
+            line.contains("`LlmReview` tool") && line.contains("openai"),
             "must name the configured HTTP fallback reviewer, got: {line}"
+        );
+        // Δ4-1: parameter stripping on the re-target.
+        assert!(
+            line.contains("never forward the skill's Codex"),
+            "must strip Codex params when re-targeting to LlmReview, got: {line}"
         );
         // Must NOT push the "use LlmReview instead" override.
         assert!(
@@ -8384,14 +9263,11 @@ mod tests {
 
     #[test]
     fn reviewer_nudge_codex_mcp_without_fallback_guides_mcp_no_model() {
-        // v0.4.17 push-gate (BUG B) DELIBERATE FLIP: previously this state was
-        // silent (emitted nothing). Real-machine testing showed the model would
-        // pass `model: gpt-5.2` to mcp__codex__codex and get rejected by the
-        // ChatGPT account. The no-fallback codex-mcp state now emits exactly one
-        // line that (a) directs the model to the Codex MCP channel and (b) tells
-        // it NOT to pass a `model` parameter (account default = gpt-5.5 + xhigh).
-        // An empty fallback string is still treated as "no fallback".
-        for fallback in [None, Some("")] {
+        // v0.4.17 flipped this state from silent to one guidance line;
+        // v0.4.22 (B1) replaced the blanket "never pass a model" rule with the
+        // two-tier gpt-5.6-sol doctrine + canonical capability chain. An
+        // empty/blank fallback string is still treated as "no fallback".
+        for fallback in [None, Some(""), Some("  ")] {
             let out = reviewer_routing_nudge("codex-mcp", fallback);
             assert_eq!(
                 out.len(),
@@ -8404,15 +9280,12 @@ mod tests {
                     && line.contains("mcp__codex__codex"),
                 "must direct the model to the Codex MCP channel, got: {line}"
             );
-            assert!(
-                line.contains("Do NOT pass a `model` parameter"),
-                "must tell the model not to pass a model parameter, got: {line}"
-            );
+            assert_codex_rules_contract(line);
             // Must not contradict the chosen reviewer with the LlmReview override,
             // and (no fallback configured) must not advertise an HTTP fallback.
             assert!(
                 !line.contains("use the `LlmReview` tool instead")
-                    && !line.contains("fall back to the `LlmReview` tool"),
+                    && !line.contains("HTTP fallback:"),
                 "no-fallback codex-mcp must not mention any LlmReview path, got: {line}"
             );
         }
@@ -8428,6 +9301,14 @@ mod tests {
                 out.len(),
                 1,
                 "provider {provider:?} should emit exactly one override line"
+            );
+            // v0.4.22 (Δ4-1): the override must also strip the skill's Codex
+            // params so a synced skill's `model: gpt-5.6-sol` can't ride into
+            // the HTTP reviewer.
+            assert!(
+                out[0].contains("never forward the skill's Codex"),
+                "provider {provider:?} must strip Codex params, got: {}",
+                out[0]
             );
             assert!(
                 out[0].contains("use the `LlmReview` tool instead"),
