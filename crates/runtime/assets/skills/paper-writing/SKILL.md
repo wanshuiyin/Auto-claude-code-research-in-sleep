@@ -1,8 +1,8 @@
 ---
 name: paper-writing
-description: "Workflow 3: Full paper writing pipeline. Orchestrates paper-plan → paper-figure → figure-spec/paper-illustration/mermaid-diagram → paper-write → paper-compile → auto-paper-improvement-loop to go from a narrative report to a polished PDF. At `— effort: max | beast` (or explicit `— assurance: submission`), Phase 6 gates the Final Report on `verify_paper_audits.sh` (resolved per integration-contract §2); the PDF is labelled `submission-ready` only when the external verifier is green. Use when user says \"写论文全流程\", \"write paper pipeline\", \"从报告到PDF\", \"paper writing\", or wants the complete paper generation workflow."
+description: "Workflow 3: Full paper writing pipeline that goes from a narrative report to a polished, submission-ready PDF. Use when user says \"写论文全流程\", \"write paper pipeline\", \"从报告到PDF\", \"paper writing\", or wants the complete paper generation workflow."
 argument-hint: "[narrative-report-path-or-topic] [— style-ref: <source>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
 # Workflow 3: Paper Writing Pipeline
@@ -26,7 +26,7 @@ In this hybrid pack, the pipeline itself is unchanged, but `paper-plan` and `pap
 
 - **VENUE = `ICLR`** — Target venue. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_JOURNAL` (IEEE Transactions / Letters), `IEEE_CONF` (IEEE conferences). Affects style file, page limit, citation format.
 - **MAX_IMPROVEMENT_ROUNDS = 2** — Number of review→fix→recompile rounds in the improvement loop.
-- **REVIEWER_MODEL = `gpt-5.5`** — Model used via Codex MCP for plan review, figure review, writing review, and improvement loop.
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP for plan review, figure review, writing review, and improvement loop.
 - **AUTO_PROCEED = true** — Auto-continue between phases. Set `false` to pause and wait for user approval after each phase.
 - **HUMAN_CHECKPOINT = false** — When `true`, the improvement loop (Phase 5) pauses after each round's review to let you see the score and provide custom modification instructions. When `false` (default), the loop runs fully autonomously. Passed through to `/auto-paper-improvement-loop`.
 - **ILLUSTRATION = `figurespec`** — Architecture/illustration generator for Phase 2b: `figurespec` (default, deterministic JSON→SVG via `/figure-spec`, best for architecture/workflow/topology), `gemini` (AI-generated via `/paper-illustration`, best for qualitative method illustrations; needs `GEMINI_API_KEY`), `codex-image2` (AI-generated via `/paper-illustration-image2` through the local Codex native image bridge — no external API key, uses your ChatGPT Plus/Pro quota; experimental), `mermaid` (Mermaid syntax via `/mermaid-diagram`, free, best for flowcharts), or `false` (skip Phase 2b, manual only).
@@ -40,7 +40,7 @@ This pipeline accepts one of:
 
 1. **`NARRATIVE_REPORT.md`** (best) — structured research narrative with claims, experiments, results, figures
 2. **Research direction + experiment results** — the skill will help draft the narrative first
-3. **Existing `PAPER_PLAN.md`** — skip Phase 1, start from Phase 2
+3. **Existing `PAPER_PLAN.md`** — skip Phase 1, start from **Phase 1.5** (the contract negotiation still runs; only resuming a genuine pre-1.5 legacy run may skip it, and then Phase 6.0's row 0 records "no contract")
 
 The more detailed the input (especially figure descriptions and quantitative results), the better the output.
 
@@ -153,7 +153,7 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 - Design section structure (5-8 sections depending on paper type)
 - Plan figure/table placement with data sources
 - Scaffold citation structure
-- GPT-5.4 reviews the plan for completeness
+- GPT-5.6-Sol reviews the plan for completeness
 
 **Output:** `PAPER_PLAN.md` with section plan, figure plan, citation scaffolding.
 
@@ -169,8 +169,78 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 Shall I proceed with figure generation?
 ```
 
-- **User approves** (or AUTO_PROCEED=true) → proceed to Phase 2.
+- **User approves** (or AUTO_PROCEED=true) → proceed to Phase 1.5.
 - **User requests changes** → adjust plan and re-present.
+
+### Phase 1.5: Negotiated Acceptance Contract (before any writing)
+
+The plan says what the paper will contain; the CONTRACT says what "done" means
+— a checklist of testable assertions, negotiated ADVERSARIALLY before the first
+section is written, and graded at the end. (The plan is the boundary; the
+contract is what gets graded.)
+
+1. **Executor proposes.** From `PAPER_PLAN.md` + `NARRATIVE_REPORT.md`, draft
+   `PAPER_ACCEPTANCE_CONTRACT.md`: **10–20 testable assertions** covering —
+   every headline claim has a named evidence source (file/table); every
+   number in the abstract traces to a results file; scope qualifiers the title
+   /abstract must carry; figures that must exist and what each must show;
+   section-level completeness (e.g. "limitations names ≥2 real limitations,
+   not hedges"); venue constraints (page limit, anonymization). Each assertion
+   must be CHECKABLE by reading the final PDF + results files — no vibes
+   ("writing is clear" is not an assertion; "every acronym is defined at first
+   use" is). Fewer than ~10 assertions and the gate rubber-stamps; beyond ~20
+   the negotiation stalls on trivia.
+
+2. **Reviewer pushes back** (fresh thread — the negotiation is adversarial):
+
+   ```
+   mcp__codex__codex:
+     model: gpt-5.6-sol
+     config: {"model_reasoning_effort": "xhigh"}
+     prompt: |
+       You are negotiating the acceptance contract for a paper BEFORE it is
+       written. Read these files directly:
+       - Plan: <abs path>/PAPER_PLAN.md
+       - Proposed contract: <abs path>/PAPER_ACCEPTANCE_CONTRACT.md
+       - Evidence inventory: <abs path>/NARRATIVE_REPORT.md (+ results/ paths)
+
+       Push back on the contract, not the plan: (a) assertions that are
+       untestable or vibes — demand a checkable rewrite; (b) missing
+       assertions — claims in the plan that no assertion covers, numbers with
+       no traceability assertion, foreseeable overclaim risks with no scope
+       assertion; (c) assertions the evidence inventory cannot possibly
+       satisfy — flag now, not after writing. End with exactly one line:
+       CONTRACT_ACCEPTED: yes    or    CONTRACT_ACCEPTED: no
+       followed by your numbered revision demands if no.
+   ```
+
+   A reply with a missing or malformed `CONTRACT_ACCEPTED:` line is treated as
+   `no`; request a corrected verdict via `codex-reply` — that correction
+   exchange does not consume a negotiation round.
+
+3. **Iterate.** On `no`, revise the contract per the demands and resubmit via
+   `mcp__codex__codex-reply` (same thread — the negotiation is one
+   conversation). **Max 3 rounds.**
+
+4. **Fallback — never stall the pipeline.** If round 3 still ends in `no`:
+   record the unresolved demands verbatim in a "## Disputed" section of the
+   contract and mark it `status: contested`. A contested contract is precisely
+   the "insert a human when the CONTRACT is wrong" trigger, so it OVERRIDES
+   `AUTO_PROCEED` for this one decision: pause and present the dispute for a
+   human tie-break. If no human responds (unattended/overnight run), proceed —
+   but a contested contract caps the outcome: Phase 6.0 gates on the UNDISPUTED
+   assertions and the Final Report must set `Submission-ready: no` with the
+   dispute reproduced verbatim; the tie-break happens when the human returns.
+
+**Output:** `PAPER_ACCEPTANCE_CONTRACT.md` (`status: accepted | contested`,
+round count, reviewer thread id). The contract is FROZEN once accepted —
+Phases 2–5 implement against it; they do not edit it. If writing reveals an
+assertion is genuinely wrong (not merely inconvenient), that is a contract
+question: surface it at a checkpoint, don't silently rewrite.
+
+**Boundary:** `/paper-claim-audit` (Phases 4.7, 5.5) stays zero-context — the
+contract is a WRITER-side gate and is never passed to the claim auditor (its
+independence is the point; two different nets).
 
 ### Phase 2: Figure Generation
 
@@ -187,7 +257,7 @@ Invoke `/paper-figure` to generate data-driven plots and tables:
 - Generate matplotlib/seaborn plots from JSON/CSV data
 - Generate LaTeX comparison tables
 - Create `figures/latex_includes.tex` for easy insertion
-- GPT-5.4 reviews figure quality and captions
+- GPT-5.6-Sol reviews figure quality and captions
 
 **Output:** `figures/` directory with PDFs, generation scripts, and LaTeX snippets.
 
@@ -279,7 +349,7 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 - Clean stale files from previous section structures
 - Automated bib cleaning (remove uncited entries)
 - De-AI polish (remove "delve", "pivotal", "landscape"...)
-- GPT-5.4 reviews each section for quality
+- GPT-5.6-Sol reviews each section for quality
 
 **Output:** `paper/` directory with `main.tex`, `sections/*.tex`, `references.bib`, `math_commands.tex`.
 
@@ -332,7 +402,7 @@ Shall I proceed with the improvement loop?
 ```
 if paper contains \begin{theorem} or \begin{lemma} or \begin{proof}:
     Run /proof-checker "paper/"
-    This invokes GPT-5.4 xhigh to:
+    This invokes GPT-5.6-Sol xhigh to:
     - Verify all proof steps (hypothesis discharge, interchange justification, etc.)
     - Check for logic gaps, quantifier errors, missing domination conditions
     - Attempt counterexamples on key lemmas
@@ -377,9 +447,9 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 
 **What this does (2 rounds):**
 
-**Round 1:** GPT-5.4 xhigh reviews the full paper → identifies CRITICAL/MAJOR/MINOR issues → Claude Code implements fixes → recompile → save `main_round1.pdf`
+**Round 1:** GPT-5.6-Sol xhigh reviews the full paper → identifies CRITICAL/MAJOR/MINOR issues → Claude Code implements fixes → recompile → save `main_round1.pdf`
 
-**Round 2:** GPT-5.4 xhigh re-reviews with conversation context → identifies remaining issues → Claude Code implements fixes → recompile → save `main_round2.pdf`
+**Round 2:** GPT-5.6-Sol xhigh re-reviews with conversation context → identifies remaining issues → Claude Code implements fixes → recompile → save `main_round2.pdf`
 
 **Typical improvements:**
 - Fix assumption-model mismatches
@@ -458,7 +528,7 @@ After the final paper-claim-audit passes, run `/citation-audit` to verify every 
 ```
 if paper/references.bib (or paper.bib) exists and contains entries cited from sec/*.tex:
     Run /citation-audit "paper/"
-    Fresh cross-family reviewer (gpt-5.5 via Codex MCP) with web/DBLP/arXiv lookup
+    Fresh cross-family reviewer (gpt-5.6-sol via Codex MCP) with web/DBLP/arXiv lookup
     verifies each entry:
       (i)   EXISTENCE — paper resolves at claimed arXiv ID / DOI / venue
       (ii)  METADATA — author names, year, venue, title match canonical sources
@@ -531,12 +601,21 @@ skipping audits while claiming to have run them.
 
 ```
 📋 Submission audits required before Final Report:
+   [ ] 0. PAPER_ACCEPTANCE_CONTRACT.md (Phase 1.5): re-read every assertion
+          against the final PDF + results files; each → satisfied / violated /
+          disputed-at-negotiation. ANY violated undisputed assertion blocks the
+          Final Report until fixed or the human explicitly waives it (waivers
+          recorded in the contract file). Contract absent (pre-1.5 run) → mark
+          "no contract" and continue.
    [ ] 1. /proof-checker        → paper/PROOF_AUDIT.json
    [ ] 2. /paper-claim-audit    → paper/PAPER_CLAIM_AUDIT.json
    [ ] 3. /citation-audit       → paper/CITATION_AUDIT.json
    [ ] 4. Resolve $AUDIT_VERIFIER per integration-contract.md §2 (Policy A),
           then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
-   [ ] 5. Block Final Report iff verifier exit code != 0
+   [ ] 5. Block Final Report iff verifier exit code != 0 OR row 0 found a
+          violated undisputed assertion. (TWO separate gates: row 0 is graded
+          by instruction against the contract; the verifier checks audit JSONs
+          only — verify_paper_audits.sh does NOT read the contract.)
 ```
 
 > The resolver in "Running the verifier" below tries
@@ -596,7 +675,12 @@ bash "$AUDIT_VERIFIER" paper/ --assurance submission
 ```
 
 - **Exit 0** — All mandatory audits present, JSON schema-valid, hashes fresh,
-  no blocking verdicts. Proceed to the Final Report below.
+  no blocking verdicts. **Before writing the Final Report, read
+  `overall_assurance` from `paper/.aris/audit-verifier-report.json`** — exit 0
+  covers BOTH `accepted` (cross-family/independent review) and `provisional`
+  (same-family or legacy review that may proceed but must not claim
+  independent acceptance). The Final Report's Submission-ready line comes from
+  that field, never from the exit code alone.
 - **Exit 1** — Surface `paper/.aris/audit-verifier-report.json` to the user
   verbatim, **refuse to generate the Final Report**, and list the specific
   remediation for each failing row:
@@ -639,7 +723,7 @@ or directly if `assurance=draft`)
 **Input**: [NARRATIVE_REPORT.md or topic]
 **Venue**: [ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM/IEEE_JOURNAL/IEEE_CONF]
 **Assurance**: [draft | submission]
-**Submission-ready**: [yes | no]   <!-- yes iff assurance=submission AND verifier exit 0 -->
+**Submission-ready**: [yes | provisional | no]   <!-- yes iff assurance=submission AND verifier exit 0 AND overall_assurance=accepted; provisional iff exit 0 with overall_assurance=provisional (same-family/legacy review — do NOT present as independently accepted); no otherwise -->
 **Date**: [today]
 
 ## Pipeline Summary
@@ -648,6 +732,7 @@ or directly if `assurance=draft`)
 |-------|--------|--------|
 | 0. Assurance Setup | ✅ | paper/.aris/assurance.txt = [draft\|submission] |
 | 1. Paper Plan | ✅ | PAPER_PLAN.md |
+| 1.5 Acceptance Contract | [accepted\|contested\|no contract] ([N] rounds) | PAPER_ACCEPTANCE_CONTRACT.md |
 | 2. Figures | ✅ | figures/ ([N] auto + [M] manual) |
 | 3. LaTeX Writing | ✅ | paper/sections/*.tex ([N] sections, [M] citations) |
 | 4. Compilation | ✅ | paper/main.pdf ([X] pages) |

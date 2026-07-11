@@ -1,0 +1,9 @@
+{
+  "name": "neurips",
+  "accent": {"base": "#3A5A7A", "deep": "#26405A", "light": "#EDF0F3", "soft": "#DEE3E8"},
+  "gold": {"base": "#C9A24A", "soft": "#FFF7E0"},
+  "neutrals": {"text_primary": "#1A1A1A", "text_secondary": "#555555", "text_muted": "#888888",
+               "bg_page": "#F2F3F5", "bg_card": "#FFFFFF", "bg_card_tint": "#FAFAFB",
+               "border_soft": "#D8D8D8"},
+  "hue_centers": {"accent": 210, "gold": 43}
+}

@@ -1,11 +1,19 @@
 ---
 name: proof-checker
-description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (Codex GPT-5.4 xhigh), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
+description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (external reviewer backend, ultra reasoning), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
 argument-hint: "[path-to-tex-file or proof-description] [--deep-fix] [--restatement-check]"
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges proof validity across rounds, threading the
+> reviewer's memory from Phase 1 → Phase 3 via `codex-reply` so the reviewer can
+> check whether a fix actually closed the gap it flagged. An external timer
+> re-enters from the top each tick, starting a fresh thread and losing that
+> memory. Schedule the *external wait that precedes it*, not the verdict. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Systematically verify a mathematical proof via cross-model adversarial review, fix identified gaps, re-review until convergence, and generate a detailed audit report with proof-obligation accounting.
 
@@ -14,12 +22,36 @@ Systematically verify a mathematical proof via cross-model adversarial review, f
 ## Constants
 
 - MAX_REVIEW_ROUNDS = 3
-- REVIEWER_MODEL = `gpt-5.5` via Codex MCP, reasoning effort always `xhigh`
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for GPT-5.4 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier; capability fallback `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh` per `shared-references/reviewer-routing.md`, capability errors only — never below `xhigh`). Manual backend uses whatever model the user chooses, **but it must be a non-Claude model** — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
+- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+
+## Reviewer Calling Convention
+
+When calling the reviewer, branch on REVIEWER_BACKEND:
+
+**If REVIEWER_BACKEND = `codex`:**
+  Use `mcp__codex__codex` for new review threads
+  (`model: gpt-5.6-sol`, `config: {"model_reasoning_effort": "ultra"}`).
+  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+
+**If REVIEWER_BACKEND = `manual`:**
+  Use `mcp__manual_review__review` for new review threads with:
+    prompt: [exact same prompt that would go to Codex]
+    config: {"model_reasoning_effort": "xhigh"}
+  Save the returned `threadId`.
+  Use `mcp__manual_review__review_reply` for follow-up rounds with:
+    threadId: [saved manual-review threadId]
+    prompt: [follow-up prompt]
+    config: {"model_reasoning_effort": "xhigh"}
+
+Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
+Review tracing applies equally to both backends.
+
 - AUDIT_DOC: `PROOF_AUDIT.md` at the paper directory root, alongside `main.tex` (cumulative log; when invoked via `/paper-writing`, this is `paper/PROOF_AUDIT.md`)
 - REPORT_TEX: `proof_audit_report.tex` (formal before/after PDF)
 - STATE_FILE: `PROOF_CHECK_STATE.json` (for recovery)
 - SKELETON_DOC: `PROOF_SKELETON.md` (micro-claim inventory)
+- **RENDER_HTML = true** — When `true` (default), auto-render `PROOF_AUDIT.md` to HTML at workflow end via `/render-html`. Uses **full Codex review gate** (audit-class artifact — math-heavy content; render-fidelity check protects against MathJax breakage and matches the skill's cross-model audit invariant). Set `false` to skip, or pass `— render html: false`.
 
 ### Acceptance Gate (objective, replaces subjective scoring)
 
@@ -131,13 +163,55 @@ When the proof invokes any of the following, require explicit verification of AL
 
 ### Phase 0.5: Proof-Obligation Ledger
 
+> **Fan-out (Tier-aware) — build the ledger in parallel; never judge in
+> parallel.** For a large multi-theorem paper, ledger *construction* is breadth
+> over independent sections. **Tier 1** (Workflow): spawn one Claude subagent
+> per section/theorem to extract that unit's symbols, assumptions, micro-claims,
+> and local quantified statements, each returning a structured ledger fragment.
+> **Tier 2**: the same subagents via the Agent tool. **Tier 3**: walk the
+> sections sequentially. This follows
+> [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
+>
+> Two hard rules:
+> 1. **The shards EXTRACT, they do not ADJUDICATE.** Building the ledger
+>    (inventorying obligations, typing symbols, restating with explicit
+>    quantifiers) is structural extraction. Whether a proof step is *valid* —
+>    whether an obligation is actually discharged — is a Type-B correctness
+>    verdict reserved for the cross-model jury in Phase 1 / Phase 3 (codex or
+>    manual, `ultra`). A Claude shard MUST NOT mark a micro-claim "proved" or
+>    "sound"; it only records the obligation and where the paper claims to
+>    discharge it. See [`acceptance-gate.md`](../shared-references/acceptance-gate.md)
+>    — the loop may self-verify *that the ledger is complete*, never *that the
+>    proofs are correct*.
+>    - **This governs the ledger spec wording below.** Where the artifacts say
+>      "WHERE each is verified", "or mark UNVERIFIED", or "where conditions are
+>      proven", a shard records a **location pointer** (`file:line` the paper
+>      claims discharge) — never its own judgment that the discharge is
+>      mathematically valid. A shard's `UNVERIFIED` means *"the paper cites no
+>      discharge location"*, NOT *"the shard checked the math and it fails"*.
+>      Soundness is the jury's verdict, not the shard's.
+>
+> **Shard output** (extraction schema, per
+> [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md)): each shard
+> returns `{shard_id: "<section/theorem id>", entries: [...]}` — the typed
+> ledger items (symbols, assumptions, micro-claims, canonical statements,
+> limit-order facts) for that unit, each carrying its canonical id (e.g.
+> `MC-17`, the symbol name) as `dedup_key`. Never prose-only; never a validity
+> verdict field.
+> 2. **Global artifacts are a barrier, computed on the merged ledger, not
+>    per-shard.** The Dependency DAG and its cycle detection (incl. semantic
+>    circularity), and cross-section symbol-type consistency, require the whole
+>    paper in view. Merge all shard fragments first, then compute these on the
+>    union — a per-shard DAG would miss exactly the cross-section cycles this
+>    phase exists to catch.
+
 Build formal accounting artifacts. Save to `PROOF_SKELETON.md`:
 
 #### 1. Dependency DAG
 Nodes = Definitions / Assumptions / Lemmas / Theorems. Edges = "uses". **Detect cycles** (including semantic circularity where Lemma A uses a corollary that quietly depends on A).
 
 #### 2. Assumption Ledger
-For each theorem/lemma, list every hypothesis with WHERE each is verified (or mark "UNVERIFIED"). Track **usage-minimal assumption sets** — which assumptions were actually used vs merely stated.
+For each theorem/lemma, list every hypothesis with WHERE each is verified — i.e. the **location pointer** the paper claims discharges it (`file:line`), not a judgment that the discharge is valid; mark "UNVERIFIED" when the paper cites no discharge location (not when you believe the math fails — that is the jury's call). Track **usage-minimal assumption sets** — which assumptions were actually used vs merely stated.
 
 #### 3. Typed Symbol Table
 Each symbol must have a **type signature**:
@@ -163,9 +237,9 @@ Every nontrivial step becomes a numbered micro-claim in **sequent form**:
 MC-17: Context: [Lemma 3.1, κ < κ_0, Z_κ has bounded moments up to order 2m+2]
        ⊢ Goal: P̂_0 is positive definite
        Rule: monomials linearly independent on support of continuous distribution
-       Side-conditions: positive density near origin ✓ (by GMM weak convergence)
+       Side-conditions: positive density near origin — claimed discharge: §B.2 (paper argues via GMM weak convergence; validity is the jury's call, not the shard's)
 ```
-Each micro-claim has: justification rule name + required conditions + where conditions are proven.
+Each micro-claim has: justification rule name + required conditions + where conditions are proven (a location pointer to where the paper claims to discharge them, not a validity judgment).
 
 #### 6. Limit-Order Map
 Track every asymptotic statement's **limit order and uniformity scope**:
@@ -175,14 +249,15 @@ h_act = Θ(κ^α)  [as κ→0, uniform in π on compact subsets of Π_K, for fix
 ```
 Flag any statement where limit order is ambiguous or uniformity is unclear.
 
-### Phase 1: First Review (Codex GPT-5.4 xhigh)
+### Phase 1: First Review (reviewer backend, ultra reasoning)
 
-Submit the **complete proof content** with the following **mandatory reviewer checklist** in the prompt:
+Submit the **complete proof content** with the checklist below, using the selected backend.
+
+For `codex`, call `mcp__codex__codex`. For `manual`, call `mcp__manual_review__review`. Always pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` (deep-audit tier).
+
+Use this exact prompt for both backends:
 
 ```
-mcp__codex__codex:
-  config: {"model_reasoning_effort": "xhigh"}
-  prompt: |
     You are performing a rigorous mathematical proof review. For EVERY theorem,
     lemma, and proposition, check ALL of the following:
 
@@ -347,9 +422,9 @@ Log this choice — it is a scope-changing decision when it alters theorem state
 pdflatex -interaction=nonstopmode <file>.tex 2>&1 | grep -E "Error|Warning|undefined"
 ```
 
-### Phase 3: Re-Review (Codex GPT-5.4 xhigh)
+### Phase 3: Re-Review (reviewer backend, ultra reasoning)
 
-Use `codex-reply` with saved threadId. Include fix summaries. Request the same mandatory checklist.
+Continue with the selected backend. For `codex`, use `mcp__codex__codex-reply` with the saved threadId. For `manual`, use `mcp__manual_review__review_reply` with the saved threadId. Include fix summaries. Request the same mandatory checklist.
 
 Check acceptance gate. If not met, repeat Phases 2-3 (up to MAX_REVIEW_ROUNDS).
 
@@ -365,11 +440,18 @@ After all fixes, verify the proof as a whole:
 - **No silent assumption strengthening**: Any fix that strengthened assumptions has propagated to the main theorem statement.
 
 #### Independent second review for FATAL/CRITICAL fixes
-For any fix that resolved a FATAL or CRITICAL issue, submit the **fixed section alone** (without showing the previous critique) to a **fresh Codex thread**:
+For any fix that resolved a FATAL or CRITICAL issue, submit the **fixed section alone** (without showing the previous critique) to a **fresh reviewer thread** using the selected backend. Do NOT use a reply tool — this step must be blind.
+
+*For codex:* start a fresh `mcp__codex__codex` thread.
+*For manual:* start a fresh `mcp__manual_review__review` thread.
+
+The blind review prompt:
 
 ```
+[Codex:]
 mcp__codex__codex:
-  config: {"model_reasoning_effort": "xhigh"}
+  model: gpt-5.6-sol
+  config: {"model_reasoning_effort": "ultra"}
   prompt: |
     Blind review of the following proof section. You have NOT seen any prior
     review or discussion. Check every step for correctness, hidden assumptions,
@@ -473,6 +555,69 @@ Write `PROOF_CHECK_STATE.json`:
 }
 ```
 
+### Phase 5.5: Research Wiki Claim Ledger (additive; only if a wiki is active)
+
+If — and only if — a `research-wiki/` exists, persist each top-level
+theorem/headline as a **claim node** so the wiki's PROVE/JUDGE ledger records what
+was proven and with what honesty. This is the **birth point** for wiki claim nodes
+(`claims/<slug>.md`). It is a **detect-only record, never a verdict**: it never
+changes the audit's `verdict`/`reason_code`, never blocks, and is skipped entirely
+when `verdict == NOT_APPLICABLE` (no theorems) or no wiki is found.
+
+> The claim's `status` is the **PROOF axis only** (`verified` / `sound-modulo-imports`
+> / `refuted` / `unproven` / `drafted` / `retracted`). Empirical experiment support is
+> a **separate axis** carried by `supports` / `invalidates` *edges* from
+> `/result-to-claim` — those words are NEVER written into this `status` field (the
+> `research_wiki.py` validator rejects them).
+
+Resolve the helper via the **canonical resolver** (integration-contract §2). Check
+`NOT_APPLICABLE` first (in cwd, where the audit ran), then run from the project root
+(the wiki sits at root; a paper audit may run from a `paper/` subdir). Every guard
+warn-and-skips — the audit is already complete and is never affected:
+
+```bash
+grep -q '"verdict"[[:space:]]*:[[:space:]]*"NOT_APPLICABLE"' PROOF_AUDIT.json 2>/dev/null \
+  && { echo "verdict NOT_APPLICABLE (no theorems); skipping claim ledger" >&2; exit 0; }
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 0
+[ -d research-wiki ] || { echo "no research-wiki/ at project root; skipping claim ledger (audit complete)" >&2; exit 0; }
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+WIKI_SCRIPT=".aris/tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
+[ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+[ -f "$WIKI_SCRIPT" ] || { echo "WARN: research_wiki.py not resolved; skipping claim ledger (audit unaffected)" >&2; exit 0; }
+```
+
+For each top-level theorem/headline in `PROOF_SKELETON.md` (the main theorem + the
+key lemmas the headline depends on — NOT every micro-claim), map the audit outcome
+to an **honest** claim status:
+
+| Audit outcome (`PROOF_AUDIT.json` verdict + Phase 1.5 counterexamples) | `--status` |
+|---|---|
+| `verdict=PASS` / `all_proofs_complete`, no flagged imports | `verified` |
+| proof closes but rests on a flagged `[unverified-axiom]` / imported result | `sound-modulo-imports` |
+| counterexample found (Phase 1.5) **or** reviewer judged the statement false | `refuted` |
+| open gap (unresolved FATAL/CRITICAL / UNJUSTIFIED, no counterexample) | `unproven` |
+
+Never invent a status: a plain proof gap is `unproven` — never `refuted` (which
+asserts falsity) and never `verified`/`drafted`. Then record (idempotent):
+
+```bash
+python3 "$WIKI_SCRIPT" add_claim research-wiki/ \
+  --slug "<stable-theorem-id, e.g. thm-main-ub>" --name "<theorem headline>" \
+  --status "<mapped status>" --provenance "<trace_path from PROOF_AUDIT.json>" \
+  --statement "<canonical theorem statement>" \
+  --scope "<what it does NOT say; any flagged imports>" \
+  --evidence "<PROOF_AUDIT.json verdict + counterexample / obligation pointers>" \
+  --update-on-exist \
+  || echo "WARN: add_claim failed for <slug> (audit unaffected; fix wiki/status and re-run)" >&2
+```
+
+`--update-on-exist` lets a re-audit refresh a claim's status (an `unproven` claim
+becomes `verified` once the gap closes). `--provenance` is the honesty receipt (the
+`trace_path`); never omit it.
+
 ## Deep-Fix Mode (opt-in)
 
 **Default**: disabled. The Phase 1 reviewer emits issues with `minimal_fix` (a 1-2 sentence pointer); existing callers see no change.
@@ -503,7 +648,7 @@ A deep-fix-only failure must never contaminate the default proof-check output. A
 
 Verifier gates MUST treat `unavailable` identically to the field being absent: not blocking. Do **not** add a `UNCLEAR_DEEP_FIX` (or any deep-fix-only) entry into `details.issues`, since `details.issues` is the default schema's issue list and adding deep-fix-specific failures to it would change default behavior for callers without the flag.
 
-If the augmented Phase 1 call fails so badly that the normal proof review cannot be recovered (e.g., the reviewer thread itself errored), retry once with the unaugmented prompt; if that also fails, fall through to the existing reviewer-failure path that maps to the top-level `ERROR` verdict.
+If the augmented Phase 1 call fails so badly that the normal proof review cannot be recovered (e.g., the reviewer thread itself errored), retry once with the unaugmented prompt **only when the error proves the call never executed** (schema/validation or explicit capability error per the fallback chain in `reviewer-routing.md`); on timeout, rate-limit, transport, or server errors do NOT blind-retry (the review may have run — double-running double-bills), fall through directly to the existing reviewer-failure path that maps to the top-level `ERROR` verdict.
 
 ## Key Rules
 
@@ -518,10 +663,10 @@ If the augmented Phase 1 call fails so badly that the normal proof review cannot
 - **No silent assumption strengthening**: Any fix that adds conditions must propagate to the theorem statement.
 
 ### Cross-model protocol
-- **Claude analyzes, Codex reviews**: Claude reads proof, formulates questions, implements fixes. Codex provides adversarial review.
-- **Codex reasoning always xhigh**: Never downgrade.
+- **Executor analyzes, reviewer critiques**: Claude reads proof, formulates questions, implements fixes. The external reviewer provides adversarial review.
+- **Reviewer reasoning always ultra** (deep-audit tier): never below `xhigh` — only the capability fallback chain in `reviewer-routing.md` may step down, and only on explicit capability errors.
 - **Send full content**: Don't summarize — send actual math for line-by-line checking.
-- **Preserve threadId within a single run**: Use `codex-reply` for Phase 3 follow-up rounds within the same top-level `/proof-checker` invocation, so the reviewer keeps prior-issue context when judging whether a fix closed the gap. Across separate top-level invocations, always start a fresh thread (see "Thread independence" below).
+- **Preserve threadId within a single run**: Use the appropriate reply tool (`mcp__codex__codex-reply` or `mcp__manual_review__review_reply`) for Phase 3 follow-up rounds within the same top-level `/proof-checker` invocation, so the reviewer keeps prior-issue context when judging whether a fix closed the gap. Across separate top-level invocations, always start a fresh thread (see "Thread independence" below).
 
 ### Fix quality
 - **Minimal fixes**: Fix exactly what's broken, nothing more.
@@ -550,6 +695,7 @@ If the augmented Phase 1 call fails so badly that the normal proof review cannot
 | `PROOF_AUDIT.json` | Machine-readable submission verdict (see below) | Always emitted |
 | `proof_audit_report.tex/.pdf` | Formal before/after report | Phase 4 |
 | `PROOF_CHECK_STATE.json` | State for recovery | Phase 5 |
+| `PROOF_AUDIT.html` (+ `.review.json` sidecar) | Single-file HTML view of `PROOF_AUDIT.md` auto-rendered via `/render-html "PROOF_AUDIT.md" --json "PROOF_AUDIT.json"`. **Non-blocking** — if `/render-html` fails the audit still counts as complete; `PROOF_AUDIT.{md,json}` are the canonical outputs. | Workflow end (when `RENDER_HTML = true`, default) |
 
 When `--restatement-check` is set, `PROOF_AUDIT.json` additionally carries `details.restatement_drift` and `details.restatement_check_status`; both fields are omitted when the flag is unset. See "Submission Artifact Emission" below.
 
@@ -578,8 +724,8 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "gpt-5.5",
-  "reviewer_reasoning": "xhigh",
+  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "theorems_audited": <int>,
@@ -690,7 +836,7 @@ must carry an explicit justification in `summary` + `details.issues`.
 
 ### Thread independence
 
-Every **top-level** `/proof-checker` invocation starts a fresh `mcp__codex__codex` thread; do not reuse a saved threadId across separate invocations of this skill. Within a single top-level invocation, `codex-reply` is the correct primitive to thread the Phase 3 follow-up rounds — the reviewer needs prior-issue context to judge whether a fix actually closed the gap, and the Phase 1→3 flow above explicitly relies on this. The Phase 3.5 "Independent second review for FATAL/CRITICAL fixes" sub-step is the deliberate exception inside a single run: it must spawn a fresh thread so the blind reviewer has no exposure to the original critique.
+Every **top-level** `/proof-checker` invocation starts a fresh reviewer thread. For codex this is `mcp__codex__codex`; for manual this is `mcp__manual_review__review`. Do not reuse a saved threadId across separate invocations of this skill. Within a single top-level invocation, the appropriate reply tool (`mcp__codex__codex-reply` or `mcp__manual_review__review_reply`) threads the Phase 3 follow-up rounds — the reviewer needs prior-issue context to judge whether a fix actually closed the gap, and the Phase 1→3 flow above explicitly relies on this. The Phase 3.5 "Independent second review for FATAL/CRITICAL fixes" sub-step is the deliberate exception inside a single run: it must spawn a fresh thread so the blind reviewer has no exposure to the original critique.
 
 Do not accept prior audit outputs (PAPER_CLAIM_AUDIT, CITATION_AUDIT, EXPERIMENT_LOG) as input across separate invocations — the cross-run freshness is what preserves reviewer independence per `shared-references/reviewer-independence.md`.
 

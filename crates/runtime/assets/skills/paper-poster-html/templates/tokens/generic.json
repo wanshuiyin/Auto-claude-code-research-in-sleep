@@ -1,0 +1,9 @@
+{
+  "name": "generic",
+  "accent": {"base": "#2D5F8B", "deep": "#1F4566", "light": "#E8F1F8", "soft": "#D7E5F0"},
+  "gold": {"base": "#C9A24A", "soft": "#FFF7E0"},
+  "neutrals": {"text_primary": "#1A1A1A", "text_secondary": "#555555", "text_muted": "#888888",
+               "bg_page": "#F6F2F0", "bg_card": "#FFFFFF", "bg_card_tint": "#FAFAFB",
+               "border_soft": "#D8D8D8"},
+  "hue_centers": {"accent": 210, "gold": 43}
+}

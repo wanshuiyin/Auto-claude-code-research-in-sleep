@@ -7,6 +7,15 @@ allowed-tools: Bash(ssh *), Bash(echo *), Read, Write, Edit
 
 # Monitor Experiment Results
 
+> ⏱ **External cadence is appropriate here.** This skill waits on an external
+> fact (job completion / progress), so it is a natural `/loop` / `CronCreate`
+> surface: the wake reads status and self-judges only **machine-checkable**
+> completion (exit code, file exists, epoch logged) — never quality. This is
+> the additive external-wait shape in
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+> If a scheduled wait here ends in a verdict step (e.g. then audit results),
+> run that verdict **once** after the wait clears — not re-entered per tick.
+
 Monitor: $ARGUMENTS
 
 ## Workflow

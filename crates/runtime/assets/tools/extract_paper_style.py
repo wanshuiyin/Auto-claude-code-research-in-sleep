@@ -18,7 +18,7 @@ or claims. This helper resolves the reference, derives a compact, neutral
 
 Writer skills that accept `--style-ref <source>`:
   - paper-write, paper-plan, paper-writing
-  - paper-illustration, paper-poster, paper-slides
+  - paper-illustration, paper-slides
   - grant-proposal, auto-paper-improvement-loop
 
 Strict rules for the calling skill

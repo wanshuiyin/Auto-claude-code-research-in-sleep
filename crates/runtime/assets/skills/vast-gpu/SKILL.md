@@ -2,7 +2,7 @@
 name: vast-gpu
 description: "Rent, manage, and destroy GPU instances on vast.ai. Use when user says \"rent gpu\", \"vast.ai\", \"rent a server\", \"cloud gpu\", or needs on-demand GPU without owning hardware."
 argument-hint: [task-description or action]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob
 ---
 
 # Vast.ai GPU Management
@@ -237,13 +237,27 @@ To destroy when done: /vast-gpu destroy <ID>
 
 Set up the rented instance for a specific experiment. Called automatically by `/run-experiment` when targeting a vast.ai instance.
 
-**Step 1: Install Dependencies**
+> Follow `../shared-references/compute-env-contract.md`: write/reuse the
+> declarative env spec (ordered `pip_phases`, not one big install), record the
+> `env:<name>@<specHash>` block in `.aris/compute/vast.md`, and run the seeded
+> kernel witness before launching the real experiment — a fresh instance whose
+> `import torch` succeeds can still have the wrong-SM wheel.
+
+**Step 1: Install Dependencies (render the env spec, phase by phase)**
+
+Render the project's env spec as ORDERED phases — one `pip install` per phase,
+so an earlier phase's pin can't be dragged by a later package:
 
 ```bash
+# phase 1: the fought-over pins first (torch/cuda wheel)
+ssh -p <PORT> root@<HOST> "pip install -q torch==<pinned>"
+# phase 2+: everything that must respect those pins
 ssh -p <PORT> root@<HOST> "pip install -q wandb tensorboard scipy scikit-learn pandas"
 ```
 
-If a `requirements.txt` exists in the project, install that instead:
+Legacy fallback — if the project only has a `requirements.txt` and no env spec,
+install it as a single phase, then treat any version fight it causes as the
+signal to convert it into ordered phases:
 ```bash
 scp -P <PORT> requirements.txt root@<HOST>:/workspace/
 ssh -p <PORT> root@<HOST> "pip install -q -r /workspace/requirements.txt"

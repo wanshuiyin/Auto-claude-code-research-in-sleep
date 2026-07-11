@@ -1,11 +1,18 @@
 ---
 name: citation-audit
-description: "Zero-context verification that every bibliographic entry in the paper is real, correctly attributed, and used in a context the cited paper actually supports. Uses a fresh cross-model reviewer with web/DBLP/arXiv lookup to catch hallucinated authors, wrong years, fabricated venues, version mismatches, and wrong-context citations (cite present but the cited paper does not establish the claim). Use when user says \"审查引用\", \"check citations\", \"citation audit\", \"verify references\", \"引用核对\", or before submission to ensure bibliography integrity."
+description: "Zero-context verification that every bibliographic entry in the paper is real, correctly attributed, and used in a context the cited paper actually supports — catching hallucinated authors, wrong years, fabricated venues, version mismatches, and wrong-context citations. Use when user says \"审查引用\", \"check citations\", \"citation audit\", \"verify references\", \"引用核对\", or before submission to ensure bibliography integrity."
 argument-hint: "[paper-directory-or-bib-file] [--uncited] [— soft-only]"
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent, mcp__codex__codex, WebSearch, WebFetch
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, mcp__codex__codex, WebSearch, WebFetch
 ---
 
 # Citation Audit
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges bibliographic correctness. Re-running that verdict
+> on a timer adds no new signal (it changes only when the *bibliography*
+> changes). Schedule the *external wait that precedes it* — bibliography
+> finalized → then audit **once**. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Verify every `\cite{...}` in a paper against three independent layers:
 
@@ -38,12 +45,13 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.5`** — Used via Codex MCP. Default for cross-model review with web access.
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Used via Codex MCP. Default for cross-model review with web access.
 - **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Never `codex-reply`.
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
 - **STATE = `CITATION_AUDIT.json`** — Machine-readable verdict ledger consumable by downstream tools.
 - **SOFT_ONLY = `false`** — When true (set via `— soft-only` / `— soft_only` flag), the audit runs all three layers normally but **forbids any `.bib` file mutation**. Findings that would otherwise mutate the bib (FIX / REPLACE / REMOVE) are translated into per-occurrence sentence-rewrite proposals against the citing `*.tex` files. Used by `/resubmit-pipeline` Phase 1 to honor the user's hard "freeze the bib" constraint.
+- **RENDER_HTML = true** — When `true` (default), auto-render `CITATION_AUDIT.md` to HTML after writing the report. Uses **full Codex review gate** (audit-class artifact — render-fidelity check matches the skill's cross-model audit invariant). Set `false` to skip, or pass `— render html: false`.
 
 ## Workflow
 
@@ -78,7 +86,7 @@ For each **cited** bib entry — i.e., each key in `cited_keys` with at least on
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   sandbox: read-only
   prompt: |
@@ -307,6 +315,7 @@ After each `mcp__codex__codex` reviewer call, save the trace following `shared-r
 - `.aris/traces/citation-audit/<date>_runNN/` (per-entry review traces)
 - Optional: applied fixes to `references.bib` + `sec/*.tex` (with `--apply` flag)
 - Optional: `details.uncited_entries` field in JSON + `## Uncited Entries (opt-in)` MD section (with `--uncited` flag; field absent and section omitted when flag is unset)
+- `CITATION_AUDIT.html` (when `RENDER_HTML = true`, default) — auto-rendered single-file HTML view via `/render-html "CITATION_AUDIT.md" --json "CITATION_AUDIT.json"`. Full review gate. Sidecar `.review.json` carries render-fidelity verdict. **Non-blocking**: if `/render-html` fails (helper missing, Codex MCP unavailable, file write error), log the failure and treat the audit as complete — the JSON + MD ledger are the canonical outputs.
 
 ## Optional: Soft-Only Mode (— soft-only)
 
@@ -413,8 +422,8 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/citation-audit/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "gpt-5.5",
-  "reviewer_reasoning": "xhigh",
+  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_reasoning": "<resolved — the effort that actually ran (target: xhigh)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
     "total_entries":  <int>,                 // count of audited cited entries (= |cited_keys|), NOT the bib-file size

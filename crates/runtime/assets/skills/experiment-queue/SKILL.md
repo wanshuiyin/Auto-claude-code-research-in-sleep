@@ -2,10 +2,19 @@
 name: experiment-queue
 description: SSH job queue for multi-seed/multi-config ML experiments with OOM-aware retry, stale-screen cleanup, and wave-transition race prevention. Use when user says "batch experiments", "队列实验", "run grid", "multi-seed sweep", "auto-chain experiments", or when /run-experiment is insufficient for 10+ jobs that need orchestration.
 argument-hint: [manifest-or-grid-spec]
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent, Skill(run-experiment), Skill(monitor-experiment)
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Skill(run-experiment), Skill(monitor-experiment)
 ---
 
 # Experiment Queue
+
+> ⏱ **External cadence: visibility only.** This skill already runs its own
+> detached server-side scheduler (60s poll + `depends_on` + wave transitions).
+> Use its status output for overnight visibility (N done / N running / N
+> pending); do **not** wrap it in a second `/loop` / `CronCreate` poll — that
+> duplicates the scheduler on an uncoordinated clock and races the
+> wave-transition logic it was built to prevent. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md)
+> ("don't duplicate an existing scheduler").
 
 Orchestrate large batches of ML experiments on SSH remote GPU servers with proper state tracking, OOM retry, stale cleanup, and wave transitions.
 
@@ -37,6 +46,12 @@ Based on session audit (2026-04-16), the major wall-clock sinks in multi-seed gr
 All of these are pure engineering friction that can be orchestrated.
 
 ## Core Concepts
+
+> **Environment contract**: queue jobs assume the target env is already built
+> and validated per `../shared-references/compute-env-contract.md` (spec-hash
+> ledger + kernel witness). A wave of jobs dying at import time = the env
+> contract was skipped, not a queue bug; check the provider's
+> `.aris/compute/<provider>.md` ledger before re-queueing.
 
 ### Job Manifest
 
@@ -83,6 +98,16 @@ pending → running → completed
                  ↘ failed_other → stuck (needs manual inspection)
 stale_screen_detected → cleaned → pending
 ```
+
+> **Operator note on `stuck` (the agent's move, not the queue's):** the queue
+> deterministically parks `failed_other` jobs as `stuck` — that part is code and
+> unchanged. Before handing a `stuck` batch to the human, the OPERATING AGENT
+> should check: if the same failure repeats across jobs, try ONE clean
+> reimplement of the **agent-generated wrapper/attempt script only** — never
+> user/project source (`run_*.py` you didn't write), the manifest, queue state,
+> logs, or results (see `shared-references/external-cadence.md` § *Let a broken
+> attempt restart, not just patch*). Reserve the human handoff for
+> contract/environment doubts, not merely broken attempt code.
 
 ### Wave Orchestration
 
@@ -382,7 +407,7 @@ Then user can check anytime or wait for summary report.
 
 ## Rationale / Source
 
-Identified via 2026-04-16 post-mortem analysis (Codex GPT-5.4 xhigh) of a 1.5-day
+Identified via 2026-04-16 post-mortem analysis (Codex GPT-5.5 xhigh) of a 1.5-day
 multi-seed paper experiment session:
 
 - Wall-clock sink: stale screens, OOM, wave transitions, manual parser

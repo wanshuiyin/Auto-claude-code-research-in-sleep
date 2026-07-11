@@ -2,7 +2,7 @@
 name: slides-polish
 description: "Per-page Codex review + targeted python-pptx / Beamer fixes for academic talk slides. Use AFTER /paper-slides (or any externally generated PPTX/Beamer) when the deck looks 'mostly OK' but the user wants a final pass that aligns visual weight with a reference, bumps PPTX fonts to projector-readable size, kills italic style leaks, fixes text-frame overflow, and catches per-slide layout drift. Trigger phrases: \"polish slides\", \"slides 排版不对\", \"PPTX 字体太小\", \"和 Beamer 比一下\", \"per-page review\", \"和 codex 一页一页过\"."
 argument-hint: "[slides-dir-or-pptx] — reference: <ref-pdf> [— style: generic | why-rf | neurips | icml | iclr | cvpr] [— effort: lite | balanced | max | beast] [— interactive]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex
 ---
 
 # Slides Polish: Per-Page Codex Review + Targeted Layout Fixes
@@ -36,7 +36,7 @@ manually) — do not run `/slides-polish` for that.
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.5`** — Codex MCP model for per-page review. xhigh reasoning is non-negotiable (see `../shared-references/effort-contract.md`). `gpt-5.4` is acceptable when the user has no `gpt-5.5` access; `gpt-5.5` is preferred for visual nuance.
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Codex MCP model for per-page review. xhigh reasoning is non-negotiable (see `../shared-references/effort-contract.md`). If the account has no `gpt-5.6-sol` access, follow the capability fallback chain in `../shared-references/reviewer-routing.md` (`gpt-5.5`+`xhigh`; `gpt-5.4` only as an explicit user override).
 - **REVIEWER_REASONING = `xhigh`** — Hard invariant; the effort knob does **not** change this.
 - **CONTEXT_POLICY = `fresh`** — Each per-page review uses a **fresh** Codex thread (`mcp__codex__codex`, never `codex-reply`). See `../shared-references/reviewer-independence.md`. This prevents the reviewer from anchoring on prior fixes.
 - **REFERENCE_VISUAL** — Path to a PDF the user wants the polished deck to **align with** in visual weight (typography proportion, color discipline, callout density). Required input. If polishing PPTX only, the **Beamer compile of the same talk** is the ideal reference. If no reference exists yet, ask the user; do not silently default to "Why-RF" or any preset.
@@ -191,7 +191,7 @@ Schema notes:
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   sandbox: read-only
   prompt: |
@@ -226,7 +226,7 @@ recompile or save, move to next slide.
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   sandbox: read-only
   prompt: |
@@ -525,10 +525,10 @@ Both the triage pass and the per-slide passes are traced.
 ## Prior Skill Relationship
 
 - Runs **after** `/paper-slides` (or any externally generated deck).
-- Compatible with `/paper-poster` workflow (same color discipline) but
+- Compatible with `/paper-poster-html` workflow (same color discipline) but
   different output cadence.
 - Uses the same `mcp__codex__codex` MCP infrastructure as
-  `/auto-paper-improvement-loop`, `/peer-review`, etc.
+  `/auto-paper-improvement-loop`, `/research-review`, etc.
 - Does **not** call or compose with `/paper-slides` content phases — strict
   separation.
 

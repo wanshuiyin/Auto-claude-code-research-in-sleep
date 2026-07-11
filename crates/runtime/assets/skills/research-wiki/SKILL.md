@@ -2,7 +2,7 @@
 name: research-wiki
 description: "Persistent research knowledge base that accumulates papers, ideas, experiments, claims, and their relationships across the entire research lifecycle. Inspired by Karpathy's LLM Wiki pattern. Use when user says \"知识库\", \"research wiki\", \"add paper\", \"wiki query\", \"查知识库\", or wants to build/query a persistent field map."
 argument-hint: [subcommand: init|ingest|sync|query|update|lint|stats]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
 # Research Wiki: Persistent Research Knowledge Base
@@ -24,7 +24,7 @@ Inspired by [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6
 | **Paper** | `papers/` | `paper:<slug>` | A published or preprint research paper |
 | **Idea** | `ideas/` | `idea:<id>` | A research idea (proposed, tested, or failed) |
 | **Experiment** | `experiments/` | `exp:<id>` | A concrete experiment run with results |
-| **Claim** | `claims/` | `claim:<id>` | A testable scientific claim with evidence status |
+| **Claim** | `claims/` | `claim:<id>` | A theorem/headline with an honest PROOF status — born via `/proof-checker` (see Hook 4) |
 
 ### Typed Relationships (`graph/edges.jsonl`)
 
@@ -40,6 +40,22 @@ Inspired by [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6
 | `supersedes` | paper → paper | Newer work replaces older |
 
 Edges are stored in `graph/edges.jsonl` only. The `## Connections` section on each page is **auto-generated** from the graph — never hand-edit it.
+
+### Capture hygiene (anti-self-poisoning)
+
+Before persisting an **idea / claim / experiment** note, screen it for
+operational noise that would harden into a self-cited falsehood (see
+[`shared-references/capture-antipatterns.md`](../shared-references/capture-antipatterns.md)).
+Resolve the helper via the canonical chain (integration-contract §2):
+`.aris/tools/capture_filter.py` → `tools/capture_filter.py` →
+`$ARIS_REPO/tools/capture_filter.py` (warn-and-skip if unresolved). Run
+`python3 <capture_filter> -` on the note text; if it flags **env-failure /
+transient-error / negative-tool-claim**, do NOT store it as a durable node —
+rewrite it to the *fix / missing config / workaround*, or drop it. Never store
+"codex/gemini/the reviewer can't do X" — that gets loaded into every future
+session and cited against the agent long after the real cause is gone. (The wiki's
+"failed ideas → anti-repeat memory" is the GOOD inverse: a class-level *research*
+finding, not operational noise.)
 
 ## Wiki Directory Structure
 
@@ -246,7 +262,7 @@ Generate `query_pack.md` — a compressed, context-window-friendly summary:
 
 | Section | Budget | Content |
 |---------|--------|---------|
-| Project direction | 300 chars | From CLAUDE.md or RESEARCH_BRIEF.md |
+| Project direction | full sections | Structured extraction from `RESEARCH_BRIEF.md` by `## ` heading (Problem / Constraints / Direction / Background / Non-Goals / Domain Knowledge / Existing Results), in priority order. No per-field char cap — the 8000-char assembly loop is the only safety net. Falls back to a flat 600-char slice if the brief uses no known headings. |
 | Top 5 gaps | 1200 chars | From gap_map.md, ranked by: unresolved + linked ideas + failed experiments |
 | Paper clusters | 1600 chars | 3-5 clusters by tag overlap, 2-3 sentences each |
 | Failed ideas | 1400 chars | **Always included** — highest anti-repetition value |
@@ -265,7 +281,7 @@ Update a specific entity:
 ```
 /research-wiki update paper:chen2025 — relevance: core
 /research-wiki update idea:001 — outcome: negative
-/research-wiki update claim:C1 — status: invalidated
+/research-wiki update claim:C1 — status: refuted
 ```
 
 After any update: rebuild `query_pack.md`, update `log.md`.
@@ -275,7 +291,7 @@ After any update: rebuild `query_pack.md`, update `log.md`.
 Health check the wiki:
 
 1. **Orphan pages** — entities with zero edges
-2. **Stale claims** — claims with `status: reported` older than 14 days
+2. **Stale claims** — claims still `status: drafted` or `status: unproven` older than 14 days
 3. **Contradictions** — claims with both `supports` and `invalidates` edges
 4. **Missing connections** — papers sharing 2+ tags but no explicit relationship
 5. **Dead ideas** — `stage: proposed` ideas that were never tested
@@ -292,7 +308,7 @@ Quick overview:
 Papers: 28 (12 core, 10 related, 6 peripheral)
 Ideas: 7 (2 active, 3 failed, 1 partial, 1 succeeded)
 Experiments: 12
-Claims: 15 (5 supported, 3 invalidated, 7 reported)
+Claims: 15 (8 verified, 4 unproven, 2 refuted, 1 sound-modulo-imports)
 Edges: 64
 Gaps: 8 (3 unresolved)
 Last updated: 2026-04-07T10:12:00Z
@@ -343,35 +359,47 @@ if research-wiki/query_pack.md exists (and < 7 days old):
     still run fresh literature search for last 3-6 months
 ```
 
-**After ideation (THIS IS CRITICAL — without it, ideas/ stays empty):**
+**After ideation (CRITICAL — without it, `ideas/` stays empty; runs on EVERY
+generation, including a re-run with updated constraints):** the page write is a
+**deterministic helper command**, not a freehand step the model can skip:
 ```
 for idea in all_generated_ideas (recommended + killed):
-    /research-wiki upsert_idea(idea)
-    for paper_id in idea.based_on:
-        add_edge(idea.node_id, paper_id, "inspired_by")
-    for gap_id in idea.target_gaps:
-        add_edge(idea.node_id, gap_id, "addresses_gap")
-rebuild query_pack
+    python3 "$WIKI_SCRIPT" upsert_idea research-wiki/ \
+      --slug <stable-id> --title <title> --stage <proposed|archived> --outcome pending \
+      --thesis <...> --risks <...> --based-on <paper:slug,...> --target-gaps <G2,...>
+    # one call: writes ideas/<slug>.md, wires inspired_by/addresses_gap edges,
+    # rebuilds index + query_pack, logs. Default skip-on-exist (won't clobber an
+    # existing idea enriched by /result-to-claim). `outcome` ∈ {unknown, pending,
+    # negative, mixed, positive} — the experiment verdict is set later by
+    # /result-to-claim, never guessed at ideation.
 log "idea-creator wrote N ideas to wiki"
 ```
 
 ### Hook 3: After `/result-to-claim` verdict
 
 ```
-# Create experiment page
-exp_id = upsert_experiment(experiment_data)
+# Create/refresh the experiment node FIRST via the deterministic helper (verdict owner
+# → --update-on-exist). This is the experiment BIRTH point. add_edge does NOT verify
+# node existence, so GATE the supports/invalidates edges below on the node having been
+# born (EXP_NODE_OK) — else they'd dangle off a missing exp node.
+EXP_NODE_OK = (python3 "$WIKI_SCRIPT" add_experiment research-wiki/ --slug <exp_id> \
+  --idea idea:<active_idea> --verdict <yes|partial|no> --confidence <high|medium|low> \
+  --metrics <...> --reasoning <...> --provenance <run dir> --update-on-exist) succeeded
+  # writes page + idea--tested_by-->exp edge + rebuilds index/query_pack
 
-# Update each claim's status
-for claim_id in resolved_claims:
-    if verdict == "yes":
-        set_claim_status(claim_id, "supported")
-        add_edge(exp_id, claim_id, "supports")
-    elif verdict == "partial":
-        set_claim_status(claim_id, "partial")
-        add_edge(exp_id, claim_id, "supports")  # partial
-    else:
-        set_claim_status(claim_id, "invalidated")
-        add_edge(exp_id, claim_id, "invalidates")
+# Record empirical support as EDGES ONLY, and ONLY if EXP_NODE_OK — never overwrite the
+# claim's `status`. A claim's `status` is the PROOF axis (verified / sound-modulo-imports
+# / refuted / unproven / drafted / retracted), owned by /proof-checker (the claim birth
+# point). Experiment support is a SEPARATE axis carried entirely by supports/invalidates
+# edges; writing "supported"/"invalidated" into status is rejected by the validator.
+if EXP_NODE_OK:
+    for claim_id in resolved_claims:
+        if verdict == "yes":
+            add_edge(exp_id, claim_id, "supports")
+        elif verdict == "partial":
+            add_edge(exp_id, claim_id, "supports")   # partial — qualify in --evidence
+        else:
+            add_edge(exp_id, claim_id, "invalidates")
 
 # Update idea outcome
 update_idea(active_idea_id, outcome=verdict)
@@ -383,6 +411,25 @@ if verdict in ("no", "partial"):
 rebuild query_pack
 log "result-to-claim: exp_id updated, verdict=..."
 ```
+
+### Hook 4: Claim birth — from `/proof-checker` (the ONLY birth point)
+
+Wiki **claim nodes are born here.** `/proof-checker` Phase 5.5 calls `add_claim`
+for each top-level theorem/headline after writing `PROOF_AUDIT.json`, stamping an
+honest PROOF-axis `status` and a `provenance` pointer to the audit trace. No other
+skill creates a claim node: `/result-to-claim` (Hook 3) only adds empirical
+`supports`/`invalidates` *edges* to an already-born claim and never edits its `status`.
+
+```bash
+# (run by /proof-checker; shown here for the wiki's record)
+python3 "$WIKI_SCRIPT" add_claim research-wiki/ --slug thm-main-ub \
+  --name "Main upper bound" --status verified \
+  --provenance ".aris/traces/proof-checker/<run>/" --statement "..." --update-on-exist
+```
+
+Claim `status` ∈ {`drafted`, `unproven`, `sound-modulo-imports`, `verified`,
+`refuted`, `retracted`} — the **proof axis only**. Empirical support is a separate
+axis, carried entirely by edges (Hook 3), never written into `status`.
 
 ## Re-ideation Trigger
 

@@ -1,18 +1,50 @@
 ---
 name: research-review
-description: Get a deep critical review of research from GPT via Codex MCP. Use when user says "review my research", "help me review", "get external review", or wants critical feedback on research ideas, papers, or experimental results.
+description: Get a deep critical review of research from an external reviewer backend (Codex or manual). Use when user says "review my research", "help me review", "get external review", or wants critical feedback on research ideas, papers, or experimental results.
 argument-hint: [topic-or-scope]
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
-# Research Review via Codex MCP (xhigh reasoning)
+# Research Review via External Reviewer Backend (ultra reasoning)
 
-Get a multi-round critical review of research work from an external LLM with maximum reasoning depth.
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it produces a cross-model review verdict, multi-round with
+> reviewer thread continuity. An external timer re-fires the verdict on
+> wall-clock time and breaks the reviewer's round-to-round memory: zero new
+> signal, full token cost. Schedule the *external wait that precedes it* (work
+> ready → then review once), not the verdict. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+
+Get a multi-round critical review of research work from the selected external reviewer backend with maximum reasoning depth.
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-5.5` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.5`, `o3`, `gpt-4o`)
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for GPT-5.4 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier). Must be an OpenAI model (e.g., `gpt-5.6-sol`, `gpt-5.5`, `o3`). Manual backend uses whatever model the user chooses.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+
+## Reviewer Calling Convention
+
+When calling the reviewer, branch on REVIEWER_BACKEND:
+
+**If REVIEWER_BACKEND = `codex`:**
+  Use `mcp__codex__codex` for new review threads.
+  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+
+**If REVIEWER_BACKEND = `manual`:**
+  Use `mcp__manual_review__review` for new review threads with:
+    prompt: [exact same prompt that would go to Codex]
+    config: {"model_reasoning_effort": "xhigh"}
+  Save the returned `threadId`.
+  Use `mcp__manual_review__review_reply` for follow-up rounds with:
+    threadId: [saved manual-review threadId]
+    prompt: [follow-up prompt]
+    config: {"model_reasoning_effort": "xhigh"}
+
+Content fidelity: the manual reviewer should see the same substantive review
+brief Codex would read. If the manual UI supports file upload / attachment,
+reuse the same brief file; otherwise paste the brief contents inline because
+remote web UIs cannot read your local filesystem paths. Review tracing applies
+equally to both backends.
 
 ## Context: $ARGUMENTS
 
@@ -33,14 +65,24 @@ Before calling the external reviewer, compile a comprehensive briefing:
 3. Identify: core claims, methodology, key results, known weaknesses
 
 ### Step 2: Initial Review (Round 1)
-Send a detailed prompt with xhigh reasoning:
+Send a detailed prompt with ultra reasoning, using the selected backend. For
+the `codex` backend, keep the MCP payload short: write the full briefing to
+`RESEARCH_REVIEW_REQUEST.md`, then point Codex at that file.
+
+*For codex backend:*
 
 ```
 mcp__codex__codex:
-  config: {"model_reasoning_effort": "xhigh"}
+  model: gpt-5.6-sol
+  config: {"model_reasoning_effort": "ultra"}
   prompt: |
-    [Full research context + specific questions]
-    Please act as a senior ML reviewer (NeurIPS/ICML level). Identify:
+    Read the review brief at <absolute path to RESEARCH_REVIEW_REQUEST.md>.
+    Executor notes are not evidence beyond the files they cite, so verify the
+    referenced artifacts before judging.
+    Please act as a senior ML reviewer (NeurIPS/ICML level). Start from the
+    assumption that the work is broken somewhere — your job is to find where.
+    Be adversarial. Trust nothing the author tells you — verify everything
+    yourself. Identify:
     1. Logical gaps or unjustified claims
     2. Missing experiments that would strengthen the story
     3. Narrative weaknesses
@@ -48,8 +90,34 @@ mcp__codex__codex:
     Please be brutally honest.
 ```
 
+The review brief should contain the full research context, the specific
+questions, and the primary artifact / raw-result paths the reviewer should
+inspect.
+
+*For manual backend:* use `mcp__manual_review__review` with the same brief
+contents. If the manual-review UI supports attachments, attach
+`RESEARCH_REVIEW_REQUEST.md`; otherwise paste the brief inline. Save the
+returned `threadId`.
+
 ### Step 3: Iterative Dialogue (Rounds 2-N)
-Use `mcp__codex__codex-reply` with the returned `threadId` to continue the conversation:
+For `codex` backend: use `mcp__codex__codex-reply` with the returned `threadId`.
+For `manual` backend: use `mcp__manual_review__review_reply` with the same `threadId`.
+Use the appropriate tool to continue the conversation. For Codex follow-up
+rounds, write an updated brief such as `RESEARCH_REVIEW_ROUND_2.md` and send
+only the path:
+
+```text
+mcp__codex__codex-reply:
+  threadId: [saved reviewer threadId from Step 2]
+  # replies inherit the thread's model/effort (gpt-5.6-sol ultra)
+  prompt: |
+    Read the updated review brief at <absolute path to
+    RESEARCH_REVIEW_ROUND_2.md>.
+    Focus on unresolved weaknesses and whether the revision actually fixed them.
+```
+
+For manual follow-up rounds, attach that same updated brief if possible;
+otherwise paste it inline.
 
 For each round:
 1. **Respond** to criticisms with evidence/counterarguments
@@ -79,10 +147,22 @@ Save the full interaction and conclusions to a review document in the project ro
 
 Update project memory/notes with key review conclusions.
 
+> **Composed mode** — if invoked with `— composed: <canonical-report-path>` (an
+> orchestrator like `/idea-discovery` passes this), do **not** write a standalone review
+> `.md` in the project root. The raw conversation is already persisted to `.aris/traces/…`
+> (see *Review Tracing* below — that audit copy is kept in every mode); fold the review
+> *conclusions* (consensus, claims matrix, prioritized TODOs) into the orchestrator's
+> canonical report and cite the trace path there. **Default (no `— composed:` directive):
+> behave exactly as above — write the standalone review document.** Never infer composed
+> mode from a report file merely existing. Full rules:
+> [`shared-references/output-composition.md`](../shared-references/output-composition.md).
+
 ## Key Rules
 
-- ALWAYS use `config: {"model_reasoning_effort": "xhigh"}` for reviews
-- Send comprehensive context in Round 1 — the external model cannot read your files
+- ALWAYS pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` for reviews (deep-audit tier; capability fallback per `reviewer-routing.md`, never below `xhigh`)
+- Put comprehensive context in the review brief. Codex can read local files
+  when you pass an absolute path; manual reviewers usually cannot, so attach or
+  paste the same brief there.
 - Be honest about weaknesses — hiding them leads to worse feedback
 - Push back on criticisms you disagree with, but accept valid ones
 - Focus on ACTIONABLE feedback — "what experiment would fix this?"
@@ -108,4 +188,4 @@ Update project memory/notes with key review conclusions.
 
 ## Review Tracing
 
-After each `mcp__codex__codex` or `mcp__codex__codex-reply` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).

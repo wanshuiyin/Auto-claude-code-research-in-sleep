@@ -2,7 +2,7 @@
 name: serverless-modal
 description: "Run GPU workloads on Modal — training, fine-tuning, inference, batch processing. Zero-config serverless: no SSH, no Docker, auto scale-to-zero. Use when user says \"modal run\", \"modal training\", \"modal inference\", \"deploy to modal\", \"need a GPU\", \"run on modal\", \"serverless GPU\", or needs remote GPU compute."
 argument-hint: [task-description]
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Agent
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write
 ---
 
 # Modal Cloud GPU — Training & Inference
@@ -16,6 +16,10 @@ Task: $ARGUMENTS
 - **Auto scale-to-zero**: billing stops the instant your code finishes. No idle instances.
 - **Local-first**: run `modal run` from your laptop. Code, data, and results stay local; only the GPU function runs remotely.
 - **Reproducible environments**: dependencies declared in code via `modal.Image`, not system-level packages.
+  Treat the `modal.Image` chain as the RENDERED form of the declarative env spec in
+  `../shared-references/compute-env-contract.md` — same spec fields (base, ordered
+  pip phases, env vars, smoke probes), same `env:<name>@<specHash>` ledger entry in
+  `.aris/compute/modal.md`, same three-tier validation before a long run.
 
 **Best for**: Users without a local GPU who need to debug CUDA code, run small-scale tests, or iterate quickly on experiments. The $5 free tier (no card) is enough for code debugging; $30 (with card) covers most small-scale experiment runs.
 
@@ -110,8 +114,13 @@ The most common pattern for `run-experiment` integration. Wraps an existing trai
 import modal
 
 app = modal.App("experiment-name")
-image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "torch", "transformers", "accelerate", "datasets", "wandb"
+# One .pip_install() call per SPEC PHASE (chained calls install in order, so a
+# pinned torch in the first call can't be dragged by packages in the second —
+# the rendered form of compute-env-contract.md's ordered pip_phases):
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("torch")                                        # phase 1: pins
+    .pip_install("transformers", "accelerate", "datasets", "wandb")  # phase 2
 )
 
 # Mount local project code into the container
@@ -150,8 +159,10 @@ Run: `modal run launcher.py`
 import modal
 
 app = modal.App("inference-api")
-image = modal.Image.debian_slim(python_version="3.11").pip_install(
-    "torch", "transformers", "accelerate"
+image = (
+    modal.Image.debian_slim(python_version="3.11")
+    .pip_install("torch")                          # phase 1: pins
+    .pip_install("transformers", "accelerate")     # phase 2
 )
 
 @app.cls(image=image, gpu="L40S")

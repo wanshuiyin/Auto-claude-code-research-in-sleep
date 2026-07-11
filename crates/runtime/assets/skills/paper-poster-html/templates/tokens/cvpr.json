@@ -1,0 +1,9 @@
+{
+  "name": "cvpr",
+  "accent": {"base": "#27407A", "deep": "#1A2C57", "light": "#EBEEF4", "soft": "#DCE0EA"},
+  "gold": {"base": "#C9A24A", "soft": "#FFF7E0"},
+  "neutrals": {"text_primary": "#1A1A1A", "text_secondary": "#555555", "text_muted": "#888888",
+               "bg_page": "#F1F2F6", "bg_card": "#FFFFFF", "bg_card_tint": "#FAFAFB",
+               "border_soft": "#D8D8D8"},
+  "hue_centers": {"accent": 222, "gold": 43}
+}

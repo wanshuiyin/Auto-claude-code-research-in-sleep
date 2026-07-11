@@ -1,0 +1,28 @@
+{
+  "_README": "Query set for trigger_eval.py. Keys are skill names; values are user-intent queries that SHOULD trigger that skill. RULE: paraphrase intent, never quote the skill's own trigger phrases verbatim — a query containing the literal description trigger string is trivially positive and measures nothing. Prefix a skill key with '_' to comment it out. For negative testing (measuring FALSE triggering), add queries under a skill that should NOT fire and read the confusion matrix in the report. This sample covers a few well-scoped skills; extend per the skill you're tuning.",
+  "check-gpu": [
+    "is anything running on the servers right now?",
+    "how busy are my remote machines?",
+    "which cards are free before I launch a job"
+  ],
+  "research-lit": [
+    "find me recent papers on this topic",
+    "what has been published about diffusion language models lately",
+    "pull together related work for my intro section"
+  ],
+  "novelty-check": [
+    "has anyone already done this idea?",
+    "is my approach actually new or is it in the literature already",
+    "check if this contribution is novel before I build it"
+  ],
+  "citation-audit": [
+    "make sure every reference in my paper is real and correctly attributed",
+    "verify the bibliography before submission",
+    "did I hallucinate any citations in this draft"
+  ],
+  "kill-argument": [
+    "what is the single strongest reason a reviewer would reject this paper",
+    "give me the harshest rebuttal my theory paper would face",
+    "simulate reviewer 2's most damaging objection"
+  ]
+}

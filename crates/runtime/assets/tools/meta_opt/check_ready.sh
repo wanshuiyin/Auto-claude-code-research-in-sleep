@@ -54,3 +54,27 @@ fi
 if [ "$SINCE_LAST" -ge 5 ]; then
     echo "📊 ARIS has logged $SINCE_LAST skill runs since last optimization. Run /meta-optimize to check for improvement opportunities."
 fi
+
+# Model-delta trigger (harness diet): a model bump makes existing scaffolding a
+# deletion candidate, independent of usage volume. /meta-optimize records the
+# session model at each run in .last_optimize_model; compare against the LATEST
+# session_start event's model. Absent files (older installs, no session_start
+# yet) silently skip.
+LAST_MODEL_FILE="$ARIS_META_DIR/.last_optimize_model"
+if [ -f "$LAST_MODEL_FILE" ]; then
+    CURRENT_MODEL=$(awk '
+        /"event": *"session_start"/ {
+            if (match($0, /"model": *"[^"]+"/)) {
+                m = substr($0, RSTART, RLENGTH)
+                sub(/^"model": *"/, "", m)
+                sub(/"$/, "", m)
+                latest = m
+            }
+        }
+        END { if (latest != "") print latest }
+    ' "$EVENTS_FILE")
+    LAST_MODEL=$(cat "$LAST_MODEL_FILE")
+    if [ -n "$CURRENT_MODEL" ] && [ -n "$LAST_MODEL" ] && [ "$CURRENT_MODEL" != "$LAST_MODEL" ]; then
+        echo "🔁 Model changed since last optimization ($LAST_MODEL → $CURRENT_MODEL). Run /meta-optimize — a model bump makes existing scaffolding a deletion candidate (harness diet)."
+    fi
+fi

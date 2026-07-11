@@ -1,11 +1,22 @@
 ---
 name: auto-paper-improvement-loop
-description: "Autonomously improve a generated paper via GPT-5.4 xhigh review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
+description: "Autonomously improve a generated paper via GPT-5.6-Sol xhigh review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
 argument-hint: "[paper-directory] [— style-ref: <source>] [— edit-whitelist <path>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It
+> already loops internally (review → fix → recompile) with its own round
+> structure and a deliberate fresh-reviewer bias guard each round (no
+> `codex-reply`). Re-asking it to "improve the paper" on a
+> wall-clock timer produces no new signal — quality changes when the *review*
+> changes, not when the clock ticks — and a timed re-run that also accepts its
+> own output to decide when to stop crosses into self-acquittal
+> (`acceptance-gate.md`). Schedule the *external wait that precedes it*, not the
+> improvement loop. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Autonomously improve the paper at: **$ARGUMENTS**
 
@@ -18,7 +29,7 @@ Unlike `/auto-review-loop` (which iterates on **research** — running experimen
 ## Constants
 
 - **MAX_ROUNDS = 2** — Two rounds of review→fix→recompile. Empirically, Round 1 catches structural issues (4→6/10), Round 2 catches remaining presentation issues (6→7/10). Diminishing returns beyond 2 rounds for writing-only improvements.
-- **REVIEWER_MODEL = `gpt-5.5`** — Model used via Codex MCP for paper review.
+- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP for paper review.
 - **REVIEWER_BIAS_GUARD = true** — When `true`, every review round uses a fresh `mcp__codex__codex` thread with no prior review context. Never use `mcp__codex__codex-reply` for review rounds. Set to `false` only for deliberate debugging of the legacy behavior. **Empirical evidence:** running the same paper with `codex-reply` + "since last round we did X" prompts inflated scores from real 3/10 → fake 8/10 across multiple rounds; switching to fresh threads recovered the true 3/10 assessment.
 - **REVIEW_LOG = `PAPER_IMPROVEMENT_LOG.md`** — Cumulative log of all rounds, stored in paper directory.
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review and present score + weaknesses to the user. The user can approve fixes, provide custom modification instructions, skip specific fixes, or stop early. When `false` (default), runs fully autonomously.
@@ -65,7 +76,7 @@ Sources accepted: local TeX dir / file, local PDF, arXiv id, http(s) URL. Overle
 
 - Use `style_profile.md` only during the **fix-implementation** phase, to nudge structural choices when applying reviewer feedback. Reviewer feedback always takes precedence; style ref is tie-breaker for *how* to apply a fix, not *whether* to apply it.
 - **Never copy prose, claims, examples, or terminology** from anything reachable through the cache when implementing fixes.
-- **Never pass `— style-ref` (or the cache contents) to the GPT-5.4 reviewer sub-agent.** The Reviewer Independence Protocol below requires reviewers see only the artifact and the user's prompt — leaking the style ref would contaminate the review with author-side context. **This is the most critical invariant in this skill.**
+- **Never pass `— style-ref` (or the cache contents) to the GPT-5.6-Sol reviewer sub-agent.** The Reviewer Independence Protocol below requires reviewers see only the artifact and the user's prompt — leaking the style ref would contaminate the review with author-side context. **This is the most critical invariant in this skill.**
 
 ## Optional: Edit Whitelist (`— edit-whitelist <path>`, opt-in)
 
@@ -232,11 +243,11 @@ done > /tmp/paper_full_text.txt
 
 ### Step 2: Round 1 Review
 
-Send the full paper text AND compiled PDF to GPT-5.4 xhigh:
+Send the full paper text AND compiled PDF to GPT-5.6-Sol xhigh:
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are reviewing a [VENUE] paper. Please provide a detailed, structured review.
@@ -375,7 +386,7 @@ If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__codex__codex` t
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are reviewing a [VENUE] paper. This is a fresh, zero-context review.
@@ -419,7 +430,7 @@ Run this only if the paper is theory-heavy (≥5 `\begin{theorem}|\begin{lemma}|
 
 ```bash
 # Invoke the canonical adversarial-review primitive on the current paper.
-# /kill-argument runs two fresh-thread codex 5.5 xhigh calls and writes
+# /kill-argument runs two fresh-thread codex gpt-5.6-sol ultra calls and writes
 # KILL_ARGUMENT.{md,json} into the paper directory. It is detect-only —
 # it never edits the paper itself.
 /kill-argument "$PAPER_DIR"
@@ -549,7 +560,7 @@ Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
 ## Round 1 Review & Fixes
 
 <details>
-<summary>GPT-5.4 xhigh Review (Round 1)</summary>
+<summary>GPT-5.6-Sol xhigh Review (Round 1)</summary>
 
 [Full raw review text, verbatim]
 
@@ -563,7 +574,7 @@ Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
 ## Round 2 Review & Fixes
 
 <details>
-<summary>GPT-5.4 xhigh Review (Round 2)</summary>
+<summary>GPT-5.6-Sol xhigh Review (Round 2)</summary>
 
 [Full raw review text, verbatim]
 
@@ -611,7 +622,7 @@ paper/
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - **Preserve all PDF versions** — user needs to compare progression
-- **Save FULL raw review text** — do not summarize or truncate GPT-5.4 responses
+- **Save FULL raw review text** — do not summarize or truncate GPT-5.6-Sol responses
 - **Reviewer independence (Round 2+)**: when `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__codex__codex` thread for every review round; never use `mcp__codex__codex-reply` and never include "since last round" / fix summaries in the prompt. See the Reviewer Independence Protocol section above.
 - **Always recompile after fixes** — verify 0 errors before proceeding
 - **Do not fabricate experimental results** — synthetic validation must describe methodology, not invent numbers

@@ -557,4 +557,89 @@ mod tests {
             );
         }
     }
+
+    /// v0.4.22 exact-inventory drift test: the `tools/` slice of
+    /// BUNDLED_RESOURCES is EXACTLY the 28-helper whitelist that
+    /// tools/sync_main_skills.sh ships. Set-equality (not subset) so BOTH
+    /// failure modes are caught: a helper missing after a sync (the
+    /// pre-v0.4.22 gap — the script's RUNTIME_HELPERS lagged what synced
+    /// SKILL.md files referenced) AND a stale 29th file lingering in
+    /// assets/tools/ (the sync script never auto-prunes).
+    #[test]
+    fn bundled_tools_inventory_is_exactly_the_sync_whitelist() {
+        use std::collections::BTreeSet;
+
+        // Mirror of RUNTIME_HELPERS in tools/sync_main_skills.sh (v0.4.22).
+        const EXPECTED: &[&str] = &[
+            // baseline (v0.4.8/0.4.9 era)
+            "tools/arxiv_fetch.py",
+            "tools/deepxiv_fetch.py",
+            "tools/exa_search.py",
+            "tools/openalex_fetch.py",
+            "tools/research_wiki.py",
+            "tools/save_trace.sh",
+            "tools/semantic_scholar_fetch.py",
+            "tools/verify_paper_audits.sh",
+            "tools/verify_papers.py",
+            // v0.4.11 additions
+            "tools/extract_paper_style.py",
+            "tools/figure_renderer.py",
+            "tools/paper_illustration_image2.py",
+            "tools/overleaf_setup.sh",
+            "tools/overleaf_audit.sh",
+            "tools/verify_wiki_coverage.sh",
+            "tools/watchdog.py",
+            "tools/experiment_queue/build_manifest.py",
+            "tools/experiment_queue/queue_manager.py",
+            // v0.4.13 meta_opt hooks
+            "tools/meta_opt/log_event.sh",
+            "tools/meta_opt/check_ready.sh",
+            // v0.4.22 additions (referenced by synced SKILL.md files)
+            "tools/capture_filter.py",
+            "tools/evidence_check.py",
+            "tools/iteration_log.py",
+            "tools/provenance.py",
+            "tools/run_state.py",
+            "tools/threat_scan.py",
+            "tools/meta_opt/trigger_eval.py",
+            "tools/meta_opt/trigger_evals.sample.json",
+        ];
+        assert_eq!(EXPECTED.len(), 28, "whitelist mirror must stay at 28");
+
+        let expected: BTreeSet<&str> = EXPECTED.iter().copied().collect();
+        let actual: BTreeSet<&str> = crate::BUNDLED_RESOURCES
+            .iter()
+            .map(|(k, _)| *k)
+            .filter(|k| k.starts_with("tools/"))
+            .collect();
+
+        let missing: Vec<&&str> = expected.difference(&actual).collect();
+        let stale: Vec<&&str> = actual.difference(&expected).collect();
+        assert!(
+            missing.is_empty() && stale.is_empty(),
+            "bundled tools/ inventory drifted from the sync whitelist.\n\
+             missing (in whitelist, not bundled): {missing:?}\n\
+             stale (bundled, not in whitelist — sync never prunes; remove or whitelist): {stale:?}"
+        );
+    }
+
+    /// v0.4.22: the vendored posterly MIT license text must ship with the
+    /// vendored paper-poster-html scripts (its NOTICE.md points at this
+    /// path). Guards the build.rs ALLOWED_EXTS "txt" addition — without it
+    /// the file is silently dropped at embed time (attribution gap).
+    #[test]
+    fn posterly_mit_license_text_is_bundled() {
+        let key = "skills/paper-poster-html/LICENSES/posterly-MIT.txt";
+        let entry = crate::BUNDLED_RESOURCES.iter().find(|(k, _)| *k == key);
+        let (_, content) = entry.unwrap_or_else(|| {
+            panic!(
+                "{key} not in BUNDLED_RESOURCES — did build.rs ALLOWED_EXTS \
+                 lose \"txt\", or did the sync drop the LICENSES dir?"
+            )
+        });
+        assert!(
+            content.contains("MIT License"),
+            "bundled posterly license text does not look like an MIT license"
+        );
+    }
 }

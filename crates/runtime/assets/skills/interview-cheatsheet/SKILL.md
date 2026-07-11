@@ -1,6 +1,6 @@
 ---
 name: interview-cheatsheet
-description: "Generate a long-form Chinese interview-prep cheat sheet on a specific ML/LLM topic — formulas with derivations, from-scratch PyTorch code, comparison tables, and 25 高频面试题 (L1 必会 / L2 进阶 / L3 顶级 lab). Cross-model codex review checks math, code, historical citations, and style discipline; then /render-html produces a single-file HTML with academic-newspaper template. Output: docs/tutorials/<slug>_tutorial.{md,html,review.json}. Use when the user says '写面试 cheat sheet', '写一份 X 教程', '帮我准备 Y 面试题', '出一份 X 速查', or wants a 600-1000 line Chinese tutorial on a specific ML topic."
+description: "Generate a long-form Chinese interview-prep cheat sheet on a specific ML/LLM topic — formulas with derivations, from-scratch PyTorch code, comparison tables, and 25 高频面试题 (L1 必会 / L2 进阶 / L3 顶级 lab). Use when the user says '写面试 cheat sheet', '写一份 X 教程', '帮我准备 Y 面试题', '出一份 X 速查', or wants a 600-1000 line Chinese tutorial on a specific ML topic."
 argument-hint: <topic> [--effort balanced|max] [--byline "Name (姓名), Affiliation"] [--commit false]
 allowed-tools: Bash(*), Read, Write, Edit, mcp__codex__codex
 ---
@@ -13,7 +13,7 @@ Generate one comprehensive Chinese cheat sheet per invocation: formulas + deriva
 
 - **`<topic>`** (required) — narrow enough for one 600-1000 line tutorial. Good: "RLHF / DPO / PPO", "MoE", "KV Cache + Speculative Decoding". Bad (too broad): "all of LLM training", "diffusion" (split into Forward Process / Sampling / CFG separately).
 - **`--effort`** (default `balanced`) — `balanced` ≈ 600 lines, `max` ≈ 1000 lines with deeper proofs and more L3 questions.
-- **`--byline`** (default `"Ruofeng Yang (杨若峰), Shanghai Jiao Tong University"`) — passed to `/render-html --author`.
+- **`--byline`** (default `"<Your Name>, <Affiliation>"`) — passed to `/render-html --author`.
 - **`--commit`** (default `false`) — if `false` (default), stop after rendering; user reviews and commits. Never push without explicit user approval.
 
 ## Style guide — STRICT (read `docs/tutorials/attention_tutorial.md` as canonical reference)
@@ -42,7 +42,7 @@ Generate one comprehensive Chinese cheat sheet per invocation: formulas + deriva
 | Callout prefixes only: `💡` `⚠️` `✅` `❌` (others won't get class) | renderer maps these to `callout-info/warn/good/bad` | `> ⚠️ **FP16 overflow** — 即使除了 √d_k …` |
 | Math: `$...$` inline, `$$...$$` display, `$$\boxed{...}$$` for key boxes | MathJax CDN; literal in source | — |
 | Code: ```python fences, **real PyTorch that would run** | reviewer will check executability | — |
-| Personal-info banlist: `SJTU JHC`, `JHC PhD`, `Server5`, `job market`, `/Users/...`, specific lab/company names | reviewer flags as FAIL | byline goes via `--author` at render time, not in body |
+| Personal-info banlist: owner's institution/lab/center names, degree-program affiliations, private server aliases, job-search context, `/Users/...` paths, specific lab/company names | reviewer flags as FAIL | byline goes via `--author` at render time, not in body |
 | Language: Chinese primary, English technical terms in-place | matches established cheat-sheet style | "softmax 饱和", "vector field" |
 
 ### Eyebrow / subtitle / title naming
@@ -74,9 +74,9 @@ If the topic is too broad to fit in one cheat sheet, **stop and ask the user to 
 
 Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide. Length target: 600 lines (balanced) or 1000 lines (max), ±20%.
 
-### Step 3 — Cross-model math/code review (codex 5.5 xhigh, FRESH thread)
+### Step 3 — Cross-model math/code review (codex gpt-5.6-sol xhigh, FRESH thread)
 
-Invoke `mcp__codex__codex` with `model: gpt-5.5`, `config: {model_reasoning_effort: xhigh}`, `sandbox: read-only`, fresh thread (never `codex-reply`).
+Invoke `mcp__codex__codex` with `model: gpt-5.6-sol`, `config: {model_reasoning_effort: xhigh}`, `sandbox: read-only`, fresh thread (never `codex-reply`).
 
 Reviewer prompt:
 
@@ -85,7 +85,7 @@ You are reviewing a long-form Chinese interview-prep tutorial on <TOPIC> for mat
 
 ## Files to read (READ-ONLY)
 - Draft MD: <MD_PATH>
-- Style reference: /Users/yangruofeng/Desktop/aris_paper_discussion/aris_repo/docs/tutorials/attention_tutorial.md
+- Style reference: docs/tutorials/attention_tutorial.md
   (Read this only for STYLE — do NOT score the draft against the reference's content topic.)
 
 ## Return JSON with these 10 checks
@@ -99,7 +99,7 @@ You are reviewing a long-form Chinese interview-prep tutorial on <TOPIC> for mat
 7. heading_consistency — All `## §N` and `### N.M` follow style guide (space after §N, no glued chars).
 8. section_completeness — Sections §0..§10 (and §A if effort=max) present and non-trivial.
 9. length_target — Within ±20% of target (600 for balanced, 1000 for max).
-10. personal_info_leak — None of: SJTU JHC, JHC PhD, Server5, job market, /Users/, specific lab names like "John Hopcroft Center", company recruitment context.
+10. personal_info_leak — None of: the owner's institution / lab / center names, degree-program affiliations, private server aliases, job-search or recruitment context, absolute `/Users/...` paths. (Keep the concrete string banlist in local untracked notes — the public SKILL defines only the CATEGORIES; listing the real values here would itself be the leak.)
 
 Return JSON:
 {
@@ -209,7 +209,7 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 
 | Invariant | How it's enforced |
 |---|---|
-| Executor != reviewer family | Claude drafts; gpt-5.5 reviews (math/code stage); gpt-5.5 reviews again (render stage) |
+| Executor != reviewer family | Claude drafts; gpt-5.6-sol reviews (math/code stage); gpt-5.6-sol reviews again (render stage) |
 | Fresh thread per reviewer call | Step 3 + render's own gate both use `mcp__codex__codex` not `codex-reply` |
 | Codex reasoning = xhigh | Hardcoded in Step 3 reviewer config |
 | Personal info redaction | Both math/code reviewer and render reviewer check; banlist in style guide |

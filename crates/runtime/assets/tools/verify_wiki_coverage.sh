@@ -65,12 +65,18 @@ ARXIV_RE='\b(arXiv:|arxiv:|abs/)?([0-9]{4}\.[0-9]{4,5}(v[0-9]+)?|[a-z\-]+(\.[A-Z
 REFERENCED=$(mktemp)
 trap 'rm -f "$REFERENCED" "$INGESTED" "$MISSING"' EXIT
 
-for path in "${SCAN_PATHS[@]}"; do
-    if [[ -e "$path" ]]; then
-        # grep recursively for files, flat for directories; suppress "is a directory"
-        grep -rohE "$ARXIV_RE" "$path" 2>/dev/null || true
+# bash 3.2: empty-array "${ARR[@]}" trips `set -u`; SCAN_PATHS is empty when no
+# scan target exists in the invoking directory — the report should just be empty.
+{
+    if [[ ${#SCAN_PATHS[@]} -gt 0 ]]; then
+        for path in "${SCAN_PATHS[@]}"; do
+            if [[ -e "$path" ]]; then
+                # grep recursively for files, flat for directories; suppress "is a directory"
+                grep -rohE "$ARXIV_RE" "$path" 2>/dev/null || true
+            fi
+        done
     fi
-done \
+} \
     | sed -E 's#^(arXiv:|arxiv:|abs/)##; s/v[0-9]+$//' \
     | grep -v '^$' \
     | sort -u > "$REFERENCED"

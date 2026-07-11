@@ -1,6 +1,6 @@
 ---
 name: ablation-planner
-description: Use when main results pass result-to-claim (claim_supported=yes or partial) and ablation studies are needed for paper submission. Codex designs ablations from a reviewer's perspective, CC reviews feasibility and implements.
+description: "Use when main results pass result-to-claim (claim_supported=yes or partial) and ablation studies are needed for paper submission."
 argument-hint: [method-description-or-claim]
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__codex__codex-reply
 ---
@@ -22,7 +22,7 @@ Systematically design ablation studies that answer the questions reviewers will 
 ### Step 1: Prepare Context
 
 CC reads available project files to build the full picture:
-- Method description and components (from docs/research_contract.md or project CLAUDE.md)
+- Method description and components (from `idea-stage/docs/research_contract.md`, legacy `docs/research_contract.md`, or project CLAUDE.md)
 - Current experiment results (from EXPERIMENT_LOG.md, EXPERIMENT_TRACKER.md, or W&B)
 - Confirmed and intended claims (from result-to-claim output or project notes)
 - Available compute resources (from CLAUDE.md server config, if present)
@@ -31,6 +31,7 @@ CC reads available project files to build the full picture:
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are a rigorous ML reviewer planning ablation studies.

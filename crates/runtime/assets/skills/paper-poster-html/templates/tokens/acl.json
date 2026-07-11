@@ -1,0 +1,9 @@
+{
+  "name": "acl",
+  "accent": {"base": "#256E72", "deep": "#16494C", "light": "#EBF4F4", "soft": "#DCE9EA"},
+  "gold": {"base": "#C9A24A", "soft": "#FFF7E0"},
+  "neutrals": {"text_primary": "#1A1A1A", "text_secondary": "#555555", "text_muted": "#888888",
+               "bg_page": "#F0F4F3", "bg_card": "#FFFFFF", "bg_card_tint": "#FAFAFB",
+               "border_soft": "#D8D8D8"},
+  "hue_centers": {"accent": 183, "gold": 43}
+}

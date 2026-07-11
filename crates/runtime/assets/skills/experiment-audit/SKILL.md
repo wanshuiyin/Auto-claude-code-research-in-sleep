@@ -1,11 +1,18 @@
 ---
 name: experiment-audit
-description: "Audit experiment integrity before claiming results. Uses cross-model review (GPT-5.4) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
+description: "Audit experiment integrity before claiming results. Uses cross-model review (external reviewer backend) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
 argument-hint: [experiment-dir-or-results-path]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
 # Experiment Audit: Cross-Model Integrity Verification
+
+> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
+> verdict-bearing — it judges experiment integrity. Re-running that verdict on a
+> timer adds no new signal, and a loop that accepts its own output to decide
+> when to stop crosses into self-acquittal (`acceptance-gate.md`). Schedule the
+> *external wait that precedes it* — experiments done → then audit **once**. See
+> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Audit experiment integrity for: **$ARGUMENTS**
 
@@ -21,13 +28,34 @@ These are NOT intentional deception — they are failure modes of optimizing age
 
 ## Core Principle
 
-**The executor (Claude) collects file paths. The reviewer (GPT-5.4) reads code and judges integrity. The executor does NOT participate in integrity judgment.**
+**The executor collects file paths. The external reviewer backend reads code and judges integrity. The executor does NOT participate in integrity judgment.**
 
 This follows `shared-references/reviewer-independence.md` and `shared-references/experiment-integrity.md`.
 
 ## Constants
 
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for GPT-5.4 Pro via Oracle MCP. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+
+## Reviewer Calling Convention
+
+When calling the reviewer, branch on REVIEWER_BACKEND:
+
+**If REVIEWER_BACKEND = `codex`:**
+  Use `mcp__codex__codex` for new review threads.
+  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+
+**If REVIEWER_BACKEND = `manual`:**
+  Use `mcp__manual_review__review` for new review threads with:
+    prompt: [exact same prompt that would go to Codex]
+    config: {"model_reasoning_effort": "xhigh"}
+  Save the returned `threadId`.
+  Use `mcp__manual_review__review_reply` for follow-up rounds with:
+    threadId: [saved manual-review threadId]
+    prompt: [follow-up prompt]
+    config: {"model_reasoning_effort": "xhigh"}
+
+Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
+Review tracing applies equally to both backends.
 
 ## Workflow
 
@@ -47,19 +75,31 @@ Scan project directory for:
 
 **DO NOT summarize, interpret, or explain any file content.** Only collect paths.
 
-### Step 2: Send to Reviewer (GPT-5.4 via Codex MCP)
+### Step 2: Send to Reviewer
 
-Pass ONLY file paths and the audit checklist to the reviewer. The reviewer reads everything directly.
+Based on the selected reviewer backend (see Reviewer Calling Convention), pass ONLY file paths and the audit checklist to the reviewer. The reviewer reads everything directly.
+
+For `codex`, call `mcp__codex__codex` with:
+- `model: gpt-5.6-sol`
+- `config: {"model_reasoning_effort": "ultra"}`
+- `sandbox: read-only`
+- `cwd: [project directory]`
+- `prompt: [the exact full prompt below]`
+
+For `manual`, call `mcp__manual_review__review` with:
+- `config: {"model_reasoning_effort": "xhigh"}`
+- `prompt: [the exact full prompt below]`
+
+Manual review cannot use Codex-only `model`, `sandbox`, or `cwd`; include the same file paths in the prompt so the user can inspect them.
+
+Use this exact prompt for both backends:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.5
-  config: {"model_reasoning_effort": "xhigh"}
-  sandbox: read-only
-  cwd: [project directory]
-  prompt: |
-    You are an experiment integrity auditor. Read ALL files listed below
-    and check for the following fraud patterns.
+You are an experiment integrity auditor. Start from the assumption that the
+    evaluation is compromised somewhere — your job is to find where. Be
+    adversarial. Trust nothing the author tells you — verify everything
+    yourself. Read ALL files listed below and check for the following fraud
+    patterns.
 
     Files to read:
     - Evaluation scripts: [list paths]
@@ -134,7 +174,7 @@ Parse the reviewer's response and write `EXPERIMENT_AUDIT.md`:
 # Experiment Audit Report
 
 **Date**: [today]
-**Auditor**: GPT-5.4 xhigh (cross-model, read-only)
+**Auditor**: External reviewer backend, ultra reasoning (cross-model, read-only)
 **Project**: [project name]
 
 ## Overall Verdict: [PASS | WARN | FAIL]
@@ -174,7 +214,7 @@ Also write `EXPERIMENT_AUDIT.json` for machine consumption:
 ```json
 {
   "date": "2026-04-10",
-  "auditor": "gpt-5.5-xhigh",
+  "auditor": "external-reviewer-ultra",
   "overall_verdict": "warn",
   "integrity_status": "warn",
   "checks": {
@@ -261,4 +301,4 @@ Motivated by community-reported integrity issues (#57, #131) where executor agen
 
 ## Review Tracing
 
-After each `mcp__codex__codex` or `mcp__codex__codex-reply` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).

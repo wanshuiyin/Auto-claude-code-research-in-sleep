@@ -4,6 +4,8 @@
 
 Every ARIS skill accepts an optional `effort` parameter that controls how much work the system does. This affects breadth, depth, iterations, and coverage — but **never** the quality of cross-model review.
 
+> Design stance: the unattended *procedure* (gather → reason → act → verify → repeat) is the engineered artifact, not any single prompt — after Karpathy's "write the loop, not the prompt" (LOOPS.md, *Field Notes on Agents That Run for Days*).
+
 ```
 /any-skill "args" — effort: lite | balanced | max | beast
 ```
@@ -14,7 +16,7 @@ Default: `balanced` (current behavior, zero change for existing users).
 
 | Setting | Value | Why |
 |---------|-------|-----|
-| Codex reasoning_effort | **xhigh** | Reviewer quality is non-negotiable |
+| Codex reasoning_effort | **≥ xhigh** (deep-audit skills run `ultra` — tier table in `reviewer-routing.md`) | Reviewer quality is non-negotiable. `effort` never moves the reviewer tier in either direction — and ARIS `— effort: max` is NOT Codex `model_reasoning_effort: max` (different axes: pipeline workload vs reviewer reasoning depth) |
 | DBLP/CrossRef citations | **on** | Citation integrity is non-negotiable |
 | Reviewer independence | **on** | Cross-model protocol is non-negotiable |
 | Experiment integrity | **on** | Fraud prevention is non-negotiable |
@@ -148,7 +150,7 @@ Adjust constants:
 Every skill should print its effort configuration at the start:
 
 ```
-⚡ [effort: max] papers=25, ideas=16, rounds=6 | Codex: xhigh (always)
+⚡ [effort: max] papers=25, ideas=16, rounds=6 | Codex: tier per reviewer-routing.md (floor xhigh)
 ```
 
 ## Precedence

@@ -2,7 +2,7 @@
 name: patent-novelty-check
 description: "Assess patent novelty and non-obviousness against prior art. Use when user says \"专利查新\", \"patent novelty\", \"可专利性评估\", \"patentability check\", or wants to evaluate if an invention is patentable."
 argument-hint: [invention-description-or-brief-path]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, WebSearch, WebFetch, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex
 ---
 
 # Patent Novelty and Non-Obviousness Check
@@ -13,7 +13,7 @@ Adapted from `/novelty-check` for patent legal standards. Research novelty is NO
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.5` — Model used via Codex MCP for cross-model examiner verification
+- `REVIEWER_MODEL = gpt-5.6-sol` — Model used via Codex MCP for cross-model examiner verification
 - `NOVELTY_STANDARD = patent` — Always use legal patentability standard, not research contribution standard
 
 ## Inputs
@@ -80,6 +80,7 @@ Call `REVIEWER_MODEL` via `mcp__codex__codex` with xhigh reasoning:
 
 ```
 mcp__codex__codex:
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are a senior patent examiner at the [USPTO/CNIPA/EPO].
@@ -133,7 +134,7 @@ Write `patent/NOVELTY_ASSESSMENT.md`:
 [combination analysis with motivation to combine]
 
 ### Cross-Model Examiner Review
-[summary of GPT-5.4 examiner feedback]
+[summary of GPT-5.6-Sol examiner feedback]
 
 ### Recommended Claim Amendments
 [If claims need modification to overcome prior art, suggest specific amendments]

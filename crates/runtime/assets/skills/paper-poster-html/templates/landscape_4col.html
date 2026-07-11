@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  TEMPLATE: landscape_4col  (ARIS fork)
+  CANVAS:   60in × 36in landscape (ICML / NeurIPS / generic landscape)
+  LAYOUT:   header → optional banner → 4 body columns → optional takeaways → footer
+  USE WHEN: standard ML conference poster with 3-5 content cards per column,
+            mix of figures + equations + small tables.
+  HOW TO USE:
+    1. Copy this file to your working directory as `poster.html`.
+    2. Edit the DESIGN TOKENS in `:root` to your lab/venue colors.
+    3. Replace TODO content placeholders (search for "TODO").
+    4. Run `python tools/poster_check.py measure poster.html` to align columns.
+    5. Run `python tools/render_preview.py poster.html` to produce the PDF.
+  NOTE: as shipped, this scaffold passes `preflight` (structure) but is
+    EXPECTED to FAIL `measure`/`polish` -- figures are commented out and copy
+    is TODO stubs, so columns only fill the top of the canvas. Those two gates
+    judge a FILLED poster; balance them once you've added real content. See
+    templates/README.md ("Scaffolds, not finished posters").
+  MEASURE ROLES: every layout-critical element carries `data-measure-role`.
+  Generic measurement scripts depend on these — do not remove.
+
+  CANVAS RETARGETING: to print at another size, change the canvas in exactly
+    TWO places that must stay in sync -- the `@page { size: ... }` rule and the
+    `.poster { width/height }` (also the `@media print .poster { width/height }`).
+    Example: ICLR 2026 main conference uses 185cm 90cm landscape (official print
+    service spec) -- set @page to `185cm 90cm`, width to `1850 * var(--u)` and
+    height to `900 * var(--u)` (and the print-override .poster to `185cm`/`90cm`).
+
+  Adapted from posterly (MIT, © 2026 Ruishuo Chen) — see LICENSES/ & NOTICE.md;
+  ARIS modifications: flat de-gradient, --fs token scale, zero-inline-style
+  utilities, data-source/data-color-exempt contracts.
+  ============================================================
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POSTER TITLE — Venue Year</title>
+
+<!-- MathJax v3 for inline equations. CDN by default; to go offline,
+     download a MathJax v3 release into ./mathjax/ and change the <script>
+     `src` below to "mathjax/es5/tex-svg.js". -->
+<script>
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
+      packages: {'[+]': ['ams']}
+    },
+    svg: { fontCache: 'global' }
+  };
+</script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+
+<style>
+  /* =========================================================
+     CANVAS — 60" × 36" landscape
+     ========================================================= */
+  @page { size: 60in 36in; margin: 0; }
+
+  :root {
+    /* ===== DESIGN TOKENS ===== */
+
+    /* Primary accent (header underline, card-highlight bar, section nums, .keyword) */
+    --accent:        #2D5F8B;
+    --accent-deep:   #1F4566;
+    --accent-light:  #E8F1F8;
+    --accent-soft:   #D7E5F0;
+
+    /* Secondary accent for "ours / best" emphasis (table .ours row, "★" callouts) */
+    --gold:          #C9A24A;
+    --gold-soft:     #FFF7E0;
+
+    /* Text */
+    --text-primary:   #1A1A1A;
+    --text-secondary: #555555;
+    --text-muted:     #888888;
+
+    /* Backgrounds */
+    --bg-page:        #F6F2F0;
+    --bg-card:        #FFFFFF;
+    --bg-card-tint:   #FAFAFB;
+    --bg-emphasis:    var(--accent-light);
+
+    /* Borders */
+    --border-soft:    #D8D8D8;
+    --border-strong:  var(--accent);
+
+    /* Screen-only dark mat behind the poster (the off-canvas viewport
+       background). Print resets html/body to white, so this never reaches
+       paper; kept as a token so no color literal lives outside this block. */
+    --bg-viewport:    #2B2B2B;
+
+    /* Base unit. Print: 1mm; screen preview: 1.6px (~3.78px = 1mm at 96dpi). */
+    --u: 1.6px;
+
+    /* Font-size scale (9 archetypes). Every `font-size` in this template
+       references one of these. `calc(var(--fs-N) * k)` is permitted ONLY for
+       a COMPONENTS.md-defined variant (e.g. `.eqn--large`). */
+    --fs-1: calc(9 * var(--u));    /* micro label            */
+    --fs-2: calc(10 * var(--u));   /* small caption          */
+    --fs-3: calc(11 * var(--u));   /* caption / table        */
+    --fs-4: calc(12 * var(--u));   /* body text              */
+    --fs-5: calc(13 * var(--u));   /* equation / emphasis    */
+    --fs-6: calc(15 * var(--u));   /* subtitle               */
+    --fs-7: calc(16 * var(--u));   /* section title          */
+    --fs-8: calc(22 * var(--u));   /* banner number          */
+    --fs-9: calc(32 * var(--u));   /* main title             */
+
+    /* Fonts. Override at :root if your venue mandates a specific family. */
+    --font-serif: "Charter", "Source Serif Pro", "Georgia", serif;
+    --font-sans:  "Inter", "Helvetica Neue", sans-serif;
+
+
+    /* Shadows & watermark ink — tokenized so rules 1/3 stay literal-free
+       (the faint radial page tint is the ONE allowed literal outside this
+       block; rule 5 validates it). */
+    --shadow-screen: 0 0 60px rgba(0, 0, 0, 0.5);
+    --shadow-card: 0 calc(2 * var(--u)) calc(6 * var(--u)) rgba(45, 95, 139, 0.05);
+    --ornament-ink: rgba(45, 95, 139, 0.06);
+    /* ===== END DESIGN TOKENS ===== */
+  }
+
+  /* =========================================================
+     RESET + BASE
+     ========================================================= */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg-viewport);
+    font-family: var(--font-serif);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* =========================================================
+     UTILITY CLASSES — replace inline `style=` in the body markup.
+     The template (and any finished poster) must carry ZERO `style=`
+     attributes. Use these classes instead. Two documented exceptions
+     exist ONLY as examples and may appear in comments, never live:
+       - a logo/seal SVG flagged data-color-exempt="logo"
+       - a paper figure `<img ... data-source="paper" style="width: NN%">`
+         (AR width tweak; prefer the .w-NN classes below where possible)
+     ========================================================= */
+
+  /* Poster container — exact print dimensions; data-measure-role="poster" so poster_check.py
+     can verify the canvas size. */
+  .poster {
+    width: calc(1524 * var(--u));
+    height: calc(914 * var(--u));
+    background: var(--bg-page);
+    /* Page tint kept (radial only, all color stops alpha <= 0.06 per the
+       de-gradient policy: linear-gradient is banned, this low-alpha radial
+       wash is the single allowed exception). */
+    background-image:
+      radial-gradient(ellipse at top left,    rgba(45, 95, 139, 0.06), transparent 40%),
+      radial-gradient(ellipse at bottom right, rgba(201, 162, 74, 0.05), transparent 50%);
+    margin: 20px auto;
+    padding: calc(10 * var(--u)) calc(14 * var(--u));
+    display: grid;
+    grid-template-rows: auto auto 1fr auto auto;  /* header | banner | body | takeaways | footer */
+    gap: calc(6 * var(--u));
+    box-shadow: var(--shadow-screen);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Decorative top bar — flat solid accent (de-gradient). */
+  .poster::before {
+    content: "";
+    position: absolute; top: 0; left: 0; right: 0;
+    height: calc(8 * var(--u));
+    background: var(--accent);
+  }
+
+  /* =========================================================
+     HEADER
+     ========================================================= */
+  .header {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: calc(16 * var(--u));
+    padding: calc(2 * var(--u)) calc(4 * var(--u)) calc(5 * var(--u));
+    border-bottom: calc(2 * var(--u)) solid var(--accent);
+  }
+
+  .venue-badge {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    min-width: calc(95 * var(--u));
+    text-align: center;
+    border-right: calc(1 * var(--u)) solid var(--border-soft);
+    padding-right: calc(12 * var(--u));
+  }
+  .venue-badge .vb-venue {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: var(--fs-9);
+    color: var(--accent-deep);
+    line-height: 1;
+    letter-spacing: -0.5px;
+  }
+  .venue-badge .vb-year {
+    font-family: var(--font-sans);
+    font-size: var(--fs-5);
+    color: var(--text-secondary);
+    margin-top: calc(3 * var(--u));
+    letter-spacing: 1.2px;
+  }
+  .venue-badge .vb-tag {
+    font-family: var(--font-sans);
+    font-size: var(--fs-2);
+    color: var(--accent);
+    font-weight: 700;
+    margin-top: calc(2 * var(--u));
+    letter-spacing: 1.2px;
+  }
+
+  .title-block { text-align: center; min-width: 0; }
+  .title {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: var(--fs-9);
+    line-height: 1.05;
+    color: var(--accent-deep);
+    letter-spacing: -0.5px;
+  }
+  .title .accent { color: var(--gold); }
+  .subtitle {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    font-size: var(--fs-6);
+    color: var(--text-secondary);
+    margin-top: calc(2 * var(--u));
+    font-style: italic;
+  }
+  .authors-line {
+    font-family: var(--font-sans);
+    font-size: var(--fs-4);
+    color: var(--accent);
+    font-weight: 600;
+    margin-top: calc(3 * var(--u));
+  }
+  .authors-line .author { margin: 0 calc(4 * var(--u)); }
+  .authors-line sup { font-size: 0.7em; color: var(--accent); }
+  .authors-line .aff {
+    color: var(--text-secondary);
+    font-weight: 400;
+    display: block;
+    margin-top: calc(2 * var(--u));
+    font-size: var(--fs-4);
+  }
+
+  .right-block {
+    display: flex; align-items: center;
+    gap: calc(10 * var(--u));
+  }
+  .qr-block { display: flex; flex-direction: column; align-items: center; gap: calc(2 * var(--u)); }
+  .qr-block img {
+    width: calc(85 * var(--u));
+    height: calc(85 * var(--u));
+    border: calc(2 * var(--u)) solid var(--accent);
+    border-radius: calc(4 * var(--u));
+    background: white;
+    padding: calc(2 * var(--u));
+  }
+  .qr-label {
+    font-family: var(--font-sans);
+    font-size: var(--fs-3);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  /* Optional logo slot — drop your lab logo here. Keep its rendered height
+     close to the QR (~85u) so the header doesn't grow disproportionately.
+     A raster logo needs no exemption. An inline-SVG logo with brand colors
+     must carry data-color-exempt="logo" so style_check skips its fills, e.g.:
+       <svg data-color-exempt="logo" ...> ... </svg> */
+  .logo-slot img { height: calc(85 * var(--u)); width: auto; display: block; }
+  /* logo-row: institution logos in the header right block (REAL logos the
+     user provided — never fabricate a seal). Each img MUST carry
+     data-color-exempt="logo"; height pairs with the QR. */
+  .logo-row { display: flex; align-items: center; gap: calc(5 * var(--u)); }
+  .logo-row img { height: calc(68 * var(--u)); width: auto; display: block; }
+  /* --boxed variant: each logo in a labeled tile (logo + institution name) —
+     more presence at poster distance; white tile + soft border, no new hues. */
+  .logo-row .lr-item {
+    display: flex; flex-direction: column; align-items: center;
+    gap: calc(2 * var(--u));
+    background: var(--bg-card);
+    border: 1px solid var(--border-soft);
+    border-radius: calc(3 * var(--u));
+    padding: calc(4 * var(--u)) calc(6 * var(--u));
+  }
+  .logo-row .lr-item img { height: calc(58 * var(--u)); }
+  .logo-row .lr-label {
+    font-family: var(--font-sans); font-weight: 600; font-size: var(--fs-1);
+    color: var(--text-secondary); text-align: center; line-height: 1.15;
+  }
+  /* venue badge may carry the official venue logo above its text line */
+  .venue-badge img { height: calc(62 * var(--u)); width: auto; display: block; margin: 0 auto calc(2 * var(--u)); }
+  .venue-badge .vb-title { font-family: var(--font-sans); font-weight: 800; font-size: var(--fs-5); color: var(--accent-deep); letter-spacing: 0.5px; }
+
+  /* =========================================================
+     OPTIONAL FRAMEWORK BANNER (set display:none if you don't need it)
+     ========================================================= */
+  .framework-banner {
+    display: flex;
+    align-items: center;
+    gap: calc(16 * var(--u));
+    /* Flat solid emphasis fill (de-gradient). */
+    background: var(--bg-emphasis);
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    border-left: calc(6 * var(--u)) solid var(--accent);
+    border-radius: calc(6 * var(--u));
+    padding: calc(6 * var(--u)) calc(14 * var(--u));
+  }
+  .framework-banner img { height: calc(120 * var(--u)); width: auto; display: block; }
+  .framework-banner .banner-stats {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: calc(6 * var(--u));
+  }
+  .framework-banner .bs-item {
+    background: white;
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    border-left: calc(3 * var(--u)) solid var(--accent);
+    border-radius: calc(3 * var(--u));
+    padding: calc(2 * var(--u)) calc(8 * var(--u));
+    text-align: center;
+  }
+  .framework-banner .bs-num {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: var(--fs-8);
+    color: var(--accent);
+    line-height: 1;
+  }
+  .framework-banner .bs-label {
+    font-family: var(--font-sans);
+    font-size: var(--fs-3);
+    color: var(--text-secondary);
+    margin-top: calc(2 * var(--u));
+    line-height: 1.2;
+  }
+  .framework-banner .fb-text {
+    flex: 1.6;
+    font-family: var(--font-serif);
+    font-size: var(--fs-6);
+    line-height: 1.5;
+    text-wrap: balance;
+    text-align: center;
+  }
+  .framework-banner .fb-text strong { color: var(--accent-deep); }
+  .framework-banner .fb-label {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    font-family: var(--font-sans);
+    font-size: var(--fs-5);
+    font-weight: 700;
+    padding: calc(2 * var(--u)) calc(8 * var(--u));
+    border-radius: calc(4 * var(--u));
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    vertical-align: middle;
+    line-height: 1;
+    position: relative;
+    top: calc(-1 * var(--u));
+  }
+
+  /* =========================================================
+     BODY: 4 columns, variable-width hint via fr values
+     ========================================================= */
+  .body-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.05fr 1.05fr 1fr;
+    gap: calc(10 * var(--u));
+    /* No overflow:hidden here — it would clip card shadows (pitfall #6).
+       .poster already clips at the page boundary; min-height:0 is the
+       grid-blowout guard. */
+    min-height: 0;
+  }
+  .column {
+    display: flex; flex-direction: column;
+    gap: calc(6 * var(--u));
+    min-height: 0;
+    height: 100%;
+    padding-bottom: calc(4 * var(--u));   /* shadow breathing room above takeaways */
+  }
+
+  /* =========================================================
+     CARDS
+     ========================================================= */
+  .card {
+    background: var(--bg-card);
+    border-radius: calc(5 * var(--u));
+    padding: calc(4 * var(--u)) calc(9 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    box-shadow: var(--shadow-card);
+    position: relative;
+  }
+  .card.tinted    { background: var(--bg-card-tint); }
+  .card.highlight {
+    border-left: calc(6 * var(--u)) solid var(--accent);
+    /* Flat emphasis tint (de-gradient). */
+    background: var(--bg-emphasis);
+  }
+
+  .section-title {
+    font-family: var(--font-sans);
+    font-weight: 700;
+    font-size: var(--fs-7);
+    color: var(--accent-deep);
+    margin-bottom: calc(3 * var(--u));
+    display: flex; align-items: center;
+    gap: calc(5 * var(--u));
+    flex-wrap: wrap;
+  }
+  .section-title .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: calc(22 * var(--u)); height: calc(22 * var(--u));
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    font-size: var(--fs-5); font-weight: 700;
+    flex-shrink: 0;
+  }
+  /* Inline "★ KEY" / "★ Headline" marker beside a section title. */
+  .section-title .key-mark { color: var(--gold); font-size: var(--fs-3); }
+
+  .body-text, .card p, .card li {
+    font-family: var(--font-serif);
+    font-size: var(--fs-4);
+    line-height: 1.3;
+    color: var(--text-primary);
+  }
+  .card ul, .card ol { padding-left: calc(18 * var(--u)); }
+  .card li { margin-bottom: calc(2 * var(--u)); }
+
+  .keyword       { color: var(--accent); font-weight: 700; }
+  .keyword-gold  { color: var(--gold);   font-weight: 700; }
+  .highlight-text {
+    background: var(--bg-emphasis);
+    padding: 0 calc(3 * var(--u));
+    border-radius: calc(2 * var(--u));
+  }
+
+  /* Equation block */
+  .eqn {
+    background: var(--bg-emphasis);
+    border-left: calc(3 * var(--u)) solid var(--accent);
+    padding: calc(4 * var(--u)) calc(10 * var(--u));
+    margin: calc(4 * var(--u)) 0;
+    font-size: var(--fs-5);
+    overflow-x: hidden;
+  }
+  /* Predefined variant for a larger / more legible display equation.
+     `calc(var(--fs-N) * k)` is allowed here because this is a
+     COMPONENTS.md-registered variant (DESIGN_FINAL §A / §10 f). */
+  .eqn--large { font-size: calc(var(--fs-5) * 1.25); }
+  .eqn .label {
+    display: block;
+    font-family: var(--font-sans);
+    font-size: var(--fs-2);
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: calc(2 * var(--u));
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* Callout: solid accent for primary, solid gold for theorems / "★ key" strips */
+  .callout {
+    background: var(--accent);
+    color: white;
+    padding: calc(5 * var(--u)) calc(10 * var(--u));
+    border-radius: calc(4 * var(--u));
+    font-size: var(--fs-4);
+    margin: calc(4 * var(--u)) 0;
+  }
+  .callout strong { color: var(--gold); }
+  /* Flat solid gold (de-gradient). */
+  .callout.gold {
+    background: var(--gold);
+    color: var(--accent-deep);
+  }
+  .callout.gold strong { color: var(--accent-deep); }
+
+  /* Figure container */
+  .figure { margin: calc(4 * var(--u)) 0; text-align: center; }
+  .figure img:not([class*="w-"]) { width: 100%; }
+  .figure img {
+    border-radius: calc(4 * var(--u));
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    background: white;
+  }
+  .figure .caption {
+    font-family: var(--font-sans);
+    font-size: var(--fs-3);
+    color: var(--text-secondary);
+    margin-top: calc(3 * var(--u));
+    line-height: 1.3;
+    text-align: left;
+  }
+  .figure .caption strong { color: var(--accent-deep); }
+
+  /* Result table with .ours row highlighted gold */
+  .result-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-sans);
+    font-size: var(--fs-3);
+    margin-top: calc(3 * var(--u));
+  }
+  .result-table th, .result-table td {
+    padding: calc(2 * var(--u)) calc(4 * var(--u));
+    text-align: center;
+    border-bottom: calc(1 * var(--u)) solid var(--border-soft);
+  }
+  .result-table thead th {
+    background: var(--accent); color: white;
+    font-weight: 600; font-size: var(--fs-2);
+  }
+  .result-table tbody tr.group-row td {
+    background: var(--bg-emphasis); font-weight: 700;
+    text-align: left;
+    color: var(--accent-deep);
+    padding-left: calc(8 * var(--u));
+    border-bottom: calc(2 * var(--u)) solid var(--accent);
+  }
+  .result-table tbody tr.ours td { background: var(--gold-soft); font-weight: 700; }
+  .result-table tbody tr.ours td:first-child { color: var(--accent-deep); }
+  /* Greyed reference row (was inline color:#888). */
+  .result-table tbody tr.reference td { color: var(--text-muted); }
+  .result-table .method { text-align: left; padding-left: calc(8 * var(--u)); }
+  .result-table .best { color: var(--accent); font-weight: 700; }
+
+  /* 3-up stat box */
+  .keybox {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: calc(4 * var(--u));
+    margin: calc(4 * var(--u)) 0 0;
+  }
+  .keybox .kb-item {
+    background: var(--bg-emphasis);
+    border-top: calc(2 * var(--u)) solid var(--accent);
+    padding: calc(3 * var(--u));
+    text-align: center;
+    border-radius: 0 0 calc(3 * var(--u)) calc(3 * var(--u));
+  }
+  .kb-item .kb-num {
+    font-family: var(--font-sans);
+    font-weight: 800;
+    font-size: var(--fs-6);
+    color: var(--accent);
+    line-height: 1;
+  }
+  .kb-item .kb-label {
+    font-family: var(--font-sans);
+    font-size: var(--fs-1);
+    color: var(--text-secondary);
+    margin-top: calc(2 * var(--u));
+    line-height: 1.1;
+  }
+
+  /* Optional takeaways strip (delete the section if not needed) */
+  .takeaways-strip {
+    display: grid;
+    grid-template-columns: auto repeat(4, 1fr);
+    align-items: center;
+    gap: calc(10 * var(--u));
+    /* Flat solid emphasis fill (de-gradient). */
+    background: var(--bg-emphasis);
+    border: calc(1 * var(--u)) solid var(--border-soft);
+    border-radius: calc(5 * var(--u));
+    padding: calc(8 * var(--u)) calc(12 * var(--u));
+  }
+  .takeaways-strip .ts-title {
+    font-family: var(--font-sans);
+    font-size: var(--fs-6);
+    font-weight: 800;
+    color: var(--accent-deep);
+    display: flex; align-items: center; gap: calc(6 * var(--u));
+  }
+  .takeaways-strip .ts-title .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: calc(22 * var(--u)); height: calc(22 * var(--u));
+    background: var(--accent); color: white;
+    border-radius: 50%;
+    font-size: var(--fs-5); font-weight: 700;
+  }
+  .takeaways-strip .ts-item {
+    border-left: calc(3 * var(--u)) solid var(--accent);
+    padding-left: calc(8 * var(--u));
+    line-height: 1.3;
+    text-align: center;
+    text-wrap: balance;
+  }
+  .takeaways-strip .ts-key {
+    font-family: var(--font-sans);
+    font-size: var(--fs-3);
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .takeaways-strip .ts-text {
+    font-family: var(--font-serif);
+    font-size: var(--fs-4);
+    margin-left: calc(4 * var(--u));
+  }
+
+  /* Footer */
+  .footer {
+    grid-column: 1 / -1;
+    display: flex; justify-content: space-between; align-items: center;
+    padding-top: calc(8 * var(--u));
+    border-top: calc(1 * var(--u)) solid var(--border-soft);
+    font-family: var(--font-sans);
+    font-size: var(--fs-5);
+    color: var(--text-muted);
+  }
+  .footer .method-name { color: var(--accent-deep); }
+  .footer .repo { color: var(--accent); font-weight: 600; }
+
+  /* Optional watermark */
+  .ornament {
+    position: absolute;
+    right: calc(20 * var(--u));
+    bottom: calc(20 * var(--u));
+    font-family: var(--font-sans);
+    font-size: var(--fs-9);
+    color: var(--ornament-ink);
+    font-weight: 900;
+    letter-spacing: 4px;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* =========================================================
+     DENSITY COMPONENTS (catalogued — see COMPONENTS.md).
+     Guardrail: no component-local color semantics. Distinction is
+     carried by labels, order and typography — never by new hues.
+     ========================================================= */
+  /* equation-stack: compact multi-row formula stack (denser than one big .eqn) */
+  .equation-stack { margin: calc(2 * var(--u)) 0; }
+  .equation-stack .eqn { margin: calc(2 * var(--u)) 0; padding: calc(2 * var(--u)) calc(8 * var(--u)); }
+
+  /* eqn-anatomy: term-by-term anatomy grid (2x2 default; --row variant = 1x4) */
+  .eqn-anatomy {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: calc(2.5 * var(--u)); margin: calc(3 * var(--u)) 0;
+  }
+  .eqn-anatomy.eqn-anatomy--row { grid-template-columns: repeat(4, 1fr); }
+  .eqn-anatomy .ea-item {
+    background: var(--bg-card-tint);
+    border: 1px solid var(--border-soft);
+    border-left: calc(2 * var(--u)) solid var(--accent);
+    border-radius: calc(2 * var(--u));
+    padding: calc(2 * var(--u)) calc(4 * var(--u));
+    font-size: var(--fs-2); line-height: 1.3;
+  }
+  .eqn-anatomy .ea-tag {
+    display: inline-block; font-family: var(--font-sans); font-weight: 700;
+    font-size: var(--fs-1); color: var(--accent-deep);
+    background: var(--accent-light); border-radius: calc(1.5 * var(--u));
+    padding: calc(0.5 * var(--u)) calc(2.5 * var(--u));
+    margin-right: calc(1.5 * var(--u));
+  }
+
+  /* flow-strip: labeled pipeline, ALL steps the same accent; ONLY the
+     final step may carry the gold top bar. Not an "algorithm" unless the
+     paper has one — see COMPONENTS.md. */
+  .flow-strip { display: flex; align-items: stretch; gap: calc(1.5 * var(--u)); margin: calc(3 * var(--u)) 0; }
+  .flow-strip .step {
+    flex: 1; background: var(--accent-light);
+    border: 1px solid var(--accent-soft); border-radius: calc(2 * var(--u));
+    padding: calc(2 * var(--u)) calc(2.5 * var(--u));
+    text-align: center; font-size: var(--fs-2); line-height: 1.25;
+  }
+  .flow-strip .step .step-name {
+    display: block; font-family: var(--font-sans); font-weight: 700;
+    font-size: var(--fs-1); color: var(--accent-deep);
+    letter-spacing: 0.5px; text-transform: uppercase;
+    margin-bottom: calc(1 * var(--u));
+  }
+  .flow-strip .step--final { border-top: calc(1.5 * var(--u)) solid var(--gold); background: var(--gold-soft); }
+  .flow-strip .arrow {
+    align-self: center; color: var(--accent);
+    font-family: var(--font-sans); font-weight: 700; font-size: var(--fs-4);
+    flex: 0 0 auto;
+  }
+
+  /* figure--duo: two paper figures sharing one caption; each img MUST be
+     a data-source="paper" asset and carry .w-45/.w-50 (42-48% each). */
+  .figure--duo { display: flex; gap: calc(3 * var(--u)); align-items: flex-start; justify-content: center; }
+  .figure--duo img { max-width: 48%; min-width: 0; }  /* hard cap: duo contract is 42-48% each; an oversized w-NN cannot overflow the card */
+
+  /* result-table derived column (gold-soft = DERIVED arithmetic; label it) */
+  .result-table th.derived, .result-table td.derived {
+    background: var(--gold-soft); font-family: var(--font-sans); font-weight: 700;
+  }
+
+  /* keybox 4-up variant */
+  .keybox.keybox--4 { grid-template-columns: repeat(4, 1fr); }
+
+  /* algo: compact numbered procedure — ONLY when the paper itself states
+     an explicit algorithm/procedure; never invent steps. */
+  ol.algo { padding-left: calc(16 * var(--u)); }
+  ol.algo li { margin-bottom: calc(1.5 * var(--u)); font-size: var(--fs-3); line-height: 1.3; }
+
+  /* claim-pills: provenance mini-table (numeric-heavy posters only) */
+  .claim-pills { width: 100%; border-collapse: collapse; font-family: var(--font-sans); font-size: var(--fs-2); }
+  .claim-pills td {
+    border-bottom: 1px solid var(--border-soft);
+    padding: calc(1.5 * var(--u)) calc(3 * var(--u));
+  }
+  .claim-pills .cp-id {
+    font-weight: 700; color: var(--accent-deep); background: var(--accent-light);
+    border-radius: calc(1.5 * var(--u)); padding: 0 calc(2.5 * var(--u)); white-space: nowrap;
+  }
+  .claim-pills .cp-fact { color: var(--accent-deep); font-weight: 700; }
+  .claim-pills .cp-derived { color: var(--gold); font-weight: 700; }
+
+  /* Grid-blowout guards: (1) columns may shrink below min-content so a
+     wide equation can never widen its track and squeeze siblings;
+     (2) over-wide display math scales down to fit its box instead of
+     blowing out the card (SVG keeps aspect via height:auto). */
+  .body-grid > .column { min-width: 0; }
+  .card { min-width: 0; }
+  .eqn mjx-container > svg { max-width: 100%; height: auto; }
+
+  /* ── Utility classes — defined LAST so equal-specificity ties
+     resolve in the utility's favor (source order). ── */
+  .fs-1 { font-size: var(--fs-1); }
+  .fs-2 { font-size: var(--fs-2); }
+  .fs-3 { font-size: var(--fs-3); }
+  .fs-4 { font-size: var(--fs-4); }
+  .fs-5 { font-size: var(--fs-5); }
+  .fs-6 { font-size: var(--fs-6); }
+  .fs-7 { font-size: var(--fs-7); }
+  .fs-8 { font-size: var(--fs-8); }
+  .fs-9 { font-size: var(--fs-9); }
+
+  .mt-1 { margin-top: calc(1 * var(--u)); }
+  .mt-2 { margin-top: calc(2 * var(--u)); }
+  .mt-3 { margin-top: calc(3 * var(--u)); }
+  .mt-4 { margin-top: calc(4 * var(--u)); }
+  .mt-5 { margin-top: calc(5 * var(--u)); }
+  .mt-6 { margin-top: calc(6 * var(--u)); }
+
+  .mb-1 { margin-bottom: calc(1 * var(--u)); }
+  .mb-2 { margin-bottom: calc(2 * var(--u)); }
+  .mb-3 { margin-bottom: calc(3 * var(--u)); }
+  .mb-4 { margin-bottom: calc(4 * var(--u)); }
+
+  .w-45  { width: 45%; }
+  .w-50  { width: 50%; }
+  .w-55  { width: 55%; }
+  .w-60  { width: 60%; }
+  .w-65  { width: 65%; }
+  .w-70  { width: 70%; }
+  .w-75  { width: 75%; }
+  .w-80  { width: 80%; }
+  .w-85  { width: 85%; }
+  .w-90  { width: 90%; }
+  .w-95  { width: 95%; }
+  .w-100 { width: 100%; }
+
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted     { color: var(--text-muted); }
+  .nowrap         { white-space: nowrap; }
+  .text-center    { text-align: center; }
+
+  /* =========================================================
+     PRINT OVERRIDE — KEEP LAST so it wins source-order ties.
+     ========================================================= */
+  @media print {
+    html, body { background: white; }
+    .poster { margin: 0; box-shadow: none; width: 60in; height: 36in; page-break-after: avoid; }
+    :root { --u: 1mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="poster" data-measure-role="poster">
+
+  <!-- =========================== HEADER =========================== -->
+  <header class="header" data-measure-role="header">
+    <!-- LEFT: venue badge. Replace text or swap for an <img> if your venue allows logos. -->
+    <div class="venue-badge">
+      <div class="vb-venue">VENUE</div>
+      <div class="vb-year">YEAR</div>
+      <div class="vb-tag">POSTER</div>
+    </div>
+
+    <!-- CENTER: title block -->
+    <div class="title-block">
+      <h1 class="title">POSTER TITLE: <span class="accent">Subtitle Keyword</span></h1>
+      <div class="subtitle">One-sentence tagline that explains the work in plain English.</div>
+      <div class="authors-line">
+        <span class="author">Author One</span> &middot;
+        <span class="author">Author Two</span> &middot;
+        <span class="author">Author Three<sup>&#9993;</sup></span>
+        <span class="aff">Lab / Department &middot; Institution &middot; City, Country</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: optional logo + QR. Delete .logo-slot if your venue forbids on-poster logos. -->
+    <div class="right-block">
+      <div class="logo-slot">
+        <!-- Affiliation / lab logo goes here:
+             <img src="images/lab-logo.png" alt="Lab">
+             For an inline-SVG logo with brand colors, mark it exempt so
+             style_check skips its fills:
+             <svg data-color-exempt="logo" ...> ... </svg>
+             No logo? Delete this entire <div class="logo-slot"> instead of
+             leaving it empty (an empty slot just adds a stray gap). The .aff
+             text line and the corner .ornament still carry attribution. -->
+      </div>
+      <div class="qr-block">
+        <!-- TODO: replace with your real QR code. The default below is an inline
+             SVG placeholder so the template renders offline. Generate a real one with
+             one of:
+               $ qrencode -o qr.png -s 12 -m 0 "https://your-url"     # apt install qrencode
+               $ python -c "import qrcode; qrcode.make('https://your-url').save('qr.png')"
+             then change src to "qr.png" (export at ≥ 2× rendered size for crisp print).
+             The placeholder data-URI carries data-color-exempt="logo" so its
+             literal fills are exempt from the color gate. -->
+        <img data-color-exempt="logo" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%23fff'/><g fill='%23222'><rect x='4' y='4' width='26' height='26'/><rect x='70' y='4' width='26' height='26'/><rect x='4' y='70' width='26' height='26'/></g><g fill='%23fff'><rect x='10' y='10' width='14' height='14'/><rect x='76' y='10' width='14' height='14'/><rect x='10' y='76' width='14' height='14'/></g><g fill='%23222'><rect x='14' y='14' width='6' height='6'/><rect x='80' y='14' width='6' height='6'/><rect x='14' y='80' width='6' height='6'/><rect x='38' y='10' width='4' height='4'/><rect x='48' y='10' width='4' height='4'/><rect x='58' y='10' width='4' height='4'/><rect x='34' y='34' width='4' height='4'/><rect x='44' y='38' width='4' height='4'/><rect x='54' y='34' width='4' height='4'/><rect x='62' y='40' width='4' height='4'/><rect x='38' y='46' width='4' height='4'/><rect x='50' y='52' width='4' height='4'/><rect x='62' y='56' width='4' height='4'/><rect x='34' y='60' width='4' height='4'/><rect x='44' y='66' width='4' height='4'/><rect x='56' y='62' width='4' height='4'/><rect x='80' y='80' width='4' height='4'/><rect x='88' y='86' width='4' height='4'/></g><text x='50' y='54' text-anchor='middle' font-family='sans-serif' font-size='6' font-weight='bold' fill='%23888'>QR</text></svg>" alt="QR placeholder — replace with your real QR before printing">
+        <div class="qr-label">Paper &amp; Code</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===================== OPTIONAL FRAMEWORK BANNER =====================
+       Delete this entire <section> if your poster doesn't need a banner.
+       (To do so, also remove `auto` from the grid-template-rows above.) -->
+  <section class="framework-banner" data-measure-role="banner">
+    <!-- Method overview figure from the paper goes here. Mark it as a paper
+         asset so asset_check + style_check recognize it:
+         <img src="assets/paper_figures/framework.png" data-source="paper"
+              data-asset-id="framework" class="w-100"> -->
+    <div class="fb-text">
+      <span class="fb-label">Framework</span>
+      &nbsp;<strong>Method name</strong> in one sentence — what it does, what it improves, what's new.
+    </div>
+    <div class="banner-stats">
+      <div class="bs-item"><div class="bs-num">N&times;</div><div class="bs-label">headline<br>improvement</div></div>
+      <div class="bs-item"><div class="bs-num">SOTA</div><div class="bs-label">benchmark<br>positioning</div></div>
+      <div class="bs-item"><div class="bs-num">key</div><div class="bs-label">property<br>(e.g. proxy-free)</div></div>
+      <div class="bs-item"><div class="bs-num">tag</div><div class="bs-label">domain<br>(e.g. offline RL)</div></div>
+    </div>
+  </section>
+
+  <!-- ============================ BODY ============================ -->
+  <div class="body-grid" data-measure-role="body">
+
+    <!-- ============ COLUMN 1 ============ -->
+    <div class="column" data-measure-role="column">
+
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">1</span> Motivation</div>
+        <p class="body-text">
+          TODO: 2-3 sentences on the problem. Use <span class="keyword">accent color</span> for terms you want the eye to land on.
+        </p>
+        <ul class="mt-3 fs-4">
+          <li>TODO: pain point 1.</li>
+          <li>TODO: pain point 2.</li>
+        </ul>
+        <div class="callout mt-4">
+          <strong>Q:</strong> TODO: the question your paper answers.
+        </div>
+      </div>
+
+      <div class="card" data-measure-role="card">
+        <div class="section-title"><span class="num">2</span> Key Insight</div>
+        <p class="body-text">
+          TODO: 2-3 sentences on the central insight.
+        </p>
+        <div class="figure mt-3">
+          <!-- Key-insight figure from the paper:
+               <img src="assets/paper_figures/key-figure.png" data-source="paper"
+                    data-asset-id="key-figure" class="w-95"> -->
+          <div class="caption">
+            TODO: caption explaining (a) / (b) / (c) panels in one line each.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ COLUMN 2 ============ -->
+    <div class="column" data-measure-role="column">
+
+      <div class="card" data-measure-role="card">
+        <div class="section-title"><span class="num">3</span> Method Step 1</div>
+        <p class="body-text">TODO: how step 1 works.</p>
+        <div class="eqn">
+          <span class="label">Core equation</span>
+          $$f(x) \;=\; \text{TODO}$$
+        </div>
+        <p class="body-text">TODO: interpretation.</p>
+      </div>
+
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">4</span> Method Step 2 <span class="key-mark">&#9733; KEY</span></div>
+        <p class="body-text">TODO: how step 2 works.</p>
+        <div class="eqn eqn--large">
+          <span class="label">Step 2 equation</span>
+          $$g(x) \;=\; \text{TODO}$$
+        </div>
+        <div class="callout gold">
+          <strong>Theorem.</strong> TODO: one-sentence statement, with $\varepsilon$ bounds if applicable.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ COLUMN 3 ============ -->
+    <div class="column" data-measure-role="column">
+
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">5</span> Main Result <span class="key-mark">&#9733; Headline</span></div>
+        <p class="body-text fs-3 text-secondary mb-1">
+          TODO: setup line — dataset, # samples, baselines.
+        </p>
+        <div class="figure">
+          <!-- Main-result figure from the paper:
+               <img src="assets/paper_figures/main-result.png" data-source="paper"
+                    data-asset-id="main-result" class="w-100"> -->
+          <div class="caption fs-2">
+            <strong>Left:</strong> TODO. <strong>Right:</strong> TODO.
+          </div>
+        </div>
+        <div class="keybox">
+          <div class="kb-item"><div class="kb-num">A</div><div class="kb-label">stat 1<br>caption</div></div>
+          <div class="kb-item"><div class="kb-num">B</div><div class="kb-label">stat 2<br>caption</div></div>
+          <div class="kb-item"><div class="kb-num">C</div><div class="kb-label">stat 3<br>caption</div></div>
+        </div>
+      </div>
+
+      <div class="card" data-measure-role="card">
+        <div class="section-title"><span class="num">6</span> Robustness / Secondary</div>
+        <p class="body-text">TODO: 1-2 sentences on robustness, ablation, or secondary axis.</p>
+        <ul class="mt-3">
+          <li><strong>Setting A</strong> — TODO.</li>
+          <li><strong>Setting B</strong> — TODO.</li>
+        </ul>
+        <div class="callout mt-3">
+          TODO: bottom-line takeaway from the robustness study.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ============ COLUMN 4 ============ -->
+    <div class="column" data-measure-role="column">
+
+      <div class="card highlight" data-measure-role="card">
+        <div class="section-title"><span class="num">7</span> Benchmark Table</div>
+        <p class="body-text fs-2 text-secondary mb-1">
+          TODO: setup line — samples, seeds, metric description.
+        </p>
+        <table class="result-table">
+          <thead>
+            <tr>
+              <th class="method">Method</th>
+              <th>Metric A &#8593;</th>
+              <th>Metric B &#8593;</th>
+              <th>Cost &#8595;</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="reference"><td class="method"><em>Reference</em></td><td>x.xx</td><td>x.xx</td><td>x.xx</td></tr>
+            <tr><td class="method">Baseline 1</td><td>x.xx</td><td>x.xx</td><td>x.xx</td></tr>
+            <tr><td class="method">Baseline 2</td><td>x.xx</td><td>x.xx</td><td>x.xx</td></tr>
+            <tr class="ours"><td class="method">Ours</td><td class="best">x.xx</td><td class="best">x.xx</td><td class="best">x.xx</td></tr>
+          </tbody>
+        </table>
+        <p class="body-text mt-2 fs-3">
+          TODO: one-sentence interpretation.
+        </p>
+      </div>
+
+      <div class="card" data-measure-role="card">
+        <div class="section-title"><span class="num">8</span> Diversity / Extra View</div>
+        <p class="body-text">TODO: 1-sentence framing.</p>
+        <div class="figure">
+          <!-- Secondary figure from the paper:
+               <img src="assets/paper_figures/secondary-figure.png" data-source="paper"
+                    data-asset-id="secondary-figure" class="w-100"> -->
+          <div class="caption fs-2">TODO: caption.</div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ============================ OPTIONAL TAKEAWAYS STRIP ============================ -->
+  <section class="takeaways-strip" data-measure-role="footer-strip">
+    <div class="ts-title"><span class="num">9</span> Takeaways</div>
+    <div class="ts-item"><span class="ts-key">Idea.</span><span class="ts-text">TODO: 1-line.</span></div>
+    <div class="ts-item"><span class="ts-key">Method.</span><span class="ts-text">TODO: 1-line.</span></div>
+    <div class="ts-item"><span class="ts-key">Result.</span><span class="ts-text">TODO: 1-line.</span></div>
+    <div class="ts-item"><span class="ts-key">Practical.</span><span class="ts-text">TODO: 1-line.</span></div>
+  </section>
+
+  <!-- ============================ FOOTER ============================ -->
+  <div class="footer" data-measure-role="footer">
+    <div>
+      <strong class="method-name">METHOD NAME</strong> &middot; Venue Year &middot;
+      Acknowledgements: TODO.
+    </div>
+    <div>
+      Code: <span class="repo">github.com/&lt;org&gt;/&lt;repo&gt;</span> &nbsp;&middot;&nbsp;
+      Contact: <span class="repo">presenter@example.com</span>
+    </div>
+  </div>
+
+  <!-- Optional watermark — delete if you don't want it. -->
+  <div class="ornament">LAB &middot; INSTITUTION</div>
+
+</div>
+
+</body>
+</html>

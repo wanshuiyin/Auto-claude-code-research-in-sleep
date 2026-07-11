@@ -2,12 +2,50 @@
 name: meta-optimize
 description: "Analyze ARIS usage logs and propose optimizations to SKILL.md files, reviewer prompts, and workflow defaults. Outer-loop harness optimization inspired by Meta-Harness (Lee et al., 2026). Use when user says \"优化技能\", \"meta optimize\", \"improve skills\", \"分析使用记录\", or wants to optimize ARIS's own harness components based on accumulated experience."
 argument-hint: [target-skill-or-all]
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
 # Meta-Optimize: Outer-Loop Harness Optimization for ARIS
 
 Analyze accumulated usage logs and propose optimizations for: **$ARGUMENTS**
+
+## Privilege boundary — this skill is a READ-ONLY PRODUCER
+
+meta-optimize **proposes**; it does not **land**. The mutation of the skill corpus
+is the exclusive job of a separate, human-invoked skill: [`/meta-apply`](../meta-apply/SKILL.md).
+This split is structural, not advisory — it is why a missed instruction cannot let
+this loop apply its own patch (the self-acquittal failure mode):
+
+- **No `Write`/`Edit` tool.** This skill cannot edit a SKILL.md / shared-reference /
+  any corpus file with the frictionless mutators. Its only outputs are the REPORT and
+  staged patch files, written under `.aris/meta/` (a scratch area, never the corpus).
+- **No apply step.** There is no in-skill "apply the patch" path (see Step 6). The
+  producer ends by *staging* approved patches for `/meta-apply`; a human must then
+  invoke `/meta-apply` to land them. That human action is the landing gate.
+- **`Bash` writes to the corpus are filtered, not impossible — be honest about the
+  layers.** What IS fully closed: the *accidental / in-flow* self-acquittal — this skill
+  has no `Write`/`Edit` and no apply step, so an honest run cannot slip into editing the
+  corpus. Defense-in-depth: install the
+  [`corpus_write_guard`](../../templates/claude-hooks/corpus_write_guard.json) PreToolUse
+  hook (like `meta_logging.json`), which DENIES the common Bash shell-writes (`>`, `tee`,
+  `sed -i`, `cp`/`mv`, `touch`, `open(...,'w')`) to corpus paths. **This is a blacklist,
+  NOT a complete sandbox** — a *deliberately* obscured Bash write (`git apply`, `patch`,
+  `$var`/absolute paths, language file APIs) is not all caught. **Full structural
+  prevention requires either removing this skill's `Bash` or an FS sandbox** — over-built
+  for a not-yet-load-bearing producer, so deferred to when the gate carries real
+  auto-modification volume (a brick-3 trigger). The intended backstop against a deliberate
+  write is **detection, not prevention** — a corpus change with no valid/current
+  `provenance` stamp (content-hash mismatch) *would be* catchable in a pre-push integrity
+  check — but that verifier is **NOT yet built** (`provenance.py` has `content_hash` but no
+  integrity-check subcommand, and no pre-push hook runs one). So today the deliberate-write
+  case is neither prevented nor actively detected; track the integrity verifier as a
+  follow-up before this producer goes load-bearing. Its legitimate Bash writes go only to
+  `.aris/meta/`.
+
+See [`shared-references/acceptance-gate.md`](../shared-references/acceptance-gate.md):
+a loop can DRIVE (propose, review) same-model, but the ACQUITTAL that lands a change
+must be cross-model (Step 4 jury) **and** the landing must be a separate human-gated
+act (`/meta-apply`).
 
 ## Context
 
@@ -55,7 +93,18 @@ if [ "$SKILL_INVOCATIONS" -lt 5 ]; then
     echo "⚠️  Insufficient data (<5 skill invocations). Continue using ARIS normally and re-run later."
     exit 0
 fi
+
+# Bottleneck succession: what did the LAST cycle say was the limiting stage?
+BOTTLENECK_LOG=".aris/meta/bottleneck_log.jsonl"
+if [ -f "$BOTTLENECK_LOG" ]; then
+    echo "🧭 Prior cycle's bottleneck: $(tail -1 "$BOTTLENECK_LOG")"
+fi
 ```
+
+If a prior bottleneck entry exists, open the report (Step 5) by stating whether
+that named bottleneck was **resolved** (and by which landed patches) and what it
+has now **moved to** — bottleneck SUCCESSION, not just existence, is the signal
+this ledger exists to carry.
 
 ### Step 1: Analyze Usage Patterns
 
@@ -81,7 +130,77 @@ Read `.aris/meta/events.jsonl` and compute:
 - Where do users interrupt with manual prompts during workflows?
 - What manual corrections do users make most? (These indicate skill gaps.)
 
+**Model-delta analysis (harness diet):**
+- Has the session model (`session_start` events' `model` field) or the pinned
+  reviewer model changed since a skill's SKILL.md was last touched?
+  (`git log -1 --format=%cs -- skills/<skill>/SKILL.md` vs the model-bump date.)
+- A model bump is a **trigger to re-read, not evidence by itself**. For each
+  reasoning-scaffolding step or worked example in that SKILL.md, a deletion
+  proposal must cite TARGET-SPECIFIC evidence that the new model no longer
+  needs it: a capability-specific release note, or repeated observed behavior
+  in the event log (e.g. zero failures/interventions in the guarded step since
+  the bump). "The model got newer" alone never justifies a deletion.
+- **Never deletion candidates**, regardless of model: privilege boundaries,
+  acceptance/review gates, corpus- and provenance-integrity rules, output
+  contracts, and safety checks. The diet targets model-compensation scaffolding
+  only — a capability the new model has natively is pure overhead (context
+  weight, drift surface, reading cost). A harness that only ever grows is a
+  harness nobody is re-reading.
+
+**Trigger-rate analysis (optional, measured — not from the event log):**
+- The event log shows which skills were USED, not which were WANTED-but-omitted
+  — the omission failure mode (Claude Code passing over the right skill when the
+  installed list is long) is invisible to it. `tools/meta_opt/trigger_eval.py`
+  measures it directly: `claude -p` probes with paraphrased-intent queries run
+  from a neutral cwd (so the realistic long installed corpus is loaded), scored
+  as trigger / confusion(→which skill) / miss.
+- Run it when a specific skill is suspected of under- or mis-triggering, or as a
+  before/after check around a description edit:
+  `python3 tools/meta_opt/trigger_eval.py --eval-file tools/meta_opt/trigger_evals.sample.json --skills <name> --samples 2`
+- The **confusion matrix is the signal**, not just the rate: a query that keeps
+  landing on a sibling skill means the two descriptions overlap on that intent —
+  the fix is disambiguation, not "make the description pushier".
+- **Measure-only, evidence not verdict.** A low trigger rate is an INPUT to a
+  Step-2 proposal (which lands only via `/meta-apply`), never a self-applied
+  description rewrite. Trigger rate is model-dependent, so compare like with
+  like (record the probe model) and treat it as a proxy — it measures selection
+  under a query set, not the full long-list omission problem.
+
 Present findings as a structured summary table.
+
+### Step 1.5: Name the Current Bottleneck
+
+Synthesize the Step-1 analyses into **one sentence naming the single
+most-limiting pipeline stage right now** — e.g. "planning", "verification
+quality", "experiment execution reliability", "writing polish" — with the
+supporting evidence. The bottleneck always moves: when coding stops being the
+constraint, planning becomes it; when planning is solved, verification; when
+verification is automated, taste. This step exists to make the CURRENT
+constraint visible, so Step 2's ranked table reads as sub-fixes for one named
+constraint instead of scattered tweaks.
+
+Append the verdict to the append-only ledger `.aris/meta/bottleneck_log.jsonl`
+(same never-mutate discipline as `.aris/runs/<run_id>.iterations.jsonl`):
+
+```bash
+mkdir -p .aris/meta
+# json.dumps, NOT hand-interpolated shell strings: bottleneck/evidence are
+# natural language — a stray quote must not break the JSONL (or the shell).
+python3 - <<'PY'
+import json, datetime
+entry = {
+    "ts": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+    "cycle": 3,
+    "bottleneck": "verification quality",
+    "evidence": "review rounds plateau at 6/10 while tool failures are rare",
+    "top_patch_ids": ["P1", "P2"],
+}
+with open(".aris/meta/bottleneck_log.jsonl", "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+PY
+```
+
+Never edit or delete prior lines — succession history is the point.
 
 ### Step 2: Identify Optimization Targets
 
@@ -95,7 +214,12 @@ Based on Step 1, rank optimization opportunities by expected impact:
 | 1 | auto-review-loop default threshold | Users override to 7/10 in 60% of runs | Change default from 6/10 to 7/10 | Fewer manual overrides |
 | 2 | experiment-bridge retry count | 40% of runs hit max retries on OOM | Add OOM-specific recovery (reduce batch size) | Fewer failed experiments |
 | 3 | paper-write de-AI patterns | Users manually fix "delve" in 80% of runs | Add "delve" to default watchword list | Fewer manual edits |
+| 4 | experiment-bridge Phase-2 hand-holding steps | Model bump (session_start model changed); scaffold untouched since 2 generations ago; zero tool_failures in the steps it guards | **DELETE steps N–M — the new model does this unprompted** | Smaller harness, less drift surface |
 ```
+
+The Proposed-Change column is explicitly allowed to be a **deletion** — "DELETE
+step N, new model does this for free" is a first-class optimization, ranked by
+the same impact logic as additions.
 
 If `$ARGUMENTS` specifies a target skill, focus analysis on that skill only.
 If `$ARGUMENTS` is empty or "all", analyze all skills with sufficient data.
@@ -120,14 +244,26 @@ For each optimization target, generate a concrete diff:
 - Patches must be minimal — change only what the data supports
 - Never change artifact schemas or MCP bridge config in v1
 - Never change behavior that would break existing user workflows
+- **Anti-self-poisoning screen** (see [`shared-references/capture-antipatterns.md`](../shared-references/capture-antipatterns.md)):
+  run a proposed patch's rationale through `tools/capture_filter.py` (resolve via
+  the canonical chain). NEVER propose a change that encodes a **negative
+  tool-capability claim** ("codex can't…", "gemini is broken") or a **one-off /
+  transient failure** as a durable rule — those harden into self-cited refusals.
+  Encode the *fix / the flag needed / the workaround*, not "X can't do Y".
 
-### Step 4: Cross-Model Review of Patches
+### Step 4: Cross-Model Review of Patches (ADVISORY pre-screen)
 
-Send each patch to GPT-5.4 xhigh for adversarial review:
+> This review is **advisory** — it sharpens the Step-5 REPORT so the human can decide
+> what to stage. It is **not** the landing verdict. The binding cross-model jury runs
+> later, at landing, inside [`/meta-apply`](../meta-apply/SKILL.md), on the actual staged
+> diff (a producer-relayed verdict would be forgeable). Record this result as
+> `advisory_screen` only.
+
+Send each patch to GPT-5.6-Sol xhigh for adversarial review:
 
 ```
 mcp__codex__codex:
-  model: gpt-5.5
+  model: gpt-5.6-sol
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are reviewing a proposed optimization to an ARIS SKILL.md file.
@@ -161,6 +297,12 @@ Output a structured report:
 **Data**: [N] events, [M] skill invocations, [K] sessions
 **Target**: [skill name or "all"]
 
+## Current Bottleneck
+
+**[one-phrase name]** — [one-line evidence]. Prior cycle's bottleneck: [name —
+resolved by <patch ids> / unresolved / first recorded cycle]. (Ledger:
+`.aris/meta/bottleneck_log.jsonl`)
+
 ## Proposed Changes
 
 ### Change 1: [title]
@@ -182,24 +324,37 @@ Output a structured report:
 - [ ] Consider manual review of Change 2
 
 ## Next Steps
-Run `/meta-optimize apply 1` to apply a specific change, or
-`/meta-optimize apply all` to apply all recommended changes.
+This skill only **proposes**. To land changes: tell me which to stage, then run
+`/meta-apply` (a separate, human-invoked applier that re-checks the cross-model
+verdict before mutating anything). meta-optimize never applies.
 ```
 
-### Step 6: Apply Changes (if user approves)
+### Step 6: Stage approved patches for `/meta-apply` (NO in-skill apply)
 
-If user runs `/meta-optimize apply [N]`:
-1. Back up original SKILL.md to `.aris/meta/backups/`
-2. Apply the patch
-3. Log the change to `.aris/meta/optimizations.jsonl`
-4. Remind user to test the changed skill on their next run
+This skill does **not** apply anything. After the user has read the Step-5 REPORT and
+indicated which changes to land, **stage** them for the privileged applier:
 
-**Never auto-apply without user approval.**
+1. For each approved change `N`, write its unified diff to
+   `.aris/meta/pending/<NN>_<skill>.diff` and append a row to
+   `.aris/meta/pending/manifest.jsonl`:
+   `{patch: "<NN>_<skill>.diff", target: "<corpus path>", author_model: "<executor>",
+   advisory_screen: "pass|kill", advisory_reason: "<one line>"}`.
+   The `advisory_screen` (your Step-4 codex pre-review) is **advisory only** — it helps
+   the human read the REPORT. It is **NOT** the landing verdict and `/meta-apply` does not
+   trust it: a producer-written verdict would be forgeable. The binding cross-model jury
+   runs **at landing, inside `/meta-apply`,** on the actual staged diff.
+2. Tell the user: *"Staged M patches. Run `/meta-apply` to judge & land them."*
+
+The backup → **fresh jury-at-landing** → apply → **provenance stamp** → log all happen
+inside [`/meta-apply`](../meta-apply/SKILL.md). meta-optimize never touches the corpus and
+never produces the acquittal.
+
+**Never apply in this skill. Landing is `/meta-apply` + a fresh jury + a human, always.**
 
 ## Key Rules
 
 - **Log-driven, not speculative.** Every proposed change must cite specific data from the event log. No "I think this would be better."
-- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills.
+- **Minimal patches.** Change one thing at a time. Don't rewrite entire skills — the one sanctioned large edit is a scaffolding **deletion** backed by TARGET-SPECIFIC model-delta evidence (a capability-specific release note, or repeated post-bump event-log behavior showing the scaffold is unused — the model name changing is a trigger to look, never sufficient evidence). Privilege boundaries, acceptance gates, corpus/provenance rules, output contracts, and safety checks are never deletion candidates. Deletions go through the same review + approval gates as everything else.
 - **Reviewer-gated.** Every patch goes through cross-model review before recommendation.
 - **Reversible.** Always back up before applying. Always log what changed.
 - **User-approved.** Never auto-apply. Present, explain, let the user decide.
@@ -231,11 +386,16 @@ This skill is NOT part of the standard W1→W1.5→W2→W3→W4 pipeline. It is 
    ```
    📊 ARIS has logged 8 skill runs since last optimization. Run /meta-optimize to check for improvement opportunities.
    ```
-   This is a **suggestion only** — it does not auto-run optimization.
+   It ALSO fires — regardless of invocation count — when the session model has
+   changed since the last optimize (compared against `.aris/meta/.last_optimize_model`):
+   ```
+   🔁 Model changed since last optimization (claude-opus-4-6 → claude-opus-4-8). Run /meta-optimize — a model bump makes existing scaffolding a deletion candidate (harness diet).
+   ```
+   Both are **suggestions only** — they do not auto-run optimization.
 
 3. **Manual trigger**: User runs `/meta-optimize` when they see the reminder or whenever they want.
 
-**After each `/meta-optimize` run**, the skill writes the current timestamp to `.aris/meta/.last_optimize` so the readiness check only counts new invocations.
+**After each `/meta-optimize` run**, the skill writes the current timestamp to `.aris/meta/.last_optimize` and the current session model (latest `session_start` event's `model` field) to `.aris/meta/.last_optimize_model`, so the readiness check can detect both new usage and model bumps.
 
 ## Acknowledgements
 

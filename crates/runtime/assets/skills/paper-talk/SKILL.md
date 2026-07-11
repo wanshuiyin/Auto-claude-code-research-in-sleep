@@ -2,7 +2,7 @@
 name: paper-talk
 description: "End-to-end conference talk pipeline: paper → slide outline → Beamer + PPTX → per-page polish → assurance checks (claim / citation / anonymity) → final export and report. Default-good for academic conference talks (NeurIPS / ICML / ICLR / VALSE / 投稿 talks). Trigger phrases: \"做 talk\", \"做 PPT 全流程\", \"talk pipeline\", \"end-to-end slides\", \"做演讲\", \"conference talk full workflow\". Use when the user wants the complete talk artifact, not just a slide deck."
 argument-hint: "[paper-dir] [— talk_type: oral | spotlight | poster-talk | invited] [— minutes: N] [— assurance: draft | polished | conference-ready] [— reference: <pdf>] [— style: generic | why-rf | <venue>] [— style-ref: <paper-source>] [— effort: lite | balanced | max | beast] [— anonymous]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Agent, Skill, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__codex__codex
 ---
 
 # Paper Talk: End-to-End Conference Talk Pipeline
@@ -360,7 +360,7 @@ Forwarded to:
 ## When NOT to Use
 
 - The paper is not yet compiled or claims are not stable. Run `/paper-writing` first.
-- The user wants a poster, not a talk. Use `/paper-poster`.
+- The user wants a poster, not a talk. Use `/paper-poster-html`.
 - The user already has a finished deck and only needs visual polish. Use `/slides-polish` directly — `/paper-talk` would needlessly rebuild.
 - The talk content is unrelated to a paper (general lecture, demo). The orchestration assumes a paper-grounded talk; for ad-hoc decks, use `/paper-slides` directly with manual outline.
 
@@ -368,7 +368,7 @@ Forwarded to:
 
 - Composes `/paper-slides`, `/slides-polish`, `/paper-claim-audit`, `/citation-audit`.
 - Does **not** call `/kill-argument` by default — that is upstream intellectual stress-test, not deck QA. Users who want talk-story stress-test before slide build can run `/kill-argument paper/` first.
-- Sister workflow to `/paper-writing` (paper) and `/paper-poster` (poster).
+- Sister workflow to `/paper-writing` (paper) and `/paper-poster-html` (poster).
 
 ## Empirical Origin
 

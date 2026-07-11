@@ -102,7 +102,12 @@ human-readable Markdown sibling). The JSON must contain at minimum:
   },
   "trace_path": ".aris/traces/paper-claim-audit/2026-04-21_run01/",
   "thread_id":  "019dae73-fc12-4ab8-...",
-  "reviewer_model": "gpt-5.5",
+  "executor_model": "claude-opus-4-8",
+  "executor_family": "anthropic",
+  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_family": "openai",
+  "review_independence": "cross-family",
+  "acceptance_status": "accepted",
   "reviewer_reasoning": "xhigh",
   "generated_at": "2026-04-21T14:23:01Z",
   "details": {
@@ -125,9 +130,19 @@ Field semantics:
     after running `paper-claim-audit`? The next verifier run will catch it.)
 - **`trace_path`** — directory containing the full reviewer prompt + response
   pair, per `review-tracing.md`. Required for mandatory audits — not optional.
-- **`thread_id`** — Codex MCP thread ID, for forensic traceability.
+- **`thread_id` or `agent_id`** — durable reviewer handle. MCP routes use a
+  thread ID; Codex `spawn_agent` routes use an agent ID. At least one is required.
 - **`reviewer_model`** + **`reviewer_reasoning`** — proves cross-family review
   invariant was honored.
+- **`review_independence`** — `same-family`, `cross-family`, or `deterministic`.
+  `deterministic` is valid ONLY for what a process can actually decide
+  (compilation, schema validity, hash freshness, test suites) — the audit
+  aggregator REJECTS a deterministic label on the four semantic paper audits
+  (proof / claims / citations / attack), which only a cross-family model
+  review can accept.
+  **`acceptance_status`** is `provisional` for same-family review and
+  `accepted` for cross-family/deterministic review; neither field rewrites the
+  substantive verdict.
 - **`generated_at`** — UTC ISO-8601 timestamp.
 
 ## Verifier Contract
@@ -145,6 +160,12 @@ Field semantics:
 6. Verify `trace_path` exists and is non-empty.
 7. Output a structured JSON report and exit 0 (all green) or 1 (any FAIL /
    BLOCKED / ERROR / STALE / missing artifact).
+
+The report also emits `overall_assurance`: `blocked` for a blocking condition,
+`provisional` when green artifacts include same-family or legacy-unspecified
+review, and `accepted` only when all green artifacts are cross-family or
+deterministic. Provisional remains exit 0 but must never be presented as
+submission-ready yes.
 
 Phase 6 of `paper-writing` invokes the verifier; at `assurance: submission`,
 non-zero exit blocks Final Report generation.
