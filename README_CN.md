@@ -16,6 +16,8 @@
 
 ![ARIS-Code Screenshot](docs/screenshot.png)
 
+*截图来自较早版本 —— 当前默认 executor 为 Claude Opus 4.8，reviewer 为经由 Codex MCP 的 GPT-5.6-Sol。*
+
 > **对抗·多智能体研究自动化 CLI**
 > Executor 执行 · Reviewer 审查 · 迭代精进
 
@@ -27,6 +29,8 @@
 
 ## 📰 最新动态
 
+> **v0.4.22** (2026-07-11) — **skills 大同步 + GPT-5.6-Sol 版**。**📦 bundle 追平主仓 93 个 commit**:**79 个内置 skill**(新增 `meta-apply`、`paper-poster-html` —— 新的测量门控 HTML 海报流水线)、28 个 tools helper(+8)、11 篇新 shared-references 规范文档;同步脚本新增 `ARIS_SYNC_EXPECT_SHA` 钉版本护栏 + 精确清单漂移测试。**🎛 Reviewer 控制面升级到新 skills 携带的 GPT-5.6-Sol 双档制**:system prompt 现在放行 skills 显式 pin 的 `model: gpt-5.6-sol` + 每次调用的 effort(旧的"绝不传 model"规则会把深度审从 ultra 静默压到 xhigh)、携带规范的仅-能力型 fallback 链、并在每次 fresh codex 调用上 pin `approval-policy: "never"` + 显式 `sandbox`;HTTP LlmReview fallback 默认**刻意保持 gpt-5.5**(gpt-5.6-sol 在 chat-completions + reasoning_effort 真烟测通过前仅作实验性选项);落地 gpt-5.6 家族计价(sol $5/$30、terra $2.50/$15、luna $1/$6);banner / Reviewer 行 / `/reviewer` 全部诚实区分 primary 与 fallback。**🐛 8 个核实修复**:显式 `--model` 不再被 saved model 静默覆盖(来源全程追踪;4.8→4.7 可用性回落尊重显式选择);saved model 不再跨 provider 泄漏(OpenAI transport 无模型时 fail-fast);`--output-format json` 绝不弹审批(单 JSON 文档契约恢复);**Windows `aris login` 修好**(PKCE 读 /dev/urandom → getrandom)、**Windows 命令探测修好**(PowerShell 工具此前用 `sh` 探测自己);codex `.cmd` shim 诚实分类(setup 不再写下 MCP 起不来的配置);嵌套 config.json 现在会警告而非静默变全默认;NotebookEdit 不再铸重复 cell id。**🖥 新增 windows-latest CI job**(编译门 + 3 组定向测试)。测试:api 41 / aris-cli 204 + 1 e2e / runtime 223 / tools 69 / commands 5(+54)全绿。Codex MCP(gpt-5.6-sol **ultra**):5 轮设计 gate(NO-GO ×4 → GO)+ subagent 实现磁盘核实。
+>
 > **v0.4.21** (2026-06-28) — **bug-fix 补丁**(Codex 对抗式猎杀挖出的 5 个新真用户 bug —— 全部磁盘核实、与 v0.4.20 不重叠;设计 + 实现两道跨模型审)。**🐛 头条**:OpenAI-compatible 流式把跨网络 chunk 切断的多字节 UTF-8(中文 / emoji)解成 `�` —— 每个 HTTP chunk 单独 `from_utf8_lossy`,于是一个 3 字节中文字或 4 字节 emoji 落在 chunk 边界上就两边都坏(对中文用户 + 国产 OpenAI-compatible provider —— Kimi/GLM/MiniMax/DeepSeek/Qwen/豆包 —— 是高频命中)。流式缓冲改为原始字节,只解码完整 SSE 行。**还修**:saved 的 OpenAI/custom executor 配置不再覆盖 shell 设的 `EXECUTOR_PROVIDER`(启动"shell 优先"路径有一处没加 gate → 走错 executor / model not found);Anthropic 流在有内容但无终止信号时 clean-EOF 现在硬报错(`premature_eof`)而非把半截回答存成完整 turn(与 OpenAI `#249` guard 对称;stop_reason-only 兼容路径保留,且 `ARIS_ALLOW_EOF_WITHOUT_STOP=1` 让"合法地从不发终止信号"的代理回到旧行为);`grep_search` 的 `multiline: true` 在 content 模式真能跨行匹配了(此前静默返回空);只装在 `structuredContent` 里的 MCP 工具结果不再被丢弃。测试(CI 模式):api 35 / runtime 212 / tools 67 / aris-cli 181 / commands 5(+21,含 2 个流级集成测试)全绿。Codex MCP(gpt-5.5 xhigh):设计审(NO-GO → 修掉一个 off-by-one 后 GO)→ 实现审(NO-GO → 补流级集成测试后 GO)。(两个潜在候选 —— Anthropic block-`index` 路由、OpenAI 多行 SSE —— 仍留硬化 pass。)
 >
 > **v0.4.20** (2026-06-19) — **bug-fix 补丁**(Codex 对抗式 bug 猎杀挖出的 7 个真用户 bug,每个过 3 审轮)。**🐛 头条([#299](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/299))**:短 REPL 回复只显示 "✔ Done" —— spinner 的清行把短单行回复擦掉了;现在保留回复(只清 spinner 尾巴)。**还修**:流式多段回复不再粘连("para1para2")—— markdown 流式渲染保留段分隔,流式输出 == 一次性全量渲染;含 **CJK/全角**的 markdown 表格列对齐正确(宽度数显示 cell 非 char);**`aris "prompt"` / `--print`** 现在尊重 `aris setup` 保存的 executor model(此前只 REPL 用,配了 OpenAI/custom 的 executor 会被发 Anthropic 默认 → model not found);**Esc** 现在真能关补全 dropdown;`glob_search` 截断时报**总**匹配数(而非截断的 100,此前让模型以为 1000 个匹配只有 100);`/model` custom 菜单读 executor 实际用的 **effective env** 而非旧磁盘 config。测试(CI 模式):api 32 / runtime 205 / tools 67 / aris-cli 172 / commands 5 全绿。Codex MCP(gpt-5.5 xhigh):猎杀 → 3 审轮(NO-GO → NO-GO → GO)。(两个潜在候选 —— Anthropic block-`index` 路由、OpenAI 多行 SSE —— 当前无触发,留硬化 pass。)
@@ -104,7 +108,7 @@
 - 🔍 **Reviewer**（审查者）：独立 LLM，通过 `LlmReview` 工具对 Executor 的输出进行对抗性审查
 - 🔄 **迭代精进**：Executor 写 → Reviewer 批 → Executor 修 → 循环直至高质量
 
-内置 **42 个研究技能**（Skills），覆盖从选题到投稿的完整研究流水线。
+内置 **79 个研究技能**（Skills），覆盖从选题到投稿的完整研究流水线。
 
 ---
 
@@ -173,12 +177,12 @@ sudo mv aris /usr/local/bin/aris
 | 提供商 | 作为 Executor | 作为 Reviewer | 主要模型 |
 |--------|:------------:|:------------:|---------|
 | 🟣 Anthropic Claude | ✅ | — | claude-opus, claude-sonnet, claude-haiku |
-| 🟢 OpenAI | ✅ | ✅ | gpt-5.4, gpt-5.4-mini, gpt-5.4-nano |
+| 🟢 OpenAI | ✅ | ✅ | gpt-5.6-sol, gpt-5.6-terra, gpt-5.5 |
 | 🔵 Google Gemini | ✅ | ✅ | gemini-2.5-pro, gemini-2.5-flash |
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
 
-> **设计说明**：Anthropic Claude 仅作 Executor，其他四家可同时作 Executor 和 Reviewer。推荐经典搭配：**Claude Executor + GPT/GLM Reviewer**，构成真正的对抗多智能体。
+> **设计说明**：Anthropic Claude 仅作 Executor，其他四家可同时作 Executor 和 Reviewer。推荐经典搭配：**Claude Executor + GPT/GLM Reviewer**，构成真正的对抗多智能体。v0.4.17 起推荐的 reviewer 路径是 **Codex MCP**（`aris setup` → reviewer 选项 10 —— 用 ChatGPT 订阅即可，无需 OpenAI API key），优先使用 **GPT-5.6-Sol**；上表的 API 提供商仍可作为 HTTP reviewer / fallback（默认 `gpt-5.5`）。
 
 ---
 
@@ -201,14 +205,14 @@ sudo mv aris /usr/local/bin/aris
 
 ```
 ❯ 帮我 review 一下这篇论文
-# ARIS 读取论文后，调用 LlmReview 获取 GPT-5.4/GLM-5/MiniMax 的独立评审
+# ARIS 读取论文后，调用 LlmReview 获取 GPT-5.5/GLM-5/MiniMax 的独立评审
 # Executor 和 Reviewer 展开多轮对抗对话
 
 ❯ 用 LlmReview 给审稿人打个招呼
 # 直接调用 LlmReview 工具
 ```
 
-### 2. 📚 42 个内置研究技能
+### 2. 📚 79 个内置研究技能
 
 通过 `/skills` 命令查看所有可用技能：
 
@@ -223,14 +227,14 @@ sudo mv aris /usr/local/bin/aris
 /run-experiment    — 远程 GPU 实验部署
 /peer-review       — 同行评审模拟
 /rebuttal          — 投稿 Rebuttal 生成
-...（共 42 个）
+...（共 79 个）
 ```
 
 **技能三级优先级**（高优先覆盖低优先）：
 ```
 ~/.config/aris/skills/   [用户自定义，最高优先]
 ~/.claude/skills/        [Claude Code 兼容]
-内置 bundled skills      [42 个开箱即用]
+内置 bundled skills      [79 个开箱即用]
 ```
 
 ### 3. 🖥️ REPL 交互命令
@@ -239,7 +243,7 @@ sudo mv aris /usr/local/bin/aris
 |------|------|
 | `/help` | 查看所有命令 |
 | `/model` | 切换 Executor 模型 |
-| `/reviewer` | 切换 Reviewer 模型 |
+| `/reviewer` | 切换 HTTP fallback reviewer 模型(Codex MCP 为 primary 时,skills 每次调用显式 pin gpt-5.6-sol —— 此命令不改这个)|
 | `/permissions` | 切换权限模式（允许/拒绝/询问） |
 | `/setup` | 重新配置（无需重启） |
 | `/skills` | 查看/展示/导出技能列表 |
@@ -250,7 +254,7 @@ sudo mv aris /usr/local/bin/aris
 | `/version` | 版本信息 |
 | `/research-review` | 直接调用 review 技能 |
 | `/paper-write` | 直接调用写作技能 |
-| `...` | 以及全部 42 个技能命令 |
+| `...` | 以及全部 79 个技能命令 |
 
 ### 4. 🌐 多语言支持
 
@@ -279,17 +283,30 @@ sudo mv aris /usr/local/bin/aris
 ### 切换模型
 ```
 ❯ /model
-  当前 Executor: claude-sonnet-4-5
+  当前 Executor: claude-opus-4-8
   切换为:
-  > claude-opus-4
-    gpt-5.4
+  > claude-sonnet-4-6
+    gpt-5.5
     gemini-2.5-pro
 ```
 
-### 切换 Reviewer
+### 切换 Reviewer(HTTP fallback)
 ```
+# Codex MCP 为 primary、未配 HTTP fallback —— 只显示状态,没有 picker:
 ❯ /reviewer
-  当前 Reviewer: gpt-5.4
+  Reviewer  Codex MCP · gpt-5.6-sol preferred(skills 每次调用显式 pin;深度审 ultra,下限 xhigh)
+  未配置 HTTP fallback。此命令只控制 HTTP fallback —— 用 /setup 添加。
+
+# Codex MCP 为 primary 且配了 HTTP fallback(如 gemini)—— picker 只列该 provider 的模型:
+❯ /reviewer
+  Primary reviewer: Codex MCP · gpt-5.6-sol(skill-pinned)。此 picker 只控制 HTTP fallback(gemini)。
+  切换为:
+  > gemini-2.5-pro
+    gemini-2.5-flash
+
+# 非 Codex(纯 HTTP)reviewer —— 经典跨 provider picker:
+❯ /reviewer
+  当前 Reviewer: gpt-5.5
   切换为:
   > glm-5
     gemini-2.5-pro
@@ -309,19 +326,22 @@ sudo mv aris /usr/local/bin/aris
 **config.json 示例**：
 ```json
 {
-  "executor": {
-    "provider": "anthropic",
-    "model": "claude-sonnet-4-5",
-    "api_key": "sk-ant-..."
-  },
-  "reviewer": {
-    "provider": "openai",
-    "model": "gpt-5.4",
-    "api_key": "sk-..."
-  },
-  "language": "CN"
+  "executor_provider": "anthropic",
+  "executor_model": "claude-opus-4-8",
+  "executor_api_key": "sk-ant-...",
+  "reviewer_provider": "openai",
+  "reviewer_model": "gpt-5.5",
+  "reviewer_api_key": "sk-...",
+  "language": "cn"
 }
 ```
+
+> Schema 是**扁平**的 —— 所有 key 都在顶层。可识别的 key：
+> `executor_provider`、`executor_api_key`、`executor_base_url`、`executor_model`、
+> `reviewer_provider`、`reviewer_api_key`、`reviewer_base_url`、`reviewer_model`、
+> `reviewer_fallback_provider`、`language`、`meta_logging`。
+> 嵌套对象（如 `{"executor": {...}}`）会被**忽略**（`aris doctor` 会提示）；
+> `language` 取小写 `"en"` / `"cn"`。
 
 ---
 
@@ -338,7 +358,7 @@ sudo mv aris /usr/local/bin/aris
     "codex": {
       "type": "stdio",
       "command": "codex",
-      "args": ["mcp-server"],
+      "args": ["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""],
       "trust": true,              // 可选:跳过逐次确认
       "requestTimeoutSecs": 240   // 可选:per-server 超时
     }
@@ -349,6 +369,14 @@ sudo mv aris /usr/local/bin/aris
 最简单的配置方式是 `aris setup` → reviewer 选项 10(Codex MCP),
 它会自动写好这个条目。注意:
 
+- 经 Codex MCP 的跨模型审优先用 **GPT-5.6-Sol** —— 各 skill 在每次
+  fresh call 上显式 pin 模型 + reasoning effort(深度审计用 `ultra`,
+  verdict 类审查下限 `xhigh`)。HTTP reviewer(`/reviewer`,默认
+  `gpt-5.5`)只在 Codex 通道不可用时作为 fallback。
+- 已知限制:**同 transport 的 endpoint 覆盖**(例如把 `ANTHROPIC_BASE_URL`
+  / 自定义 base URL 指到同家族的另一个 provider)仍可能带着过期的 saved
+  executor model —— v0.4.22 的 transport 家族门只拦跨家族泄漏。这种配置
+  请显式传 `--model`;完整的路由溯源是 v0.5.0 provider-trait 的活。
 - MCP server 是 **sandbox 管不到的外部进程** —— 未受信的 MCP 工具每次
   调用都会弹确认(即使 `danger-full-access`),直到你设 `trust: true`
   或在会话内选"本 server 不再问"。
@@ -366,12 +394,12 @@ sudo mv aris /usr/local/bin/aris
 - [x] Phase 0：Rust fork 基础架构（基于 claw-code）
 - [x] Phase 1：多 Provider 支持（Anthropic/OpenAI/Gemini/GLM/MiniMax）
 - [x] Phase 1：LlmReview 对抗审查工具
-- [x] Phase 1：42 个研究技能内置
+- [x] Phase 1：研究技能内置（首发 42 个，现 79 个）
 - [x] Phase 1：语言偏好与防幻觉系统提示
 - [ ] Phase 2：Skills 系统完善（三级优先级 UI）
 - [ ] Phase 2：Web UI 仪表盘
-- [ ] Phase 3：Linux / Windows 支持
-- [ ] Phase 3：本地模型（Ollama）集成
+- [x] Phase 3：Linux / Windows 支持（Windows 实验性；v0.4.22 起有 CI 门控）
+- [x] Phase 3：本地模型（LM Studio / Ollama）集成（v0.3.9 起）
 
 ---
 

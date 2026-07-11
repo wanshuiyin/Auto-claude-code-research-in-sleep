@@ -1,5 +1,126 @@
 # ARIS-Code Changelog
 
+## v0.4.22 (2026-07-11)
+
+The **skills resync + GPT-5.6-Sol release**: the bundled skill set catches up
+93 commits to the source-of-truth (77 → **79 skills**, 28 tools helpers, 11 new
+shared-references docs), the reviewer control plane moves to the **GPT-5.6-Sol
+two-tier doctrine** the new skills carry, and **8 disk-verified bugs** land —
+including Windows `aris login` being completely broken and an explicit
+`--model` being silently overridden. Design gated by codex gpt-5.6-sol ultra
+across 5 rounds (NO-GO ×4 → GO).
+
+### 📦 Skills resync (pin 7e3ab67 → 7182624)
+
+- **79 bundled skills** (+ `meta-apply`, + `paper-poster-html`; `paper-poster`
+  is now a redirect stub), **28 tools/ helpers** (8 new, referenced by the
+  synced SKILL.md files), **11 new shared-references** convention docs
+  (fan-out-pattern, acceptance-gate, external-cadence, skill-governance,
+  compute-env-contract, resumable-runs, evidence-precheck, injection-hygiene,
+  capture-antipatterns, output-composition, taste-calibration).
+- Sync hardening: `ARIS_SYNC_EXPECT_SHA` guard (aborts BEFORE touching assets/
+  if origin/main moved — it caught a move on its first real run);
+  exact-inventory drift tests (set equality over the 28 helper keys — catches
+  both a missing helper and a stale extra); the vendored posterly MIT license
+  text now ships (`build.rs` embeds `.txt`).
+- ⚠️ `meta-apply` caveat for CLI-only installs: bundled SKILL.md bodies are
+  compiled into the binary and have no editable corpus path — `/skills export
+  <name>` first, or point it at a real `~/.claude/skills` checkout. (Upstream
+  wart, mirrored as-is: main's meta-apply still uses the legacy
+  `reasoning: ultra` shorthand; the system prompt now tells the model to
+  translate it.)
+
+### 🎛 GPT-5.6-Sol reviewer alignment (two-tier: deep audits ultra, floor xhigh)
+
+- **System-prompt reviewer nudge rewritten** — the v0.4.17 blanket "never pass
+  a model to codex" rule now CONTRADICTED the synced skills (which explicitly
+  pin `model: gpt-5.6-sol` + per-call effort) and would silently strip deep
+  audits down to xhigh. The new nudge passes the skills' pins through, carries
+  the canonical capability-only fallback chain (effort-unsupported → same
+  model at xhigh, deep tier only; model-unknown → EXPLICIT gpt-5.5 + xhigh;
+  never degrade on timeout/rate-limit/auth/transport), requires
+  `approval-policy: "never"` + an explicit `sandbox` on every fresh codex call
+  (ARIS cannot service interactive escalation requests), keeps `codex-reply`
+  to thread-id + prompt, makes the HTTP fallback **pre-dispatch-only**, and
+  strips the skill's Codex params when re-targeting to `LlmReview`.
+- **Deliberately conservative HTTP split**: the LlmReview HTTP fallback default
+  **stays gpt-5.5** (the verified-working chat-completions + reasoning_effort
+  combo). gpt-5.6-sol is offered as an EXPERIMENTAL explicit opt-in (it is
+  API-listed for chat-completions but not yet smoked with reasoning_effort).
+- `/cost` groundwork: gpt-5.6 family pricing (sol/bare $5/$0.50/$30, terra
+  $2.50/$0.25/$15, luna $1/$0.10/$6 — verified against the official pricing
+  page) instead of the $15/$75 unknown-model fallthrough.
+- Honest reviewer UI: the banner says "GPT-5.6-Sol · tiered"; the Reviewer
+  line is a three-state display (Codex primary never presents the HTTP
+  fallback model as "the Reviewer"); `/reviewer` says plainly that it controls
+  the HTTP fallback only — pure-Codex setups get guidance instead of a fake
+  switch, and with a fallback configured it edits only that provider's model.
+- `aris doctor`: codex version note (< 0.144.1 → ultra/gpt-5.6-sol
+  unavailable; prerelease/malformed get conservative notes) and a
+  stale-option-10 note (pre-v0.4.18 entries lack the xhigh floor args).
+  Neither flips doctor's overall status.
+
+### 🐛 Fixes (all disk-verified by a 4-agent adversarial pass)
+
+- **Explicit `--model` wins.** `--model opus` (or the full default id) was
+  silently overridden by a saved executor model; aliases were also resolved
+  before the setup wizard could change the provider. Model provenance is now
+  tracked end-to-end; the 4.8→4.7 availability fallback fires only for
+  non-explicit sources, and `/model` / `/setup` re-arm it.
+- **Saved model no longer leaks across transports.** Shell
+  `EXECUTOR_PROVIDER=anthropic` over a saved OpenAI config sent "gpt-5.5" to
+  the Anthropic API; the saved model now applies only on a matching provider
+  family, blank saved models count as absent, and an OpenAI transport with no
+  model source fails fast instead of sending the Claude default id.
+- **`--output-format json` never prompts.** A danger-tier tool call under
+  `--permission-mode workspace-write` printed "Permission approval required"
+  to stdout and blocked reading stdin — breaking the single-JSON-document
+  contract. The JSON path now takes the structured-deny path.
+- **Windows: `aris login` works.** PKCE randomness read `/dev/urandom`
+  (file-not-found on the shipped windows-x64 build); now `getrandom`.
+- **Windows: command probing works.** The REPL/PowerShell tools probed via
+  `sh -lc` (the PowerShell tool was dead on the one platform it exists for);
+  Windows now probes via `where.exe`. Doctor/gh detection use `where` too.
+- **Codex `.cmd` shim honesty.** `where codex` resolving an npm `.cmd` shim
+  read as "✓ found", then the MCP spawn of `codex` failed. Three-state
+  classification (native / script-shim / missing); setup requires explicit
+  confirmation before writing config against a shim.
+- **Nested config.json detected.** `{"executor": {...}}` silently parsed to
+  all-defaults while startup/doctor said OK; unrecognized top-level keys now
+  produce a Warning (doctor stays healthy — forward-compatible configs are
+  not punished).
+- **NotebookEdit duplicate cell ids.** Delete-then-insert minted an existing
+  id (`cell-{len+1}`) and later edits hit the WRONG cell; ids are now
+  collision-free.
+
+### 🖥 CI / docs
+
+- New `windows-latest` CI job: workspace compile gate + three targeted test
+  groups (PKCE, command probing, codex classifier), each guarded against
+  silent 0-test green.
+- README/README_CN current-state sweep (the skill count claim was still
+  **42**), real flat config.json example (the old nested example would trip
+  the new Warning), MCP example carries the xhigh args, screenshot captioned;
+  README_EN.md is now a redirect stub to the canonical README.md.
+- Residual limitation (documented): a same-transport endpoint override (e.g.
+  a custom base URL within the same provider family) can still carry a stale
+  saved model — full route provenance is v0.5.0 provider-trait work.
+
+### ✅ Tests / review
+
+- +54 tests: api 35+6, aris-cli 204 (+23) plus 1 end-to-end binary
+  integration test (json_mode — real aris binary vs a mock Anthropic SSE
+  server, closed stdin, structured deny, single JSON document), runtime 223
+  (+9), tools 69 (+2 unix-visible; the Windows-only probes run in the new CI
+  job), commands 5 — all green; new-code clippy delta zero.
+- Codex MCP (gpt-5.6-sol): **ultra** design gate — 5 rounds, NO-GO ×4 → GO
+  (each round caught real issues: sync dirty-tree/79-vs-103 acceptance, the
+  no-model-retry contradiction, the .cmd false-success, the /reviewer fake
+  switch, README_EN) — then an **implementation gate** whose round 2 caught
+  the first-run active-config wiring blocker, the chain-disable omission and
+  the stale-entry predicate holes (all fixed + test-locked); 4 implementation
+  subagents disk-verified.
+
 ## v0.4.21 (2026-06-28)
 
 A **bug-fix patch** — five new user-facing bugs surfaced by a Codex adversarial

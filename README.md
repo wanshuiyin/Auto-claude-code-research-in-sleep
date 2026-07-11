@@ -16,6 +16,8 @@
 
 ![ARIS-Code Screenshot](docs/screenshot.png)
 
+*Screenshot from an earlier build — current default executor is Claude Opus 4.8, reviewer GPT-5.6-Sol via Codex MCP.*
+
 > **Adversarial · Multi-Agent Research Automation CLI**
 > Executor acts · Reviewer critiques · Iterate to excellence
 
@@ -27,6 +29,8 @@
 
 ## 📰 What's New
 
+> **v0.4.22** (2026-07-11) — **The skills-resync + GPT-5.6-Sol release.** **📦 Bundle catches up 93 commits** to the skills source-of-truth: **79 bundled skills** (+`meta-apply`, +`paper-poster-html` — the new measurement-gated HTML poster pipeline), 28 tools helpers (8 new), 11 new shared-references convention docs; sync now SHA-pins with an `ARIS_SYNC_EXPECT_SHA` guard and exact-inventory drift tests. **🎛 Reviewer control plane moves to the GPT-5.6-Sol two-tier doctrine** the new skills carry: the system prompt passes the skills' explicit `model: gpt-5.6-sol` + per-call effort pins through (the old "never pass a model" rule would have silently stripped deep audits from ultra down to xhigh), carries the canonical capability-only fallback chain, and pins `approval-policy: "never"` + explicit `sandbox` on every fresh codex call; the HTTP LlmReview fallback default deliberately **stays gpt-5.5** (gpt-5.6-sol is an EXPERIMENTAL opt-in until smoked with reasoning_effort); gpt-5.6 family pricing (sol $5/$30, terra $2.50/$15, luna $1/$6) lands; the banner/Reviewer line/`/reviewer` are now honest about primary-vs-fallback. **🐛 8 verified fixes**: explicit `--model` no longer silently overridden by the saved model (provenance-tracked; the 4.8→4.7 fallback respects explicit choices); saved models no longer leak across provider transports (and OpenAI transport with no model fails fast); `--output-format json` never prompts (single-JSON-document contract restored); **Windows `aris login` fixed** (PKCE read /dev/urandom → getrandom) and **Windows command probing fixed** (the PowerShell tool probed itself through `sh`); codex `.cmd` shims are classified honestly (setup won't write a config the MCP client can't spawn without explicit confirmation); nested config.json now warns instead of silently becoming all-defaults; NotebookEdit no longer mints duplicate cell ids. **🖥 New windows-latest CI job** (compile gate + 3 targeted test groups). Tests: api 41 / aris-cli 204 + 1 e2e / runtime 223 / tools 69 / commands 5 (+54), all green. Codex MCP (gpt-5.6-sol **ultra**): 5-round design gate (NO-GO ×4 → GO) + disk-verified subagent implementation.
+>
 > **v0.4.21** (2026-06-28) — **Bug-fix patch** (5 new user-facing bugs from a Codex adversarial hunt — all disk-verified, distinct from v0.4.20 — with design + implementation both cross-model reviewed). **🐛 Headline**: OpenAI-compatible streaming corrupted multi-byte UTF-8 (CJK / emoji) split across network chunks into `�` — each HTTP chunk was `from_utf8_lossy`'d independently, so a 3-byte Chinese character or 4-byte emoji straddling a chunk boundary broke on both sides (a frequent hit for Chinese users on domestic OpenAI-compatible providers — Kimi/GLM/MiniMax/DeepSeek/Qwen/Doubao). The stream buffer is now raw bytes, decoding only complete SSE lines. **Also**: a saved OpenAI/custom executor config no longer overrides a shell-set `EXECUTOR_PROVIDER` (the startup "shell wins" path had one ungated write → wrong executor / model-not-found); an Anthropic stream that ends after content but before a terminal signal now hard-errors (`premature_eof`) instead of saving a half-finished answer as a complete turn (symmetric to the OpenAI `#249` guard; the stop_reason-only compat path is preserved, and `ARIS_ALLOW_EOF_WITHOUT_STOP=1` opts a terminal-signal-less proxy back into the old behavior); `grep_search` with `multiline: true` actually matches across lines in content mode (was silently empty); MCP tool results carried only in `structuredContent` are no longer dropped. Tests (CI mode): api 35 / runtime 212 / tools 67 / aris-cli 181 / commands 5 (+21, incl. 2 stream-level integration tests), all green. Codex MCP (gpt-5.5 xhigh): design gate (NO-GO → GO after fixing an off-by-one) → implementation gate (NO-GO → GO after adding the stream-level integration tests). (Two latent-only candidates — Anthropic block-`index` routing, OpenAI multi-line SSE — remain deferred to a hardening pass.)
 >
 > **v0.4.20** (2026-06-19) — **Bug-fix patch** (7 user-facing bugs from a Codex adversarial hunt, each reviewed across 3 rounds). **🐛 Headline ([#299](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/299))**: short REPL replies showed only "✔ Done" — the spinner's line-clear was erasing a short single-line reply; the REPL now preserves the reply (clears only the spinner tail). **Also**: streamed multi-paragraph replies no longer render glued together ("para1para2") — the markdown streamer preserves paragraph separators so streamed output equals a single full render; markdown tables with **CJK/fullwidth** content align correctly (width counts display cells, not chars); **`aris "prompt"` / `--print`** now honors the executor model saved by `aris setup` (was REPL-only, so a configured OpenAI/custom executor got the Anthropic default → model-not-found); **Esc** actually closes the completion dropdown now; `glob_search` reports the **total** match count when truncated (not the capped 100, which made the model think a 1000-match glob had 100 files); `/model`'s custom menu reads the **effective env** the executor uses, not stale on-disk config. Tests (CI mode): api 32 / runtime 205 / tools 67 / aris-cli 172 / commands 5, all green. Codex MCP (gpt-5.5 xhigh): hunt → 3 review rounds (NO-GO → NO-GO → GO). (Two latent-only candidates — Anthropic block-`index` routing, OpenAI multi-line SSE — deferred to a hardening pass.)
@@ -104,7 +108,7 @@
 - 🔍 **Reviewer**: An independent LLM that adversarially critiques the Executor's output via the `LlmReview` tool
 - 🔄 **Iterate**: Executor writes → Reviewer critiques → Executor revises → loop until quality converges
 
-With **42 bundled research skills**, ARIS covers the full pipeline from idea discovery to paper submission.
+With **79 bundled research skills**, ARIS covers the full pipeline from idea discovery to paper submission.
 
 ---
 
@@ -173,12 +177,12 @@ After setup you drop straight into the REPL. Run `/setup` at any time to reconfi
 | Provider | As Executor | As Reviewer | Key Models |
 |----------|:-----------:|:-----------:|-----------|
 | 🟣 Anthropic Claude | ✅ | — | claude-opus, claude-sonnet, claude-haiku |
-| 🟢 OpenAI | ✅ | ✅ | gpt-5.4, gpt-5.4-mini, gpt-5.4-nano |
+| 🟢 OpenAI | ✅ | ✅ | gpt-5.6-sol, gpt-5.6-terra, gpt-5.5 |
 | 🔵 Google Gemini | ✅ | ✅ | gemini-2.5-pro, gemini-2.5-flash |
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
 
-> **Design note**: Anthropic Claude is Executor-only; all other providers can serve as both Executor and Reviewer. The classic pairing is **Claude Executor + GPT/GLM Reviewer** for true adversarial multi-agent research.
+> **Design note**: Anthropic Claude is Executor-only; all other providers can serve as both Executor and Reviewer. The classic pairing is **Claude Executor + GPT/GLM Reviewer** for true adversarial multi-agent research. Since v0.4.17 the recommended reviewer path is **Codex MCP** (`aris setup` → reviewer option 10 — runs on a ChatGPT subscription, no OpenAI API key), which prefers **GPT-5.6-Sol**; the API providers above remain available as the HTTP reviewer / fallback (default `gpt-5.5`).
 
 ---
 
@@ -201,14 +205,14 @@ User input
 
 ```
 ❯ Please review this paper for me
-# ARIS reads the paper, calls LlmReview to get GPT-5.4/GLM-5/MiniMax's
+# ARIS reads the paper, calls LlmReview to get GPT-5.5/GLM-5/MiniMax's
 # independent assessment — multi-round adversarial dialogue ensues
 
 ❯ Use LlmReview to say hello to the reviewer
 # Direct LlmReview tool invocation
 ```
 
-### 2. 📚 42 Bundled Research Skills
+### 2. 📚 79 Bundled Research Skills
 
 Use `/skills` to list all available skills:
 
@@ -223,14 +227,14 @@ Use `/skills` to list all available skills:
 /run-experiment      — Remote GPU deployment
 /peer-review         — Conference reviewer simulation
 /rebuttal            — Submission rebuttal generation
-...  (42 total)
+...  (79 total)
 ```
 
 **Three-tier skill priority** (higher overrides lower):
 ```
 ~/.config/aris/skills/   [user custom — highest priority]
 ~/.claude/skills/        [Claude Code compatible]
-bundled skills           [42 out-of-the-box skills]
+bundled skills           [79 out-of-the-box skills]
 ```
 
 ### 3. 🖥️ REPL Commands
@@ -239,7 +243,7 @@ bundled skills           [42 out-of-the-box skills]
 |---------|-------------|
 | `/help` | List all commands |
 | `/model` | Switch Executor model |
-| `/reviewer` | Switch Reviewer model |
+| `/reviewer` | Switch the HTTP-fallback reviewer model (with Codex MCP primary, skills pin gpt-5.6-sol per call — this never changes that) |
 | `/permissions` | Toggle permission mode (allow / deny / ask) |
 | `/setup` | Reconfigure without restarting |
 | `/skills` | List / show / export skills |
@@ -250,7 +254,7 @@ bundled skills           [42 out-of-the-box skills]
 | `/version` | Version info |
 | `/research-review` | Invoke research review skill directly |
 | `/paper-write` | Invoke paper writing skill directly |
-| `...` | All 42 skill slash commands |
+| `...` | All 79 skill slash commands |
 
 ### 4. 🌐 Language Preference
 
@@ -279,17 +283,31 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
 ### Switch Executor Model
 ```
 ❯ /model
-  Current Executor: claude-sonnet-4-5
+  Current Executor: claude-opus-4-8
   Switch to:
-  > claude-opus-4
-    gpt-5.4
+  > claude-sonnet-4-6
+    gpt-5.5
     gemini-2.5-pro
 ```
 
-### Switch Reviewer
+### Switch Reviewer (HTTP fallback)
 ```
+# Codex MCP primary, NO HTTP fallback configured — status only, no picker:
 ❯ /reviewer
-  Current Reviewer: gpt-5.4
+  Reviewer  Codex MCP · gpt-5.6-sol preferred (skill-pinned per call; deep audits ultra, floor xhigh)
+  No HTTP fallback configured. This picker controls the HTTP fallback only — run /setup to add one.
+
+# Codex MCP primary WITH an HTTP fallback (e.g. gemini) — the picker is
+# restricted to THAT provider's models:
+❯ /reviewer
+  Primary reviewer: Codex MCP · gpt-5.6-sol (skill-pinned). This picker controls the HTTP fallback (gemini) only.
+  Switch to:
+  > gemini-2.5-pro
+    gemini-2.5-flash
+
+# Non-Codex (pure HTTP) reviewer — the classic picker across your configured keys:
+❯ /reviewer
+  Current Reviewer: gpt-5.5
   Switch to:
   > glm-5
     gemini-2.5-pro
@@ -316,19 +334,22 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
 **Example config.json**:
 ```json
 {
-  "executor": {
-    "provider": "anthropic",
-    "model": "claude-sonnet-4-5",
-    "api_key": "sk-ant-..."
-  },
-  "reviewer": {
-    "provider": "openai",
-    "model": "gpt-5.4",
-    "api_key": "sk-..."
-  },
-  "language": "EN"
+  "executor_provider": "anthropic",
+  "executor_model": "claude-opus-4-8",
+  "executor_api_key": "sk-ant-...",
+  "reviewer_provider": "openai",
+  "reviewer_model": "gpt-5.5",
+  "reviewer_api_key": "sk-...",
+  "language": "en"
 }
 ```
+
+> The schema is **flat** — every key lives at the top level. Recognized keys:
+> `executor_provider`, `executor_api_key`, `executor_base_url`, `executor_model`,
+> `reviewer_provider`, `reviewer_api_key`, `reviewer_base_url`, `reviewer_model`,
+> `reviewer_fallback_provider`, `language`, `meta_logging`.
+> Nested objects like `{"executor": {...}}` are **ignored** (`aris doctor` flags them),
+> and `language` takes lowercase `"en"` / `"cn"`.
 
 ---
 
@@ -346,7 +367,7 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
     "codex": {
       "type": "stdio",
       "command": "codex",
-      "args": ["mcp-server"],
+      "args": ["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""],
       "trust": true,              // optional: skip per-call approval
       "requestTimeoutSecs": 240   // optional: per-server timeout
     }
@@ -357,6 +378,17 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
 The easiest way to set this up is `aris setup` → reviewer option 10
 (Codex MCP), which writes the entry for you. Notes:
 
+- Cross-model review through Codex MCP prefers **GPT-5.6-Sol** — skills
+  pin the model + reasoning effort explicitly per fresh call (deep audits
+  at `ultra`, floor `xhigh` for verdict-bearing review). The HTTP
+  reviewer (`/reviewer`, default `gpt-5.5`) serves only as the fallback
+  when the Codex channel is unavailable.
+- Known limitation: a **same-transport endpoint override** (e.g. pointing
+  `ANTHROPIC_BASE_URL` / a custom base URL at a different provider within
+  the same family) can still carry a stale saved executor model — the
+  v0.4.22 transport-family gate catches cross-family leaks only. Pass
+  `--model` explicitly in that setup; full route provenance is v0.5.0
+  provider-trait work.
 - MCP servers are **external processes the sandbox does not cover** —
   untrusted MCP tools therefore prompt for approval on every call (even
   under `danger-full-access`) until you set `trust: true` or choose
@@ -377,12 +409,12 @@ The easiest way to set this up is `aris setup` → reviewer option 10
 - [x] Phase 0: Rust fork foundation (based on claw-code)
 - [x] Phase 1: Multi-provider support (Anthropic / OpenAI / Gemini / GLM / MiniMax)
 - [x] Phase 1: LlmReview adversarial critique tool
-- [x] Phase 1: 42 bundled research skills
+- [x] Phase 1: Bundled research skills (42 at launch, 79 today)
 - [x] Phase 1: Language preference & anti-hallucination system prompt
 - [ ] Phase 2: Skills system polish (three-tier priority UI)
 - [ ] Phase 2: Web UI dashboard
-- [ ] Phase 3: Linux / Windows support
-- [ ] Phase 3: Local model integration (Ollama)
+- [x] Phase 3: Linux / Windows support (Windows experimental; CI-gated since v0.4.22)
+- [x] Phase 3: Local model integration (LM Studio / Ollama, since v0.3.9)
 
 ---
 

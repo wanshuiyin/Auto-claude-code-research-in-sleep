@@ -98,3 +98,68 @@ jobs:
 
       - name: cargo build (workspace)
         run: cargo build --workspace --all-targets
+
+  # v0.4.22: Windows compile gate for the new cfg(windows) branches
+  # (C4 PKCE getrandom, C5 where.exe command probing, C6 codex
+  # classification), plus the three Windows-relevant targeted test groups.
+  #
+  # Intentionally NOT the full test suite on Windows: the rest of the
+  # workspace tests carry un-audited Unix assumptions (login-shell PATH
+  # semantics, /dev/* paths, unix permissions). Only the targeted groups
+  # below run, each with a non-zero-executed guard so a typo'd test-name
+  # filter can never produce a silent 0-test green.
+  windows:
+    name: cargo build + targeted tests (windows)
+    runs-on: windows-latest
+
+    steps:
+      # fetch-depth: 0 mirrors the ubuntu/macos jobs so any drift-test
+      # ancestor check has full git history.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch origin/main for SKILLS_SOURCE_COMMIT ancestor check
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+        continue-on-error: true
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: windows-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            windows-cargo-
+
+      - name: cargo build (workspace)
+        run: cargo build --workspace --all-targets
+
+      # GitHub's built-in `shell: bash` runs with `-eo pipefail`, so a
+      # cargo test failure fails the step through the tee pipe, and the
+      # grep guard fails the step when the name filter executed 0 tests.
+      - name: cargo test (windows-targeted, PKCE / C4)
+        shell: bash
+        run: |
+          cargo test -p runtime --lib pkce_token -- --test-threads=1 2>&1 | tee pkce_token.log
+          # Non-zero-executed guard: require "test result: ok." with >=1 passed.
+          grep -E "test result: ok\. [1-9][0-9]* passed" pkce_token.log
+
+      - name: cargo test (windows-targeted, tools probe / C5)
+        shell: bash
+        run: |
+          cargo test -p tools --lib command_exists_probe -- --test-threads=1 2>&1 | tee command_exists_probe.log
+          # Non-zero-executed guard: require "test result: ok." with >=1 passed.
+          grep -E "test result: ok\. [1-9][0-9]* passed" command_exists_probe.log
+
+      - name: cargo test (windows-targeted, codex classifier / C6)
+        shell: bash
+        run: |
+          cargo test -p aris-cli --bin aris classify_codex -- --test-threads=1 2>&1 | tee classify_codex.log
+          # Non-zero-executed guard: require "test result: ok." with >=1 passed.
+          grep -E "test result: ok\. [1-9][0-9]* passed" classify_codex.log
