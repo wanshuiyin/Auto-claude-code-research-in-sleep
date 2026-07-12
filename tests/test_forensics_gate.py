@@ -380,6 +380,14 @@ def test_paper_freshness_binding():
         # moving the number into a macro file is still a post-gate edit
         open(sty, "a").write("\n\\def\\gain{18.9}")
         assert fg.main(["fresh", "--paper-dir", d]) == 1     # STALE
+        # tabular data files (.csv → pgfplots) are fingerprinted too
+        csv = os.path.join(d, "data.csv"); open(csv, "w").write("x,y\n1,2\n")
+        rep2 = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["evaluate", "--report", rep2, "--paper-dir", d,
+                 "--anti-ar-commit", "d8f510c"])
+        assert fg.main(["fresh", "--paper-dir", d]) == 0
+        open(csv, "a").write("3,4\n")
+        assert fg.main(["fresh", "--paper-dir", d]) == 1     # STALE
 
 
 def test_fresh_rejects_block_and_forged_policy():
@@ -409,6 +417,44 @@ def test_fresh_pin_and_version_binding():
         assert fg.main(["fresh", "--paper-dir", d, "--anti-ar-commit", "d8f510c"]) == 0
         # a gate produced at an older pin must be re-audited, never inherited
         assert fg.main(["fresh", "--paper-dir", d, "--anti-ar-commit", "newpin99"]) == 1
+        # and a gate from an older gate-schema version must be re-derived
+        gp = os.path.join(d, ".aris", "forensics", "gate.json")
+        g = json.load(open(gp)); g["gate_version"] = "0"
+        json.dump(g, open(gp, "w"))
+        assert fg.main(["fresh", "--paper-dir", d, "--anti-ar-commit", "d8f510c"]) == 1
+
+
+def test_ledger_out_of_band_edit_detected():
+    # deleting ONE obligation by hand — while another keeps the recomputed
+    # decision identical (WARN) — must still read as LEDGER_DRIFT
+    with tempfile.TemporaryDirectory() as d:
+        f1 = _finding(sev="minor", span="first minor finding span")
+        f2 = _finding(sev="minor", span="second minor finding span")
+        rep = _report(os.path.join(d, "report.json"), "SOFT_FLAGS", [f1, f2])
+        fg.main(["evaluate", "--report", rep, "--paper-dir", d,
+                 "--anti-ar-commit", "d8f510c"])
+        assert fg.main(["fresh", "--paper-dir", d]) == 0     # WARN is pass-capable
+        led_path = os.path.join(d, ".aris", "forensics", "obligations.json")
+        led = json.load(open(led_path))
+        del led["obligations"][0]                            # out-of-band deletion
+        json.dump(led, open(led_path, "w"))
+        assert fg.main(["fresh", "--paper-dir", d]) == 1     # LEDGER_DRIFT
+
+
+def test_stale_report_refused_by_gate_too():
+    # the standalone `gate` subcommand runs the same stale guard as update
+    with tempfile.TemporaryDirectory() as d:
+        rep = _report(os.path.join(d, "r1.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["update", "--report", rep, "--paper-dir", d])
+        tex = os.path.join(d, "main.tex"); open(tex, "w").write("added later")
+        t = os.path.getmtime(rep)
+        os.utime(tex, (t + 10, t + 10))
+        try:
+            fg.main(["gate", "--report", rep, "--paper-dir", d,
+                     "--anti-ar-commit", "d8f510c"])
+            assert False
+        except SystemExit:
+            pass
 
 
 def test_stale_report_refused():

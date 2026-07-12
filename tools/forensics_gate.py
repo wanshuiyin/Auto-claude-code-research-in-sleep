@@ -495,7 +495,13 @@ def cmd_gate(args):
         "malformed_ledger_entries": len(weird),
         # binds this gate to the paper text it audited (checked by `fresh`)
         "paper_fingerprint": _paper_fingerprint(args.paper_dir),
-        "ledger_sha256": _sha256_file(claims) if os.path.isfile(claims) else None,
+        # binds this gate to the exact obligations ledger it judged — an
+        # out-of-band edit (e.g. hand-deleting one obligation) reads as
+        # LEDGER_DRIFT in `fresh` even when the recomputed decision agrees
+        "obligations_sha256": _sha256_file(path) if os.path.isfile(path) else None,
+        # upstream's span-anchored claims ledger (informational provenance —
+        # honestly labeled: this is NOT the obligations ledger)
+        "claims_ledger_sha256": _sha256_file(claims) if os.path.isfile(claims) else None,
         "observability_level": report.get("observability_level"),
         "coverage": report.get("coverage", {}),
         "open_obligations": len(open_obl),
@@ -546,6 +552,12 @@ def cmd_fresh(args):
               "the gate; re-run the sweep + `evaluate`")
         return 1
     ledger_path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
+    current_ledger_sha = _sha256_file(ledger_path) if os.path.isfile(ledger_path) else None
+    if gate.get("obligations_sha256") is None \
+            or gate.get("obligations_sha256") != current_ledger_sha:
+        print("forensics fresh: LEDGER_DRIFT — obligations.json changed after the "
+              "gate (even an edit that keeps the same decision); re-run `evaluate`")
+        return 1
     ledger = _load_ledger(ledger_path)
     if gate.get("report_sha256") is None \
             or gate.get("report_sha256") != ledger.get("last_report_sha256"):
@@ -625,7 +637,10 @@ def main(argv=None):
         with _ledger_lock(a.paper_dir):
             return cmd_gate(a)
     if a.cmd == "fresh":
-        return cmd_fresh(a)
+        # same lock as the mutators: a concurrent resolve/waive/update must
+        # not interleave between fresh's reads (gate, ledger, archive)
+        with _ledger_lock(a.paper_dir):
+            return cmd_fresh(a)
     if a.cmd == "evaluate":
         # one lock across update AND gate — the emitted gate.json provably
         # describes the ledger state this same transaction produced
