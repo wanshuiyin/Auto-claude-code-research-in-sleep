@@ -242,6 +242,17 @@ def cmd_update(args):
     (a human already dispositioned it)."""
     report = _load_report_strict(args.report)
     report_sha = _sha256_file(args.report)
+    # Stale-report guard: a report older than any audited paper file was
+    # generated BEFORE those edits — folding it would bind the new text to a
+    # sweep that never saw it. Refuse (fail closed); re-run the sweep instead.
+    rep_mtime = os.path.getmtime(args.report)
+    for root, dirs, files in os.walk(args.paper_dir, followlinks=True):
+        dirs[:] = [x for x in dirs if not x.startswith(".")]
+        for fn in files:
+            if fn.lower().endswith(_FINGERPRINT_EXTS) \
+                    and os.path.getmtime(os.path.join(root, fn)) > rep_mtime:
+                raise SystemExit(f"FATAL: {os.path.join(root, fn)} was modified AFTER "
+                                 f"the report — stale report; re-run the sweep")
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
     ledger = _load_ledger(path)
     by_id = {o["obligation_id"]: o for o in ledger["obligations"]}
@@ -307,10 +318,22 @@ def cmd_update(args):
                 d["last_noted_at"] = _now()
 
     _save_ledger(path, ledger)
+    # Archive the folded report verbatim: `fresh` re-reads the VERDICT from
+    # this sha-verified copy and recomputes the decision, instead of trusting
+    # a stored (editable) policy token.
+    with open(args.report, "rb") as src:
+        blob = src.read()
+    fd, tmp = tempfile.mkstemp(dir=_forensics_dir(args.paper_dir), suffix=".tmp")
+    with os.fdopen(fd, "wb") as fh:
+        fh.write(blob)
+    os.replace(tmp, os.path.join(_forensics_dir(args.paper_dir), "last_report.json"))
     print(f"obligations: +{opened} opened, {reopened} re-opened (recurrence), "
           f"{vanished} unresolved-disappearance, "
           f"{sum(1 for o in ledger['obligations'] if o['status'] == 'OPEN')} open total -> {path}")
     return 0
+
+
+VERIFIED_BY_RE = re.compile(r"(human|checker|cross-family-review):\S.*")
 
 
 def cmd_resolve(args):
@@ -319,9 +342,11 @@ def cmd_resolve(args):
     if not os.path.isfile(args.evidence):
         raise SystemExit(f"FATAL: evidence file does not exist: {args.evidence} "
                          "(a resolution without evidence is a reworded flag)")
-    if not (args.verified_by or "").strip():
-        raise SystemExit("FATAL: --verified-by is required (family checker, fresh "
-                         "cross-family review thread id, or a human)")
+    if not VERIFIED_BY_RE.fullmatch((args.verified_by or "").strip()):
+        raise SystemExit("FATAL: --verified-by must be typed provenance — "
+                         "'human:<name>', 'checker:<tool>', or "
+                         "'cross-family-review:<thread-id>' (a freehand token is "
+                         "not a receipt)")
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
     ledger = _load_ledger(path)
     for o in ledger["obligations"]:
@@ -331,9 +356,11 @@ def cmd_resolve(args):
             o["status"] = "RESOLVED"
             o["resolution"] = {
                 "fix_type": args.fix_type,
-                "evidence_path": args.evidence,
+                # abspath: the receipt is re-verified against this file on
+                # every later gate — evidence must be durable and unchanged
+                "evidence_path": os.path.abspath(args.evidence),
                 "evidence_sha256": _sha256_file(args.evidence),
-                "verified_by": args.verified_by,
+                "verified_by": args.verified_by.strip(),
                 "resolved_at": _now(),
             }
             _save_ledger(path, ledger)
@@ -371,10 +398,16 @@ def _closure_invalid(o):
         return False
     if st == "RESOLVED":
         r = o.get("resolution")
-        return not (isinstance(r, dict) and r.get("fix_type") in FIX_TYPES
-                    and isinstance(r.get("evidence_sha256"), str)
-                    and re.fullmatch(r"[0-9a-f]{64}", r["evidence_sha256"])
-                    and (r.get("verified_by") or "").strip())
+        if not (isinstance(r, dict) and r.get("fix_type") in FIX_TYPES
+                and isinstance(r.get("evidence_sha256"), str)
+                and re.fullmatch(r"[0-9a-f]{64}", r["evidence_sha256"])
+                and VERIFIED_BY_RE.fullmatch((r.get("verified_by") or "").strip())):
+            return True
+        # the receipt is re-verified, not remembered: the evidence file must
+        # still exist and still hash to what was recorded at closure time
+        p = r.get("evidence_path")
+        return not (isinstance(p, str) and os.path.isfile(p)
+                    and _sha256_file(p) == r["evidence_sha256"])
     if st == "WAIVED":
         w = o.get("waiver")
         return not (isinstance(w, dict) and (w.get("approver") or "").strip()
@@ -382,12 +415,10 @@ def _closure_invalid(o):
     return True
 
 
-def cmd_gate(args):
-    report = _load_report_strict(args.report)
-    verdict = report.get("overall_verdict", "")
-    report_sha = _sha256_file(args.report)
-    path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
-    ledger = _load_ledger(path)
+def _decide(verdict, ledger, report_sha):
+    """The ONE deterministic decision function — cmd_gate computes with it and
+    cmd_fresh RE-computes with it (a stored policy token is display, never
+    authority: editing gate.json's decision field must change nothing)."""
     open_obl = [o for o in ledger["obligations"] if o.get("status") == "OPEN"]
     open_critical = [o for o in open_obl if o.get("severity") == "critical"]
     weird = [o for o in ledger["obligations"] if _closure_invalid(o)]
@@ -404,6 +435,16 @@ def cmd_gate(args):
         decision = NO_NEW_BLOCKER
     else:
         decision = BLOCK   # unknown verdict token: fail closed
+    return decision, open_obl, open_critical, weird, unbound
+
+
+def cmd_gate(args):
+    report = _load_report_strict(args.report)
+    verdict = report.get("overall_verdict", "")
+    report_sha = _sha256_file(args.report)
+    path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
+    ledger = _load_ledger(path)
+    decision, open_obl, open_critical, weird, unbound = _decide(verdict, ledger, report_sha)
 
     exec_family = _executor_family(args.executor_model)
     claims = os.path.join(args.paper_dir, "claims.json")
@@ -468,12 +509,28 @@ def cmd_fresh(args):
         print("forensics fresh: UNBOUND — gate does not match the current "
               "obligations ledger; re-run `evaluate`")
         return 1
-    policy = gate.get("policy_decision")
-    if policy not in (WARN, NO_NEW_BLOCKER):
-        print(f"forensics fresh: policy_decision={policy!r} is not pass-capable "
-              "(BLOCK / unknown token) — the gate is closed")
+    # Re-derive the decision from the sha-verified ARCHIVED report + the live
+    # ledger — never from the gate's stored token (a one-field edit of
+    # gate.json from BLOCK to WARN must change nothing).
+    archived = os.path.join(_forensics_dir(args.paper_dir), "last_report.json")
+    if not os.path.isfile(archived) \
+            or _sha256_file(archived) != ledger.get("last_report_sha256"):
+        print("forensics fresh: NO_ARCHIVE — the folded report is missing or does "
+              "not hash to the ledger's binding; re-run `evaluate`")
         return 1
-    print(f"forensics fresh: OK ({policy}; gate matches current paper text and ledger)")
+    verdict = _load_report_strict(archived).get("overall_verdict", "")
+    decision, _open_obl, _crit, _weird, _unbound = _decide(
+        verdict, ledger, gate["report_sha256"])
+    if decision != gate.get("policy_decision"):
+        print(f"forensics fresh: MISMATCH — gate.json says "
+              f"{gate.get('policy_decision')!r} but the recomputed decision is "
+              f"{decision!r}; the gate artifact does not reproduce — re-run `evaluate`")
+        return 1
+    if decision not in (WARN, NO_NEW_BLOCKER):
+        print(f"forensics fresh: {decision} — not pass-capable; the gate is closed")
+        return 1
+    print(f"forensics fresh: OK ({decision}; recomputed from the archived report "
+          "and current ledger)")
     return 0
 
 

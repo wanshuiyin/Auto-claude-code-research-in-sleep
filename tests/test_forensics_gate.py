@@ -130,6 +130,14 @@ def test_resolution_requires_evidence_and_verifier():
         try:
             fg.main(["resolve", "--paper-dir", d, "--obligation-id", oid,
                      "--fix-type", "reworded-the-sentence", "--evidence", ev,
+                     "--verified-by", "human:x"])
+            assert False
+        except SystemExit:
+            pass
+        # freehand verified_by (no typed provenance) → refused
+        try:
+            fg.main(["resolve", "--paper-dir", d, "--obligation-id", oid,
+                     "--fix-type", "corrected-from-results", "--evidence", ev,
                      "--verified-by", "x"])
             assert False
         except SystemExit:
@@ -138,7 +146,7 @@ def test_resolution_requires_evidence_and_verifier():
         # (the gate only speaks for a report the ledger has folded — sha-bound)
         fg.main(["resolve", "--paper-dir", d, "--obligation-id", oid,
                  "--fix-type", "corrected-from-results", "--evidence", ev,
-                 "--verified-by", "codex-thread-019f..."])
+                 "--verified-by", "cross-family-review:019f..."])
         clean = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
         fg.main(["update", "--report", clean, "--paper-dir", d])
         rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")
@@ -186,7 +194,8 @@ def test_recurrence_after_resolution_reopens():
         oid = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))["obligations"][0]["obligation_id"]
         ev = os.path.join(d, "results.json"); open(ev, "w").write("{}")
         fg.main(["resolve", "--paper-dir", d, "--obligation-id", oid,
-                 "--fix-type", "corrected-from-results", "--evidence", ev, "--verified-by", "x"])
+                 "--fix-type", "corrected-from-results", "--evidence", ev,
+                 "--verified-by", "checker:paper-claim-audit"])
         # the same finding comes back — the fix didn't hold
         r2 = _report(os.path.join(d, "r2.json"), "HARD_FLAGS", [_finding()])
         fg.main(["update", "--report", r2, "--paper-dir", d])
@@ -365,6 +374,42 @@ def test_fresh_rejects_block_and_forged_policy():
         g = json.load(open(gp)); g["policy_decision"] = "TOTALLY_FINE"
         json.dump(g, open(gp, "w"))
         assert fg.main(["fresh", "--paper-dir", d]) == 1
+        # the classic forgery — a one-field edit BLOCK → WARN — is caught by
+        # recomputation from the archived report + live ledger, not trusted
+        g = json.load(open(gp)); g["policy_decision"] = "WARN"
+        json.dump(g, open(gp, "w"))
+        assert fg.main(["fresh", "--paper-dir", d]) == 1     # MISMATCH
+
+
+def test_stale_report_refused():
+    # a report OLDER than a paper file was generated before that edit —
+    # folding it would bind unaudited text to the sweep; refuse
+    with tempfile.TemporaryDirectory() as d:
+        rep = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        tex = os.path.join(d, "main.tex"); open(tex, "w").write("edited after sweep")
+        t = os.path.getmtime(rep)
+        os.utime(tex, (t + 10, t + 10))
+        try:
+            fg.main(["update", "--report", rep, "--paper-dir", d]); assert False
+        except SystemExit:
+            pass
+
+
+def test_evidence_tampered_after_resolution_blocks():
+    # receipts are re-verified, not remembered: editing the evidence file
+    # after closure invalidates the resolution
+    with tempfile.TemporaryDirectory() as d:
+        rep = _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [_finding()])
+        fg.main(["update", "--report", rep, "--paper-dir", d])
+        oid = json.load(open(os.path.join(d, ".aris", "forensics",
+                                          "obligations.json")))["obligations"][0]["obligation_id"]
+        ev = os.path.join(d, "results.json"); open(ev, "w").write("{}")
+        fg.main(["resolve", "--paper-dir", d, "--obligation-id", oid,
+                 "--fix-type", "corrected-from-results", "--evidence", ev,
+                 "--verified-by", "human:ruofeng"])
+        open(ev, "w").write('{"doctored": true}')            # tamper
+        rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")
+        assert rc == 1 and g["malformed_ledger_entries"] == 1
 
 
 def test_ledger_mutation_invalidates_standing_gate():

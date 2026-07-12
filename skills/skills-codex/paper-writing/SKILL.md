@@ -636,6 +636,7 @@ or directly if `assurance=draft`)
 **Venue**: [ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM/IEEE_JOURNAL/IEEE_CONF]
 **Assurance**: [draft | submission]
 **Submission-ready**: [yes | provisional | no]   <!-- yes iff overall_assurance=accepted; provisional iff same-family review passed -->
+**Forensics**: [NO_NEW_BLOCKER | WARN: <n> open obligations | BLOCK | n/a (opt-in, not requested)]   <!-- deterministic slice only; from .aris/forensics/gate.json — a WARN's open obligations MUST be listed in this report, never silently passed -->
 **Date**: [today]
 
 ## Pipeline Summary

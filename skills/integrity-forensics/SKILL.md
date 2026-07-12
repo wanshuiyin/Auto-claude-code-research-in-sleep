@@ -131,12 +131,16 @@ inputs AND deliverables — `.tex`/`.bib`/`.sty`/`.cls`/figures/PDF). The
 downstream preflight is ONE command:
 `python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 0 ⟺ a gate
 exists ∧ nothing in the paper changed after it ∧ the gate matches the current
-obligations ledger ∧ its decision is pass-capable (`WARN` /
-`NO_NEW_BLOCKER`). Anything else — missing gate, post-gate edit or recompile,
-unbound ledger, `BLOCK`, unknown token — exits 1: re-run the sweep +
+obligations ledger ∧ the decision — **re-computed from the sha-verified
+archived report (`last_report.json`) + the live ledger, never read from the
+gate's stored token** — is pass-capable (`WARN` / `NO_NEW_BLOCKER`). Anything
+else — missing gate, post-gate edit or recompile, unbound ledger or archive,
+recompute mismatch, `BLOCK`, unknown token — exits 1: re-run the sweep +
 `evaluate`. Every ledger mutation (`update`/`resolve`/`waive`) deletes the
-standing `gate.json`, so an interrupted run can never leave a stale pass.
-Run `evaluate` immediately after the sweep, before touching any paper file.
+standing `gate.json`, so an interrupted run can never leave a stale pass; and
+`evaluate` refuses a report OLDER than any paper file (a stale report cannot
+be folded onto text it never audited). Run `evaluate` immediately after the
+sweep, before touching any paper file.
 
 The gate artifact also records honest provenance: upstream's auditors are
 GPT-family, so for a **Claude executor** the findings carry `cross-family`
@@ -163,7 +167,7 @@ Close each obligation explicitly — the receipt is typed and hashed:
 python3 "$GATE_HELPER" resolve --paper-dir "$PAPER_DIR" --obligation-id <id> \
     --fix-type corrected-from-results|claim-narrowed|claim-withdrawn|citation-replaced \
     --evidence <path-to-the-ground-truth-that-backs-the-fix> \
-    --verified-by "<family checker | fresh cross-family review thread id | human>"
+    --verified-by "human:<name>" | "checker:<tool>" | "cross-family-review:<thread-id>"
 # or, with HUMAN sign-off only:
 python3 "$GATE_HELPER" waive --paper-dir "$PAPER_DIR" --obligation-id <id> \
     --approver "<human>" --reason "<why this stands as-is>"
@@ -179,7 +183,11 @@ Rules the ledger enforces mechanically (`tests/test_forensics_gate.py`):
   original finding snapshot immutable;
 - the executor's `fix_type` label is a receipt, not a verdict — closure of a
   critical needs a family checker, a fresh cross-family review, or a human
-  (`--verified-by` is required and recorded);
+  (`--verified-by` requires TYPED provenance and is recorded; naming a human
+  who did not approve is a false record with a permanent paper trail);
+- receipts are **re-verified, not remembered**: on every later gate the
+  evidence file must still exist and still hash to what was recorded at
+  closure time — editing the evidence after closing re-opens the BLOCK;
 - `resolve`/`waive` (like `update`) **invalidate the standing `gate.json`** —
   finish Step 3 by re-running the sweep + `evaluate`, so the gate that
   downstream preflights read reflects the post-fix state.
@@ -217,7 +225,8 @@ contract — forbidden.
 ## Review tracing
 
 Upstream saves its own per-dimension traces under the paper's
-`.aris/traces/`. The launcher adds only the gate artifact
-(`.aris/forensics/gate.json`, which pins `anti_ar_commit` + report/ledger
-hashes + the paper-text fingerprint) and the obligations ledger
-(`.aris/forensics/obligations.json`).
+`.aris/traces/`. The launcher adds only the `.aris/forensics/` artifacts:
+`gate.json` (pins `anti_ar_commit` + report/ledger hashes + the paper-text
+fingerprint), `obligations.json` (the append-only ledger), and
+`last_report.json` (the sha-verified archive of the folded report that
+`fresh` recomputes from).

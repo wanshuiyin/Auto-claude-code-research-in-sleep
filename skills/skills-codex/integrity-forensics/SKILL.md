@@ -83,15 +83,21 @@ executor — informational: this gate only raises flags, it grants nothing.
 The downstream preflight is ONE command:
 `python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 0 ⟺ gate
 exists ∧ paper unchanged since ∧ gate matches the current ledger ∧ decision
-pass-capable (WARN/NO_NEW_BLOCKER). Any ledger mutation deletes the standing
-gate.json, so a stale pass can never be replayed.
+pass-capable (WARN/NO_NEW_BLOCKER), where the decision is RE-computed from
+the sha-verified archived report + live ledger (the stored token is display,
+not authority). Any ledger mutation deletes the standing gate.json, and
+`evaluate` refuses a report older than any paper file — neither a stale pass
+nor a stale report can be replayed.
 
 ## Step 3 — Fix what it found
 
 Identical obligations discipline to the mainline skill: append-only ledger,
 `UNRESOLVED_DISAPPEARANCE` on vanished-but-unresolved findings, typed + hashed
 `resolve` receipts (`corrected-from-results | claim-narrowed | claim-withdrawn |
-citation-replaced`), human-only `waive` (never a resolution), and **The One
-Forbidden Loop**: never "edit → re-sweep → repeat until it stops flagging".
+citation-replaced`; `--verified-by` must be typed provenance —
+`human:<name>` / `checker:<tool>` / `cross-family-review:<thread-id>` — and
+the evidence file is RE-hashed on every later gate), human-only `waive`
+(never a resolution), and **The One Forbidden Loop**: never "edit → re-sweep
+→ repeat until it stops flagging".
 Numeric obligations route to the result files; the rest to the matching audit
 skill or the human.
