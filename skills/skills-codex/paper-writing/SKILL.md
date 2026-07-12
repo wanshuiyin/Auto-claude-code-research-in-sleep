@@ -522,10 +522,17 @@ skipping audits while claiming to have run them.
    [ ] 3. /citation-audit       → paper/CITATION_AUDIT.json
    [ ] 4. Resolve $AUDIT_VERIFIER per integration-contract §2 (Policy A),
           then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
-   [ ] 5. Block Final Report iff verifier exit code != 0 OR row 0 found a
-          violated undisputed assertion. (TWO separate gates: row 0 is graded
-          by instruction against the contract; the verifier checks audit JSONs
-          only — verify_paper_audits.sh does NOT read the contract.)
+   [ ] 5. Integrity forensics (Phase 5.9 — OPT-IN here): re-parse the CURRENT
+          $ARGUMENTS. If it contains `— self_forensics: true`, require
+          `python3 "$GATE_HELPER" fresh --paper-dir paper/` exit 0 (gate
+          exists ∧ paper unchanged since ∧ ledger-bound ∧ decision
+          pass-capable). Exit 1 → the deterministic slice never saw this
+          text: run Phase 5.9 NOW. Not opted in → mark "n/a (opt-in)".
+   [ ] 6. Block Final Report iff verifier exit code != 0 OR row 0 found a
+          violated undisputed assertion OR row 5 is red. (THREE separate
+          gates: row 0 is graded by instruction against the contract; the
+          verifier checks audit JSONs only — verify_paper_audits.sh does NOT
+          read the contract; row 5 reads the forensics gate artifact.)
 ```
 
 > `<ARIS_REPO>` placeholder — replace with the absolute path to your ARIS

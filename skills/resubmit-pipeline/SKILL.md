@@ -313,6 +313,13 @@ the bib is frozen in this pipeline, so `citation-replaced` is NOT a legal
 fix-type here — a citation obligation either gets a `waive` with human
 sign-off or escalates to the user to relax the bib freeze.
 
+Immediately before the Overleaf push (and again whenever the run was
+resumed), re-parse the CURRENT `$ARGUMENTS`: unless it contains
+`— self_forensics: false`, require
+`python3 "$GATE_HELPER" fresh --paper-dir "$NEW_VENUE_DIR/"` to exit 0 — any
+microedit or recompile after the gate reads as STALE and forces the re-run.
+A previous run's opt-out never carries over.
+
 **Diff report**:
 
 ```bash

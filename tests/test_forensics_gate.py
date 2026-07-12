@@ -277,6 +277,21 @@ def test_schema_drift_fails_closed():
             fg.main(["update", "--report", rep3, "--paper-dir", d]); assert False
         except SystemExit:
             pass
+        # weight 2 is not a known weight (only 0/1) — a critical finding must
+        # not slip past the obligation filter via an unexpected weight value
+        f4 = _finding(weight=2)
+        rep4 = _report(os.path.join(d, "r4.json"), "CLEAN_GIVEN_EVIDENCE", [f4])
+        try:
+            fg.main(["update", "--report", rep4, "--paper-dir", d]); assert False
+        except SystemExit:
+            pass
+        # a finding with no severity at all is drift, not "info"
+        f5 = _finding(); del f5["severity"]; del f5["_severity_final"]
+        rep5 = _report(os.path.join(d, "r5.json"), "HARD_FLAGS", [f5])
+        try:
+            fg.main(["update", "--report", rep5, "--paper-dir", d]); assert False
+        except SystemExit:
+            pass
 
 
 def test_closed_status_without_receipt_blocks():
@@ -290,11 +305,15 @@ def test_closed_status_without_receipt_blocks():
         led["obligations"].append({"obligation_id": "a" * 24, "status": "RESOLVED",
                                    "severity": "critical"})   # no resolution receipt
         led["obligations"].append({"obligation_id": "b" * 24, "status": "WAIVED"})
+        led["obligations"].append({"obligation_id": "c" * 24, "status": "RESOLVED",
+                                   "resolution": {"fix_type": "corrected-from-results",
+                                                  "evidence_sha256": "",   # forged: not a sha
+                                                  "verified_by": "x"}})
         json.dump(led, open(led_path, "w"))
         rc = fg.main(["gate", "--report", rep, "--paper-dir", d,
                       "--anti-ar-commit", "d8f510c"])
         g = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
-        assert rc == 1 and g["malformed_ledger_entries"] == 2
+        assert rc == 1 and g["malformed_ledger_entries"] == 3
 
 
 def test_disappearance_history_survives_reappearance():
@@ -319,16 +338,48 @@ def test_disappearance_history_survives_reappearance():
 
 
 def test_paper_freshness_binding():
-    # gate.json binds to the paper text; editing a .tex afterwards → STALE
+    # gate.json binds to the paper content; editing any compile input (.tex,
+    # .sty, figures, the compiled PDF, …) afterwards → STALE
     with tempfile.TemporaryDirectory() as d:
         tex = os.path.join(d, "main.tex"); open(tex, "w").write("\\emph{16.7\\%}")
+        sty = os.path.join(d, "macros.sty"); open(sty, "w").write("\\def\\gain{16.7}")
         assert fg.main(["fresh", "--paper-dir", d]) == 1     # no gate yet
         rep = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
         fg.main(["evaluate", "--report", rep, "--paper-dir", d,
                  "--anti-ar-commit", "d8f510c"])
         assert fg.main(["fresh", "--paper-dir", d]) == 0
-        open(tex, "a").write("\n% reworded after the sweep")
+        # moving the number into a macro file is still a post-gate edit
+        open(sty, "a").write("\n\\def\\gain{18.9}")
         assert fg.main(["fresh", "--paper-dir", d]) == 1     # STALE
+
+
+def test_fresh_rejects_block_and_forged_policy():
+    with tempfile.TemporaryDirectory() as d:
+        open(os.path.join(d, "main.tex"), "w").write("x")
+        rep = _report(os.path.join(d, "report.json"), "HARD_FLAGS", [_finding()])
+        fg.main(["evaluate", "--report", rep, "--paper-dir", d,
+                 "--anti-ar-commit", "d8f510c"])
+        assert fg.main(["fresh", "--paper-dir", d]) == 1     # BLOCK is not pass-capable
+        # a hand-crafted unknown policy token is not pass-capable either
+        gp = os.path.join(d, ".aris", "forensics", "gate.json")
+        g = json.load(open(gp)); g["policy_decision"] = "TOTALLY_FINE"
+        json.dump(g, open(gp, "w"))
+        assert fg.main(["fresh", "--paper-dir", d]) == 1
+
+
+def test_ledger_mutation_invalidates_standing_gate():
+    # any update/resolve/waive kills gate.json — a gate computed against a
+    # previous ledger state can never be replayed (crash-safe: fail closed)
+    with tempfile.TemporaryDirectory() as d:
+        open(os.path.join(d, "main.tex"), "w").write("x")
+        rep = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["evaluate", "--report", rep, "--paper-dir", d,
+                 "--anti-ar-commit", "d8f510c"])
+        assert fg.main(["fresh", "--paper-dir", d]) == 0
+        hard = _report(os.path.join(d, "r2.json"), "HARD_FLAGS", [_finding()])
+        fg.main(["update", "--report", hard, "--paper-dir", d])   # ledger mutates
+        assert not os.path.isfile(os.path.join(d, ".aris", "forensics", "gate.json"))
+        assert fg.main(["fresh", "--paper-dir", d]) == 1     # NO_GATE, fail closed
 
 
 def test_concurrent_updates_lose_nothing():

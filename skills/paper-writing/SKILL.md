@@ -661,14 +661,14 @@ skipping audits while claiming to have run them.
           not an authorization.
           - current $ARGUMENTS has `— self_forensics: false` → skipping is
             legal; write/refresh paper/.aris/forensics/opt_out.txt.
-          - otherwise require paper/.aris/forensics/gate.json with
-            policy_decision != BLOCK (the tool already refuses reports the
-            ledger hasn't folded) AND a passing freshness check:
-            `python3 "$GATE_HELPER" fresh --paper-dir paper/` — exit 1 means
-            the paper's .tex/.bib changed AFTER the gate (or no gate exists):
-            the sweep never saw this text; run Phase 5.9 NOW, before the
-            Final Report. gate.json says BLOCK → blocked, same as a verifier
-            FAIL.
+          - otherwise the whole check is ONE command:
+            `python3 "$GATE_HELPER" fresh --paper-dir paper/` — exit 0 ⟺ a
+            gate exists ∧ no paper file changed after it ∧ it matches the
+            current obligations ledger ∧ its decision is pass-capable (an
+            ALLOWLIST: WARN / NO_NEW_BLOCKER — an unknown or missing token
+            never passes). Exit 1 → the sweep never saw this text (or the
+            gate is BLOCK): run Phase 5.9 NOW, before the Final Report —
+            BLOCK is blocked, same as a verifier FAIL.
    [ ] 6. Block Final Report iff verifier exit code != 0 OR row 0 found a
           violated undisputed assertion OR row 5 is red. (THREE separate
           gates: row 0 is graded by instruction against the contract; the

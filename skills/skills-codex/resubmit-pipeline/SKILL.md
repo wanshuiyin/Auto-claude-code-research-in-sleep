@@ -311,7 +311,11 @@ say CLEAN), so it is off unless requested. If opted in, run
 between rounds — its One Forbidden Loop), gate `BLOCK` → stop before the
 Overleaf push. Resubmit-specific rule: the bib is frozen, so
 `citation-replaced` is NOT a legal fix-type here — citation obligations get a
-human-signed `waive` or escalate to relax the bib freeze.
+human-signed `waive` or escalate to relax the bib freeze. If opted in
+(re-check the CURRENT `$ARGUMENTS`, not conversation memory), the Overleaf
+push additionally requires
+`python3 "$GATE_HELPER" fresh --paper-dir "$NEW_VENUE_DIR/"` exit 0 — a
+microedit or recompile after the gate is STALE and forces the re-run.
 
 **Diff report**:
 

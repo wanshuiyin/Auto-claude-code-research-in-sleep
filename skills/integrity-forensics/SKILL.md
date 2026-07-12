@@ -54,10 +54,15 @@ git -C "$CLONE_DIR" cat-file -e "$ANTI_AR_COMMIT^{commit}" 2>/dev/null \
 git -C "$CLONE_DIR" checkout -qf "$ANTI_AR_COMMIT" || {
     echo "FATAL: cannot checkout pinned commit $ANTI_AR_COMMIT"; exit 1; }
 # Force a PRISTINE tree at the pin — local tampering with the clone (edited
-# adjudicator, injected module, …) must not survive bootstrap and run under
-# the official pin's name. Tracked modifications discarded, untracked removed.
-git -C "$CLONE_DIR" reset --hard -q "$ANTI_AR_COMMIT"
-git -C "$CLONE_DIR" clean -fdxq
+# adjudicator, injected module, even one hidden inside a NESTED git repo,
+# which single-f clean skips) must not survive bootstrap and run under the
+# official pin's name. Every step is checked; then the tree is verified.
+git -C "$CLONE_DIR" reset --hard -q "$ANTI_AR_COMMIT" || {
+    echo "FATAL: reset to pin failed"; exit 1; }
+git -C "$CLONE_DIR" clean -ffdxq || {
+    echo "FATAL: clean failed"; exit 1; }
+[ -z "$(git -C "$CLONE_DIR" status --porcelain)" ] || {
+    echo "FATAL: clone is not pristine after reset+clean — refusing to run"; exit 1; }
 
 # One-time-per-pin validation: the upstream eval gate (8 injected-defect
 # classes, 100% recall + zero clean false positives) must PASS before this
@@ -121,12 +126,17 @@ plus: any OPEN critical obligation → BLOCK; any OPEN obligation → at least
 WARN; a closed-without-receipt or unknown-status ledger entry → BLOCK (a
 hand-edited `"status": "RESOLVED"` does not open the gate).
 
-`gate.json` also records a `paper_fingerprint` (sha over the paper's
-`.tex`/`.bib`). Downstream preflights verify it with
-`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 1 means the
-paper changed after the gate (or no gate exists), so the verdict does not
-speak for the current text: re-run the sweep + `evaluate`. Run `evaluate`
-immediately after the sweep, before touching any paper file.
+`gate.json` also records a `paper_fingerprint` (sha over the paper's compile
+inputs AND deliverables — `.tex`/`.bib`/`.sty`/`.cls`/figures/PDF). The
+downstream preflight is ONE command:
+`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 0 ⟺ a gate
+exists ∧ nothing in the paper changed after it ∧ the gate matches the current
+obligations ledger ∧ its decision is pass-capable (`WARN` /
+`NO_NEW_BLOCKER`). Anything else — missing gate, post-gate edit or recompile,
+unbound ledger, `BLOCK`, unknown token — exits 1: re-run the sweep +
+`evaluate`. Every ledger mutation (`update`/`resolve`/`waive`) deletes the
+standing `gate.json`, so an interrupted run can never leave a stale pass.
+Run `evaluate` immediately after the sweep, before touching any paper file.
 
 The gate artifact also records honest provenance: upstream's auditors are
 GPT-family, so for a **Claude executor** the findings carry `cross-family`
@@ -169,7 +179,10 @@ Rules the ledger enforces mechanically (`tests/test_forensics_gate.py`):
   original finding snapshot immutable;
 - the executor's `fix_type` label is a receipt, not a verdict — closure of a
   critical needs a family checker, a fresh cross-family review, or a human
-  (`--verified-by` is required and recorded).
+  (`--verified-by` is required and recorded);
+- `resolve`/`waive` (like `update`) **invalidate the standing `gate.json`** —
+  finish Step 3 by re-running the sweep + `evaluate`, so the gate that
+  downstream preflights read reflects the post-fix state.
 
 ### The One Forbidden Loop
 

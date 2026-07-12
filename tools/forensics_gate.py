@@ -120,16 +120,24 @@ def _forensics_dir(paper_dir):
     return d
 
 
+# The full compile-input closure PLUS the compiled deliverable. Numbers moved
+# into a .sty macro, a regenerated figure, or a rebuilt PDF after the sweep
+# must all read as STALE — the sweep audited none of them.
+_FINGERPRINT_EXTS = (".tex", ".bib", ".sty", ".cls", ".bst", ".inc", ".def",
+                     ".tikz", ".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg")
+
+
 def _paper_fingerprint(paper_dir):
-    """sha256 over the paper's text artifact (*.tex/*.bib, sorted relpaths,
-    dot-dirs like .aris/.git excluded) — binds a gate artifact to the content
-    it audited, so a paper edited AFTER a clean sweep reads as STALE (via the
-    `fresh` subcommand) instead of inheriting the old gate."""
+    """sha256 over the paper's compile inputs + deliverables (sorted relpaths,
+    dot-dirs like .aris/.git excluded, symlinked dirs followed) — binds a gate
+    artifact to the content it audited, so a paper edited (or recompiled)
+    AFTER a clean sweep reads as STALE (via the `fresh` subcommand) instead of
+    inheriting the old gate."""
     entries = []
-    for root, dirs, files in os.walk(paper_dir):
+    for root, dirs, files in os.walk(paper_dir, followlinks=True):
         dirs[:] = sorted(x for x in dirs if not x.startswith("."))
         for fn in files:
-            if fn.endswith((".tex", ".bib")):
+            if fn.lower().endswith(_FINGERPRINT_EXTS):
                 fp = os.path.join(root, fn)
                 entries.append((os.path.relpath(fp, paper_dir), _sha256_file(fp)))
     h = hashlib.sha256()
@@ -175,6 +183,12 @@ def _save_ledger(path, data):
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
+    # EVERY ledger mutation invalidates the standing gate: a gate computed
+    # against the previous ledger state must never survive it (`evaluate`
+    # rewrites gate.json right after; a crash in between leaves NO gate —
+    # which fails closed — rather than a stale pass).
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(os.path.join(os.path.dirname(path), "gate.json"))
 
 
 def _load_report_strict(path):
@@ -202,14 +216,17 @@ def _load_report_strict(path):
         if not isinstance(f, dict):
             raise SystemExit(f"FATAL: report {path} findings[{i}] is not an object")
         w = f.get("_verdict_weight", 1)
-        if isinstance(w, bool) or not isinstance(w, int):
-            raise SystemExit(f"FATAL: report {path} findings[{i}] has a non-integer "
-                             f"_verdict_weight ({w!r}) — schema drift; see Pin-bump checklist")
+        if isinstance(w, bool) or not isinstance(w, int) or w not in (0, 1):
+            raise SystemExit(f"FATAL: report {path} findings[{i}] has _verdict_weight "
+                             f"{w!r} (must be 0 or 1) — schema drift; see Pin-bump checklist")
         for key in ("severity", "_severity_final"):
             v = f.get(key)
             if v is not None and v not in ("critical", "major", "minor", "info"):
                 raise SystemExit(f"FATAL: report {path} findings[{i}] has unknown "
                                  f"{key} {v!r} — schema drift; see Pin-bump checklist")
+        if f.get("severity") is None and f.get("_severity_final") is None:
+            raise SystemExit(f"FATAL: report {path} findings[{i}] carries no severity "
+                             "at all — schema drift; see Pin-bump checklist")
     report["findings"] = findings
     return report
 
@@ -356,6 +373,7 @@ def _closure_invalid(o):
         r = o.get("resolution")
         return not (isinstance(r, dict) and r.get("fix_type") in FIX_TYPES
                     and isinstance(r.get("evidence_sha256"), str)
+                    and re.fullmatch(r"[0-9a-f]{64}", r["evidence_sha256"])
                     and (r.get("verified_by") or "").strip())
     if st == "WAIVED":
         w = o.get("waiver")
@@ -427,22 +445,35 @@ def cmd_gate(args):
 
 
 def cmd_fresh(args):
-    """Check that gate.json still speaks for the CURRENT paper text. Exit 1 on
-    a missing gate or on any *.tex/*.bib change since the gate was computed —
-    a resumed or post-edit run must re-sweep, never inherit an old gate."""
+    """The downstream preflight, in one exit code. Exit 0 ⟺ a gate exists AND
+    it speaks for the CURRENT paper content AND for the CURRENT obligations
+    ledger AND its decision is pass-capable (WARN / NO_NEW_BLOCKER). Missing
+    gate, post-gate edits, an unbound ledger, BLOCK, or any unknown policy
+    token → exit 1: a resumed or post-edit run must re-sweep + `evaluate`,
+    never inherit an old (or hand-crafted) pass."""
     out = os.path.join(_forensics_dir(args.paper_dir), "gate.json")
     if not os.path.isfile(out):
         print("forensics fresh: NO_GATE — gate.json missing; run `evaluate` first")
         return 1
     with open(out, encoding="utf-8") as fh:
         gate = json.load(fh)
-    want = gate.get("paper_fingerprint")
-    have = _paper_fingerprint(args.paper_dir)
-    if want != have:
-        print("forensics fresh: STALE — paper .tex/.bib changed after the gate; "
-              "re-run the sweep + `evaluate`")
+    if gate.get("paper_fingerprint") != _paper_fingerprint(args.paper_dir):
+        print("forensics fresh: STALE — paper sources/deliverables changed after "
+              "the gate; re-run the sweep + `evaluate`")
         return 1
-    print("forensics fresh: OK (gate matches current paper text)")
+    ledger_path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
+    ledger = _load_ledger(ledger_path)
+    if gate.get("report_sha256") is None \
+            or gate.get("report_sha256") != ledger.get("last_report_sha256"):
+        print("forensics fresh: UNBOUND — gate does not match the current "
+              "obligations ledger; re-run `evaluate`")
+        return 1
+    policy = gate.get("policy_decision")
+    if policy not in (WARN, NO_NEW_BLOCKER):
+        print(f"forensics fresh: policy_decision={policy!r} is not pass-capable "
+              "(BLOCK / unknown token) — the gate is closed")
+        return 1
+    print(f"forensics fresh: OK ({policy}; gate matches current paper text and ledger)")
     return 0
 
 
@@ -486,7 +517,11 @@ def main(argv=None):
 
     a = ap.parse_args(argv)
     if a.cmd == "gate":
-        return cmd_gate(a)          # does not mutate the ledger
+        # gate does not mutate the ledger, but it must read it and write
+        # gate.json under the same lock — otherwise a concurrent `evaluate`
+        # could land a BLOCK gate that this older read then overwrites
+        with _ledger_lock(a.paper_dir):
+            return cmd_gate(a)
     if a.cmd == "fresh":
         return cmd_fresh(a)
     if a.cmd == "evaluate":

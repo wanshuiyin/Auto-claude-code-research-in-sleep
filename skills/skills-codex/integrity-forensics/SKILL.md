@@ -38,9 +38,11 @@ fi
 git -C "$CLONE_DIR" cat-file -e "$ANTI_AR_COMMIT^{commit}" 2>/dev/null \
     || git -C "$CLONE_DIR" fetch -q origin
 git -C "$CLONE_DIR" checkout -qf "$ANTI_AR_COMMIT" || { echo "FATAL: cannot checkout pin"; exit 1; }
-# pristine tree at the pin — local tampering must not run under the pin's name
-git -C "$CLONE_DIR" reset --hard -q "$ANTI_AR_COMMIT"
-git -C "$CLONE_DIR" clean -fdxq
+# pristine tree at the pin — local tampering (incl. nested-repo injections;
+# hence double -f) must not run under the pin's name; verify, don't assume
+git -C "$CLONE_DIR" reset --hard -q "$ANTI_AR_COMMIT" || { echo "FATAL: reset failed"; exit 1; }
+git -C "$CLONE_DIR" clean -ffdxq || { echo "FATAL: clean failed"; exit 1; }
+[ -z "$(git -C "$CLONE_DIR" status --porcelain)" ] || { echo "FATAL: tree not pristine"; exit 1; }
 # marker OUTSIDE the clone (a marker inside a tamperable tree proves nothing)
 MARKER="${CLONE_DIR}.aris_eval_ok_${ANTI_AR_COMMIT}"
 if [ ! -f "$MARKER" ]; then
@@ -78,9 +80,11 @@ deterministic-only run reports whenever it found no flags — the semantic
 dimensions never ran, so nothing may wave the paper through) · `SOFT_FLAGS` →
 **WARN**. The gate records `same-family` proposal provenance for a Codex
 executor — informational: this gate only raises flags, it grants nothing.
-`gate.json` records a `paper_fingerprint`; downstream preflights run
-`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 1 = the paper
-changed after the gate (or no gate): re-run the sweep + `evaluate`.
+The downstream preflight is ONE command:
+`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 0 ⟺ gate
+exists ∧ paper unchanged since ∧ gate matches the current ledger ∧ decision
+pass-capable (WARN/NO_NEW_BLOCKER). Any ledger mutation deletes the standing
+gate.json, so a stale pass can never be replayed.
 
 ## Step 3 — Fix what it found
 
