@@ -1,7 +1,7 @@
 ---
 name: meta-apply
 description: "Privileged applier that LANDS meta-optimize / corpus-audit patches the user approved, with a fresh landing review and human approval. Base Codex review is same-family provisional. Use when the user says \"meta apply\", \"/meta-apply\", \"land the staged patches\", \"应用优化\", after a /meta-optimize run."
-argument-hint: [patch-number-or-all]
+argument-hint: "[patch-number-or-all]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob
 ---
 

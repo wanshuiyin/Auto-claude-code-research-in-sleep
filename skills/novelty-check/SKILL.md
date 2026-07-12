@@ -1,7 +1,7 @@
 ---
 name: novelty-check
 description: Verify research idea novelty against recent literature. Use when user says "查新", "novelty check", "有没有人做过", "check novelty", or wants to verify a research idea is novel before implementing.
-argument-hint: [method-or-idea-description]
+argument-hint: "[method-or-idea-description]"
 allowed-tools: WebSearch, WebFetch, Grep, Read, Glob, mcp__codex__codex
 ---
 

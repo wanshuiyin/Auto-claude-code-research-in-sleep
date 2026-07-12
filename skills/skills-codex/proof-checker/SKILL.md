@@ -1,7 +1,7 @@
 ---
 name: proof-checker
 description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via fresh-agent Codex GPT-5.6-Sol ultra review, fixes each gap with full derivations, re-reviews, and generates an audit report. Base review is same-family provisional. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
-argument-hint: [path-to-tex-file or proof-description]
+argument-hint: "[path-to-tex-file or proof-description]"
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
 ---
 

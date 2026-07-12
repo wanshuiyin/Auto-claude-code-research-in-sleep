@@ -1,7 +1,7 @@
 ---
 name: integrity-forensics
 description: "Run the Anti-Autoresearch integrity-forensics sweep (span-anchored evidence ledger → GPT auditors propose findings → deterministic rules-only adjudicator) against a paper via a SHA-pinned thin launcher — then convert the verdict into a typed policy gate (BLOCK/WARN/NO_NEW_BLOCKER) and an append-only obligations ledger. Use when user says \"integrity forensics\", \"forensic audit this paper\", \"投稿前自查诚信\", \"审这篇论文的诚信\", or says \"anti-autoresearch\" when the upstream repo's own skills are not installed. Also invoked by /paper-writing (submission self-forensics, default ON), /peer-review (forensic appendix), /resubmit-pipeline."
-argument-hint: [paper-dir | pdf | arxiv-id]
+argument-hint: "[paper-dir | pdf | arxiv-id]"
 allowed-tools: Bash(*), Read, Write, Grep, Glob, mcp__codex__codex
 ---
 

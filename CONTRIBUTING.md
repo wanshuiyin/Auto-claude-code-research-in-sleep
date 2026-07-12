@@ -39,7 +39,7 @@ Example skill structure:
 ---
 name: my-skill
 description: What this skill does
-argument-hint: [optional-argument-hint]
+argument-hint: "[optional-argument-hint]"
 allowed-tools: Read, Write, Bash(*)
 ---
 

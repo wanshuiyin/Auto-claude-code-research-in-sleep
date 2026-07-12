@@ -1,7 +1,7 @@
 ---
 name: research-lit
 description: Search and analyze research papers, find related work, summarize key ideas. Use when user says "find papers", "related work", "literature review", "what does this paper say", or needs to understand academic papers.
-argument-hint: [paper-topic-or-url]
+argument-hint: "[paper-topic-or-url]"
 allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
 ---
 

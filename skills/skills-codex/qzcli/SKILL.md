@@ -1,7 +1,7 @@
 ---
 name: qzcli
 description: Manage GPU compute jobs on the Qizhi (启智) platform using qzcli — a kubectl-style CLI tool. Use when user says "qzcli", "启智平台", "submit job", "stop job", "查计算组", "avail", "list jobs", "batch submit", or needs to manage distributed training jobs on a Qizhi instance.
-argument-hint: [login|avail|list|create|stop <job-id>|batch|status|watch]
+argument-hint: "[login|avail|list|create|stop <job-id>|batch|status|watch]"
 allowed-tools: Bash(*), Read, Write
 ---
 

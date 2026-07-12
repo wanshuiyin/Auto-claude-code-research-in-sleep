@@ -1,7 +1,7 @@
 ---
 name: monitor-experiment
 description: Monitor running experiments, check progress, collect results. Use when user says "check results", "is it done", "monitor", or wants experiment output.
-argument-hint: [server-alias or screen-name]
+argument-hint: "[server-alias or screen-name]"
 allowed-tools: Bash(ssh *), Bash(echo *), Read, Write, Edit
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: integrity-forensics
 description: "Run the Anti-Autoresearch integrity-forensics DETERMINISTIC slice (numeric core + rules-only adjudicator) against a paper via a SHA-pinned thin launcher, then convert the verdict into a typed policy gate (BLOCK/WARN/NO_NEW_BLOCKER) and an append-only obligations ledger. Codex-native limitation: upstream ships no Codex-native auditor pack, so the full nine-dimension semantic sweep requires a Claude Code session — this pack runs the honestly-scoped deterministic-only mode (it can flag, it can never say CLEAN). Use when user says \"integrity forensics\", \"forensic audit this paper\", \"投稿前自查诚信\"."
-argument-hint: [paper-dir | pdf | arxiv-id]
+argument-hint: "[paper-dir | pdf | arxiv-id]"
 ---
 
 # Integrity Forensics — thin launcher (Codex-native: deterministic slice)

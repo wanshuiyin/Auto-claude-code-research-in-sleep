@@ -1,7 +1,7 @@
 ---
 name: result-to-claim
 description: Use when experiments complete to judge what claims the results support, what they don't, and what evidence is still missing. A secondary Codex agent evaluates results against intended claims and routes to next action (pivot, supplement, or confirm). Use after experiments finish — before writing the paper or running ablations.
-argument-hint: [experiment-description-or-wandb-run]
+argument-hint: "[experiment-description-or-wandb-run]"
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit
 ---
 

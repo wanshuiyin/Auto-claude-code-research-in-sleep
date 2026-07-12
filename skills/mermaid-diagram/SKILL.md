@@ -1,7 +1,7 @@
 ---
 name: mermaid-diagram
 description: "Generate Mermaid diagrams from user requirements. Supports flowcharts, sequence diagrams, class diagrams, ER diagrams, Gantt charts, and 18 more diagram types."
-argument-hint: [diagram description or requirements]
+argument-hint: "[diagram description or requirements]"
 allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep
 ---
 

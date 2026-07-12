@@ -1,7 +1,7 @@
 ---
 name: ablation-planner
 description: "Use when main results pass result-to-claim (claim_supported=yes or partial) and ablation studies are needed for paper submission."
-argument-hint: [method-description-or-claim]
+argument-hint: "[method-description-or-claim]"
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__codex__codex-reply
 ---
 

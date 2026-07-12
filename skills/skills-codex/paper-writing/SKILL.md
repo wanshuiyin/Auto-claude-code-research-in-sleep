@@ -1,7 +1,7 @@
 ---
 name: paper-writing
 description: "Workflow 3: Full paper writing pipeline that goes from a narrative report to a polished, submission-ready PDF. Use when user says \"写论文全流程\", \"write paper pipeline\", \"从报告到PDF\", \"paper writing\", or wants the complete paper generation workflow."
-argument-hint: [narrative-report-path-or-topic]
+argument-hint: "[narrative-report-path-or-topic]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill
 ---
 

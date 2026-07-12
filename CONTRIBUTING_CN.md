@@ -39,7 +39,7 @@ Skill 结构示例：
 ---
 name: my-skill
 description: 这个 Skill 的功能
-argument-hint: [可选参数提示]
+argument-hint: "[可选参数提示]"
 allowed-tools: Read, Write, Bash(*)
 ---
 

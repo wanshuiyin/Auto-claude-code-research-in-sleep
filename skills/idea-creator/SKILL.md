@@ -1,7 +1,7 @@
 ---
 name: idea-creator
 description: Generate and rank research ideas given a broad direction. Use when user says "找idea", "brainstorm ideas", "generate research ideas", "what can we work on", or wants to explore a research area for publishable directions.
-argument-hint: [research-direction]
+argument-hint: "[research-direction]"
 allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 

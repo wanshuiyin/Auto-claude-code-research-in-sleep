@@ -1,7 +1,7 @@
 ---
 name: feishu-notify
 description: "Send notifications to Feishu/Lark. Internal utility used by other skills, or manually via /feishu-notify. Use when user says \"发飞书\", \"notify feishu\", or other skills need to send status updates."
-argument-hint: [message-text]
+argument-hint: "[message-text]"
 allowed-tools: Bash(curl *), Bash(cat *), Read, Glob
 ---
 
