@@ -35,7 +35,7 @@ def has_send_input_block(text: str) -> bool:
 def test_codex_skill_set_matches_mainline() -> None:
     main_names = skill_names(MAIN_SKILLS)
     codex_names = skill_names(CODEX_SKILLS)
-    assert len(main_names) == 79
+    assert len(main_names) == 80
     assert main_names == codex_names
 
 
@@ -436,7 +436,7 @@ def test_codex_medium_risk_skills_preserve_claude_semantics() -> None:
         "paper-writing": [
             "Architecture & Illustration Generation",
             "Submission pre-flight checklist",
-            "Invoking the three audits",
+            "Invoking the four audits",
             "Running the verifier",
             "Optional hardening",
             "assurance-contract.md",

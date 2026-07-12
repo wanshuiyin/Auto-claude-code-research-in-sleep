@@ -76,8 +76,8 @@ echo "<resolved-level>" > paper/.aris/assurance.txt   # draft or submission
 - **`draft`** — Existing behavior. Audits run only when their content detector
   matches (Phase 4.5 / 4.7 / 5.5 / 5.8). Missing artifacts are non-blocking.
   Silent-skip allowed.
-- **`submission`** — The three mandatory audits (proof-checker,
-  paper-claim-audit, citation-audit) are treated as load-bearing gates. Each
+- **`submission`** — The four mandatory audits (proof-checker,
+  paper-claim-audit, citation-audit, kill-argument) are treated as load-bearing gates. Each
   sub-audit must emit its JSON artifact (PASS / WARN / FAIL / NOT_APPLICABLE /
   BLOCKED / ERROR) — never silent-skip. Phase 6 runs
   `verify_paper_audits.sh` (canonical name; resolved per
@@ -444,6 +444,22 @@ else:
 
 **Empirical motivation:** in a real submission run, several real papers were cited in contexts they did not actually support, and at least one bib entry shipped with `author = "Anonymous"` because the metadata had not been resolved. None were caught by the improvement loop or numeric claim audit; only fresh web-lookup review surfaced them.
 
+### Phase 5.9: Integrity Forensics (optional here — see Codex-native note)
+
+The mainline pipeline defaults to a pre-submission Anti-Autoresearch sweep
+(`/integrity-forensics` launcher: SHA-pinned clone, evidence ledger, nine
+auditor dimensions, deterministic adjudication, typed BLOCK/WARN/NO_NEW_BLOCKER
+gate + append-only obligations). **In a Codex-native session this is OFF by
+default**: upstream ships no Codex-native pack, so only its deterministic-only
+mode is runnable here (numeric core + adjudicator with an all-unavailable
+coverage map — it can flag, it can never say CLEAN; translating upstream's
+reviewer calls into `spawn_agent` would rewrite an upstream contract and is
+forbidden). Run it with `— self_forensics: true` for the deterministic slice,
+or run the full sweep from a Claude Code session. If it runs: gate `BLOCK`
+refuses the Final Report; the gate records `same-family` proposal provenance
+for a Codex executor — informational, since this gate only raises flags and
+grants nothing.
+
 ### Phase 6: Final Report
 
 **Phase 6.0 — Submission Gate**
@@ -517,7 +533,7 @@ skipping audits while claiming to have run them.
 > `ARIS_REPO="$(cd "$(readlink .agents/skills/paper-writing)/../../.." && pwd)"`.
 > The path is stable across runs; store it in a shell variable if you prefer.
 
-#### Invoking the three audits
+#### Invoking the four audits
 
 Each sub-audit runs in a **fresh Codex thread** (never a continuation reply,
 never pass prior audit output as context — this preserves reviewer
