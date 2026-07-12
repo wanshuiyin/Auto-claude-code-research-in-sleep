@@ -155,12 +155,21 @@ def test_resolution_requires_evidence_and_verifier():
 
 
 def test_waiver_is_not_resolution_and_needs_a_human():
+    # "needs a human" is typed-provenance accountability, not authentication:
+    # the approver MUST be recorded as 'human:<name>' (a freehand or non-human
+    # token is refused; a false 'human:' record is an explicit, permanent lie)
     with tempfile.TemporaryDirectory() as d:
         rep = _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [_finding()])
         fg.main(["update", "--report", rep, "--paper-dir", d])
         oid = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))["obligations"][0]["obligation_id"]
+        try:
+            fg.main(["waive", "--paper-dir", d, "--obligation-id", oid,
+                     "--approver", "executor-llm", "--reason", "let me through"])
+            assert False
+        except SystemExit:
+            pass
         fg.main(["waive", "--paper-dir", d, "--obligation-id", oid,
-                 "--approver", "Ruofeng Yang", "--reason", "known benchmark quirk, documented in appendix"])
+                 "--approver", "human:Ruofeng Yang", "--reason", "known benchmark quirk, documented in appendix"])
         led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
         o = led["obligations"][0]
         assert o["status"] == "WAIVED" and o["finding_snapshot"]["severity"] == "critical"
@@ -223,13 +232,24 @@ def test_unrelated_edit_does_not_duplicate_obligations():
 def test_null_findings_and_weird_status_fail_closed():
     with tempfile.TemporaryDirectory() as d:
         # findings: null is tolerated as empty (strict-parsed), non-list is fatal
-        json.dump({"overall_verdict": "CLEAN_GIVEN_EVIDENCE", "findings": None},
+        json.dump({"overall_verdict": "CLEAN_GIVEN_EVIDENCE", "findings": None,
+                   "adjudicator": "deterministic-rules-v2", "coverage": {}},
                   open(os.path.join(d, "rn.json"), "w"))
         assert fg.main(["update", "--report", os.path.join(d, "rn.json"), "--paper-dir", d]) == 0
-        json.dump({"overall_verdict": "CLEAN_GIVEN_EVIDENCE", "findings": {"x": 1}},
+        json.dump({"overall_verdict": "CLEAN_GIVEN_EVIDENCE", "findings": {"x": 1},
+                   "adjudicator": "deterministic-rules-v2", "coverage": {}},
                   open(os.path.join(d, "rb.json"), "w"))
         try:
             fg.main(["update", "--report", os.path.join(d, "rb.json"), "--paper-dir", d])
+            assert False
+        except SystemExit:
+            pass
+        # a bare {verdict, findings} stub names no adjudicator / carries no
+        # coverage map — not an Anti-AR report; the gate refuses to speak for it
+        json.dump({"overall_verdict": "CLEAN_GIVEN_EVIDENCE", "findings": []},
+                  open(os.path.join(d, "stub.json"), "w"))
+        try:
+            fg.main(["update", "--report", os.path.join(d, "stub.json"), "--paper-dir", d])
             assert False
         except SystemExit:
             pass
@@ -379,6 +399,16 @@ def test_fresh_rejects_block_and_forged_policy():
         g = json.load(open(gp)); g["policy_decision"] = "WARN"
         json.dump(g, open(gp, "w"))
         assert fg.main(["fresh", "--paper-dir", d]) == 1     # MISMATCH
+
+
+def test_fresh_pin_and_version_binding():
+    with tempfile.TemporaryDirectory() as d:
+        rep = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["evaluate", "--report", rep, "--paper-dir", d,
+                 "--anti-ar-commit", "d8f510c"])
+        assert fg.main(["fresh", "--paper-dir", d, "--anti-ar-commit", "d8f510c"]) == 0
+        # a gate produced at an older pin must be re-audited, never inherited
+        assert fg.main(["fresh", "--paper-dir", d, "--anti-ar-commit", "newpin99"]) == 1
 
 
 def test_stale_report_refused():

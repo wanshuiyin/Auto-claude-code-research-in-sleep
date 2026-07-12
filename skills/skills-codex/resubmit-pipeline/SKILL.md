@@ -314,7 +314,8 @@ Overleaf push. Resubmit-specific rule: the bib is frozen, so
 human-signed `waive` or escalate to relax the bib freeze. If opted in
 (re-check the CURRENT `$ARGUMENTS`, not conversation memory), the Overleaf
 push additionally requires
-`python3 "$GATE_HELPER" fresh --paper-dir "$NEW_VENUE_DIR/"` exit 0 — a
+`python3 "$GATE_HELPER" fresh --paper-dir "$NEW_VENUE_DIR/" --anti-ar-commit "$ANTI_AR_COMMIT"`
+exit 0 — a
 microedit or recompile after the gate is STALE and forces the re-run.
 
 **Diff report**:

@@ -81,7 +81,8 @@ dimensions never ran, so nothing may wave the paper through) · `SOFT_FLAGS` →
 **WARN**. The gate records `same-family` proposal provenance for a Codex
 executor — informational: this gate only raises flags, it grants nothing.
 The downstream preflight is ONE command:
-`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 0 ⟺ gate
+`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR" --anti-ar-commit "$ANTI_AR_COMMIT"`
+— exit 0 ⟺ produced at the current pin ∧ gate
 exists ∧ paper unchanged since ∧ gate matches the current ledger ∧ decision
 pass-capable (WARN/NO_NEW_BLOCKER), where the decision is RE-computed from
 the sha-verified archived report + live ledger (the stored token is display,

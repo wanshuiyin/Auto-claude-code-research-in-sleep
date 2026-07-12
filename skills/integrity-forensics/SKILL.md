@@ -129,7 +129,8 @@ hand-edited `"status": "RESOLVED"` does not open the gate).
 `gate.json` also records a `paper_fingerprint` (sha over the paper's compile
 inputs AND deliverables — `.tex`/`.bib`/`.sty`/`.cls`/figures/PDF). The
 downstream preflight is ONE command:
-`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 0 ⟺ a gate
+`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR" --anti-ar-commit "$ANTI_AR_COMMIT"`
+— exit 0 ⟺ the gate was produced at the CURRENT pin ∧ a gate
 exists ∧ nothing in the paper changed after it ∧ the gate matches the current
 obligations ledger ∧ the decision — **re-computed from the sha-verified
 archived report (`last_report.json`) + the live ledger, never read from the
@@ -170,7 +171,7 @@ python3 "$GATE_HELPER" resolve --paper-dir "$PAPER_DIR" --obligation-id <id> \
     --verified-by "human:<name>" | "checker:<tool>" | "cross-family-review:<thread-id>"
 # or, with HUMAN sign-off only:
 python3 "$GATE_HELPER" waive --paper-dir "$PAPER_DIR" --obligation-id <id> \
-    --approver "<human>" --reason "<why this stands as-is>"
+    --approver "human:<name>" --reason "<why this stands as-is>"
 ```
 
 Rules the ledger enforces mechanically (`tests/test_forensics_gate.py`):
@@ -200,6 +201,25 @@ flag faster than fixing the number, and the result is a paper laundered
 against its own audit. The re-run after fixes exists to confirm the
 DISCREPANCY is gone (and to catch new ones); the obligations ledger — not the
 verdict — decides whether the gate opens.
+
+## Trust boundary (what is computed vs what is protocol)
+
+- **Computed** (the gate enforces these mechanically): verdict→policy mapping,
+  append-only ledger lifecycle, sha bindings (report ↔ ledger ↔ archive),
+  receipt re-hashing, the paper fingerprint, pin/version match, and the
+  recomputed decision (`fresh` never trusts a stored token).
+- **Protocol** (instruction-graded, deliberately): that the sweep actually ran
+  at the pinned clone against this paper. The gate raises the bar —
+  structural floor (a report must name its adjudicator and carry a coverage
+  map), stale-report mtime guard — but true content-binding needs upstream to
+  stamp a paper fingerprint into `report.json` (tracked as an upstream
+  issue). Likewise `human:` / `checker:` / `cross-family-review:` labels are
+  accountability, not authentication: a false label is an explicit,
+  permanent false record.
+- **Out of scope**: a party rewriting the `.aris/` artifacts consistently with
+  shell access has owner power (they could delete the directory outright).
+  The gate defends against the sloppy or corner-cutting executor and against
+  honest crashes/races/resumes — not against the machine's owner.
 
 ## Pin-bump checklist (maintainers)
 

@@ -662,7 +662,9 @@ skipping audits while claiming to have run them.
           - current $ARGUMENTS has `— self_forensics: false` → skipping is
             legal; write/refresh paper/.aris/forensics/opt_out.txt.
           - otherwise the whole check is ONE command:
-            `python3 "$GATE_HELPER" fresh --paper-dir paper/` — exit 0 ⟺ a
+            `python3 "$GATE_HELPER" fresh --paper-dir paper/ --anti-ar-commit
+            "$ANTI_AR_COMMIT"` (the pin constant from /integrity-forensics;
+            an old-pin gate must be re-audited) — exit 0 ⟺ a
             gate exists ∧ no paper file changed after it ∧ it matches the
             current obligations ledger ∧ its decision is pass-capable (an
             ALLOWLIST: WARN / NO_NEW_BLOCKER — an unknown or missing token

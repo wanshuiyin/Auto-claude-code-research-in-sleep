@@ -524,7 +524,8 @@ skipping audits while claiming to have run them.
           then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
    [ ] 5. Integrity forensics (Phase 5.9 — OPT-IN here): re-parse the CURRENT
           $ARGUMENTS. If it contains `— self_forensics: true`, require
-          `python3 "$GATE_HELPER" fresh --paper-dir paper/` exit 0 (gate
+          `python3 "$GATE_HELPER" fresh --paper-dir paper/ --anti-ar-commit
+          "$ANTI_AR_COMMIT"` exit 0 (produced at the current pin; gate
           exists ∧ paper unchanged since ∧ ledger-bound ∧ decision
           pass-capable). Exit 1 → the deterministic slice never saw this
           text: run Phase 5.9 NOW. Not opted in → mark "n/a (opt-in)".

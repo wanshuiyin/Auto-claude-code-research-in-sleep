@@ -120,11 +120,17 @@ def _forensics_dir(paper_dir):
     return d
 
 
-# The full compile-input closure PLUS the compiled deliverable. Numbers moved
-# into a .sty macro, a regenerated figure, or a rebuilt PDF after the sweep
-# must all read as STALE — the sweep audited none of them.
+# The compile-input closure PLUS the compiled deliverable PLUS tabular data
+# sources (pgfplots/tables read .csv/.dat at compile time). Numbers moved
+# into a .sty macro, a regenerated figure, an edited data file, or a rebuilt
+# PDF after the sweep must all read as STALE — the sweep audited none of
+# them. .json is deliberately NOT fingerprinted: the sweep's own report.json
+# (and re-run siblings) live in the paper dir and would self-trip the
+# staleness guard; JSON results feeding the paper are covered by resolution
+# evidence re-hashing instead.
 _FINGERPRINT_EXTS = (".tex", ".bib", ".sty", ".cls", ".bst", ".inc", ".def",
-                     ".tikz", ".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg")
+                     ".tikz", ".pgf", ".pdf", ".png", ".jpg", ".jpeg", ".eps",
+                     ".svg", ".csv", ".tsv", ".dat")
 
 
 def _paper_fingerprint(paper_dir):
@@ -144,6 +150,27 @@ def _paper_fingerprint(paper_dir):
     for rel, sha in sorted(entries):
         h.update("{}\0{}\n".format(rel, sha).encode("utf-8"))
     return h.hexdigest()
+
+
+def _assert_report_not_stale(report_path, paper_dir):
+    """A report older than any audited paper file was generated BEFORE those
+    edits — folding or gating it would bind new text to a sweep that never saw
+    it. Refuse (fail closed); re-run the sweep instead. NOTE this is an mtime
+    net for the honest resumed-run case, not proof of provenance — true
+    content binding needs upstream to stamp a paper fingerprint into
+    report.json (filed upstream)."""
+    rep_mtime = os.path.getmtime(report_path)
+    for root, dirs, files in os.walk(paper_dir, followlinks=True):
+        dirs[:] = [x for x in dirs if not x.startswith(".")]
+        for fn in files:
+            fp = os.path.join(root, fn)
+            if not fn.lower().endswith(_FINGERPRINT_EXTS):
+                continue
+            if os.path.samefile(fp, report_path):
+                continue   # the report itself may be fingerprinted (.json)
+            if os.path.getmtime(fp) > rep_mtime:
+                raise SystemExit(f"FATAL: {fp} was modified AFTER the report — "
+                                 "stale report; re-run the sweep")
 
 
 SEV_RANK = {"minor": 1, "major": 2, "critical": 3}
@@ -208,6 +235,17 @@ def _load_report_strict(path):
         raise SystemExit(f"FATAL: report {path} has a non-list findings field")
     if not isinstance(report.get("overall_verdict", ""), str):
         raise SystemExit(f"FATAL: report {path} has a non-string overall_verdict")
+    # Structural provenance floor: every real Anti-AR report names its
+    # adjudicator and carries a coverage map. A bare {verdict, findings} stub
+    # is not a report this gate will speak for. (This raises the bar for a
+    # skipped-sweep shortcut; it is NOT cryptographic provenance — see the
+    # launcher's Trust boundary note.)
+    if not (isinstance(report.get("adjudicator"), str) and report["adjudicator"].strip()):
+        raise SystemExit(f"FATAL: report {path} names no adjudicator — not an "
+                         "Anti-AR report; run the pinned sweep")
+    if not isinstance(report.get("coverage"), dict):
+        raise SystemExit(f"FATAL: report {path} carries no coverage map — not an "
+                         "Anti-AR report; run the pinned sweep")
     for i, f in enumerate(findings):
         # Schema drift fails CLOSED: a finding this tool cannot classify must
         # stop the gate, not silently lose its obligation (e.g. a critical
@@ -242,17 +280,7 @@ def cmd_update(args):
     (a human already dispositioned it)."""
     report = _load_report_strict(args.report)
     report_sha = _sha256_file(args.report)
-    # Stale-report guard: a report older than any audited paper file was
-    # generated BEFORE those edits — folding it would bind the new text to a
-    # sweep that never saw it. Refuse (fail closed); re-run the sweep instead.
-    rep_mtime = os.path.getmtime(args.report)
-    for root, dirs, files in os.walk(args.paper_dir, followlinks=True):
-        dirs[:] = [x for x in dirs if not x.startswith(".")]
-        for fn in files:
-            if fn.lower().endswith(_FINGERPRINT_EXTS) \
-                    and os.path.getmtime(os.path.join(root, fn)) > rep_mtime:
-                raise SystemExit(f"FATAL: {os.path.join(root, fn)} was modified AFTER "
-                                 f"the report — stale report; re-run the sweep")
+    _assert_report_not_stale(args.report, args.paper_dir)
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
     ledger = _load_ledger(path)
     by_id = {o["obligation_id"]: o for o in ledger["obligations"]}
@@ -370,8 +398,12 @@ def cmd_resolve(args):
 
 
 def cmd_waive(args):
-    if not (args.approver or "").strip() or not (args.reason or "").strip():
-        raise SystemExit("FATAL: waive requires --approver (a HUMAN) and --reason")
+    if not re.fullmatch(r"human:\S.*", (args.approver or "").strip()) \
+            or not (args.reason or "").strip():
+        raise SystemExit("FATAL: waive requires --approver 'human:<name>' and "
+                         "--reason. The tool cannot authenticate humanity — the "
+                         "typed prefix makes a non-human waiver an explicit false "
+                         "record with a permanent paper trail, not a lazy default.")
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
     ledger = _load_ledger(path)
     for o in ledger["obligations"]:
@@ -410,7 +442,8 @@ def _closure_invalid(o):
                     and _sha256_file(p) == r["evidence_sha256"])
     if st == "WAIVED":
         w = o.get("waiver")
-        return not (isinstance(w, dict) and (w.get("approver") or "").strip()
+        return not (isinstance(w, dict)
+                    and re.fullmatch(r"human:\S.*", (w.get("approver") or "").strip())
                     and (w.get("reason") or "").strip())
     return True
 
@@ -442,6 +475,7 @@ def cmd_gate(args):
     report = _load_report_strict(args.report)
     verdict = report.get("overall_verdict", "")
     report_sha = _sha256_file(args.report)
+    _assert_report_not_stale(args.report, args.paper_dir)
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
     ledger = _load_ledger(path)
     decision, open_obl, open_critical, weird, unbound = _decide(verdict, ledger, report_sha)
@@ -498,6 +532,15 @@ def cmd_fresh(args):
         return 1
     with open(out, encoding="utf-8") as fh:
         gate = json.load(fh)
+    if gate.get("gate_version") != GATE_VERSION:
+        print(f"forensics fresh: VERSION_MISMATCH — gate is v{gate.get('gate_version')!r}, "
+              f"tool is v{GATE_VERSION}; re-run `evaluate`")
+        return 1
+    if args.anti_ar_commit and gate.get("anti_ar_commit") != args.anti_ar_commit:
+        print(f"forensics fresh: PIN_MISMATCH — gate was produced at pin "
+              f"{gate.get('anti_ar_commit')!r}, launcher pins {args.anti_ar_commit!r}; "
+              "findings from an older adjudicator must be re-audited (pin-bump rule)")
+        return 1
     if gate.get("paper_fingerprint") != _paper_fingerprint(args.paper_dir):
         print("forensics fresh: STALE — paper sources/deliverables changed after "
               "the gate; re-run the sweep + `evaluate`")
@@ -571,6 +614,8 @@ def main(argv=None):
 
     f = sub.add_parser("fresh", help="verify gate.json still matches the current paper text")
     f.add_argument("--paper-dir", required=True)
+    f.add_argument("--anti-ar-commit", default=None,
+                   help="when given, the gate must have been produced at this pin")
 
     a = ap.parse_args(argv)
     if a.cmd == "gate":

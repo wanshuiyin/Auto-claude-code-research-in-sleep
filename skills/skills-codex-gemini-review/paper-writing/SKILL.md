@@ -210,6 +210,18 @@ Invoke `/auto-paper-improvement-loop` to polish the paper:
 
 **Format check** (included in improvement loop Step 8): After final recompilation, auto-detect and fix overfull hboxes (content exceeding margins), verify page count vs venue limit, and ensure compact formatting. Any overfull > 10pt is fixed before generating the final PDF.
 
+### Phase 5.9: Integrity Forensics (opt-in — Codex executor rules apply)
+
+Same contract as the base Codex pack (`skills-codex/paper-writing` Phase 5.9,
+which this overlay does not change): the executor here is Codex, so only
+upstream's **deterministic-only slice** of `/integrity-forensics` is runnable
+(numeric core + rules-only adjudicator — it can flag, it can never say
+CLEAN), OFF unless the CURRENT `$ARGUMENTS` contains `— self_forensics:
+true`. If opted in: run the launcher on `paper/` (absolute path), then before
+the Final Report require `python3 "$GATE_HELPER" fresh --paper-dir paper/
+--anti-ar-commit "$ANTI_AR_COMMIT"` exit 0 — an opted-in run without a fresh gate is **incomplete, not
+skippable**; gate `BLOCK` refuses the Final Report.
+
 ### Phase 6: Final Report
 
 ```markdown
@@ -217,6 +229,7 @@ Invoke `/auto-paper-improvement-loop` to polish the paper:
 
 **Input**: [NARRATIVE_REPORT.md or topic]
 **Venue**: [ICLR/NeurIPS/ICML]
+**Forensics**: [NO_NEW_BLOCKER | WARN: <n> open obligations (listed below) | BLOCK | n/a (opt-in, not requested)]
 **Date**: [today]
 
 ## Pipeline Summary
