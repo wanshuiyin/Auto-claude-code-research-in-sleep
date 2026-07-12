@@ -36,7 +36,7 @@ never silently apply:
 1. **The human named THIS patch.** Apply only patches the user listed (`/meta-apply 1,3`
    or `all`); default to applying nothing.
 2. **Fresh cross-model jury PASS, obtained now.** Run `mcp__codex__codex` (fresh thread,
-   NOT codex-reply; `model: gpt-5.6-sol`, `reasoning: ultra`, `sandbox: read-only`,
+   NOT codex-reply; `model: gpt-5.6-sol`, `config: {"model_reasoning_effort": "ultra"}`, `sandbox: read-only`,
    paths-only per [`reviewer-independence.md`](../shared-references/reviewer-independence.md))
    on the staged `.diff` + its target. Ask: *does this change improve the harness without
    regressions; PASS or KILL + one-line reason.* **KILL ⇒ refuse.** The human cannot
