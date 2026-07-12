@@ -51,13 +51,20 @@ fi
 # fetch ONLY if the pin isn't already present — a cached, validated pin works offline
 git -C "$CLONE_DIR" cat-file -e "$ANTI_AR_COMMIT^{commit}" 2>/dev/null \
     || git -C "$CLONE_DIR" fetch -q origin
-git -C "$CLONE_DIR" checkout -q "$ANTI_AR_COMMIT" || {
+git -C "$CLONE_DIR" checkout -qf "$ANTI_AR_COMMIT" || {
     echo "FATAL: cannot checkout pinned commit $ANTI_AR_COMMIT"; exit 1; }
+# Force a PRISTINE tree at the pin — local tampering with the clone (edited
+# adjudicator, injected module, …) must not survive bootstrap and run under
+# the official pin's name. Tracked modifications discarded, untracked removed.
+git -C "$CLONE_DIR" reset --hard -q "$ANTI_AR_COMMIT"
+git -C "$CLONE_DIR" clean -fdxq
 
 # One-time-per-pin validation: the upstream eval gate (8 injected-defect
 # classes, 100% recall + zero clean false positives) must PASS before this
 # pin is allowed to produce a verdict. NEVER skip; NEVER proceed on failure.
-MARKER="$CLONE_DIR/.aris_eval_ok_$ANTI_AR_COMMIT"
+# The marker lives OUTSIDE the clone: a marker inside a tamperable tree proves
+# nothing (and `git clean` above would erase it, forcing re-eval every run).
+MARKER="${CLONE_DIR}.aris_eval_ok_${ANTI_AR_COMMIT}"
 if [ ! -f "$MARKER" ]; then
     ( cd "$CLONE_DIR" && python3 eval/run_eval.py ) || {
         echo "FATAL: upstream eval gate FAILED at pin $ANTI_AR_COMMIT — refusing to"
@@ -110,7 +117,16 @@ The gate translates the verdict into policy WITHOUT re-labeling it:
 | `CLEAN_GIVEN_EVIDENCE` | **NO_NEW_BLOCKER** — *never* called PASS or accepted: it means "no flag found in the evidence at hand", not an acquittal |
 | anything else | **BLOCK** (fail closed) |
 
-plus: any OPEN critical obligation → BLOCK; any OPEN obligation → at least WARN.
+plus: any OPEN critical obligation → BLOCK; any OPEN obligation → at least
+WARN; a closed-without-receipt or unknown-status ledger entry → BLOCK (a
+hand-edited `"status": "RESOLVED"` does not open the gate).
+
+`gate.json` also records a `paper_fingerprint` (sha over the paper's
+`.tex`/`.bib`). Downstream preflights verify it with
+`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 1 means the
+paper changed after the gate (or no gate exists), so the verdict does not
+speak for the current text: re-run the sweep + `evaluate`. Run `evaluate`
+immediately after the sweep, before touching any paper file.
 
 The gate artifact also records honest provenance: upstream's auditors are
 GPT-family, so for a **Claude executor** the findings carry `cross-family`
@@ -190,4 +206,5 @@ contract — forbidden.
 Upstream saves its own per-dimension traces under the paper's
 `.aris/traces/`. The launcher adds only the gate artifact
 (`.aris/forensics/gate.json`, which pins `anti_ar_commit` + report/ledger
-hashes) and the obligations ledger (`.aris/forensics/obligations.json`).
+hashes + the paper-text fingerprint) and the obligations ledger
+(`.aris/forensics/obligations.json`).

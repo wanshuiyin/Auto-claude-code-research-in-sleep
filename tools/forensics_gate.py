@@ -120,6 +120,24 @@ def _forensics_dir(paper_dir):
     return d
 
 
+def _paper_fingerprint(paper_dir):
+    """sha256 over the paper's text artifact (*.tex/*.bib, sorted relpaths,
+    dot-dirs like .aris/.git excluded) — binds a gate artifact to the content
+    it audited, so a paper edited AFTER a clean sweep reads as STALE (via the
+    `fresh` subcommand) instead of inheriting the old gate."""
+    entries = []
+    for root, dirs, files in os.walk(paper_dir):
+        dirs[:] = sorted(x for x in dirs if not x.startswith("."))
+        for fn in files:
+            if fn.endswith((".tex", ".bib")):
+                fp = os.path.join(root, fn)
+                entries.append((os.path.relpath(fp, paper_dir), _sha256_file(fp)))
+    h = hashlib.sha256()
+    for rel, sha in sorted(entries):
+        h.update("{}\0{}\n".format(rel, sha).encode("utf-8"))
+    return h.hexdigest()
+
+
 SEV_RANK = {"minor": 1, "major": 2, "critical": 3}
 
 
@@ -145,6 +163,9 @@ def _load_ledger(path):
             data = json.load(fh)
         if not isinstance(data, dict) or not isinstance(data.get("obligations"), list):
             raise SystemExit(f"FATAL: {path} is not an obligations ledger")
+        for i, o in enumerate(data["obligations"]):
+            if not isinstance(o, dict) or not isinstance(o.get("obligation_id"), str):
+                raise SystemExit(f"FATAL: {path} obligations[{i}] is malformed")
         return data
     return {"ledger_version": "1", "obligations": []}
 
@@ -173,7 +194,23 @@ def _load_report_strict(path):
         raise SystemExit(f"FATAL: report {path} has a non-list findings field")
     if not isinstance(report.get("overall_verdict", ""), str):
         raise SystemExit(f"FATAL: report {path} has a non-string overall_verdict")
-    report["findings"] = [f for f in findings if isinstance(f, dict)]
+    for i, f in enumerate(findings):
+        # Schema drift fails CLOSED: a finding this tool cannot classify must
+        # stop the gate, not silently lose its obligation (e.g. a critical
+        # finding whose _verdict_weight arrives as the STRING "1" would
+        # otherwise read as non-weight-1 and never gate).
+        if not isinstance(f, dict):
+            raise SystemExit(f"FATAL: report {path} findings[{i}] is not an object")
+        w = f.get("_verdict_weight", 1)
+        if isinstance(w, bool) or not isinstance(w, int):
+            raise SystemExit(f"FATAL: report {path} findings[{i}] has a non-integer "
+                             f"_verdict_weight ({w!r}) — schema drift; see Pin-bump checklist")
+        for key in ("severity", "_severity_final"):
+            v = f.get(key)
+            if v is not None and v not in ("critical", "major", "minor", "info"):
+                raise SystemExit(f"FATAL: report {path} findings[{i}] has unknown "
+                                 f"{key} {v!r} — schema drift; see Pin-bump checklist")
+    report["findings"] = findings
     return report
 
 
@@ -202,7 +239,12 @@ def cmd_update(args):
         if fid in by_id:
             o = by_id[fid]
             o["last_seen_report"] = report_sha
-            o.pop("unresolved_disappearance", None)
+            # a closed disappearance episode is archived, never erased — the
+            # appeared→vanished→reappeared trail is itself audit evidence
+            gone = o.pop("unresolved_disappearance", None)
+            if gone is not None:
+                o.setdefault("disappearance_history", []).append(
+                    {**gone, "reappeared_at": _now(), "reappeared_in_report": report_sha})
             # severity ratchet: minor->critical escalates, never de-escalates
             new_sev, old_sev = _severity(f), o.get("severity", "minor")
             if SEV_RANK.get(new_sev, 0) > SEV_RANK.get(old_sev, 0):
@@ -235,12 +277,17 @@ def cmd_update(args):
     for o in ledger["obligations"]:
         if o["status"] == "OPEN" and o["obligation_id"] not in current \
                 and o.get("last_seen_report") != report_sha:
-            o["unresolved_disappearance"] = {
-                "noted_at": _now(), "absent_from_report": report_sha,
-                "note": "finding no longer detected but obligation was never "
-                        "resolved with evidence — disappearance is not resolution",
-            }
-            vanished += 1
+            d = o.get("unresolved_disappearance")
+            if d is None:
+                o["unresolved_disappearance"] = {
+                    "noted_at": _now(), "absent_from_report": report_sha,
+                    "note": "finding no longer detected but obligation was never "
+                            "resolved with evidence — disappearance is not resolution",
+                }
+                vanished += 1
+            else:   # still absent: extend the episode, never overwrite its start
+                d["last_absent_report"] = report_sha
+                d["last_noted_at"] = _now()
 
     _save_ledger(path, ledger)
     print(f"obligations: +{opened} opened, {reopened} re-opened (recurrence), "
@@ -296,20 +343,40 @@ def cmd_waive(args):
     raise SystemExit(f"FATAL: no obligation {args.obligation_id}")
 
 
+def _closure_invalid(o):
+    """A ledger entry counts as validly closed ONLY with its receipt: RESOLVED
+    needs a typed resolution (legal fix_type, hashed evidence, verifier);
+    WAIVED needs a human waiver record. A closed status WITHOUT the receipt —
+    or any unknown status — is not 'closed', it is malformed: fail toward
+    caution (a hand-edited `"status": "RESOLVED"` must not open the gate)."""
+    st = o.get("status")
+    if st == "OPEN":
+        return False
+    if st == "RESOLVED":
+        r = o.get("resolution")
+        return not (isinstance(r, dict) and r.get("fix_type") in FIX_TYPES
+                    and isinstance(r.get("evidence_sha256"), str)
+                    and (r.get("verified_by") or "").strip())
+    if st == "WAIVED":
+        w = o.get("waiver")
+        return not (isinstance(w, dict) and (w.get("approver") or "").strip()
+                    and (w.get("reason") or "").strip())
+    return True
+
+
 def cmd_gate(args):
     report = _load_report_strict(args.report)
     verdict = report.get("overall_verdict", "")
     report_sha = _sha256_file(args.report)
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
-    ledger = _load_ledger(path) if os.path.isfile(path) else {"obligations": []}
+    ledger = _load_ledger(path)
     open_obl = [o for o in ledger["obligations"] if o.get("status") == "OPEN"]
     open_critical = [o for o in open_obl if o.get("severity") == "critical"]
-    # an unknown/mangled status is not "closed" — fail toward caution
-    weird = [o for o in ledger["obligations"]
-             if o.get("status") not in ("OPEN", "RESOLVED", "WAIVED")]
-    # the gate only speaks for a report the ledger has actually folded in
-    unbound = (ledger.get("last_report_sha256") is not None
-               and ledger["last_report_sha256"] != report_sha)
+    weird = [o for o in ledger["obligations"] if _closure_invalid(o)]
+    # The gate only speaks for a report the ledger has actually folded in.
+    # A MISSING ledger (or one that never folded anything) is unbound too —
+    # deleting obligations.json must not turn a CLEAN report into exit 0.
+    unbound = ledger.get("last_report_sha256") != report_sha
 
     if verdict in ("HARD_FLAGS", "REVIEW_UNAVAILABLE") or open_critical or weird or unbound:
         decision = BLOCK
@@ -332,7 +399,9 @@ def cmd_gate(args):
         "anti_ar_commit": args.anti_ar_commit,
         "report_sha256": report_sha,
         "ledger_bound": not unbound,
-        "malformed_ledger_statuses": len(weird),
+        "malformed_ledger_entries": len(weird),
+        # binds this gate to the paper text it audited (checked by `fresh`)
+        "paper_fingerprint": _paper_fingerprint(args.paper_dir),
         "ledger_sha256": _sha256_file(claims) if os.path.isfile(claims) else None,
         "observability_level": report.get("observability_level"),
         "coverage": report.get("coverage", {}),
@@ -348,13 +417,33 @@ def cmd_gate(args):
                                       else "unknown")),
     }
     out = os.path.join(_forensics_dir(args.paper_dir), "gate.json")
-    tmp = out + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(out), suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(gate, fh, indent=2, ensure_ascii=False)
     os.replace(tmp, out)
     print(f"forensics gate: {decision} (upstream: {verdict or '(missing)'}; "
           f"open obligations: {len(open_obl)}, critical: {len(open_critical)}) -> {out}")
     return 0 if decision != BLOCK else 1
+
+
+def cmd_fresh(args):
+    """Check that gate.json still speaks for the CURRENT paper text. Exit 1 on
+    a missing gate or on any *.tex/*.bib change since the gate was computed —
+    a resumed or post-edit run must re-sweep, never inherit an old gate."""
+    out = os.path.join(_forensics_dir(args.paper_dir), "gate.json")
+    if not os.path.isfile(out):
+        print("forensics fresh: NO_GATE — gate.json missing; run `evaluate` first")
+        return 1
+    with open(out, encoding="utf-8") as fh:
+        gate = json.load(fh)
+    want = gate.get("paper_fingerprint")
+    have = _paper_fingerprint(args.paper_dir)
+    if want != have:
+        print("forensics fresh: STALE — paper .tex/.bib changed after the gate; "
+              "re-run the sweep + `evaluate`")
+        return 1
+    print("forensics fresh: OK (gate matches current paper text)")
+    return 0
 
 
 def main(argv=None):
@@ -392,15 +481,22 @@ def main(argv=None):
     w.add_argument("--approver", required=True)
     w.add_argument("--reason", required=True)
 
+    f = sub.add_parser("fresh", help="verify gate.json still matches the current paper text")
+    f.add_argument("--paper-dir", required=True)
+
     a = ap.parse_args(argv)
     if a.cmd == "gate":
-        return cmd_gate(a)          # read-only
+        return cmd_gate(a)          # does not mutate the ledger
+    if a.cmd == "fresh":
+        return cmd_fresh(a)
     if a.cmd == "evaluate":
+        # one lock across update AND gate — the emitted gate.json provably
+        # describes the ledger state this same transaction produced
         with _ledger_lock(a.paper_dir):
             rc = cmd_update(a)
             if rc != 0:
                 return rc
-        return cmd_gate(a)
+            return cmd_gate(a)
     with _ledger_lock(a.paper_dir):
         return {"update": cmd_update, "resolve": cmd_resolve,
                 "waive": cmd_waive}[a.cmd](a)

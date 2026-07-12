@@ -37,8 +37,12 @@ if [ ! -d "$CLONE_DIR/.git" ]; then
 fi
 git -C "$CLONE_DIR" cat-file -e "$ANTI_AR_COMMIT^{commit}" 2>/dev/null \
     || git -C "$CLONE_DIR" fetch -q origin
-git -C "$CLONE_DIR" checkout -q "$ANTI_AR_COMMIT" || { echo "FATAL: cannot checkout pin"; exit 1; }
-MARKER="$CLONE_DIR/.aris_eval_ok_$ANTI_AR_COMMIT"
+git -C "$CLONE_DIR" checkout -qf "$ANTI_AR_COMMIT" || { echo "FATAL: cannot checkout pin"; exit 1; }
+# pristine tree at the pin — local tampering must not run under the pin's name
+git -C "$CLONE_DIR" reset --hard -q "$ANTI_AR_COMMIT"
+git -C "$CLONE_DIR" clean -fdxq
+# marker OUTSIDE the clone (a marker inside a tamperable tree proves nothing)
+MARKER="${CLONE_DIR}.aris_eval_ok_${ANTI_AR_COMMIT}"
 if [ ! -f "$MARKER" ]; then
     ( cd "$CLONE_DIR" && python3 eval/run_eval.py ) || {
         echo "FATAL: upstream eval gate FAILED at pin — refusing an unvalidated pin"; exit 1; }
@@ -74,6 +78,9 @@ deterministic-only run reports whenever it found no flags — the semantic
 dimensions never ran, so nothing may wave the paper through) · `SOFT_FLAGS` →
 **WARN**. The gate records `same-family` proposal provenance for a Codex
 executor — informational: this gate only raises flags, it grants nothing.
+`gate.json` records a `paper_fingerprint`; downstream preflights run
+`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR"` — exit 1 = the paper
+changed after the gate (or no gate): re-run the sweep + `evaluate`.
 
 ## Step 3 — Fix what it found
 

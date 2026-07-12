@@ -572,10 +572,11 @@ not silently skip the default-ON gate):
 2. Parse `$ARGUMENTS` for `— self_forensics: true | false`.
 3. Then:
    - `submission` → **ON by default**. Opt out only with an explicit
-     `— self_forensics: false` — persist the receipt so Phase 6.0 can tell
-     "opted out" from "never ran":
+     `— self_forensics: false` — persist the receipt as a record:
      `mkdir -p paper/.aris/forensics && echo "opted-out: — self_forensics: false in \$ARGUMENTS" > paper/.aris/forensics/opt_out.txt`
      (recorded in the Final Report as `Forensics: skipped (opted out)`).
+     The receipt documents THIS run's decision; it does not authorize any
+     later run to skip — Phase 6.0 re-parses `$ARGUMENTS` itself.
    - `draft` → off unless `— self_forensics: true`.
 
 **Gate handling** (exit 1 = `BLOCK`: upstream `HARD_FLAGS`,
@@ -654,13 +655,20 @@ skipping audits while claiming to have run them.
    [ ] 3. /citation-audit       → paper/CITATION_AUDIT.json
    [ ] 4. Resolve $AUDIT_VERIFIER per integration-contract.md §2 (Policy A),
           then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
-   [ ] 5. Integrity forensics (Phase 5.9, default ON at submission): require
-          EITHER paper/.aris/forensics/gate.json with policy != BLOCK and
-          report_sha256 matching the ledger's last_report_sha256, OR the
-          persisted opt-out receipt paper/.aris/forensics/opt_out.txt.
-          NEITHER present → Phase 5.9 never ran on this (possibly resumed)
-          run: run it NOW, before the Final Report. gate.json says BLOCK →
-          blocked, same as a verifier FAIL.
+   [ ] 5. Integrity forensics (Phase 5.9, default ON at submission). FIRST
+          re-parse the CURRENT $ARGUMENTS — an opt_out.txt receipt left by a
+          PREVIOUS run never carries over; it is a record for the report line,
+          not an authorization.
+          - current $ARGUMENTS has `— self_forensics: false` → skipping is
+            legal; write/refresh paper/.aris/forensics/opt_out.txt.
+          - otherwise require paper/.aris/forensics/gate.json with
+            policy_decision != BLOCK (the tool already refuses reports the
+            ledger hasn't folded) AND a passing freshness check:
+            `python3 "$GATE_HELPER" fresh --paper-dir paper/` — exit 1 means
+            the paper's .tex/.bib changed AFTER the gate (or no gate exists):
+            the sweep never saw this text; run Phase 5.9 NOW, before the
+            Final Report. gate.json says BLOCK → blocked, same as a verifier
+            FAIL.
    [ ] 6. Block Final Report iff verifier exit code != 0 OR row 0 found a
           violated undisputed assertion OR row 5 is red. (THREE separate
           gates: row 0 is graded by instruction against the contract; the

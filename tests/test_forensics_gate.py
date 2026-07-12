@@ -38,8 +38,10 @@ def _report(path, verdict, findings=()):
 
 
 def _gate(d, verdict, findings=(), executor="claude-opus-4-8"):
+    # `evaluate` = fold + gate in one locked transaction (the launcher's
+    # canonical call; a bare `gate` on an unfolded report BLOCKs by design)
     rep = _report(os.path.join(d, "report.json"), verdict, findings)
-    rc = fg.main(["gate", "--report", rep, "--paper-dir", d,
+    rc = fg.main(["evaluate", "--report", rep, "--paper-dir", d,
                   "--anti-ar-commit", "d8f510c", "--executor-model", executor])
     gate = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
     return rc, gate
@@ -228,7 +230,7 @@ def test_null_findings_and_weird_status_fail_closed():
         led["obligations"].append({"obligation_id": "x" * 24, "status": "TOTALLY_DONE"})
         json.dump(led, open(led_path, "w"))
         rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")
-        assert rc == 1 and g["malformed_ledger_statuses"] == 1
+        assert rc == 1 and g["malformed_ledger_entries"] == 1
 
 
 def test_gate_refuses_unfolded_report():
@@ -236,8 +238,97 @@ def test_gate_refuses_unfolded_report():
     with tempfile.TemporaryDirectory() as d:
         r1 = _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [_finding()])
         fg.main(["update", "--report", r1, "--paper-dir", d])
-        rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")   # different report, never folded
+        clean = _report(os.path.join(d, "clean.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        rc = fg.main(["gate", "--report", clean, "--paper-dir", d,   # never folded
+                      "--anti-ar-commit", "d8f510c"])
+        g = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
         assert rc == 1 and g["ledger_bound"] is False
+
+
+def test_gate_refuses_missing_ledger():
+    # deleting (or never creating) obligations.json must not let a CLEAN
+    # report exit 0 — an unfolded gate is unbound, hence BLOCK
+    with tempfile.TemporaryDirectory() as d:
+        clean = _report(os.path.join(d, "clean.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        rc = fg.main(["gate", "--report", clean, "--paper-dir", d,
+                      "--anti-ar-commit", "d8f510c"])
+        g = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
+        assert rc == 1 and g["policy_decision"] == "BLOCK" and g["ledger_bound"] is False
+
+
+def test_schema_drift_fails_closed():
+    # a critical finding whose weight/severity this tool cannot classify must
+    # STOP the gate, never silently drop its obligation
+    with tempfile.TemporaryDirectory() as d:
+        f = _finding(); f["_verdict_weight"] = "1"          # string, not int
+        rep = _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [f])
+        try:
+            fg.main(["update", "--report", rep, "--paper-dir", d]); assert False
+        except SystemExit:
+            pass
+        f2 = _finding(); f2["severity"] = f2["_severity_final"] = "catastrophic"
+        rep2 = _report(os.path.join(d, "r2.json"), "HARD_FLAGS", [f2])
+        try:
+            fg.main(["update", "--report", rep2, "--paper-dir", d]); assert False
+        except SystemExit:
+            pass
+        rep3 = _report(os.path.join(d, "r3.json"), "CLEAN_GIVEN_EVIDENCE", ["not-an-object"])
+        try:
+            fg.main(["update", "--report", rep3, "--paper-dir", d]); assert False
+        except SystemExit:
+            pass
+
+
+def test_closed_status_without_receipt_blocks():
+    # hand-editing "status": "RESOLVED"/"WAIVED" without the receipt must not
+    # open the gate — closure is only valid WITH its evidence
+    with tempfile.TemporaryDirectory() as d:
+        rep = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["update", "--report", rep, "--paper-dir", d])
+        led_path = os.path.join(d, ".aris", "forensics", "obligations.json")
+        led = json.load(open(led_path))
+        led["obligations"].append({"obligation_id": "a" * 24, "status": "RESOLVED",
+                                   "severity": "critical"})   # no resolution receipt
+        led["obligations"].append({"obligation_id": "b" * 24, "status": "WAIVED"})
+        json.dump(led, open(led_path, "w"))
+        rc = fg.main(["gate", "--report", rep, "--paper-dir", d,
+                      "--anti-ar-commit", "d8f510c"])
+        g = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
+        assert rc == 1 and g["malformed_ledger_entries"] == 2
+
+
+def test_disappearance_history_survives_reappearance():
+    # appeared → vanished → reappeared: the vanished episode is archived,
+    # never erased (append-only audit trail)
+    with tempfile.TemporaryDirectory() as d:
+        fg.main(["update", "--report",
+                 _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [_finding()]),
+                 "--paper-dir", d])
+        fg.main(["update", "--report",
+                 _report(os.path.join(d, "r2.json"), "CLEAN_GIVEN_EVIDENCE", []),
+                 "--paper-dir", d])
+        fg.main(["update", "--report",
+                 _report(os.path.join(d, "r3.json"), "HARD_FLAGS", [_finding()]),
+                 "--paper-dir", d])
+        led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
+        o = led["obligations"][0]
+        assert o["status"] == "OPEN"
+        assert "unresolved_disappearance" not in o          # current: present again
+        assert len(o["disappearance_history"]) == 1          # episode archived
+        assert o["disappearance_history"][0]["reappeared_in_report"]
+
+
+def test_paper_freshness_binding():
+    # gate.json binds to the paper text; editing a .tex afterwards → STALE
+    with tempfile.TemporaryDirectory() as d:
+        tex = os.path.join(d, "main.tex"); open(tex, "w").write("\\emph{16.7\\%}")
+        assert fg.main(["fresh", "--paper-dir", d]) == 1     # no gate yet
+        rep = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["evaluate", "--report", rep, "--paper-dir", d,
+                 "--anti-ar-commit", "d8f510c"])
+        assert fg.main(["fresh", "--paper-dir", d]) == 0
+        open(tex, "a").write("\n% reworded after the sweep")
+        assert fg.main(["fresh", "--paper-dir", d]) == 1     # STALE
 
 
 def test_concurrent_updates_lose_nothing():
@@ -267,6 +358,31 @@ def test_evaluate_is_atomic_update_plus_gate():
         assert rc == 1
         g = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
         assert g["policy_decision"] == "BLOCK" and g["ledger_bound"] is True
+
+
+def test_concurrent_evaluates_do_not_corrupt():
+    # evaluate holds ONE lock across update+gate, and gate.json uses unique
+    # temp files — concurrent evaluates must neither crash nor lose obligations
+    import concurrent.futures, subprocess
+    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools",
+                        "forensics_gate.py")
+    with tempfile.TemporaryDirectory() as d:
+        reports = []
+        for i in range(4):
+            f = _finding(span=f"concurrent evaluate finding {i} distinct span")
+            reports.append(_report(os.path.join(d, f"r{i}.json"), "HARD_FLAGS", [f]))
+        def run(rep):
+            return subprocess.run([sys.executable, tool, "evaluate", "--report", rep,
+                                   "--paper-dir", d, "--anti-ar-commit", "d8f510c"],
+                                  capture_output=True, text=True)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            results = list(ex.map(run, reports))
+        assert all(r.returncode == 1 for r in results), [r.stderr for r in results]
+        assert all("Traceback" not in r.stderr for r in results), [r.stderr for r in results]
+        led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
+        assert len(led["obligations"]) == 4
+        g = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
+        assert g["policy_decision"] == "BLOCK"   # whichever won, it's a coherent artifact
 
 
 if __name__ == "__main__":
