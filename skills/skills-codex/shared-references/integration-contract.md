@@ -232,6 +232,7 @@ taxonomy here first if a future helper does not fit.
 | Helper (canonical name) | Policy | Rationale |
 |---|---|---|
 | `verify_paper_audits.sh` | A (gate) | Exit code is the source of truth for submission readiness |
+| `forensics_gate.py` (in `/integrity-forensics`, `/paper-writing` Phase 5.9/6.0, `/resubmit-pipeline`) | A (gate) | Typed policy gate + append-only obligations ledger for the Anti-Autoresearch launcher (deterministic slice in Codex-native sessions); when forensics is in play an unresolved helper blocks the Final Report / Overleaf push (never improvise the gate). `fresh` is the one-command downstream preflight; exit code is the source of truth |
 | `save_trace.sh` | C (forensic) | Trace artifacts are load-bearing for audit traceability |
 | `research_wiki.py ingest_paper` (caller skills) | B (side-effect) | Primary output (idea/paper summary) is delivered without wiki ingestion |
 | `research_wiki.py` (in `/research-wiki` itself) | A (gate) | The SKILL is the wiki tool; missing helper means no functionality |
