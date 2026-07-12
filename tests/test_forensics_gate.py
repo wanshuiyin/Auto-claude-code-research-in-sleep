@@ -132,12 +132,16 @@ def test_resolution_requires_evidence_and_verifier():
             assert False
         except SystemExit:
             pass
-        # proper resolution → closes, gate clears
+        # proper resolution → closes; then the post-fix RE-SWEEP is folded in
+        # (the gate only speaks for a report the ledger has folded — sha-bound)
         fg.main(["resolve", "--paper-dir", d, "--obligation-id", oid,
                  "--fix-type", "corrected-from-results", "--evidence", ev,
                  "--verified-by", "codex-thread-019f..."])
+        clean = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["update", "--report", clean, "--paper-dir", d])
         rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")
         assert rc == 0 and g["policy_decision"] == "NO_NEW_BLOCKER"
+        assert g["ledger_bound"] is True
 
 
 def test_waiver_is_not_resolution_and_needs_a_human():
@@ -150,8 +154,119 @@ def test_waiver_is_not_resolution_and_needs_a_human():
         led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
         o = led["obligations"][0]
         assert o["status"] == "WAIVED" and o["finding_snapshot"]["severity"] == "critical"
+        clean = _report(os.path.join(d, "report.json"), "CLEAN_GIVEN_EVIDENCE", [])
+        fg.main(["update", "--report", clean, "--paper-dir", d])
         rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")
         assert rc == 0    # waived obligations no longer block — but the record is permanent
+
+
+
+
+# ---- round-2 review hardening ----
+
+def test_severity_ratchets_and_clean_still_blocks():
+    with tempfile.TemporaryDirectory() as d:
+        r1 = _report(os.path.join(d, "r1.json"), "SOFT_FLAGS", [_finding(sev="minor")])
+        fg.main(["update", "--report", r1, "--paper-dir", d])
+        r2 = _report(os.path.join(d, "r2.json"), "HARD_FLAGS", [_finding(sev="critical")])
+        fg.main(["update", "--report", r2, "--paper-dir", d])
+        led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
+        assert len(led["obligations"]) == 1 and led["obligations"][0]["severity"] == "critical"
+        # even a later CLEAN report cannot outrank the open critical obligation
+        rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")
+        assert rc == 1 and g["policy_decision"] == "BLOCK"
+
+
+def test_recurrence_after_resolution_reopens():
+    with tempfile.TemporaryDirectory() as d:
+        r1 = _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [_finding()])
+        fg.main(["update", "--report", r1, "--paper-dir", d])
+        oid = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))["obligations"][0]["obligation_id"]
+        ev = os.path.join(d, "results.json"); open(ev, "w").write("{}")
+        fg.main(["resolve", "--paper-dir", d, "--obligation-id", oid,
+                 "--fix-type", "corrected-from-results", "--evidence", ev, "--verified-by", "x"])
+        # the same finding comes back — the fix didn't hold
+        r2 = _report(os.path.join(d, "r2.json"), "HARD_FLAGS", [_finding()])
+        fg.main(["update", "--report", r2, "--paper-dir", d])
+        led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
+        o = led["obligations"][0]
+        assert o["status"] == "OPEN" and o["previous_resolutions"]   # archived, not erased
+        rc, _g = _gate(d, "HARD_FLAGS")
+        assert rc == 1
+
+
+def test_unrelated_edit_does_not_duplicate_obligations():
+    # identity excludes artifact_hash: the same finding re-reported after an
+    # unrelated edit to the same file (new file hash) is ONE obligation
+    with tempfile.TemporaryDirectory() as d:
+        f1 = _finding(); f1["evidence"][0]["artifact_hash"] = "hash-before-edit"
+        f2 = _finding(); f2["evidence"][0]["artifact_hash"] = "hash-after-edit"
+        fg.main(["update", "--report", _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [f1]),
+                 "--paper-dir", d])
+        fg.main(["update", "--report", _report(os.path.join(d, "r2.json"), "HARD_FLAGS", [f2]),
+                 "--paper-dir", d])
+        led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
+        assert len(led["obligations"]) == 1
+
+
+def test_null_findings_and_weird_status_fail_closed():
+    with tempfile.TemporaryDirectory() as d:
+        # findings: null is tolerated as empty (strict-parsed), non-list is fatal
+        json.dump({"overall_verdict": "CLEAN_GIVEN_EVIDENCE", "findings": None},
+                  open(os.path.join(d, "rn.json"), "w"))
+        assert fg.main(["update", "--report", os.path.join(d, "rn.json"), "--paper-dir", d]) == 0
+        json.dump({"overall_verdict": "CLEAN_GIVEN_EVIDENCE", "findings": {"x": 1}},
+                  open(os.path.join(d, "rb.json"), "w"))
+        try:
+            fg.main(["update", "--report", os.path.join(d, "rb.json"), "--paper-dir", d])
+            assert False
+        except SystemExit:
+            pass
+        # a mangled ledger status is not "closed" — gate BLOCKs
+        led_path = os.path.join(d, ".aris", "forensics", "obligations.json")
+        led = json.load(open(led_path))
+        led["obligations"].append({"obligation_id": "x" * 24, "status": "TOTALLY_DONE"})
+        json.dump(led, open(led_path, "w"))
+        rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")
+        assert rc == 1 and g["malformed_ledger_statuses"] == 1
+
+
+def test_gate_refuses_unfolded_report():
+    # the gate only speaks for the report the ledger last folded (sha binding)
+    with tempfile.TemporaryDirectory() as d:
+        r1 = _report(os.path.join(d, "r1.json"), "HARD_FLAGS", [_finding()])
+        fg.main(["update", "--report", r1, "--paper-dir", d])
+        rc, g = _gate(d, "CLEAN_GIVEN_EVIDENCE")   # different report, never folded
+        assert rc == 1 and g["ledger_bound"] is False
+
+
+def test_concurrent_updates_lose_nothing():
+    import concurrent.futures, subprocess
+    tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tools",
+                        "forensics_gate.py")
+    with tempfile.TemporaryDirectory() as d:
+        reports = []
+        for i in range(8):
+            f = _finding(span=f"unique finding number {i} with its own span text")
+            reports.append(_report(os.path.join(d, f"r{i}.json"), "HARD_FLAGS", [f]))
+        def run(rep):
+            return subprocess.run([sys.executable, tool, "update", "--report", rep,
+                                   "--paper-dir", d], capture_output=True, text=True)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+            results = list(ex.map(run, reports))
+        assert all(r.returncode == 0 for r in results), [r.stderr for r in results]
+        led = json.load(open(os.path.join(d, ".aris", "forensics", "obligations.json")))
+        assert len(led["obligations"]) == 8      # append-only survived concurrency
+
+
+def test_evaluate_is_atomic_update_plus_gate():
+    with tempfile.TemporaryDirectory() as d:
+        rep = _report(os.path.join(d, "report.json"), "HARD_FLAGS", [_finding()])
+        rc = fg.main(["evaluate", "--report", rep, "--paper-dir", d,
+                      "--anti-ar-commit", "d8f510c"])
+        assert rc == 1
+        g = json.load(open(os.path.join(d, ".aris", "forensics", "gate.json")))
+        assert g["policy_decision"] == "BLOCK" and g["ledger_bound"] is True
 
 
 if __name__ == "__main__":

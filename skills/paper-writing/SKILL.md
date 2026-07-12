@@ -562,11 +562,21 @@ typed policy gate and the append-only obligations ledger. Self-auditing runs
 at whatever observability the artifacts allow (with `code/` + `results/`
 present that is L2 — stricter than anything an external reviewer can run).
 
-**When it runs:**
-- `assurance: submission` → **ON by default**. Opt out with
-  `— self_forensics: false` (recorded in the Final Report as
-  `Forensics: skipped (opted out)`).
-- `assurance: draft` → off unless `— self_forensics: true`.
+**When it runs** (re-derive here — do NOT trust `.aris/assurance.txt` alone;
+a resumed run whose Phase 0 never executed, or whose file went stale, must
+not silently skip the default-ON gate):
+
+1. Re-derive the assurance level from `$ARGUMENTS` with the **same rule as
+   Phase 0 / Phase 6.0** (explicit `— assurance:` wins; else `max`/`beast` →
+   `submission`; else `draft`).
+2. Parse `$ARGUMENTS` for `— self_forensics: true | false`.
+3. Then:
+   - `submission` → **ON by default**. Opt out only with an explicit
+     `— self_forensics: false` — persist the receipt so Phase 6.0 can tell
+     "opted out" from "never ran":
+     `mkdir -p paper/.aris/forensics && echo "opted-out: — self_forensics: false in \$ARGUMENTS" > paper/.aris/forensics/opt_out.txt`
+     (recorded in the Final Report as `Forensics: skipped (opted out)`).
+   - `draft` → off unless `— self_forensics: true`.
 
 **Gate handling** (exit 1 = `BLOCK`: upstream `HARD_FLAGS`,
 `REVIEW_UNAVAILABLE`, or an OPEN critical obligation):
@@ -644,10 +654,18 @@ skipping audits while claiming to have run them.
    [ ] 3. /citation-audit       → paper/CITATION_AUDIT.json
    [ ] 4. Resolve $AUDIT_VERIFIER per integration-contract.md §2 (Policy A),
           then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
-   [ ] 5. Block Final Report iff verifier exit code != 0 OR row 0 found a
-          violated undisputed assertion. (TWO separate gates: row 0 is graded
-          by instruction against the contract; the verifier checks audit JSONs
-          only — verify_paper_audits.sh does NOT read the contract.)
+   [ ] 5. Integrity forensics (Phase 5.9, default ON at submission): require
+          EITHER paper/.aris/forensics/gate.json with policy != BLOCK and
+          report_sha256 matching the ledger's last_report_sha256, OR the
+          persisted opt-out receipt paper/.aris/forensics/opt_out.txt.
+          NEITHER present → Phase 5.9 never ran on this (possibly resumed)
+          run: run it NOW, before the Final Report. gate.json says BLOCK →
+          blocked, same as a verifier FAIL.
+   [ ] 6. Block Final Report iff verifier exit code != 0 OR row 0 found a
+          violated undisputed assertion OR row 5 is red. (THREE separate
+          gates: row 0 is graded by instruction against the contract; the
+          verifier checks audit JSONs only — verify_paper_audits.sh does NOT
+          read the contract; row 5 reads the forensics gate artifact.)
 ```
 
 > The resolver in "Running the verifier" below tries

@@ -35,7 +35,8 @@ ANTI_AR_COMMIT="d8f510c49c29ccb5f98ecb1f8e397a7a27eb97c4"
 if [ ! -d "$CLONE_DIR/.git" ]; then
     git clone --no-checkout https://github.com/wanshuiyin/Anti-Autoresearch.git "$CLONE_DIR"
 fi
-git -C "$CLONE_DIR" fetch -q origin
+git -C "$CLONE_DIR" cat-file -e "$ANTI_AR_COMMIT^{commit}" 2>/dev/null \
+    || git -C "$CLONE_DIR" fetch -q origin
 git -C "$CLONE_DIR" checkout -q "$ANTI_AR_COMMIT" || { echo "FATAL: cannot checkout pin"; exit 1; }
 MARKER="$CLONE_DIR/.aris_eval_ok_$ANTI_AR_COMMIT"
 if [ ! -f "$MARKER" ]; then
@@ -64,8 +65,7 @@ Resolve `forensics_gate.py` via the canonical helper chain
 (`shared-references/integration-contract.md` §2, Policy A), then:
 
 ```bash
-python3 "$GATE_HELPER" update --report "$PAPER_DIR/report.json" --paper-dir "$PAPER_DIR"
-python3 "$GATE_HELPER" gate   --report "$PAPER_DIR/report.json" --paper-dir "$PAPER_DIR" \
+python3 "$GATE_HELPER" evaluate --report "$PAPER_DIR/report.json" --paper-dir "$PAPER_DIR" \
     --anti-ar-commit "$ANTI_AR_COMMIT" --executor-model "codex-gpt-5.6-sol"
 ```
 

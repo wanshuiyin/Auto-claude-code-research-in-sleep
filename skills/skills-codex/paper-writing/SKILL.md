@@ -458,7 +458,10 @@ forbidden). Run it with `— self_forensics: true` for the deterministic slice,
 or run the full sweep from a Claude Code session. If it runs: gate `BLOCK`
 refuses the Final Report; the gate records `same-family` proposal provenance
 for a Codex executor — informational, since this gate only raises flags and
-grants nothing.
+grants nothing. An opted-in run (`— self_forensics: true` in `$ARGUMENTS` —
+re-check `$ARGUMENTS` at Phase 6.0, not conversation memory) that reaches the
+Final Report without `paper/.aris/forensics/gate.json` is **incomplete, not
+skippable**: run the slice before reporting.
 
 ### Phase 6: Final Report
 

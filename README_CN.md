@@ -265,7 +265,7 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 
 ## 2. 📢 最近更新
 
-- **2026-07-12** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🛡️ **投稿前,你的论文先过一遍审稿人那侧的取证**([#357](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/357))。新 skill `/integrity-forensics`:[Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) 的 SHA-pin 薄启动器——敌意审稿人能跑的那套扫描(逐字锚定的证据账本、九个审计维度、GRIM/GRIMMER/statcheck 数值核心、纯规则裁决器)现在先跑在你自己的论文上,而且比任何外部审稿人都严(它看得到你的代码和结果)。结论进一道 typed gate——flag 能拦下投稿,但"没查出问题"只记作"无新阻断"、永远不算无罪判决;每条 finding 变成一条义务,只有带类型、带 hash 的证据才能销项(把被点名的句子改个措辞不算数,台账会记下来)。`/paper-writing` 在 submission 档默认就跑;`— self_forensics: false` 可关。⚠️ 首次运行会克隆并校验 pin 的上游(需要网络,几分钟);跑 `bash tools/smart_update.sh --apply` 拉取更新。
+- **2026-07-12** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🛡️ **投稿前,你的论文先过一遍审稿人那侧的取证**([#357](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/357))。新 skill `/integrity-forensics`:[Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) 的 SHA-pin 薄启动器——敌意审稿人能跑的那套扫描(逐字锚定的证据账本、九个审计维度、GRIM/GRIMMER/statcheck 数值核心、纯规则裁决器)现在先跑在你自己的论文上,而且通常比外部审稿人更严(`code/` 和 `results/` 在场时,它连这些也一起看)。结论进一道 typed gate——flag 能拦下投稿,但"没查出问题"只记作"无新阻断"、永远不算无罪判决;构成义务的 finding 只有带类型、带 hash 的证据才能销项(把被点名的句子改个措辞不算数,台账会记下来)。`/paper-writing` 在 submission 档默认就跑;`— self_forensics: false` 可关。⚠️ 首次运行会克隆并校验 pin 的上游(需要网络,几分钟);跑 `bash tools/smart_update.sh --apply` 拉取更新。
 - **2026-07-10** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧠 **Reviewer 默认换成 GPT-5.6-Sol,深度审计用上新的 `ultra` 档**([#354](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/354))。codex-cli 0.144.1 在 `xhigh` 之上加了 `max`、`ultra` 两档(`ultra` 还会自己分派子任务)。ARIS 的审阅现在默认走 `gpt-5.6-sol`:七个重量级裁决(`/proof-checker`、`/kill-argument`、`/research-review`、`/experiment-audit`、`/paper-claim-audit`、`/result-to-claim`、`/meta-apply`)用 `ultra`,其余一律保持 `xhigh`。codex-cli 版本旧或账号没有这个模型?skill 会自动降级(先 5.6-sol `xhigh`,再 5.5 `xhigh`)——但只在这两种明确报错时降,超时不降,永远不低于 `xhigh`。顺手修了一个问题:`/result-to-claim` 在审稿模型连不上时不再自己给自己的实验下结论,而是诚实停下。⚠️ 升级 codex-cli 到 ≥ 0.144.1,重启 session(MCP server 要重启才生效),然后跑 `bash tools/smart_update.sh --apply`。
 - **2026-07-03** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧬 **从 Anthropic 的 Claude Science skills 借来三点小改动**([#339](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/339)、[#340](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/340)、[#341](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/341);Apache-2.0)。ARIS 现在用同一种写法描述 GPU 环境,同一份配置可以用在 SSH 机器、Modal 和集群上,再让一个全新的 agent 按安装说明走一遍来检查。我们也加了一个小工具,用来测试 skill 描述到底能不能让系统选中正确的 skill。最后,图表和写作检查会把"事实是否正确"和"风格是否好看"分开:事实必须过,风格只是建议。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
 - **2026-07-02** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🔁 **把 Karpathy 的 LOOPS.md 思路吸收到 ARIS**([#333](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/333)–[#337](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/337))。Reviewer 现在会先找哪里可能有问题,而不是礼貌地打个分。遇到奇怪的 review 结论时,ARIS 会先让你看保存下来的 reviewer 记录,而不是立刻再问一遍模型。做坏的构建可以按计划重来,不必一直补丁叠补丁;计划、日志和结果会保留。评分可以参考真实的好/坏例子,`/meta-optimize` 会问哪些东西该删,`/paper-writing` 会在动笔前先定清楚"写完"的标准。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
@@ -512,7 +512,7 @@ Codex 基础镜像默认由新的 Codex `spawn_agent` 自审：流程可以继�
 
 ## 4. ✨ 功能亮点
 
-ARIS 用 **79 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
+ARIS 用 **80 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
 
 🔥 *而且这套"广度 / 审 / 记忆"三角能适配任何 agent 的 **ultracode 式深度模式**：广度 pass 适配运行时暴露的能力（Claude Code 原生 ultracode / workflows + Opus 4.8、Codex `spawn_agent`，或纯顺序执行），并按层级干净降级（fan-out → agent spawn → 顺序）。三件事分得很清楚：**广度 · 跨模型对抗审 → 准确性 · research wiki → 记忆性**。无论循环由谁推进，最后都回到同一套跨模型对抗审 + research wiki：**能推进，不能定案**。*
 
@@ -573,7 +573,7 @@ ARIS 现有 **80+ 个 skill**，覆盖文献调研、idea 生成、实验、审�
 
 </details>
 
-→ **[按 category 浏览全部 79 个 skill →](docs/SKILLS_CATALOG.md)**
+→ **[按 category 浏览全部 80 个 skill →](docs/SKILLS_CATALOG.md)**
 
 ---
 

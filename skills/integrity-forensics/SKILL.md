@@ -48,7 +48,9 @@ ANTI_AR_COMMIT="d8f510c49c29ccb5f98ecb1f8e397a7a27eb97c4"
 if [ ! -d "$CLONE_DIR/.git" ]; then
     git clone --no-checkout https://github.com/wanshuiyin/Anti-Autoresearch.git "$CLONE_DIR"
 fi
-git -C "$CLONE_DIR" fetch -q origin
+# fetch ONLY if the pin isn't already present — a cached, validated pin works offline
+git -C "$CLONE_DIR" cat-file -e "$ANTI_AR_COMMIT^{commit}" 2>/dev/null \
+    || git -C "$CLONE_DIR" fetch -q origin
 git -C "$CLONE_DIR" checkout -q "$ANTI_AR_COMMIT" || {
     echo "FATAL: cannot checkout pinned commit $ANTI_AR_COMMIT"; exit 1; }
 
@@ -70,11 +72,12 @@ echo "anti-autoresearch pinned at $ANTI_AR_COMMIT (eval gate: validated)"
 Open and follow **`$CLONE_DIR/workflows/anti-autoresearch/SKILL.md`** end to
 end on the target. Two wrapper rules — the ONLY things this launcher adds:
 
-1. **cwd + ROOT.** Upstream skills self-locate via `git rev-parse
-   --show-toplevel`. Run every upstream bash block with `cd "$CLONE_DIR"`
-   first (or `ROOT="$CLONE_DIR"` exported), and refer to the paper by
-   **absolute path** — otherwise upstream resolves ROOT to the ARIS repo and
-   finds the wrong Python spine.
+1. **cwd.** Upstream skills self-locate via `git rev-parse --show-toplevel`.
+   Run every upstream bash block with `cd "$CLONE_DIR"` first — ALWAYS the cd,
+   never just an exported `ROOT` (upstream blocks re-derive ROOT themselves
+   and would overwrite it) — and refer to the paper by **absolute path**,
+   otherwise upstream resolves ROOT to the ARIS repo and finds the wrong
+   Python spine.
 2. **Codex calls carry `approval-policy: never` + `sandbox: read-only`**
    (session hygiene; upstream already specifies fresh-thread-per-dimension,
    serial execution, and its own model pins — do not alter them).
@@ -89,9 +92,10 @@ whatever upstream derives from the artifacts present — do not promise L2.
 ## Step 2 — Typed gate + obligations (ARIS-side post-processing)
 
 ```bash
-# Resolve $GATE_HELPER via the canonical chain (integration-contract §2), then:
-python3 "$GATE_HELPER" update --report "$PAPER_DIR/report.json" --paper-dir "$PAPER_DIR"
-python3 "$GATE_HELPER" gate   --report "$PAPER_DIR/report.json" --paper-dir "$PAPER_DIR" \
+# Resolve $GATE_HELPER via the canonical chain (integration-contract §2), then
+# ONE atomic call (update + gate in a single locked transaction — the gate only
+# ever speaks for the report the ledger has folded, sha-bound):
+python3 "$GATE_HELPER" evaluate --report "$PAPER_DIR/report.json" --paper-dir "$PAPER_DIR" \
     --anti-ar-commit "$ANTI_AR_COMMIT" --executor-model "<this pipeline's executor>"
 # exit 0 = WARN / NO_NEW_BLOCKER · exit 1 = BLOCK
 ```

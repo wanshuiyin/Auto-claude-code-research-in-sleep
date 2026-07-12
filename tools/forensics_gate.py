@@ -31,12 +31,19 @@ Pure stdlib. Artifacts:
   <paper>/.aris/forensics/obligations.json   (append-only ledger; never pruned)
 """
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 import re
 import sys
+import tempfile
 from datetime import datetime, timezone
+
+try:
+    import fcntl  # POSIX
+except ImportError:  # pragma: no cover
+    fcntl = None
 
 GATE_VERSION = "1"
 AUDITOR_FAMILY = "openai"   # Anti-AR's reviewer pins are GPT-family by upstream contract
@@ -90,14 +97,16 @@ def _is_obligation_bearing(f):
 
 
 def fingerprint(f):
-    """Stable identity of a finding ACROSS re-runs. Deliberately excludes
-    finding_id (F001... is positional) and claim_id (positional in the ledger).
-    Uses what survives an honest re-run: which auditor, which pattern, the
-    verbatim evidence spans (whitespace-normalized), their artifact hashes and
-    file locations."""
+    """Stable identity of a finding ACROSS re-runs. Deliberately excludes:
+    finding_id (F001... is positional), claim_id (positional in the ledger),
+    and artifact_hash (upstream hashes the WHOLE source file, so any unrelated
+    edit to the same .tex would re-identify every finding in it — duplicating
+    obligations on honest revisions). Identity = which auditor, which pattern,
+    the verbatim evidence spans (whitespace-normalized), and their file paths;
+    artifact hashes remain recorded on each observation as provenance."""
     ev = sorted(
-        (_norm_ws(e.get("span")), e.get("artifact_hash") or "",
-         ((e.get("location") or {}).get("file") or ""))
+        (_norm_ws(e.get("span")),
+         os.path.normpath((e.get("location") or {}).get("file") or ""))
         for e in (f.get("evidence") or []) if isinstance(e, dict)
     )
     basis = json.dumps({"skill": f.get("skill"), "pattern_id": f.get("pattern_id"),
@@ -111,6 +120,25 @@ def _forensics_dir(paper_dir):
     return d
 
 
+SEV_RANK = {"minor": 1, "major": 2, "critical": 3}
+
+
+@contextlib.contextmanager
+def _ledger_lock(paper_dir):
+    """One lock around every load→mutate→save transaction — concurrent
+    update/resolve/waive must never lose records (append-only is a promise)."""
+    lock_path = os.path.join(_forensics_dir(paper_dir), ".ledger.lock")
+    fh = open(lock_path, "w")
+    try:
+        if fcntl is not None:
+            fcntl.flock(fh, fcntl.LOCK_EX)
+        yield
+    finally:
+        if fcntl is not None:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+        fh.close()
+
+
 def _load_ledger(path):
     if os.path.isfile(path):
         with open(path, encoding="utf-8") as fh:
@@ -122,34 +150,71 @@ def _load_ledger(path):
 
 
 def _save_ledger(path, data):
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
     os.replace(tmp, path)
 
 
+def _load_report_strict(path):
+    """A report that cannot be parsed into the expected shape must fail CLOSED —
+    never fall through to a permissive gate."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            report = json.load(fh)
+    except Exception as e:
+        raise SystemExit(f"FATAL: cannot parse report {path}: {type(e).__name__}")
+    if not isinstance(report, dict):
+        raise SystemExit(f"FATAL: report {path} is not a JSON object")
+    findings = report.get("findings")
+    if findings is None:
+        findings = []
+    if not isinstance(findings, list):
+        raise SystemExit(f"FATAL: report {path} has a non-list findings field")
+    if not isinstance(report.get("overall_verdict", ""), str):
+        raise SystemExit(f"FATAL: report {path} has a non-string overall_verdict")
+    report["findings"] = [f for f in findings if isinstance(f, dict)]
+    return report
+
+
 def cmd_update(args):
     """Fold a fresh report into the ledger. APPEND-ONLY: new findings open new
-    obligations; existing ones are untouched; OPEN obligations whose fingerprint
-    is absent from this report gain an UNRESOLVED_DISAPPEARANCE note (they stay
-    OPEN — disappearance is not resolution)."""
-    with open(args.report, encoding="utf-8") as fh:
-        report = json.load(fh)
+    obligations; existing ones are untouched except for two escalations that can
+    only move TOWARD caution — severity ratchets up to the historical max, and a
+    RESOLVED obligation whose finding RECURS re-opens (the fix evidently didn't
+    hold; the old resolution is archived, never erased). OPEN obligations whose
+    fingerprint is absent from this report gain an UNRESOLVED_DISAPPEARANCE note
+    (they stay OPEN — disappearance is not resolution). WAIVED stays closed
+    (a human already dispositioned it)."""
+    report = _load_report_strict(args.report)
     report_sha = _sha256_file(args.report)
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
     ledger = _load_ledger(path)
     by_id = {o["obligation_id"]: o for o in ledger["obligations"]}
 
     current = {}
-    for f in report.get("findings", []):
-        if isinstance(f, dict) and _is_obligation_bearing(f):
+    for f in report["findings"]:
+        if _is_obligation_bearing(f):
             current[fingerprint(f)] = f
 
-    opened = 0
+    opened = reopened = 0
     for fid, f in current.items():
         if fid in by_id:
-            by_id[fid]["last_seen_report"] = report_sha
-            by_id[fid].pop("unresolved_disappearance", None)
+            o = by_id[fid]
+            o["last_seen_report"] = report_sha
+            o.pop("unresolved_disappearance", None)
+            # severity ratchet: minor->critical escalates, never de-escalates
+            new_sev, old_sev = _severity(f), o.get("severity", "minor")
+            if SEV_RANK.get(new_sev, 0) > SEV_RANK.get(old_sev, 0):
+                o["severity"] = new_sev
+                o.setdefault("_escalations", []).append(
+                    {"from": old_sev, "to": new_sev, "at": _now(), "report": report_sha})
+            # recurrence after resolution: the fix did not hold — re-open
+            if o["status"] == "RESOLVED":
+                o.setdefault("previous_resolutions", []).append(o.pop("resolution"))
+                o["status"] = "OPEN"
+                o["recurred_after_resolution"] = {"at": _now(), "report": report_sha}
+                reopened += 1
             continue
         ledger["obligations"].append({
             "obligation_id": fid,
@@ -164,6 +229,7 @@ def cmd_update(args):
             "opened_at": _now(),
         })
         opened += 1
+    ledger["last_report_sha256"] = report_sha   # binds gate to the folded report
 
     vanished = 0
     for o in ledger["obligations"]:
@@ -177,7 +243,8 @@ def cmd_update(args):
             vanished += 1
 
     _save_ledger(path, ledger)
-    print(f"obligations: +{opened} opened, {vanished} unresolved-disappearance, "
+    print(f"obligations: +{opened} opened, {reopened} re-opened (recurrence), "
+          f"{vanished} unresolved-disappearance, "
           f"{sum(1 for o in ledger['obligations'] if o['status'] == 'OPEN')} open total -> {path}")
     return 0
 
@@ -230,15 +297,21 @@ def cmd_waive(args):
 
 
 def cmd_gate(args):
-    with open(args.report, encoding="utf-8") as fh:
-        report = json.load(fh)
+    report = _load_report_strict(args.report)
     verdict = report.get("overall_verdict", "")
+    report_sha = _sha256_file(args.report)
     path = os.path.join(_forensics_dir(args.paper_dir), "obligations.json")
     ledger = _load_ledger(path) if os.path.isfile(path) else {"obligations": []}
     open_obl = [o for o in ledger["obligations"] if o.get("status") == "OPEN"]
     open_critical = [o for o in open_obl if o.get("severity") == "critical"]
+    # an unknown/mangled status is not "closed" — fail toward caution
+    weird = [o for o in ledger["obligations"]
+             if o.get("status") not in ("OPEN", "RESOLVED", "WAIVED")]
+    # the gate only speaks for a report the ledger has actually folded in
+    unbound = (ledger.get("last_report_sha256") is not None
+               and ledger["last_report_sha256"] != report_sha)
 
-    if verdict in ("HARD_FLAGS", "REVIEW_UNAVAILABLE") or open_critical:
+    if verdict in ("HARD_FLAGS", "REVIEW_UNAVAILABLE") or open_critical or weird or unbound:
         decision = BLOCK
     elif verdict == "SOFT_FLAGS" or open_obl:
         decision = WARN
@@ -257,7 +330,9 @@ def cmd_gate(args):
         "upstream_adjudicator": report.get("adjudicator", ""),
         "policy_decision": decision,
         "anti_ar_commit": args.anti_ar_commit,
-        "report_sha256": _sha256_file(args.report),
+        "report_sha256": report_sha,
+        "ledger_bound": not unbound,
+        "malformed_ledger_statuses": len(weird),
         "ledger_sha256": _sha256_file(claims) if os.path.isfile(claims) else None,
         "observability_level": report.get("observability_level"),
         "coverage": report.get("coverage", {}),
@@ -298,6 +373,12 @@ def main(argv=None):
     u.add_argument("--report", required=True)
     u.add_argument("--paper-dir", required=True)
 
+    e = sub.add_parser("evaluate", help="atomic update + gate in one transaction (preferred)")
+    e.add_argument("--report", required=True)
+    e.add_argument("--paper-dir", required=True)
+    e.add_argument("--anti-ar-commit", required=True)
+    e.add_argument("--executor-model", default="claude")
+
     r = sub.add_parser("resolve", help="close ONE obligation with typed, hashed evidence")
     r.add_argument("--paper-dir", required=True)
     r.add_argument("--obligation-id", required=True)
@@ -312,8 +393,17 @@ def main(argv=None):
     w.add_argument("--reason", required=True)
 
     a = ap.parse_args(argv)
-    return {"gate": cmd_gate, "update": cmd_update,
-            "resolve": cmd_resolve, "waive": cmd_waive}[a.cmd](a)
+    if a.cmd == "gate":
+        return cmd_gate(a)          # read-only
+    if a.cmd == "evaluate":
+        with _ledger_lock(a.paper_dir):
+            rc = cmd_update(a)
+            if rc != 0:
+                return rc
+        return cmd_gate(a)
+    with _ledger_lock(a.paper_dir):
+        return {"update": cmd_update, "resolve": cmd_resolve,
+                "waive": cmd_waive}[a.cmd](a)
 
 
 if __name__ == "__main__":

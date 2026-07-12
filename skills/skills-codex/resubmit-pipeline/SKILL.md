@@ -302,6 +302,17 @@ If extra round queue is non-empty AND user-budget allows: one extra Phase 2 roun
 
 Verifies no Phase 2 microedit accidentally introduced a numerical claim that's not backed by results.
 
+**Integrity forensics re-run** (opt-in here: `— self_forensics: true`): the
+mainline pipeline defaults to an Anti-Autoresearch re-sweep after microedits;
+in a Codex-native session only upstream's **deterministic-only slice** is
+runnable (numeric core + rules-only adjudicator — it can flag, it can never
+say CLEAN), so it is off unless requested. If opted in, run
+`/integrity-forensics` on `$NEW_VENUE_DIR/` AFTER all microedits (never
+between rounds — its One Forbidden Loop), gate `BLOCK` → stop before the
+Overleaf push. Resubmit-specific rule: the bib is frozen, so
+`citation-replaced` is NOT a legal fix-type here — citation obligations get a
+human-signed `waive` or escalate to relax the bib freeze.
+
 **Diff report**:
 
 ```bash
