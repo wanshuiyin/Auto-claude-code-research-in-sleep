@@ -37,7 +37,8 @@ When Zotero is configured, the default search order becomes:
 1. **Zotero** (your library — fastest, highest signal)
 2. **Obsidian** (if [also configured](OBSIDIAN.md) — your processed notes)
 3. **Local PDFs** under the project directory
-4. **Web** (arXiv, Semantic Scholar, Exa, DeepXiv, Gemini, OpenAlex)
+4. **Web search** (`web`, including arXiv and Google Scholar; included in default `all`)
+5. **Opt-in external sources** (`semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`; only searched when explicitly listed via `— sources:`)
 
 Override the default with `— sources: zotero, web` or `— sources: all`.
 

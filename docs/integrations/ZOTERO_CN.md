@@ -37,7 +37,8 @@ claude mcp add zotero -s user -- zotero-mcp \
 1. **Zotero**（你的文献库——最快、信号最强）
 2. **Obsidian**（如果[也配置了](OBSIDIAN_CN.md)——你加工后的笔记）
 3. **本地 PDF**（项目目录下的）
-4. **网络**（arXiv、Semantic Scholar、Exa、DeepXiv、Gemini、OpenAlex）
+4. **网络搜索**（`web`，包括 arXiv 和 Google Scholar；包含在默认 `all` 中）
+5. **显式启用的外部源**（`semantic-scholar`、`deepxiv`、`exa`、`gemini`、`openalex`；只有在 `— sources:` 中显式列出时才搜索）
 
 可以用 `— sources: zotero, web` 或 `— sources: all` 覆盖默认。
 
