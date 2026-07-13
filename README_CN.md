@@ -492,6 +492,28 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 </details>
 
 <details>
+<summary><b>Sandbox 行为与 strict mode</b> —— 控制 tool call 是否可以改变配置中的 sandbox 策略</summary>
+
+运行时的 `sandbox` 配置提供一个基线，但 tool request 也可能携带 sandbox 相关 override。在旧版兼容模式下，最终生效的 request 可能与 `settings.json` 中写入的值不同。
+
+如果希望配置中的策略成为硬约束，可以开启 `strictMode`：
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "strictMode": true
+  }
+}
+```
+
+当 `strictMode: true` 时，运行时会忽略 LLM 传入的以下 override：`dangerouslyDisableSandbox`、`namespaceRestrictions`、`isolateNetwork`、`filesystemMode` 和 `allowedMounts`。即使 tool call 请求了不同值，配置中的 sandbox 策略仍然生效。该选项默认关闭，以保持已有配置的兼容行为。
+
+可以运行 `aris doctor` 查看当前报告的 sandbox 状态。`strictMode` 只控制 tool request 是否能够覆盖运行时配置；它不替代宿主机的权限、文件系统保护或网络策略。
+
+</details>
+
+<details>
 <summary><b>Codex MCP 配置 + 替代 reviewer 路由</b> —— 在 <code>~/.codex/config.toml</code> 钉模型；Codex+Claude 审稿、Codex+Gemini 审稿、Codex mirror 安装链的入口指向</summary>
 
 **重要：** ARIS skill 现在在每个 fresh call 里显式钉住 reviewer（`model: gpt-5.6-sol` + 按档位的 reasoning effort）——`~/.codex/config.toml` 不再静默决定 reviewer。仍建议在其中写 `model = "gpt-5.6-sol"`：它覆盖 codex 原生/mirror 会话和任何未钉住的调用。`ultra`/`max` 档需要 codex-cli ≥ 0.144.1 并重启 session。

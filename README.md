@@ -535,6 +535,28 @@ All pipeline behaviors are configurable via inline overrides — append `— key
 </details>
 
 <details>
+<summary><b>Sandbox behavior and strict mode</b> — control whether tool-call overrides may change the configured sandbox policy</summary>
+
+The runtime's `sandbox` settings provide a configured baseline, while a tool request may also carry sandbox-related overrides. In the legacy compatibility mode, the effective request can therefore differ from the values written in `settings.json`.
+
+To make the configured policy authoritative, enable `strictMode`:
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "strictMode": true
+  }
+}
+```
+
+With `strictMode: true`, the runtime ignores these LLM-supplied overrides: `dangerouslyDisableSandbox`, `namespaceRestrictions`, `isolateNetwork`, `filesystemMode`, and `allowedMounts`. The configured sandbox policy remains in effect even when a tool call requests a different value. This is opt-in so existing configurations keep their legacy behavior by default.
+
+Run `aris doctor` to inspect the currently reported sandbox state. `strictMode` controls whether tool requests can override the runtime configuration; it does not replace the host operating system's permissions, filesystem protections, or network policy.
+
+</details>
+
+<details>
 <summary><b>Codex MCP config + alternative reviewer routing</b> — pin the model in <code>~/.codex/config.toml</code>; pointers to Codex+Claude-review, Codex+Gemini-review, and the Codex mirror install chain</summary>
 
 **Important:** ARIS skills pin the reviewer explicitly (`model: gpt-5.6-sol` + a per-tier reasoning effort) in every fresh call — your `~/.codex/config.toml` no longer silently decides the reviewer. Still set `model = "gpt-5.6-sol"` there (recommended): it covers codex-native/mirror sessions and anything that doesn't pin. `ultra`/`max` effort needs codex-cli ≥ 0.144.1 + a session restart.
