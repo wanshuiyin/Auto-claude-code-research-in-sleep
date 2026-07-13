@@ -103,13 +103,17 @@ def test_search_works_builds_filters_and_caps_page_size(monkeypatch):
 
     assert captured["url"] == "https://api.openalex.org/works"
     assert captured["timeout"] == 30
-    assert captured["params"] == {
-        "search": "agent memory",
-        "per_page": 200,
-        "sort": "cited_by_count:desc",
-        "filter": "publication_year:2020-2023,type:article,is_oa:true,cited_by_count:>10",
-        "api_key": "test-key",
+    params = captured["params"]
+    assert params["search"] == "agent memory"
+    assert params["per_page"] == 200
+    assert params["sort"] == "cited_by_count:desc"
+    assert set(params["filter"].split(",")) == {
+        "publication_year:2020-2023",
+        "type:article",
+        "is_oa:true",
+        "cited_by_count:>10",
     }
+    assert params["api_key"] == "test-key"
 
 
 def test_search_works_surfaces_rate_limit_error(monkeypatch, capsys):
