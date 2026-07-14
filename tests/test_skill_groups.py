@@ -82,6 +82,30 @@ class CatalogTest(unittest.TestCase):
         empty = set(self.groups) - used
         self.assertFalse(empty, f"groups with no skills: {sorted(empty)}")
 
+    def test_requires_edges_are_referenced_in_skill_md(self):
+        """Coarse anti-drift guard for the `requires` column.
+
+        Every requires edge A→B must at least be textually referenced as
+        `/B` inside A's SKILL.md. This catches the omission-by-refactor
+        direction (SKILL.md drops a phase, catalog keeps the stale edge);
+        the judgment call "is this reference an unconditional invocation
+        rather than a see-also" remains a manual curation duty — see the
+        criterion documented in the catalog header.
+        """
+        import re
+
+        for name, (_, requires) in sorted(self.skills.items()):
+            if requires == "-":
+                continue
+            text = (SKILLS_DIR / name / "SKILL.md").read_text()
+            for dep in requires.split(","):
+                self.assertTrue(
+                    re.search(r"/" + re.escape(dep) + r"\b", text),
+                    f"catalog says {name} requires '{dep}' but "
+                    f"skills/{name}/SKILL.md never references /{dep} — "
+                    "stale edge or wrong dependency",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

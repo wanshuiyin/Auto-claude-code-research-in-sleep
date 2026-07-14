@@ -7,11 +7,21 @@
 #   group	<group-id>	<display-name>	<description>
 #   skill	<skill-name>	<group-id>	<requires>	<short-description>
 #
-# <requires> = comma-separated skills the entry invokes as hard pipeline phases
-# (selecting the skill auto-includes them), or "-" for none. Soft "see also"
-# mentions do NOT belong here. <short-description> = one concise line shown in
-# the interactive picker / --list-groups. Every skills/<name>/SKILL.md must
-# appear exactly once; tests/test_skill_groups.py enforces catalog completeness.
+# <requires> = skills the entry actually exercises in a DEFAULT run:
+#   (a) unconditional pipeline phases ("Invoke /x" with no gate);
+#   (b) default-on invocations — blocking (submission-assurance mandatory
+#       audits) or documented-silent-skip (auto-render, W&B health checks):
+#       a silent skip is silent feature loss, so it still belongs here;
+#   (c) hard artifact prerequisites the skill errors out demanding
+#       (wiki-enrich -> "run /research-wiki init first", meta-apply ->
+#       "run /meta-optimize first").
+# NOT requires: opt-in flags/branches, "use X instead" alternatives,
+# input-producers and downstream consumers, comparisons, doc links.
+# "-" = none. Every edge was verified against the SKILL.md invocation site
+# (#366 review pass); tests/test_skill_groups.py guards each edge textually.
+# <short-description> = one concise line shown in the interactive picker /
+# --list-groups. Every skills/<name>/SKILL.md must appear exactly once;
+# tests/test_skill_groups.py enforces catalog completeness.
 group	lit-search	文献检索	arXiv/OpenAlex/Semantic Scholar 等文献搜索、抓取与阅读
 group	ideation	选题与方向	找 idea、查新、方向打磨、research wiki 与总编排 pipeline
 group	review-loop	自动评审闭环	跨模型自动 review 循环与对抗性评审
@@ -32,24 +42,24 @@ skill	gemini-search	lit-search	-	Gemini 驱动的文献发现
 skill	research-lit	lit-search	-	文献综述与相关工作分析
 skill	comm-lit-review	lit-search	-	通信领域专用文献综述
 skill	idea-creator	ideation	-	给定方向生成并排序研究 idea
-skill	idea-discovery	ideation	idea-creator,novelty-check,research-lit,research-review	W1:从方向到验证过的 idea 全流程
+skill	idea-discovery	ideation	idea-creator,novelty-check,research-lit,research-review,research-refine-pipeline,render-html	W1:从方向到验证过的 idea 全流程
 skill	idea-discovery-robot	ideation	idea-creator,novelty-check,research-lit,research-review	W1 机器人/具身智能特化版
 skill	novelty-check	ideation	-	idea 查新(有没有人做过)
 skill	research-refine	ideation	-	粗糙方向打磨成聚焦提案
 skill	research-refine-pipeline	ideation	research-refine,experiment-plan	refine+实验计划一条龙
 skill	research-wiki	ideation	-	跨生命周期研究知识库
 skill	wiki-enrich	ideation	research-wiki	补全 wiki 论文页 TODO
-skill	research-pipeline	ideation	idea-discovery,experiment-bridge,auto-review-loop,paper-writing,research-lit	端到端总 pipeline:找 idea→实验→论文
+skill	research-pipeline	ideation	idea-discovery,experiment-bridge,auto-review-loop,render-html	端到端总 pipeline:找 idea→实验→论文
 skill	research-review	review-loop	-	研究方案/结果批判性评审
-skill	auto-review-loop	review-loop	-	外部模型多轮 review→修复循环
-skill	auto-review-loop-llm	review-loop	auto-review-loop	用任意 OpenAI 兼容 API 做 review
-skill	auto-review-loop-minimax	review-loop	auto-review-loop	用 MiniMax API 做 review
-skill	kill-argument	review-loop	-	对抗性双线程评审(最强拒稿论证)
+skill	auto-review-loop	review-loop	result-to-claim,training-check,render-html	外部模型多轮 review→修复循环
+skill	auto-review-loop-llm	review-loop	-	用任意 OpenAI 兼容 API 做 review
+skill	auto-review-loop-minimax	review-loop	-	用 MiniMax API 做 review
+skill	kill-argument	review-loop	render-html	对抗性双线程评审(最强拒稿论证)
 skill	formula-derivation	theory	-	公式推导与理论线组织
 skill	proof-writer	theory	-	撰写严格数学证明
-skill	proof-checker	theory	-	证明缺口审查与修复
+skill	proof-checker	theory	render-html	证明缺口审查与修复
 skill	experiment-plan	experiments	-	claim 驱动的实验路线图
-skill	experiment-bridge	experiments	experiment-plan,run-experiment,monitor-experiment,result-to-claim	W1.5:从实验计划到跑通初步结果
+skill	experiment-bridge	experiments	run-experiment,experiment-queue,monitor-experiment,training-check,ablation-planner	W1.5:从实验计划到跑通初步结果
 skill	experiment-queue	experiments	-	SSH 批量实验队列(OOM 重试)
 skill	run-experiment	experiments	-	部署运行实验(本地/远程/云 GPU)
 skill	monitor-experiment	experiments	-	监控实验进度收集结果
@@ -63,17 +73,17 @@ skill	serverless-modal	experiments	-	Modal 无服务器 GPU
 skill	experiment-audit	experiments	-	实验诚实度审计(防假结果)
 skill	result-to-claim	experiments	-	结果能支撑什么 claim 的裁决
 skill	ablation-planner	experiments	-	消融实验规划
-skill	paper-writing	paper-core	paper-plan,paper-write,paper-compile,paper-figure,proof-checker,paper-claim-audit,citation-audit,auto-paper-improvement-loop,integrity-forensics	W3:从报告到投稿级 PDF 全流程
+skill	paper-writing	paper-core	paper-plan,paper-write,paper-compile,paper-figure,figure-spec,proof-checker,paper-claim-audit,citation-audit,auto-paper-improvement-loop,integrity-forensics,kill-argument	W3:从报告到投稿级 PDF 全流程
 skill	paper-plan	paper-core	-	论文大纲生成
 skill	paper-write	paper-core	-	按大纲逐节写 LaTeX
 skill	paper-compile	paper-core	-	LaTeX 编译修错出 PDF
 skill	paper-figure	paper-core	-	从实验结果出论文图表
-skill	citation-audit	paper-core	-	引用真实性/正确性核查
-skill	paper-claim-audit	paper-core	-	论文数字与原始结果核对
+skill	citation-audit	paper-core	render-html	引用真实性/正确性核查
+skill	paper-claim-audit	paper-core	render-html	论文数字与原始结果核对
 skill	integrity-forensics	paper-core	-	投稿前诚信取证扫描
-skill	auto-paper-improvement-loop	paper-core	paper-compile	论文 review→润色→重编译循环
+skill	auto-paper-improvement-loop	paper-core	proof-checker,paper-claim-audit,kill-argument	论文 review→润色→重编译循环
 skill	writing-systems-papers	paper-core	-	系统方向论文写作要领
-skill	specification-writing	paper-core	-	技术规格文档撰写
+skill	specification-writing	paper-core	embodiment-description,figure-description	技术规格文档撰写
 skill	overleaf-sync	paper-core	-	本地↔Overleaf 双向同步
 skill	render-html	paper-core	-	MD/JSON 工件渲染成 HTML 报告
 skill	paper-illustration	paper-visuals	-	AI 生成论文插图(Gemini)
@@ -83,13 +93,13 @@ skill	mermaid-diagram	paper-visuals	-	Mermaid 流程/时序/类图
 skill	pixel-art	paper-visuals	-	像素画生成
 skill	paper-poster	paper-visuals	paper-poster-html	(已弃用)重定向到 poster-html
 skill	paper-poster-html	paper-visuals	-	学术海报生成(HTML 版)
-skill	paper-slides	paper-visuals	slides-polish	会议幻灯(beamer→PDF+PPTX)
-skill	paper-talk	paper-visuals	paper-slides	演讲稿+幻灯一体
+skill	paper-slides	paper-visuals	-	会议幻灯(beamer→PDF+PPTX)
+skill	paper-talk	paper-visuals	paper-slides,slides-polish	演讲稿+幻灯一体
 skill	slides-polish	paper-visuals	-	幻灯片打磨
-skill	rebuttal	submission	-	W4:审稿意见解析与安全回复
-skill	resubmit-pipeline	submission	rebuttal,paper-writing,paper-compile,paper-claim-audit,citation-audit,proof-checker,integrity-forensics,auto-paper-improvement-loop	被拒后重投全流程
-skill	grant-proposal	submission	-	基金申请书(NSFC/NSF/科研費等)
-skill	patent-pipeline	patent	invention-structuring,claims-drafting,embodiment-description,figure-description,jurisdiction-format,patent-review,prior-art-search,patent-novelty-check	专利撰写全流程
+skill	rebuttal	submission	render-html	W4:审稿意见解析与安全回复
+skill	resubmit-pipeline	submission	auto-paper-improvement-loop,proof-checker,paper-claim-audit,citation-audit,kill-argument,paper-compile,integrity-forensics	被拒后重投全流程
+skill	grant-proposal	submission	research-lit,novelty-check,research-review	基金申请书(NSFC/NSF/科研費等)
+skill	patent-pipeline	patent	prior-art-search,patent-novelty-check,invention-structuring,claims-drafting,specification-writing,patent-review,jurisdiction-format	专利撰写全流程
 skill	invention-structuring	patent	-	粗 idea 结构化成发明披露
 skill	claims-drafting	patent	-	撰写权利要求书
 skill	embodiment-description	patent	-	实施例详细描述

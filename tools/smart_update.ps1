@@ -196,6 +196,22 @@ if (Test-Path $LocalDir) {
     }
 }
 
+# install_aris.ps1 creates flat PER-SKILL junctions (the root dir is real), so
+# the root-junction check above can't see a managed flat install. The manifest
+# is the authoritative marker — refuse project-mode updates when one exists.
+if ($ProjectPath) {
+    $manifest = Join-Path $ProjectRoot '.aris/installed-skills.txt'
+    if (Test-Path $manifest) {
+        Write-Host ""
+        Write-Host "✗ Managed install detected (manifest: $manifest)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "smart_update is for COPIED installs. This project is managed by install_aris.ps1:"
+        Write-Host "  cd <aris-repo>; git pull                      # updates content of existing skills"
+        Write-Host "  .\tools\install_aris.ps1 $ProjectRoot         # reconciles new/removed skills"
+        exit 2
+    }
+}
+
 # ─── Personal info patterns ───────────────────────────────────────────────────
 $PersonalPatterns = @(
     'ssh '

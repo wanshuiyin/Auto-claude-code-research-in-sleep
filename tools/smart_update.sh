@@ -177,6 +177,21 @@ if [[ -L "$LOCAL_DIR" ]]; then
     exit 2
 fi
 
+# install_aris.sh creates flat PER-SKILL symlinks (the root dir is real), so
+# the root-symlink check above can't see a managed flat install. The manifest
+# is the authoritative marker — refuse project-mode updates when one exists.
+if [[ "$MODE" == "project" && -f "$PROJECT_ROOT/.aris/installed-skills.txt" ]]; then
+    REPO_ROOT_FOR_HINT="$(cd "$(dirname "$0")/.." && pwd)"
+    echo "" >&2
+    echo -e "\033[0;31m✗ Managed symlink install detected (manifest: $PROJECT_ROOT/.aris/installed-skills.txt)\033[0m" >&2
+    echo "" >&2
+    echo "smart_update is for COPIED installs. This project is managed by install_aris.sh:" >&2
+    echo "  cd <aris-repo> && git pull           # updates content of existing skills" >&2
+    echo "  bash $REPO_ROOT_FOR_HINT/tools/install_aris.sh \"$PROJECT_ROOT\"   # reconciles new/removed skills" >&2
+    echo "" >&2
+    exit 2
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
