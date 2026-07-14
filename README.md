@@ -399,10 +399,12 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 bash Auto-claude-code-research-in-sleep/tools/install_aris.sh ~/your-project   # symlinks ARIS skills into <project>/.claude/skills/
 # (prefer a global install instead? cp -r Auto-claude-code-research-in-sleep/skills/* ~/.claude/skills/)
+# (don't need all 80? --list-groups / --groups X,Y / --skills X — see "Selective install" below)
 
 # 1b. Update later (when upstream changes)
 cd Auto-claude-code-research-in-sleep && git pull
 bash tools/smart_update.sh --apply   # updates safe skills, flags your personal customizations
+# (NEW upstream skills need confirmation — --add-new to accept all non-interactively)
 
 # Optional Codex mirror managed project install
 bash tools/install_aris_codex.sh ~/your-codex-project
@@ -1536,7 +1538,8 @@ git pull
 
 # 🧠 Smart update (recommended) — analyzes what's safe to update
 bash tools/smart_update.sh          # dry-run: shows what would change
-bash tools/smart_update.sh --apply  # apply: adds new + updates safe ones
+bash tools/smart_update.sh --apply  # apply: updates safe ones; NEW upstream skills prompt
+                                     # one-by-one on a TTY, or use --add-new / --skip-new
 
 # Manual options (if you prefer):
 # cp -r skills/* ~/.claude/skills/       # Option A: overwrite all
