@@ -6,7 +6,7 @@ The canonical implementation now lives at
 (Phase 3.1 — Arch C — self-contained single-owner helper).
 
 This shim exists so existing users keep working without re-running
-install_aris.sh. The three legacy resolver layers all still hit a
+install_aris.sh. The four legacy resolver layers all still hit a
 valid Python module:
 
   layer 1  <project>/.aris/tools/figure_renderer.py
@@ -18,7 +18,11 @@ valid Python module:
            → this file (when running from inside the ARIS repo)
 
   layer 3  $ARIS_REPO/tools/figure_renderer.py
-           → this file (when ARIS_REPO env var is set)
+           → this file (when ARIS_REPO env var or manifest sets it)
+
+  layer 4  $ARIS_REPO/tools/figure_renderer.py
+           → this file (when ARIS_REPO is resolved from the global
+             pointer file ~/.aris/repo, #358 — no project manifest needed)
 
 Shim semantics: `os.execv` replaces the current Python process with
 the real helper, so the helper sees its own `__file__`, `sys.path[0]`,

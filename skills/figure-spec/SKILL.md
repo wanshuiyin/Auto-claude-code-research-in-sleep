@@ -44,7 +44,7 @@ or a manually copied `tools/figure_renderer.py` keep working
 unchanged.
 
 Resolve `$FIGURE_RENDERER` with the hybrid chain (layer 0 prefers the
-self-contained location for the owning SKILL; layers 1-3 are the
+self-contained location for the owning SKILL; layers 1-4 are the
 shared-runtime chain documented in
 [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2,
 Policy A — skill-local gate):
@@ -55,11 +55,14 @@ FIGURE_RENDERER=""
 if [ -n "${CLAUDE_SKILL_DIR:-}" ] && [ -f "$CLAUDE_SKILL_DIR/scripts/figure_renderer.py" ]; then
   FIGURE_RENDERER="$CLAUDE_SKILL_DIR/scripts/figure_renderer.py"
 fi
-# Layers 1-3: shared-runtime chain (legacy compatibility + non-CC hosts).
+# Layers 1-4: shared-runtime chain (legacy compatibility + non-CC hosts).
 if [ -z "$FIGURE_RENDERER" ]; then
   cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
   if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
       ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+  fi
+  if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+      ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
   fi
   FIGURE_RENDERER=".aris/tools/figure_renderer.py"
   [ -f "$FIGURE_RENDERER" ] || FIGURE_RENDERER="tools/figure_renderer.py"
@@ -67,8 +70,8 @@ if [ -z "$FIGURE_RENDERER" ]; then
   [ -f "$FIGURE_RENDERER" ] || FIGURE_RENDERER=""
 fi
 [ -z "$FIGURE_RENDERER" ] && {
-  echo "ERROR: figure_renderer.py not resolved (layer 0: \$CLAUDE_SKILL_DIR/scripts/; layers 1-3: .aris/tools/, tools/, \$ARIS_REPO/tools/)." >&2
-  echo "       /figure-spec cannot produce SVG output. Fix: rerun bash tools/install_aris.sh, or copy the helper from \$ARIS_REPO/skills/figure-spec/scripts/." >&2
+  echo "ERROR: figure_renderer.py not resolved (layer 0: \$CLAUDE_SKILL_DIR/scripts/; layers 1-4: .aris/tools/, tools/, \$ARIS_REPO/tools/, \$ARIS_REPO/tools/ via ~/.aris/repo)." >&2
+  echo "       /figure-spec cannot produce SVG output. Fix: rerun bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), or copy the helper from \$ARIS_REPO/skills/figure-spec/scripts/." >&2
   exit 1
 }
 ```

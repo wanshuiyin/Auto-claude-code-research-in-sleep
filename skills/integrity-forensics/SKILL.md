@@ -36,8 +36,9 @@ Audit target: **$ARGUMENTS**
   create a second, unauditable configuration surface.
 - **GATE_HELPER = `forensics_gate.py`** — resolved via the canonical chain
   (`shared-references/integration-contract.md` §2): `.aris/tools/` →
-  `tools/` → `$ARIS_REPO/tools/`. Failure policy A (required): if it cannot
-  be resolved at `assurance: submission`, STOP — never improvise the gate.
+  `tools/` → `$ARIS_REPO/tools/` → `$ARIS_REPO/tools/` via `~/.aris/repo`.
+  Failure policy A (required): if it cannot be resolved at
+  `assurance: submission`, STOP — never improvise the gate.
 
 ## Step 0 — Bootstrap the pin (idempotent)
 

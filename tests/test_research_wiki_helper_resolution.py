@@ -6,10 +6,12 @@ caller skills hard-coded `python3 tools/research_wiki.py`, which silently
 fails when <project>/tools/ is not on disk (the post-install_aris.sh
 default — install_aris.sh creates .aris/tools symlink, not tools/).
 
-The fix is a 3-layer resolution chain documented in
-skills/shared-references/wiki-helper-resolution.md. This test runs the
-chain in three concrete scenarios and asserts the helper is reachable
-in each.
+The fix is a 4-layer resolution chain documented in
+skills/shared-references/wiki-helper-resolution.md (layer 4, added in
+#358, is the global pointer file `~/.aris/repo` written by the
+installer/updater — it covers a global copy-install with no
+project-local manifest). This test runs the chain in concrete
+scenarios and asserts the helper is reachable in each.
 """
 import os
 import shutil
@@ -31,10 +33,17 @@ HELPER = REPO_ROOT / "tools" / "research_wiki.py"
 # `set -e` even when wrapped in `2>/dev/null`, and awk exits 2 when
 # its input file is missing — which is the common case (no manifest
 # yet). The chain is set-eu-unsafe by design; running it without
-# strict mode is the documented contract.
+# strict mode is the documented contract. The layer-4 pointer-file
+# read below uses the strict-safe `if`/`|| true` form instead (the
+# form documented as safe for a SKILL author who wants it), since a
+# plain `cat` of a missing file would otherwise propagate a non-zero
+# exit the same way `awk` does.
 RESOLUTION_CHAIN = r'''
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 WIKI_SCRIPT=".aris/tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
@@ -58,9 +67,15 @@ def _git_init(path: Path) -> None:
     )
 
 
-def _run_chain(cwd: Path, env_overrides: dict | None = None):
+def _run_chain(cwd: Path, env_overrides: dict | None = None, home: Path | None = None):
     env = os.environ.copy()
     env.pop("ARIS_REPO", None)
+    # Hermetic $HOME: a real dev machine may already have a ~/.aris/repo
+    # pointer file (written by install_aris.sh/smart_update.sh, #358),
+    # which would make layer-4 fire unexpectedly in tests that are only
+    # meant to exercise layers 1-3, or in the helper-missing test.
+    if home is not None:
+        env["HOME"] = str(home)
     if env_overrides:
         env.update(env_overrides)
     # Use `bash -c` (not `-lc`); SKILL bash blocks execute in non-login
@@ -80,6 +95,10 @@ class ChainTest(unittest.TestCase):
         self.project = self.tmp / "project"
         self.project.mkdir()
         _git_init(self.project)
+        # Hermetic $HOME (no ~/.aris/repo) so layer 4 stays inert unless a
+        # test explicitly writes the pointer file into it.
+        self.home = self.tmp / "home"
+        self.home.mkdir()
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -92,7 +111,7 @@ class ChainTest(unittest.TestCase):
         (self.project / ".aris").mkdir()
         (self.project / ".aris" / "tools").symlink_to(REPO_ROOT / "tools")
 
-        result = _run_chain(self.project)
+        result = _run_chain(self.project, home=self.home)
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(
             result.stdout.splitlines()[0],
@@ -109,7 +128,7 @@ class ChainTest(unittest.TestCase):
         (self.project / "tools").mkdir()
         shutil.copy(HELPER, self.project / "tools" / "research_wiki.py")
 
-        result = _run_chain(self.project)
+        result = _run_chain(self.project, home=self.home)
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(
             result.stdout.splitlines()[0],
@@ -126,7 +145,7 @@ class ChainTest(unittest.TestCase):
         shutil.copy(HELPER, self.project / "tools" / "research_wiki.py")
         (self.project / "paper").mkdir()
 
-        result = _run_chain(self.project / "paper")
+        result = _run_chain(self.project / "paper", home=self.home)
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(
             result.stdout.splitlines()[0],
@@ -144,6 +163,7 @@ class ChainTest(unittest.TestCase):
         result = _run_chain(
             self.project,
             env_overrides={"ARIS_REPO": str(REPO_ROOT)},
+            home=self.home,
         )
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(
@@ -161,7 +181,7 @@ class ChainTest(unittest.TestCase):
         manifest = self.project / ".aris" / "installed-skills.txt"
         manifest.write_text(f"repo_root\t{REPO_ROOT}\n")
 
-        result = _run_chain(self.project)
+        result = _run_chain(self.project, home=self.home)
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertEqual(
             result.stdout.splitlines()[0],
@@ -169,11 +189,31 @@ class ChainTest(unittest.TestCase):
         )
 
     # ------------------------------------------------------------------
+    # Layer 4: ARIS_REPO resolved from the global pointer file
+    # ~/.aris/repo (#358) — covers a global copy-install with no
+    # project-local manifest and no .aris/tools symlink.
+    # ------------------------------------------------------------------
+    def test_layer4_global_pointer_file(self):
+        """No symlink, no tools/, no ARIS_REPO env, no manifest;
+        ~/.aris/repo points at the ARIS repo."""
+        (self.home / ".aris").mkdir()
+        (self.home / ".aris" / "repo").write_text(f"{REPO_ROOT}\n")
+
+        result = _run_chain(self.project, home=self.home)
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertEqual(
+            result.stdout.splitlines()[0],
+            f"{REPO_ROOT}/tools/research_wiki.py",
+        )
+        self.assertTrue((self.project / "research-wiki" / "query_pack.md").exists())
+
+    # ------------------------------------------------------------------
     # Helper-missing case: chain exits 42 (test harness sentinel)
     # ------------------------------------------------------------------
     def test_helper_missing(self):
-        """No symlink, no tools/, no ARIS_REPO, no manifest → chain fails."""
-        result = _run_chain(self.project)
+        """No symlink, no tools/, no ARIS_REPO, no manifest, no pointer
+        file → chain fails."""
+        result = _run_chain(self.project, home=self.home)
         self.assertEqual(
             result.returncode, 42,
             msg="chain should fail explicitly when no helper found "

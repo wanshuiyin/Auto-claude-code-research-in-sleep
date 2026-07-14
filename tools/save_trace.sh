@@ -8,8 +8,9 @@
 # block then runs `bash "$TRACE_HELPER" --skill ... --purpose ... --model ...`.
 # Do NOT hard-code `bash tools/save_trace.sh` from a SKILL; the path is
 # only stable from inside the ARIS repo (manual smoke testing) and breaks
-# silently in downstream user projects that have only `.aris/tools/` or
-# `$ARIS_REPO/tools/`.
+# silently in downstream user projects that have only `.aris/tools/`,
+# `$ARIS_REPO/tools/` (env var or manifest), or `$ARIS_REPO/tools/` resolved
+# via the global pointer file `~/.aris/repo` (#358).
 #
 # Usage (from inside the ARIS repo, smoke test):
 #   bash tools/save_trace.sh \

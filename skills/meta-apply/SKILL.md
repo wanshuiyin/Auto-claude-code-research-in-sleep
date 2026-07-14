@@ -57,9 +57,10 @@ PENDING=".aris/meta/pending"
 echo "Staged:"; cat "$PENDING/manifest.jsonl"
 ```
 
-Resolve `provenance.py` via the 3-layer chain in
+Resolve `provenance.py` via the 4-layer chain in
 [`integration-contract.md`](../shared-references/integration-contract.md) §2
-(`.aris/tools/` → `tools/` → `$ARIS_REPO/tools/`).
+(`.aris/tools/` → `tools/` → `$ARIS_REPO/tools/` → `$ARIS_REPO/tools/` via
+`~/.aris/repo`).
 
 ### Step 1: Jury-at-landing for each requested patch
 

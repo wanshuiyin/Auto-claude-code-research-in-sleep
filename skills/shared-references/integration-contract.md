@@ -56,6 +56,11 @@ because the helper may sit at any of:
 - `<project>/.aris/tools/<helper>` — symlinked by `install_aris.sh` (Phase 0, #174)
 - `<project>/tools/<helper>` — manual copy or running from inside the ARIS repo
 - `$ARIS_REPO/tools/<helper>` — env var or auto-resolved from the install manifest
+- `$ARIS_REPO/tools/<helper>` via `$HOME/.aris/repo` — global pointer file
+  (one line, absolute repo path) written by `install_aris*.{sh,ps1}` and
+  `smart_update*.{sh,ps1}` at install/update time; the only layer that
+  resolves for a global copy-install (`~/.claude/skills`) with no
+  project-local `.aris/` manifest (#358)
 
 Every caller — including those primarily exercised from inside the
 ARIS repo — MUST use the resolution chain. The chain's middle layer
@@ -76,6 +81,11 @@ because the prose endorsed the hardcoded form.
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+# Layer 4: global pointer file, written by the installer/updater at
+# ~/.aris/repo (#358) — covers global copy-installs with no project manifest.
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 HELPER=".aris/tools/<helper>"
 [ -f "$HELPER" ] || HELPER="tools/<helper>"
@@ -108,8 +118,9 @@ verifiers whose exit code gates submission readiness (e.g.
 
 ```bash
 [ -n "$AUDIT_VERIFIER" ] || {
-  echo "ERROR: verify_paper_audits.sh not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "ERROR: verify_paper_audits.sh not resolved at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
   echo "       assurance=submission requires the verifier; aborting Final Report." >&2
+  echo "       Fix: rerun bash tools/install_aris.sh (or smart_update.sh) to refresh ~/.aris/repo, or export ARIS_REPO." >&2
   exit 1
 }
 ```
@@ -122,7 +133,7 @@ gets produced, only the wiki side-effect is missed).
 ```bash
 [ -n "$WIKI_SCRIPT" ] || {
   echo "WARN: research_wiki.py not resolved; primary output unaffected, wiki side-effect skipped." >&2
-  echo "      Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+  echo "      Fix: rerun bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or copy the helper to tools/." >&2
 }
 [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ --arxiv-id "$id"
 ```
@@ -256,7 +267,7 @@ Single-owner helpers progressively migrate into the owning SKILL's
 `scripts/` subdirectory (matching the Claude Code official skill
 layout). When an owner SKILL invokes its own helper, it tries the
 self-contained location FIRST, then falls through to the canonical
-3-layer chain so legacy users continue to work:
+4-layer chain so legacy users continue to work:
 
 ```bash
 # Layer 0 (owner SKILL only): self-contained at $CLAUDE_SKILL_DIR/scripts/.
@@ -264,7 +275,7 @@ HELPER=""
 if [ -n "${CLAUDE_SKILL_DIR:-}" ] && [ -f "$CLAUDE_SKILL_DIR/scripts/<helper>" ]; then
   HELPER="$CLAUDE_SKILL_DIR/scripts/<helper>"
 fi
-# Layers 1-3: fall through to the standard chain.
+# Layers 1-4: fall through to the standard chain.
 if [ -z "$HELPER" ]; then
   # ... canonical strict-safe resolver block from above ...
 fi
@@ -282,12 +293,14 @@ Three properties of layer 0:
    and layer 0 is skipped — the SKILL silently falls through to the
    standard chain.
 
-3. **Backwards-compatible.** The canonical 3-layer chain still works
+3. **Backwards-compatible.** The canonical 4-layer chain still works
    because Phase 3 keeps the legacy entry at `tools/<helper>` as a
    thin `os.execv` shim that forwards to the canonical location. So
-   `.aris/tools/<helper>` (layer 1), `tools/<helper>` (layer 2), and
-   `$ARIS_REPO/tools/<helper>` (layer 3) all resolve to a working
-   Python script for any user who has not re-run `install_aris.sh`.
+   `.aris/tools/<helper>` (layer 1), `tools/<helper>` (layer 2),
+   `$ARIS_REPO/tools/<helper>` via the manifest (layer 3), and
+   `$ARIS_REPO/tools/<helper>` via `~/.aris/repo` (layer 4) all
+   resolve to a working Python script for any user who has not
+   re-run `install_aris.sh`.
 
 The per-helper policy table at the end of §2 marks Phase 3 moves
 with a "Phase 3.N move" note pointing at the new canonical location.

@@ -160,6 +160,11 @@ if [[ "$MISS_COUNT" -gt 0 ]]; then
     HINT_SCRIPT=".aris/tools/research_wiki.py"
     [[ -f "$HINT_SCRIPT" ]] || HINT_SCRIPT="tools/research_wiki.py"
     [[ -f "$HINT_SCRIPT" ]] || { [[ -n "${ARIS_REPO:-}" ]] && HINT_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
+    # Layer 4: global pointer file written by the installer/updater (#358).
+    if [[ -z "${ARIS_REPO:-}" && ! -f "$HINT_SCRIPT" && -f "$HOME/.aris/repo" ]]; then
+        ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+        [[ -n "$ARIS_REPO" ]] && HINT_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
+    fi
     [[ -f "$HINT_SCRIPT" ]] || HINT_SCRIPT="<resolve-via-shared-ref>/research_wiki.py"
     echo "Backfill suggestion:" >&2
     echo "    python3 \"$HINT_SCRIPT\" sync $WIKI_ROOT --arxiv-ids $HINT_IDS" >&2
