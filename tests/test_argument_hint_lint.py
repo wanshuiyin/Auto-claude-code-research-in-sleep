@@ -82,6 +82,17 @@ def _violations_in_frontmatter(lines):
                 f"argument-hint carries a YAML anchor/alias/tag ({value!r}) "
                 "— use a plain quoted string"
             )
+        elif re.fullmatch(r"[|>][+-]?\d*", value):
+            problems.append(
+                f"argument-hint opens a block scalar ({value!r}) — the hint "
+                'must be a same-line string: argument-hint: "[your-hint]"'
+            )
+        elif value.lower() in ("null", "~", "true", "false", "yes", "no", "on", "off") \
+                or re.fullmatch(r"[+-]?\d+(\.\d+)?", value):
+            problems.append(
+                f"argument-hint YAML-types as null/bool/number ({value!r}), "
+                f'not a string — quote it: argument-hint: "{value}"'
+            )
     return problems
 
 
@@ -124,6 +135,12 @@ BAD_FRONTMATTERS = [
     'name: demo\n"argument-hint": [paper-dir]',               # quoted key
     "name: demo\nargument-hint: &hint [paper-dir]",           # anchored node
     "name: demo\nargument-hint:  # to fill in later",         # comment-only = null
+    "name: demo\nargument-hint: |\n  multi\n  line",          # block scalar
+    "name: demo\nargument-hint: >-\n  folded",                # folded block scalar
+    "name: demo\nargument-hint: null",                        # YAML null
+    "name: demo\nargument-hint: ~",                           # YAML null (tilde)
+    "name: demo\nargument-hint: true",                        # YAML bool
+    "name: demo\nargument-hint: 123",                         # YAML int
 ]
 
 GOOD_FRONTMATTERS = [
