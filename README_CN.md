@@ -742,6 +742,8 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**所列分数
 
 **涉及 Skills：** `research-lit` + `idea-creator` + `novelty-check` + `research-review` + `research-refine-pipeline`
 
+> 🧪 **快速体验：** 想先试用 `/ablation-planner` 再本地安装 ARIS？可以在 [ClawMama 的 Telegram 或 WhatsApp 中体验 ARIS Ablation Planner](https://app.clawmama.run/skills/32axv8/hermes?locale=en-US&utm_source=github&utm_medium=issue&utm_campaign=skill_outreach_aris_ablation_planner)。这是可选的外部 demo，不替代本地安装路径。
+
 > 💡 **一键调用：** `/idea-discovery "你的研究方向"` 自动跑完整个工作流 1。
 
 > 🔄 **人在回路中：** 每个阶段都会展示结果等你反馈。不满意？告诉它哪里不对——调整 prompt 重新生成。信任默认选择？它会自动带着最优方案继续。你决定参与多深。

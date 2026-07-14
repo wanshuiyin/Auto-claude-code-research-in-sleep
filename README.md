@@ -794,6 +794,8 @@ Don't have a concrete idea yet? Just give a research direction — `/idea-discov
 
 The output is a ranked `IDEA_REPORT.md` plus a refined proposal (`refine-logs/FINAL_PROPOSAL.md`) and experiment plan (`refine-logs/EXPERIMENT_PLAN.md`) for the top idea. Dead-end ideas are documented too, saving future exploration.
 
+> 🧪 **Quick try:** Want to test `/ablation-planner` before setting up ARIS locally? [Try the ARIS Ablation Planner in Telegram or WhatsApp via ClawMama](https://app.clawmama.run/skills/32axv8/hermes?locale=en-US&utm_source=github&utm_medium=issue&utm_campaign=skill_outreach_aris_ablation_planner). This optional external demo complements, but does not replace, the local installation path.
+
 <details>
 <summary><b>Show W1 flow diagram and example command sequence</b> — research-lit → idea-creator → novelty-check → research-refine → experiment-plan</summary>
 
