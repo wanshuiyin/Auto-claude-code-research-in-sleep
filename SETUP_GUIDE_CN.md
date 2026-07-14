@@ -78,6 +78,12 @@ git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git ~
 cd ~/your-paper-project
 bash ~/aris_repo/tools/install_aris.sh
 
+# 只装需要的 skill（选择性安装）：
+bash ~/aris_repo/tools/install_aris.sh --list-groups                  # 查看 10 个功能分组
+bash ~/aris_repo/tools/install_aris.sh --groups paper-core,lit-search # 按组安装
+bash ~/aris_repo/tools/install_aris.sh --skills paper-writing         # 按 skill 安装（依赖自动带上）
+# 全新安装时不带任何选择参数（且在终端里跑）会进入交互式逐组选择菜单
+
 # 其他常用：
 bash ~/aris_repo/tools/install_aris.sh --dry-run        # 预览安装计划，不实际执行
 bash ~/aris_repo/tools/install_aris.sh --uninstall      # 按安装清单卸载，不影响其他文件

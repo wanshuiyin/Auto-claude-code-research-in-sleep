@@ -78,6 +78,12 @@ git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git ~
 cd ~/your-paper-project
 bash ~/aris_repo/tools/install_aris.sh
 
+# Install only what you need (selective install):
+bash ~/aris_repo/tools/install_aris.sh --list-groups                  # show the 10 skill groups
+bash ~/aris_repo/tools/install_aris.sh --groups paper-core,lit-search # install by group
+bash ~/aris_repo/tools/install_aris.sh --skills paper-writing         # by skill (hard deps auto-included)
+# A fresh install with no selection flags (run in a terminal) walks an interactive per-group menu
+
 # Other useful flags:
 bash ~/aris_repo/tools/install_aris.sh --dry-run        # preview install plan, no changes
 bash ~/aris_repo/tools/install_aris.sh --uninstall      # uninstall per manifest, leaves other files intact
