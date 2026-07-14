@@ -20,10 +20,24 @@
 #                  must be a relative path
 #   -UpstreamPath: explicit upstream skills directory
 #   -LocalPath: explicit local skills directory
+#
+# New-skill policy (-Apply only; dry-run always just reports):
+#   default (TTY, no policy switch): each new upstream skill is confirmed one
+#                                    by one [y/N]; a decline is remembered in
+#                                    <local>\.aris-declined.txt and never re-asked
+#   -AddNew:  install every new skill (does NOT un-decline previously declined
+#             skills — edit/clear .aris-declined.txt for that)
+#   -SkipNew: skip every new skill without recording a decline (same as the
+#             automatic behavior when there is no interactive console)
+#
+# On successful -Apply, writes $env:USERPROFILE\.aris\repo <- this repo's root
+# (helper resolution chain layer 4, #358) so copy-installed skills can find tools\.
 
 [CmdletBinding(DefaultParameterSetName = 'Global')]
 param(
     [switch]$Apply,
+    [switch]$AddNew,
+    [switch]$SkipNew,
 
     [Parameter(ParameterSetName = 'Project', Mandatory = $true)]
     [string]$ProjectPath,
@@ -39,6 +53,16 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($AddNew -and $SkipNew) {
+    Write-Host "Error: -AddNew and -SkipNew are mutually exclusive" -ForegroundColor Red
+    exit 1
+}
+$NewPolicy = if ($AddNew) { 'add' } elseif ($SkipNew) { 'skip' } else { '' }
+
+# This repo's root (independent of -UpstreamPath overrides) — used for the
+# skill-group catalog lookup and the global helper-resolution pointer.
+$RepoRoot = Split-Path $PSScriptRoot -Parent
 
 # ─── Resolve upstream & local paths ───────────────────────────────────────────
 if ($PSCmdlet.ParameterSetName -eq 'Project') {
@@ -59,7 +83,7 @@ if ($PSCmdlet.ParameterSetName -eq 'Project') {
         exit 1
     }
     # Upstream always comes from the repo (same as global)
-    $UpstreamDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'skills'
+    $UpstreamDir = Join-Path $RepoRoot 'skills'
     if (-not (Test-Path $UpstreamDir)) {
         $resolved = Join-Path $PSScriptRoot '..\skills' | Resolve-Path -ErrorAction SilentlyContinue
         if ($resolved) { $UpstreamDir = $resolved.Path }
@@ -106,13 +130,52 @@ if ($PSCmdlet.ParameterSetName -eq 'Project') {
     $Scope = "Custom"
 } else {
     # Global default
-    $UpstreamDir = Join-Path (Split-Path $PSScriptRoot -Parent) 'skills'
+    $UpstreamDir = Join-Path $RepoRoot 'skills'
     if (-not (Test-Path $UpstreamDir)) {
         $resolved = Join-Path $PSScriptRoot '..\skills' | Resolve-Path -ErrorAction SilentlyContinue
         if ($resolved) { $UpstreamDir = $resolved.Path }
     }
     $LocalDir = Join-Path $env:USERPROFILE '.claude\skills'
     $Scope = 'Global'
+}
+
+# ─── New-skill confirmation state (declined list + group catalog lookup) ──────
+$CatalogPath = Join-Path $RepoRoot 'tools\skill-groups.tsv'
+$DeclinedFile = Join-Path $LocalDir '.aris-declined.txt'
+
+function Test-Declined {
+    param([string]$Name)
+    if (-not (Test-Path $DeclinedFile)) { return $false }
+    return (Get-Content -Path $DeclinedFile) -contains $Name
+}
+
+function Get-CatalogGroup {
+    param([string]$Name)
+    if (-not (Test-Path $CatalogPath)) { return '?' }
+    foreach ($line in Get-Content -Path $CatalogPath) {
+        $f = $line -split "`t"
+        if ($f.Length -ge 3 -and $f[0] -eq 'skill' -and $f[1] -eq $Name) { return $f[2] }
+    }
+    return '?'
+}
+
+# Layer-4 helper resolution (#358): a global pointer file lets globally/copy-
+# installed skills find $env:USERPROFILE\.aris\repo without a per-project install.
+function Ensure-GlobalPointer {
+    # $env:USERPROFILE is the Windows PowerShell convention; fall back to $HOME
+    # so this also works under pwsh on non-Windows hosts (e.g. CI, WSL testing).
+    $userProfile = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
+    $pointerDir = Join-Path $userProfile '.aris'
+    $pointer = Join-Path $pointerDir 'repo'
+    try {
+        if (-not (Test-Path $pointerDir)) { New-Item -ItemType Directory -Path $pointerDir -Force | Out-Null }
+    } catch { return }
+    $cur = $null
+    if (Test-Path $pointer) { $cur = (Get-Content -Path $pointer -Raw -ErrorAction SilentlyContinue) }
+    if ($cur -and $cur.Trim() -eq $RepoRoot) { return }
+    $tmp = "$pointer.tmp.$PID"
+    Set-Content -Path $tmp -Value $RepoRoot
+    Move-Item -Path $tmp -Destination $pointer -Force
 }
 
 # ─── Refuse to operate on symlinked installs ──────────────────────────────────
@@ -292,6 +355,45 @@ function Show-MergeReport {
     }
 }
 
+# New-skill three-state policy: interactive confirm / -AddNew / -SkipNew.
+# A skill already in .aris-declined.txt is never re-asked and never installed —
+# not even by -AddNew (only editing/clearing the declined file restores it).
+function Resolve-NewSkillPolicy {
+    param([string[]]$NewList, [string]$Policy)
+    $toInstall = [System.Collections.Generic.List[string]]::new()
+    $skipped = [System.Collections.Generic.List[string]]::new()
+    $justDeclined = [System.Collections.Generic.List[string]]::new()
+    $interactive = -not [Console]::IsInputRedirected
+
+    foreach ($name in $NewList) {
+        if (Test-Declined $name) { continue }
+        switch ($Policy) {
+            'add' { $toInstall.Add($name) }
+            'skip' { $skipped.Add($name) }
+            default {
+                if ($interactive) {
+                    $grp = Get-CatalogGroup $name
+                    $reply = Read-Host "  install new skill $($name.PadRight(30)) (group: $grp) [y/N]"
+                    if ($reply -match '^[yY]') { $toInstall.Add($name) } else { $justDeclined.Add($name) }
+                } else {
+                    $skipped.Add($name)
+                }
+            }
+        }
+    }
+
+    if ($justDeclined.Count -gt 0) {
+        $existing = @()
+        if (Test-Path $DeclinedFile) { $existing = @(Get-Content -Path $DeclinedFile) }
+        $merged = @($existing + $justDeclined) | Where-Object { $_ } | Sort-Object -Unique
+        $tmp = "$DeclinedFile.tmp.$PID"
+        Set-Content -Path $tmp -Value $merged
+        Move-Item -Path $tmp -Destination $DeclinedFile -Force
+    }
+
+    return @{ ToInstall = $toInstall; Skipped = $skipped; JustDeclined = $justDeclined }
+}
+
 function Invoke-SafeUpdate {
     param(
         $NewList,
@@ -327,7 +429,20 @@ $r = Compare-SkillDirs -SrcDir $UpstreamDir -DstDir $LocalDir -Patterns $Persona
 
 # ─── Report ────────────────────────────────────────────────────────────────────
 Show-Section 'Identical (no action needed)' $r.Identical 'Green'
-Show-Section 'New skills (safe to add)' $r.New 'Green'
+
+# Pre-declined subset of $r.New (informational only — the decision of what to
+# install/skip/prompt is only made inside the -Apply block below).
+$NewPredeclined = @($r.New | Where-Object { Test-Declined $_ })
+Write-Host "New skills upstream (confirmed one-by-one on -Apply, unless -AddNew/-SkipNew): $($r.New.Count)" -ForegroundColor Green
+foreach ($s in $r.New) {
+    if (Test-Declined $s) {
+        Write-Host "   $s (previously declined — stays skipped unless -AddNew)" -ForegroundColor Yellow
+    } else {
+        Write-Host "   $s"
+    }
+}
+Write-Host ''
+
 Show-Section 'Updated upstream, no personal info (safe to replace)' $r.Safe 'Cyan'
 
 Write-Host "Updated upstream + local customizations (needs manual merge): $($r.Merge.Count)" -ForegroundColor Yellow
@@ -343,7 +458,8 @@ $Total = $r.New.Count + $r.Identical.Count + $r.Safe.Count + $r.Merge.Count
 Write-Host '=== Summary ===' -ForegroundColor Cyan
 Write-Host "Total upstream skills: $Total"
 Write-Host "  Up to date:  $($r.Identical.Count)" -ForegroundColor Green
-Write-Host "  New to add:  $($r.New.Count)" -ForegroundColor Green
+Write-Host "  New upstream: $($r.New.Count)" -ForegroundColor Green -NoNewline
+Write-Host " (requires confirmation on -Apply; $($NewPredeclined.Count) previously declined)"
 Write-Host "  Safe update: $($r.Safe.Count)" -ForegroundColor Cyan
 Write-Host "  Need merge:  $($r.Merge.Count)" -ForegroundColor Yellow
 Write-Host "  Local only:  $($r.LocalOnly.Count)"
@@ -352,17 +468,31 @@ Write-Host ''
 if ($Apply) {
     Write-Host 'Applying safe updates...' -ForegroundColor Cyan
 
+    $newDecision = Resolve-NewSkillPolicy -NewList $r.New -Policy $NewPolicy
     $sharedUpstream = Join-Path $UpstreamDir 'shared-references'
-    Invoke-SafeUpdate -NewList $r.New -SafeList $r.Safe -SrcDir $UpstreamDir -DstDir $LocalDir -SharedDir $sharedUpstream
+    Invoke-SafeUpdate -NewList $newDecision.ToInstall -SafeList $r.Safe -SrcDir $UpstreamDir -DstDir $LocalDir -SharedDir $sharedUpstream
 
     Write-Host ''
-    Write-Host "Done! $($r.New.Count) new + $($r.Safe.Count) updated." -ForegroundColor Green
+    Write-Host "Done! $($newDecision.ToInstall.Count) new + $($r.Safe.Count) updated." -ForegroundColor Green
+
+    if ($newDecision.Skipped.Count -gt 0) {
+        Write-Host "$($newDecision.Skipped.Count) new skill(s) skipped, not declined: $($newDecision.Skipped -join ', ')" -ForegroundColor Yellow
+        Write-Host "   Re-run with -AddNew to install them (or re-run interactively)." -ForegroundColor Yellow
+    }
+    if ($newDecision.JustDeclined.Count -gt 0) {
+        Write-Host "Declined just now (recorded in $DeclinedFile, won't be asked again): $($newDecision.JustDeclined -join ', ')"
+    }
+    if ($NewPredeclined.Count -gt 0) {
+        Write-Host "Previously declined, still skipped: $($NewPredeclined.Count) (edit $DeclinedFile to reconsider)"
+    }
 
     if ($r.Merge.Count -gt 0) {
         Write-Host "$($r.Merge.Count) skills have personal customizations and were NOT updated." -ForegroundColor Yellow
         Write-Host "   Review manually: $($r.Merge -join ', ')" -ForegroundColor Yellow
         Write-Host "   Tip: diff the local and upstream SKILL.md files to merge changes" -ForegroundColor Yellow
     }
+
+    Ensure-GlobalPointer
 } else {
     switch ($PSCmdlet.ParameterSetName) {
         'Project'  { $cmdHint = ".\tools\smart_update.ps1 -ProjectPath `"$ProjectRoot`" -Apply" }

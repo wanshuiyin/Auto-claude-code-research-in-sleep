@@ -18,6 +18,20 @@
 #   considered "customized" if its current hash differs from the recorded
 #   baseline (i.e., user modified it after install). Files matching their
 #   baseline are safe to overwrite with the new upstream version.
+#
+# New-skill policy (--apply only; dry-run always just reports):
+#   default (TTY, no policy flag): each new upstream skill is confirmed one by
+#                                  one [y/N]; a decline is remembered in
+#                                  <local>/.aris-declined.txt and never re-asked
+#   --add-new:  install every new skill (does NOT un-decline previously
+#               declined skills)
+#   --skip-new: skip every new skill without recording a decline (same as the
+#               automatic behavior when there is no TTY)
+# shared-references is support content, not a selectable skill: it is always
+# kept in sync and never subject to this confirmation.
+#
+# On successful --apply, writes $HOME/.aris/repo <- this repo's root (helper
+# resolution chain layer 4, #358) so copy-installed skills can find tools/.
 
 set -euo pipefail
 
@@ -28,12 +42,15 @@ CUSTOM_UPSTREAM=""
 CUSTOM_LOCAL=""
 HAS_CUSTOM_UPSTREAM=false
 HAS_CUSTOM_LOCAL=false
+NEW_POLICY=""   # "" (prompt) | add | skip
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \?//'; }
+usage() { sed -n '2,34p' "$0" | sed 's/^# \?//'; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --apply) APPLY=true; shift ;;
+        --add-new) NEW_POLICY="add"; shift ;;
+        --skip-new) NEW_POLICY="skip"; shift ;;
         --project) MODE="project"; PROJECT_PATH="${2:?--project requires path}"; shift 2 ;;
         --upstream) MODE="explicit"; HAS_CUSTOM_UPSTREAM=true; CUSTOM_UPSTREAM="${2:?--upstream requires path}"; shift 2 ;;
         --local) MODE="explicit"; HAS_CUSTOM_LOCAL=true; CUSTOM_LOCAL="${2:?--local requires path}"; shift 2 ;;
@@ -136,6 +153,31 @@ log ""
 
 [[ -d "$LOCAL" ]] || die "local skill directory not found: $LOCAL (install skills first, or use --local)"
 
+# ─── New-skill confirmation state (declined list + group catalog lookup) ──────
+CATALOG_PATH="$REPO_ROOT/tools/skill-groups.tsv"
+DECLINED_FILE="$LOCAL/.aris-declined.txt"
+
+is_declined() {  # $1 = skill name
+    [[ -f "$DECLINED_FILE" ]] && grep -qxF "$1" "$DECLINED_FILE"
+}
+
+catalog_group_of() {  # $1 = skill name -> group id, or "?" if unknown
+    local g=""
+    [[ -f "$CATALOG_PATH" ]] && g=$(awk -F'\t' -v s="$1" '$1=="skill" && $2==s {print $3; exit}' "$CATALOG_PATH")
+    echo "${g:-?}"
+}
+
+# Layer-4 helper resolution (#358): a global pointer file lets globally/copy-
+# installed skills find $ARIS_REPO/tools without a per-project install.
+ensure_global_pointer() {
+    local pointer="$HOME/.aris/repo"
+    mkdir -p "$(dirname "$pointer")" 2>/dev/null || return 0
+    local cur=""
+    [[ -f "$pointer" ]] && cur="$(cat "$pointer" 2>/dev/null || true)"
+    [[ "$cur" == "$REPO_ROOT" ]] && return 0
+    printf '%s\n' "$REPO_ROOT" > "$pointer.tmp.$$" && mv -f "$pointer.tmp.$$" "$pointer"
+}
+
 # Build diff report
 UPDATED=()
 NEW=()
@@ -225,16 +267,29 @@ if (( ${#UPDATED[@]} > 0 )); then
     log ""
 fi
 
+# Pre-declined subset of NEW (informational only — the decision of what to
+# install/skip/prompt is only made inside the --apply block below).
+NEW_PREDECLINED=()
+for name in "${NEW[@]:-}"; do
+    [[ -n "$name" && "$name" != "shared-references" ]] || continue
+    is_declined "$name" && NEW_PREDECLINED+=("$name")
+done
+
 if (( ${#NEW[@]} > 0 )); then
-    log "New skills available:"
+    log "New skills available (confirmed one-by-one on --apply, unless --add-new/--skip-new; ${#NEW_PREDECLINED[@]} previously declined):"
     for name in "${NEW[@]}"; do
-        log "  + $name"
+        if [[ "$name" != "shared-references" ]] && is_declined "$name"; then
+            log "  + $name (previously declined — stays skipped unless --add-new)"
+        else
+            log "  + $name"
+        fi
     done
     log ""
 fi
 
 if (( ${#UPDATED[@]} == 0 && ${#NEW[@]} == 0 )); then
     log "Everything up to date."
+    $APPLY && ensure_global_pointer
     exit 0
 fi
 
@@ -262,8 +317,57 @@ if (( ${#UPDATED[@]} > 0 )); then
     done
 fi
 
+# ── New-skill three-state policy: interactive confirm / --add-new / --skip-new ──
+# A skill already in .aris-declined.txt is never re-asked and never installed —
+# not even by --add-new (only editing/clearing the declined file restores it).
+# shared-references is support content, not a selectable skill: always synced.
+TO_INSTALL_NEW=()
+SKIPPED_NEW=()
+JUST_DECLINED=()
+
 if (( ${#NEW[@]} > 0 )); then
     for name in "${NEW[@]}"; do
+        if [[ "$name" == "shared-references" ]]; then
+            TO_INSTALL_NEW+=("$name")
+            continue
+        fi
+        if is_declined "$name"; then
+            continue
+        fi
+        case "$NEW_POLICY" in
+            add)
+                TO_INSTALL_NEW+=("$name")
+                ;;
+            skip)
+                SKIPPED_NEW+=("$name")
+                ;;
+            *)
+                if [[ -t 0 ]]; then
+                    grp="$(catalog_group_of "$name")"
+                    printf "  install new skill %-30s (group: %s) [y/N] " "$name" "$grp" >&2
+                    read -r reply </dev/tty
+                    if [[ "$reply" =~ ^[yY] ]]; then
+                        TO_INSTALL_NEW+=("$name")
+                    else
+                        JUST_DECLINED+=("$name")
+                    fi
+                else
+                    SKIPPED_NEW+=("$name")
+                fi
+                ;;
+        esac
+    done
+fi
+
+if (( ${#JUST_DECLINED[@]} > 0 )); then
+    {
+        [[ -f "$DECLINED_FILE" ]] && cat "$DECLINED_FILE"
+        printf '%s\n' "${JUST_DECLINED[@]}"
+    } | sort -u > "$DECLINED_FILE.tmp.$$" && mv -f "$DECLINED_FILE.tmp.$$" "$DECLINED_FILE"
+fi
+
+if (( ${#TO_INSTALL_NEW[@]} > 0 )); then
+    for name in "${TO_INSTALL_NEW[@]}"; do
         cp -r "$UPSTREAM/$name" "$LOCAL/$name"
         # Record baseline hash for new installs
         if [[ -f "$LOCAL/$name/SKILL.md" ]]; then
@@ -275,5 +379,18 @@ if (( ${#NEW[@]} > 0 )); then
 fi
 
 log ""
-log "Done. ${#UPDATED[@]} updated, ${#NEW[@]} added."
+log "Done. ${#UPDATED[@]} updated, ${#TO_INSTALL_NEW[@]} added."
 log "Baselines recorded in: $BASELINE_FILE"
+
+if (( ${#SKIPPED_NEW[@]} > 0 )); then
+    log "  ${#SKIPPED_NEW[@]} new skill(s) skipped, not declined: ${SKIPPED_NEW[*]}"
+    log "  Re-run with --add-new to install them (or re-run interactively on a TTY)."
+fi
+if (( ${#JUST_DECLINED[@]} > 0 )); then
+    log "  Declined just now (recorded in $DECLINED_FILE, won't be asked again): ${JUST_DECLINED[*]}"
+fi
+if (( ${#NEW_PREDECLINED[@]} > 0 )); then
+    log "  Previously declined, still skipped: ${#NEW_PREDECLINED[@]} (edit $DECLINED_FILE to reconsider)"
+fi
+
+ensure_global_pointer

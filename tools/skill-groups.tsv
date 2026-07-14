@@ -1,0 +1,102 @@
+# ARIS skill catalog — single source of truth for selective install.
+# Consumed by: install_aris.sh / install_aris_codex.sh / install_aris_copilot.sh /
+#              install_aris.ps1 / smart_update*.sh|ps1 / tests/test_skill_groups.py
+#
+# Record types (tab-separated):
+#   group	<group-id>	<display-name>	<description>
+#   skill	<skill-name>	<group-id>	<requires>
+#
+# <requires> = comma-separated skills the entry invokes as hard pipeline phases
+# (selecting the skill auto-includes them), or "-" for none. Soft "see also"
+# mentions do NOT belong here. Every skills/<name>/SKILL.md must appear exactly
+# once; tests/test_skill_groups.py enforces catalog completeness.
+group	lit-search	文献检索	arXiv/OpenAlex/Semantic Scholar 等文献搜索、抓取与阅读
+group	ideation	选题与方向	找 idea、查新、方向打磨、research wiki 与总编排 pipeline
+group	review-loop	自动评审闭环	跨模型自动 review 循环与对抗性评审
+group	theory	公式与证明	公式推导、证明撰写与证明审查
+group	experiments	实验与算力	实验计划/执行/监控/分析与 GPU 集群、无服务器算力
+group	paper-core	论文写作主线	从大纲到 PDF 的写作、编译、数字/引用/诚信审计
+group	paper-visuals	配图与展示	插图、示意图、海报、幻灯片与演讲
+group	submission	投稿与基金	返修 rebuttal、重投 pipeline、基金申请书
+group	patent	专利	发明构建、权利要求、实施例到各国格式的专利流水线
+group	meta-utils	元工具与杂项	skill 语料自优化、通知、面试准备等
+skill	arxiv	lit-search	-
+skill	alphaxiv	lit-search	-
+skill	deepxiv	lit-search	-
+skill	semantic-scholar	lit-search	-
+skill	openalex	lit-search	-
+skill	exa-search	lit-search	-
+skill	gemini-search	lit-search	-
+skill	research-lit	lit-search	-
+skill	comm-lit-review	lit-search	-
+skill	idea-creator	ideation	-
+skill	idea-discovery	ideation	idea-creator,novelty-check,research-lit,research-review
+skill	idea-discovery-robot	ideation	idea-creator,novelty-check,research-lit,research-review
+skill	novelty-check	ideation	-
+skill	research-refine	ideation	-
+skill	research-refine-pipeline	ideation	research-refine,experiment-plan
+skill	research-wiki	ideation	-
+skill	wiki-enrich	ideation	research-wiki
+skill	research-pipeline	ideation	idea-discovery,experiment-bridge,auto-review-loop,paper-writing,research-lit
+skill	research-review	review-loop	-
+skill	auto-review-loop	review-loop	-
+skill	auto-review-loop-llm	review-loop	auto-review-loop
+skill	auto-review-loop-minimax	review-loop	auto-review-loop
+skill	kill-argument	review-loop	-
+skill	formula-derivation	theory	-
+skill	proof-writer	theory	-
+skill	proof-checker	theory	-
+skill	experiment-plan	experiments	-
+skill	experiment-bridge	experiments	experiment-plan,run-experiment,monitor-experiment,result-to-claim
+skill	experiment-queue	experiments	-
+skill	run-experiment	experiments	-
+skill	monitor-experiment	experiments	-
+skill	analyze-results	experiments	-
+skill	training-check	experiments	-
+skill	system-profile	experiments	-
+skill	dse-loop	experiments	-
+skill	qzcli	experiments	-
+skill	vast-gpu	experiments	-
+skill	serverless-modal	experiments	-
+skill	experiment-audit	experiments	-
+skill	result-to-claim	experiments	-
+skill	ablation-planner	experiments	-
+skill	paper-writing	paper-core	paper-plan,paper-write,paper-compile,paper-figure,proof-checker,paper-claim-audit,citation-audit,auto-paper-improvement-loop,integrity-forensics
+skill	paper-plan	paper-core	-
+skill	paper-write	paper-core	-
+skill	paper-compile	paper-core	-
+skill	paper-figure	paper-core	-
+skill	citation-audit	paper-core	-
+skill	paper-claim-audit	paper-core	-
+skill	integrity-forensics	paper-core	-
+skill	auto-paper-improvement-loop	paper-core	paper-compile
+skill	writing-systems-papers	paper-core	-
+skill	specification-writing	paper-core	-
+skill	overleaf-sync	paper-core	-
+skill	render-html	paper-core	-
+skill	paper-illustration	paper-visuals	-
+skill	paper-illustration-image2	paper-visuals	-
+skill	figure-spec	paper-visuals	-
+skill	mermaid-diagram	paper-visuals	-
+skill	pixel-art	paper-visuals	-
+skill	paper-poster	paper-visuals	paper-poster-html
+skill	paper-poster-html	paper-visuals	-
+skill	paper-slides	paper-visuals	slides-polish
+skill	paper-talk	paper-visuals	paper-slides
+skill	slides-polish	paper-visuals	-
+skill	rebuttal	submission	-
+skill	resubmit-pipeline	submission	rebuttal,paper-writing,paper-compile,paper-claim-audit,citation-audit,proof-checker,integrity-forensics,auto-paper-improvement-loop
+skill	grant-proposal	submission	-
+skill	patent-pipeline	patent	invention-structuring,claims-drafting,embodiment-description,figure-description,jurisdiction-format,patent-review,prior-art-search,patent-novelty-check
+skill	invention-structuring	patent	-
+skill	claims-drafting	patent	-
+skill	embodiment-description	patent	-
+skill	figure-description	patent	-
+skill	jurisdiction-format	patent	-
+skill	patent-review	patent	-
+skill	prior-art-search	patent	-
+skill	patent-novelty-check	patent	-
+skill	meta-optimize	meta-utils	-
+skill	meta-apply	meta-utils	meta-optimize
+skill	feishu-notify	meta-utils	-
+skill	interview-cheatsheet	meta-utils	-
