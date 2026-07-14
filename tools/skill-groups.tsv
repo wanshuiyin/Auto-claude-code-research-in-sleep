@@ -42,7 +42,7 @@ skill	gemini-search	lit-search	-	Gemini 驱动的文献发现
 skill	research-lit	lit-search	-	文献综述与相关工作分析
 skill	comm-lit-review	lit-search	-	通信领域专用文献综述
 skill	idea-creator	ideation	-	给定方向生成并排序研究 idea
-skill	idea-discovery	ideation	idea-creator,novelty-check,research-lit,research-review,research-refine-pipeline,render-html	W1:从方向到验证过的 idea 全流程
+skill	idea-discovery	ideation	idea-creator,novelty-check,research-lit,research-review,research-refine-pipeline,research-refine,render-html	W1:从方向到验证过的 idea 全流程
 skill	idea-discovery-robot	ideation	idea-creator,novelty-check,research-lit,research-review	W1 机器人/具身智能特化版
 skill	novelty-check	ideation	-	idea 查新(有没有人做过)
 skill	research-refine	ideation	-	粗糙方向打磨成聚焦提案
