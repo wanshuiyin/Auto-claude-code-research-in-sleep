@@ -66,6 +66,12 @@ def _violations_in_frontmatter(lines):
                 in_block_scalar = True
             continue
         value = m.group(1)
+        if not value.startswith(('"', "'")):
+            # strip a trailing YAML comment from UNQUOTED values (in YAML a
+            # comment needs preceding whitespace; a plain scalar cannot
+            # contain " #", so the split is safe) — otherwise
+            # `argument-hint: null  # todo` would classify as a plain string
+            value = re.split(r"\s+#", value, maxsplit=1)[0].rstrip()
         if value == "" or value.startswith("#"):
             problems.append(
                 "argument-hint has no same-line value (a null / block "
@@ -141,6 +147,9 @@ BAD_FRONTMATTERS = [
     "name: demo\nargument-hint: ~",                           # YAML null (tilde)
     "name: demo\nargument-hint: true",                        # YAML bool
     "name: demo\nargument-hint: 123",                         # YAML int
+    "name: demo\nargument-hint: | # comment",                 # block scalar + comment
+    "name: demo\nargument-hint: null  # todo",                # null + comment
+    "name: demo\nargument-hint: [x]  # comment",              # flow seq + comment
 ]
 
 GOOD_FRONTMATTERS = [
