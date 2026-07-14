@@ -4,6 +4,11 @@ from types import SimpleNamespace
 
 import pytest
 
+# openalex_fetch treats `requests` as an optional dependency (it prints an
+# install hint instead of hard-crashing); CI installs only pytest, so skip
+# this module there rather than fail on the missing import.
+pytest.importorskip("requests")
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "tools" / "openalex_fetch.py"
