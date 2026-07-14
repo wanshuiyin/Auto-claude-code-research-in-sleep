@@ -1234,6 +1234,12 @@ claude   # hooks 立即生效
    # 验证
    latexmk --version && pdfinfo -v
    ```
+   > **Windows（PowerShell）：** 先安装 [MiKTeX Basic Installer](https://miktex.org/howto/install-miktex) 或 [Windows 版 TeX Live](https://tug.org/texlive/windows.html)，再单独安装 [Windows 版 Poppler](https://github.com/oschwartz10612/poppler-windows/releases)。将包含 `pdfinfo.exe` 的目录加入 `PATH`，重新打开 PowerShell，然后验证：
+   > ```powershell
+   > latexmk --version
+   > pdfinfo -v
+   > ```
+   > 如果命令找不到，请刷新 TeX 发行版的包/路径设置，并确认包含 `pdfinfo.exe` 的 Poppler 目录已加入 `PATH`。
    > 如果只用工作流 1 和 2（找 idea + 自动 review），不需要安装 LaTeX。
 
 <a id="install-skills"></a>

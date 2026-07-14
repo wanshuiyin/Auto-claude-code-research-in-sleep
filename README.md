@@ -1409,6 +1409,12 @@ Add `— reviewer: oracle-pro` to any reviewer-aware skill (`/proof-checker`, `/
    # Verify
    latexmk --version && pdfinfo -v
    ```
+   > **Windows (PowerShell):** Install a TeX distribution using the [MiKTeX Basic Installer](https://miktex.org/howto/install-miktex) or [TeX Live for Windows](https://tug.org/texlive/windows.html). Install [Poppler for Windows](https://github.com/oschwartz10612/poppler-windows/releases) separately, add the directory containing `pdfinfo.exe` to `PATH`, and open a new PowerShell window. Then verify:
+   > ```powershell
+   > latexmk --version
+   > pdfinfo -v
+   > ```
+   > If either command is not found, refresh the TeX distribution's package/path settings and check that the Poppler directory containing `pdfinfo.exe` is on `PATH`.
    > If you only need Workflow 1 & 2 (idea discovery + auto review), LaTeX is not required.
 
 <a id="install-skills"></a>
