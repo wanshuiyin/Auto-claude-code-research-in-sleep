@@ -291,6 +291,7 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 
 ## 2. 📢 What's New
 
+- **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🐞 **[`/web-debug-search`](skills/web-debug-search/SKILL.md)** (Issue [#211](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/211)). Adds a focused debugging/discovery workflow for GitHub Issues and Discussions: exact and normalized error-string matching, version compatibility tracking, and explicit failure handling. Results are labeled for debugging only and are not paper-citation evidence.
 - **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧩 **Selective install + global helper pointer** ([#366](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/366)). The 80 skills are no longer all-or-nothing: all four installers (`install_aris.sh` / `_codex` / `_copilot` / `.ps1`) support group-based selection — `--list-groups` shows the 10-group catalog ([`tools/skill-groups.tsv`](tools/skill-groups.tsv)), `--groups paper-core,lit-search` installs by group, `--skills X` / `--exclude Y` fine-tune, and a bare TTY run opens a full-screen checkbox picker (Space toggles a skill or a whole group, `a` selects all, Enter confirms; falls back to per-group Y/n/e prompts without python3/curses); hard pipeline deps (the catalog's `requires` column) are auto-included, with a warning if you cut one. **Updates auto-detect the installed set** (the manifest) and NEW upstream skills need per-skill confirmation — declines are remembered in `.aris/skills-declined.txt` and never re-asked (`--add-new` / `--skip-new` for scripting); the `smart_update*` family gets the same treatment for copy installs. Also fixes helper scripts being unresolvable from global copy installs (`~/.claude/skills`): the resolution chain gains a 4th layer — installers/updaters write a pointer file `~/.aris/repo`, consulted when `.aris/tools/` → `tools/` → `$ARIS_REPO/tools/` all miss. ⚠️ Backward compatible: `--quiet` fresh installs still install everything; run any installer/updater once to get the pointer file.
 - **2026-07-12** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🛡️ **Your paper now gets the reviewer-side forensics treatment before you submit** ([#357](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/357)). New `/integrity-forensics` skill: a SHA-pinned thin launcher runs [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch)'s hostile-reviewer sweep (evidence ledger, nine auditor dimensions, numeric core, rules-only adjudicator) on your paper first. The verdict feeds a typed gate — flags can block a submission, a clean sweep is recorded as "no new blocker" (never an acquittal) — and findings close only with typed, hashed evidence or a recorded human waiver (rewording the flagged sentence doesn't count; the ledger notices). `/paper-writing` runs it by default at submission assurance (`— self_forensics: false` opts out; the Codex mirror is opt-in and limited to upstream's deterministic slice, which can flag but never say CLEAN). ⚠️ First run clones and validates the pinned upstream (needs network); run `bash tools/smart_update.sh --apply`.
 - **2026-07-10** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧠 **Reviewer default is now GPT-5.6-Sol; deep audits think at the new `ultra` level** ([#354](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/354)). codex-cli 0.144.1 added `max`/`ultra` reasoning above `xhigh`; ARIS reviews now default to `gpt-5.6-sol`, with the seven heavyweight verdicts (`/proof-checker`, `/kill-argument`, `/research-review`, `/experiment-audit`, `/paper-claim-audit`, `/result-to-claim`, `/meta-apply`) at `ultra` and everything else at `xhigh`. Older codex-cli or no model access steps down automatically (5.6-sol → 5.5, both `xhigh`) — never below `xhigh`, never on a mere timeout. Also fixed: `/result-to-claim` now stops honestly instead of judging its own results when the reviewer is unreachable. ⚠️ Upgrade codex-cli to ≥ 0.144.1, restart the session (MCP reloads only then), and run `bash tools/smart_update.sh --apply`.
@@ -580,14 +581,14 @@ See [full setup guide](#setup) for details and [alternative model combinations](
 
 ## 4. ✨ Features
 
-ARIS chains **80 composable skills** across the whole research lifecycle — literature & novelty → idea discovery → GPU experiments → autonomous review loop → paper writing → peer review — with **cross-model adversarial review** (Claude executes · GPT-5.6-Sol xhigh reviews · optional **GPT-5.5 Pro** via Oracle), anti-hallucination DBLP/CrossRef citations, a persistent **Research Wiki**, flexible model backends, human-in-the-loop checkpoints, and optional Feishu / Zotero / Obsidian / GPU integrations.
+ARIS chains **81 composable skills** across the whole research lifecycle — literature & novelty → idea discovery → GPU experiments → autonomous review loop → paper writing → peer review — with **cross-model adversarial review** (Claude executes · GPT-5.6-Sol xhigh reviews · optional **GPT-5.5 Pro** via Oracle), anti-hallucination DBLP/CrossRef citations, a persistent **Research Wiki**, flexible model backends, human-in-the-loop checkpoints, and optional Feishu / Zotero / Obsidian / GPU integrations.
 
 🔥 *And it scales to any agent's **ultracode-style deep mode** — the breadth/firepower pass adapts to the runtime (Claude Code ultracode + workflows on Opus 4.8, Codex `spawn_agent`, or plain sequential), feeding three roles: **breadth · cross-model review → accuracy · research wiki → memory**. However a loop is driven, it reports to the same cross-model jury + research wiki — **it can drive, never acquit**.*
 
 <details>
 <summary><b>Full feature list</b></summary>
 
-- 📊 **80 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`). See [full catalog →](docs/SKILLS_CATALOG.md)
+- 📊 **81 composable skills** — mix and match, or chain into full pipelines (`/idea-discovery`, `/auto-review-loop`, `/paper-writing`, `/research-pipeline`). See [full catalog →](docs/SKILLS_CATALOG.md)
 - 🔍 **Literature & novelty** — multi-source paper search (**[Zotero](docs/integrations/ZOTERO.md)** + **[Obsidian](docs/integrations/OBSIDIAN.md)** + **local PDFs** + arXiv/Scholar) + cross-model novelty verification
 - 💡 **Idea discovery** — literature survey → brainstorm 8-12 ideas → novelty check → GPU pilot experiments → ranked report
 - 🔄 **Auto review loop** — 4-round autonomous review, 5/10 → 7.5/10 overnight with 20+ GPU experiments
@@ -620,7 +621,7 @@ ARIS chains **80 composable skills** across the whole research lifecycle — lit
 <a id="skills-catalog"></a>
 <a id="-skills-catalog"></a>
 
-ARIS ships **80+ skills** across literature, ideation, experiments, audit, writing, talks, patents, and meta-utilities — the full catalog (role / category / requirements per skill) lives in **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)** to keep this README scannable.
+ARIS ships **81+ skills** across literature, ideation, experiments, audit, writing, talks, patents, and meta-utilities — the full catalog (role / category / requirements per skill) lives in **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)** to keep this README scannable.
 
 <details>
 <summary><b>Start here</b> — common entry points (use case → skill)</summary>
@@ -641,7 +642,7 @@ ARIS ships **80+ skills** across literature, ideation, experiments, audit, writi
 
 </details>
 
-→ **[Browse all 80 skills by category in the full catalog →](docs/SKILLS_CATALOG.md)**
+→ **[Browse all 81 skills by category in the full catalog →](docs/SKILLS_CATALOG.md)**
 
 ---
 

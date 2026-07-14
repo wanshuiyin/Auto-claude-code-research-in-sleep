@@ -38,6 +38,7 @@ skill	deepxiv	lit-search	-	DeepXiv 渐进式论文阅读
 skill	semantic-scholar	lit-search	-	正式发表论文检索(引用数/venue)
 skill	openalex	lit-search	-	OpenAlex 引用图谱与机构元数据
 skill	exa-search	lit-search	-	Exa AI 网页搜索+内容抽取
+skill	web-debug-search	lit-search	-	GitHub Issues/Discussions 调试检索与版本兼容性
 skill	gemini-search	lit-search	-	Gemini 驱动的文献发现
 skill	research-lit	lit-search	-	文献综述与相关工作分析
 skill	comm-lit-review	lit-search	-	通信领域专用文献综述

@@ -265,6 +265,7 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 
 ## 2. 📢 最近更新
 
+- **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🐞 **[`/web-debug-search`](skills/web-debug-search/SKILL.md)**（Issue [#211](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/211)）。新增聚焦调试/发现的检索流程：搜索 GitHub Issues 与 Discussions，支持精确/归一化错误字符串匹配、版本兼容性追踪和明确的失败处理。所有结果都标记为调试用途，不能作为论文引用证据。
 - **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧩 **选择性安装 + 全局脚本指针**([#366](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/366))。80 个 skill 不再"一股脑全装":四套安装器(`install_aris.sh` / `_codex` / `_copilot` / `.ps1`)支持按功能分组选装——`--list-groups` 看 10 个分组目录([`tools/skill-groups.tsv`](tools/skill-groups.tsv)),`--groups paper-core,lit-search` 按组装,`--skills X` / `--exclude Y` 精调,TTY 上不带参数进全屏勾选界面(空格勾选/组行整组切换、`a` 全选、Enter 确认;无 python3/curses 时退回逐组 Y/n/e 问答);pipeline 硬依赖(catalog `requires` 列)自动带全,选断了会警告。**更新时自动侦测已装集合**(manifest),上游**新增**的 skill 逐个二次确认——拒绝的记在 `.aris/skills-declined.txt`,以后不再重复问(`--add-new` / `--skip-new` 供脚本化);copy 安装的 `smart_update*` 系列同样生效。同时修了全局 copy 安装(`~/.claude/skills`)找不到 helper 脚本的问题:解析链加第 4 层——安装/更新时写指针文件 `~/.aris/repo`,`.aris/tools/` → `tools/` → `$ARIS_REPO/tools/` 都不命中时读它定位仓库。⚠️ 向后兼容:`--quiet` 全新安装仍是全装;跑一次任意安装器/更新器即可拿到指针文件。
 - **2026-07-12** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🛡️ **投稿前,你的论文先过一遍审稿人那侧的取证**([#357](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/357))。新 skill `/integrity-forensics`:SHA-pin 薄启动器,把 [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) 那套敌意审稿人能跑的扫描(证据账本、九个审计维度、数值核心、纯规则裁决器)先跑在你自己的论文上。结论进一道 typed gate——flag 能拦下投稿,"没查出问题"只记作"无新阻断"、不算无罪判决;finding 只有带类型、带 hash 的证据、或人签字的 waiver 才能销项(把句子改个措辞不算数,台账会记下来)。`/paper-writing` 在 submission 档默认就跑(`— self_forensics: false` 可关;Codex 镜像是 opt-in,且只能跑上游的确定性切片——能报 flag,永远说不出 CLEAN)。⚠️ 首次运行需要联网克隆并校验上游;跑 `bash tools/smart_update.sh --apply` 拉取更新。
 - **2026-07-10** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧠 **Reviewer 默认换成 GPT-5.6-Sol,深度审计用上新的 `ultra` 档**([#354](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/354))。codex-cli 0.144.1 在 `xhigh` 之上加了 `max`、`ultra`;ARIS 审阅默认走 `gpt-5.6-sol`,七个重量级裁决(`/proof-checker`、`/kill-argument`、`/research-review`、`/experiment-audit`、`/paper-claim-audit`、`/result-to-claim`、`/meta-apply`)用 `ultra`,其余保持 `xhigh`。codex-cli 版本旧或没有这个模型会自动降级(5.6-sol → 5.5,均 `xhigh`)——永远不低于 `xhigh`,单纯超时不降级。顺手修了:`/result-to-claim` 审稿模型连不上时诚实停下,不再自判自己的实验。⚠️ 升级 codex-cli 到 ≥ 0.144.1,重启 session,跑 `bash tools/smart_update.sh --apply`。
@@ -537,14 +538,14 @@ Codex 基础镜像默认由新的 Codex `spawn_agent` 自审：流程可以继�
 
 ## 4. ✨ 功能亮点
 
-ARIS 用 **80 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
+ARIS 用 **81 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
 
 🔥 *而且这套"广度 / 审 / 记忆"三角能适配任何 agent 的 **ultracode 式深度模式**：广度 pass 适配运行时暴露的能力（Claude Code 原生 ultracode / workflows + Opus 4.8、Codex `spawn_agent`，或纯顺序执行），并按层级干净降级（fan-out → agent spawn → 顺序）。三件事分得很清楚：**广度 · 跨模型对抗审 → 准确性 · research wiki → 记忆性**。无论循环由谁推进，最后都回到同一套跨模型对抗审 + research wiki：**能推进，不能定案**。*
 
 <details>
 <summary><b>完整功能清单</b></summary>
 
-- 📊 **80 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
+- 📊 **81 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
 - 🔍 **文献 & 查新** — 多源论文搜索（**[Zotero](docs/integrations/ZOTERO_CN.md)** + **[Obsidian](docs/integrations/OBSIDIAN_CN.md)** + **本地 PDF** + arXiv/Scholar）+ 跨模型查新验证
 - 💡 **Idea 发现** — 文献调研 → 头脑风暴 8-12 个 idea → 查新 → GPU pilot 实验 → 排名报告
 - 🔄 **自动 review 循环** — 4 轮自主审稿，一夜从 5/10 提升到 7.5/10，自动跑 20+ 组 GPU 实验
@@ -577,7 +578,7 @@ ARIS 用 **80 个可组合 skill** 覆盖科研全生命周期——文献查新
 <a id="skills-catalog"></a>
 <a id="-skills-catalog"></a>
 
-ARIS 现有 **80+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、演讲、专利、meta 工具等——完整目录（每个 skill 含 role / category / 依赖）在 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)**，独立成文以保持 README 可扫读。
+ARIS 现有 **81+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、演讲、专利、meta 工具等——完整目录（每个 skill 含 role / category / 依赖）在 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)**，独立成文以保持 README 可扫读。
 
 <details>
 <summary><b>常用入口</b> —— 场景 → 入口 skill</summary>
@@ -598,7 +599,7 @@ ARIS 现有 **80+ 个 skill**，覆盖文献调研、idea 生成、实验、审�
 
 </details>
 
-→ **[按 category 浏览全部 80 个 skill →](docs/SKILLS_CATALOG.md)**
+→ **[按 category 浏览全部 81 个 skill →](docs/SKILLS_CATALOG.md)**
 
 ---
 

@@ -24,7 +24,7 @@ complete workflows but records `review_independence: same-family` and
 verifiers may record accepted; never describe base Codex self-review as
 cross-model acceptance.
 
-**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **80 skills**, grouped by role.
+**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **81 skills**, grouped by role.
 
 Invocation syntax is identical across hosts:
 ```
