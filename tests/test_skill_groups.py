@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Catalog integrity for tools/skill-groups.tsv (#358 selective install).
+"""Catalog integrity for tools/skill-groups.tsv (#366 selective install).
 
 The catalog is the single source of truth for the selective-install feature
 in all four installers. Drift between skills/ and the catalog silently

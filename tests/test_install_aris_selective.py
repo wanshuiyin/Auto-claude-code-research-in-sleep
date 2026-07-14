@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Selective install / new-skill confirmation for install_aris.sh (#358).
+"""Selective install / new-skill confirmation for install_aris.sh (#366).
 
 Covers:
   fresh:      --quiet with no selection flags installs everything (legacy)

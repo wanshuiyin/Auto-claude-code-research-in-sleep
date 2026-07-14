@@ -160,7 +160,7 @@ if [[ "$MISS_COUNT" -gt 0 ]]; then
     HINT_SCRIPT=".aris/tools/research_wiki.py"
     [[ -f "$HINT_SCRIPT" ]] || HINT_SCRIPT="tools/research_wiki.py"
     [[ -f "$HINT_SCRIPT" ]] || { [[ -n "${ARIS_REPO:-}" ]] && HINT_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
-    # Layer 4: global pointer file written by the installer/updater (#358).
+    # Layer 4: global pointer file written by the installer/updater (#366).
     if [[ -z "${ARIS_REPO:-}" && ! -f "$HINT_SCRIPT" && -f "$HOME/.aris/repo" ]]; then
         ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
         [[ -n "$ARIS_REPO" ]] && HINT_SCRIPT="$ARIS_REPO/tools/research_wiki.py"

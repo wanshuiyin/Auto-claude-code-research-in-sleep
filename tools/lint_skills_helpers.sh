@@ -4,7 +4,7 @@
 # Per shared-references/integration-contract.md §2, SKILL.md files must
 # resolve helpers via the canonical strict-safe chain
 #   .aris/tools/<helper>  →  tools/<helper>  →  $ARIS_REPO/tools/<helper>
-#   →  $ARIS_REPO/tools/<helper> via the global pointer file ~/.aris/repo (#358)
+#   →  $ARIS_REPO/tools/<helper> via the global pointer file ~/.aris/repo (#366)
 # (Codex mirror uses the mirror-side chain), NOT hardcode `python3 tools/foo.py`
 # or `bash tools/foo.sh` directly.
 #

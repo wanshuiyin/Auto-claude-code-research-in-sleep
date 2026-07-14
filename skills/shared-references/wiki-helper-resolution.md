@@ -12,7 +12,7 @@ left a real user's `research-wiki/` empty for a week.
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
 # Layer 4: global pointer file written by the installer/updater at
-# ~/.aris/repo (#358) — covers global copy-installs with no project manifest.
+# ~/.aris/repo (#366) — covers global copy-installs with no project manifest.
 if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
     ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
@@ -74,7 +74,7 @@ Four locations correspond to four legitimate install / dev paths:
 | `.aris/tools/research_wiki.py` | After running `bash tools/install_aris.sh` in the user project (Phase 0 symlink, added in #174 / #192) |
 | `tools/research_wiki.py` | (a) Manual copy of the helper into the user project (a documented temporary workaround); (b) running a SKILL from inside the ARIS repo itself |
 | `$ARIS_REPO/tools/research_wiki.py` | Env var explicitly set, or auto-resolved from `.aris/installed-skills.txt`'s `repo_root` field |
-| `$ARIS_REPO/tools/research_wiki.py` via `~/.aris/repo` | Global pointer file written by `install_aris*.{sh,ps1}` / `smart_update*.{sh,ps1}` (#358); the only layer that resolves for a **global copy-install** (`~/.claude/skills/research-wiki`) where none of the first three apply — there is no project-local `.aris/`, no `tools/` copy, and no manifest to read `ARIS_REPO` from |
+| `$ARIS_REPO/tools/research_wiki.py` via `~/.aris/repo` | Global pointer file written by `install_aris*.{sh,ps1}` / `smart_update*.{sh,ps1}` (#366); the only layer that resolves for a **global copy-install** (`~/.claude/skills/research-wiki`) where none of the first three apply — there is no project-local `.aris/`, no `tools/` copy, and no manifest to read `ARIS_REPO` from |
 
 Order matters: the symlinked install is preferred because the symlink
 auto-tracks upstream tool fixes; the manual copy is second because it
@@ -95,7 +95,7 @@ all miss.
   Codex-side global install, lives in the **Codex** mirror's chain
   (`skills/skills-codex/...`), not the CC chain.
 
-`~/.aris/repo` (layer 4, #358) is the one exception to the earlier
+`~/.aris/repo` (layer 4, #366) is the one exception to the earlier
 "no 4th layer" stance in this doc's history: it exists because the
 installer/updater now writes it, giving the previously-missing
 precedent. If a 5th layer is ever proposed, it should still meet the

@@ -60,7 +60,7 @@ because the helper may sit at any of:
   (one line, absolute repo path) written by `install_aris*.{sh,ps1}` and
   `smart_update*.{sh,ps1}` at install/update time; the only layer that
   resolves for a global copy-install (`~/.claude/skills`) with no
-  project-local `.aris/` manifest (#358)
+  project-local `.aris/` manifest (#366)
 
 Every caller — including those primarily exercised from inside the
 ARIS repo — MUST use the resolution chain. The chain's middle layer
@@ -83,7 +83,7 @@ if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
 # Layer 4: global pointer file, written by the installer/updater at
-# ~/.aris/repo (#358) — covers global copy-installs with no project manifest.
+# ~/.aris/repo (#366) — covers global copy-installs with no project manifest.
 if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
     ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi

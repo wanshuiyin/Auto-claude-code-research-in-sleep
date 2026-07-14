@@ -22,7 +22,7 @@ valid Python module:
 
   layer 4  $ARIS_REPO/tools/figure_renderer.py
            → this file (when ARIS_REPO is resolved from the global
-             pointer file ~/.aris/repo, #358 — no project manifest needed)
+             pointer file ~/.aris/repo, #366 — no project manifest needed)
 
 Shim semantics: `os.execv` replaces the current Python process with
 the real helper, so the helper sees its own `__file__`, `sys.path[0]`,

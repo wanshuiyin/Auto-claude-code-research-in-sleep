@@ -10,7 +10,7 @@
 # only stable from inside the ARIS repo (manual smoke testing) and breaks
 # silently in downstream user projects that have only `.aris/tools/`,
 # `$ARIS_REPO/tools/` (env var or manifest), or `$ARIS_REPO/tools/` resolved
-# via the global pointer file `~/.aris/repo` (#358).
+# via the global pointer file `~/.aris/repo` (#366).
 #
 # Usage (from inside the ARIS repo, smoke test):
 #   bash tools/save_trace.sh \

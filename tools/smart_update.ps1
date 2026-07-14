@@ -31,7 +31,7 @@
 #             automatic behavior when there is no interactive console)
 #
 # On successful -Apply, writes $env:USERPROFILE\.aris\repo <- this repo's root
-# (helper resolution chain layer 4, #358) so copy-installed skills can find tools\.
+# (helper resolution chain layer 4, #366) so copy-installed skills can find tools\.
 
 [CmdletBinding(DefaultParameterSetName = 'Global')]
 param(
@@ -159,7 +159,7 @@ function Get-CatalogGroup {
     return '?'
 }
 
-# Layer-4 helper resolution (#358): a global pointer file lets globally/copy-
+# Layer-4 helper resolution (#366): a global pointer file lets globally/copy-
 # installed skills find $env:USERPROFILE\.aris\repo without a per-project install.
 function Ensure-GlobalPointer {
     # $env:USERPROFILE is the Windows PowerShell convention; fall back to $HOME

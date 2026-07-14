@@ -227,7 +227,7 @@ build_upstream_inventory() {
     sort -t'|' -k2,2 -o "$out" "$out"
 }
 
-# --- Selective install (#358, ported from install_aris.sh) ---
+# --- Selective install (#366, ported from install_aris.sh) ---
 # Upstream rows are 3-field (kind|name|source_rel); catalog skill names match
 # these mainline skill names 1:1.
 
@@ -460,7 +460,7 @@ filter_upstream_by_selection() {  # $1 = upstream file, $2 = selected file, $3 =
     ' "$1" > "$3"
 }
 
-# Layer-4 helper resolution (#358): a global pointer file lets globally/copy-
+# Layer-4 helper resolution (#366): a global pointer file lets globally/copy-
 # installed skills find $ARIS_REPO/tools without a per-project install.
 ensure_global_pointer() {
     $DRY_RUN && return 0
@@ -917,7 +917,7 @@ build_upstream_inventory "$ARIS_REPO" "$UPSTREAM_FILE"
 MANIFEST_DATA="$(mktemp -t aris-copilot-manifest.XXXX)"
 load_manifest "$MANIFEST_PATH" "$MANIFEST_DATA"
 
-# Selective install (#358): build the selected set, then plan against it.
+# Selective install (#366): build the selected set, then plan against it.
 SELECTED_FILE="$(mktemp -t aris-copilot-selected.XXXX)"
 DECLINED_CANDIDATES="$(mktemp -t aris-copilot-declined.XXXX)"
 build_selection "$UPSTREAM_FILE" "$DECLINED_CANDIDATES" "$SELECTED_FILE"
@@ -955,7 +955,7 @@ log "Applying:"
 apply_plan "$PLAN_FILE"
 commit_manifest "$MANIFEST_TMP"
 
-# #358: persist declined skills + global repo pointer (best-effort, after
+# #366: persist declined skills + global repo pointer (best-effort, after
 # manifest commit for the same reason as install_aris.sh).
 save_declined "$DECLINED_CANDIDATES" "$SELECTED_FILE"
 ensure_global_pointer

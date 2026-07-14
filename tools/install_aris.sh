@@ -287,7 +287,7 @@ build_upstream_inventory() {
     fi
 }
 
-# ─── Selective install (#358) ─────────────────────────────────────────────────
+# ─── Selective install (#366) ─────────────────────────────────────────────────
 # Catalog = tools/skill-groups.tsv in the aris-repo. Two record types:
 #   group\t<id>\t<display>\t<description>
 #   skill\t<name>\t<group-id>\t<requires: comma list or "-">
@@ -489,7 +489,7 @@ build_selection() {  # $1 = upstream file, $2 = declined-candidates out file, $3
                 log "→ adding $(wc -l < "$new_file" | tr -d ' ') new upstream skill(s) (--all/--add-new)"
             elif [[ "$NEW_POLICY" == "skip" ]] || $QUIET || [[ ! -t 0 ]]; then
                 # warn (not log): must stay visible under --quiet — silently
-                # missing new skills is exactly the failure mode #358 fixes.
+                # missing new skills is exactly the failure mode #366 fixes.
                 warn "new upstream skills NOT installed: $(paste -sd, - < "$new_file")"
                 warn "  (rerun interactively to be asked, or pass --add-new / --skills NAME)"
             else
@@ -533,7 +533,7 @@ filter_upstream_by_selection() {  # $1 = upstream file, $2 = selected file, $3 =
     ' "$1" > "$3"
 }
 
-# Layer-4 helper resolution (#358): a global pointer file lets globally/copy-
+# Layer-4 helper resolution (#366): a global pointer file lets globally/copy-
 # installed skills find $ARIS_REPO/tools without a per-project install.
 ensure_global_pointer() {
     $DRY_RUN && return 0
@@ -1118,7 +1118,7 @@ build_upstream_inventory "$ARIS_REPO" > "$UPSTREAM_FILE"
 MANIFEST_DATA="$(mktemp -t aris-manifest.XXXX)"
 load_manifest "$MANIFEST_PATH" "$MANIFEST_DATA"
 
-# Selective install (#358): build the selected set, then plan against it.
+# Selective install (#366): build the selected set, then plan against it.
 SELECTED_FILE="$(mktemp -t aris-selected.XXXX)"
 DECLINED_CANDIDATES="$(mktemp -t aris-declined.XXXX)"
 build_selection "$UPSTREAM_FILE" "$DECLINED_CANDIDATES" "$SELECTED_FILE"
@@ -1190,7 +1190,7 @@ commit_manifest "$MANIFEST_TMP"
 # Runs after manifest commit so a failure here doesn't roll back skill links.
 ensure_tools_symlink
 
-# #358: persist declined skills + global repo pointer (both best-effort,
+# #366: persist declined skills + global repo pointer (both best-effort,
 # after manifest commit for the same reason as above).
 save_declined "$DECLINED_CANDIDATES" "$SELECTED_FILE"
 ensure_global_pointer

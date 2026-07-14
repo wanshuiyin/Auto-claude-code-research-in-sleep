@@ -7,7 +7,7 @@ Phase 3.3 (Arch C) moved the implementation to
 This shim keeps the directory-level resolver chain working
 (.aris/tools/experiment_queue/ → tools/experiment_queue/ →
 $ARIS_REPO/tools/experiment_queue/ → same, via the global pointer
-file ~/.aris/repo, #358). Once a SKILL has resolved
+file ~/.aris/repo, #366). Once a SKILL has resolved
 the directory, it runs `python3 $QUEUE_TOOLS/queue_manager.py`,
 which lands here, which os.execv's into the canonical script.
 

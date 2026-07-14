@@ -12,7 +12,7 @@ Used by `/research-lit` (Step 1.5, mandatory), `/idea-creator`, `/novelty-check`
 Helper resolution chain: `.aris/tools/verify_papers.py` →
 `tools/verify_papers.py` → `$ARIS_REPO/tools/verify_papers.py` →
 `$ARIS_REPO/tools/verify_papers.py` via the global pointer file
-`~/.aris/repo` (#358). See
+`~/.aris/repo` (#366). See
 `skills/shared-references/wiki-helper-resolution.md` for the canonical pattern.
 
 CLI:

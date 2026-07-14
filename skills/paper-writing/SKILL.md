@@ -686,7 +686,7 @@ skipping audits while claiming to have run them.
 > then `tools/verify_paper_audits.sh` (in-repo run), then
 > `$ARIS_REPO/tools/verify_paper_audits.sh` (env-var-set or manifest-derived
 > path), then the same `$ARIS_REPO/tools/verify_paper_audits.sh` resolved via
-> the global pointer file `~/.aris/repo` (#358). The chain always tries
+> the global pointer file `~/.aris/repo` (#366). The chain always tries
 > layers 1 → 2 → 3 → 4 in order; setting `export ARIS_REPO=~/…` only ensures
 > layer 3 has a valid target if layers 1 and 2 are absent, and layer 4 only
 > fires when neither the env var nor the project manifest set `ARIS_REPO`.

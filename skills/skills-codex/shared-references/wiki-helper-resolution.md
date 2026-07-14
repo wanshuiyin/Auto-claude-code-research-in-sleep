@@ -10,7 +10,7 @@ for Codex's install layout (the helper may live under
 ```bash
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null)}"
 # Global pointer file written by install_aris*/smart_update* at ~/.aris/repo
-# (#358) — same file the CC chain reads; covers global copy-installs with
+# (#366) — same file the CC chain reads; covers global copy-installs with
 # no project-local manifest.
 if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
     ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
@@ -57,7 +57,7 @@ After Variant B, every helper invocation must be guarded:
 | Symlink layer (`.aris/tools/...`) | yes (PR #174 / #192) | no — Codex install model is direct copy under `~/.codex/skills/`, no symlink |
 | Global-install layer (`~/.codex/skills/<name>/...`) | no | yes |
 | `cd "$(git rev-parse --show-toplevel)"` preamble | yes — guards subdir cwd | optional — Codex usually invokes from project root |
-| Global pointer file (`~/.aris/repo`) | yes (layer 4, #358) | yes — same file, read before the `~/.codex/skills/...` global-install layer |
+| Global pointer file (`~/.aris/repo`) | yes (layer 4, #366) | yes — same file, read before the `~/.codex/skills/...` global-install layer |
 
 Outcome of both chains is the same: a populated `$WIKI_SCRIPT` env var
 or an empty string + warning.

@@ -8,7 +8,7 @@ default — install_aris.sh creates .aris/tools symlink, not tools/).
 
 The fix is a 4-layer resolution chain documented in
 skills/shared-references/wiki-helper-resolution.md (layer 4, added in
-#358, is the global pointer file `~/.aris/repo` written by the
+#366, is the global pointer file `~/.aris/repo` written by the
 installer/updater — it covers a global copy-install with no
 project-local manifest). This test runs the chain in concrete
 scenarios and asserts the helper is reachable in each.
@@ -71,7 +71,7 @@ def _run_chain(cwd: Path, env_overrides: dict | None = None, home: Path | None =
     env = os.environ.copy()
     env.pop("ARIS_REPO", None)
     # Hermetic $HOME: a real dev machine may already have a ~/.aris/repo
-    # pointer file (written by install_aris.sh/smart_update.sh, #358),
+    # pointer file (written by install_aris.sh/smart_update.sh, #366),
     # which would make layer-4 fire unexpectedly in tests that are only
     # meant to exercise layers 1-3, or in the helper-missing test.
     if home is not None:
@@ -190,7 +190,7 @@ class ChainTest(unittest.TestCase):
 
     # ------------------------------------------------------------------
     # Layer 4: ARIS_REPO resolved from the global pointer file
-    # ~/.aris/repo (#358) — covers a global copy-install with no
+    # ~/.aris/repo (#366) — covers a global copy-install with no
     # project-local manifest and no .aris/tools symlink.
     # ------------------------------------------------------------------
     def test_layer4_global_pointer_file(self):

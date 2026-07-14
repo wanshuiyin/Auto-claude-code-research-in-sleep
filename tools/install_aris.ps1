@@ -82,7 +82,7 @@ param(
     [string]$MigrateCopy = '',
     [switch]$ClearStaleLock,
 
-    # Selective install (#358 parity with install_aris.sh).
+    # Selective install (#366 parity with install_aris.sh).
     [string]$Groups = '',
     [string]$Skills = '',
     [string]$Exclude = '',
@@ -349,7 +349,7 @@ function Test-SafeName {
     return $Name -match $SafeNameRegex
 }
 
-# ─── Selective install (#358 parity) ───────────────────────────────────────
+# ─── Selective install (#366 parity) ───────────────────────────────────────
 # Catalog = tools/skill-groups.tsv in the ARIS repo, shared across platforms.
 # Two record types (tab-separated):
 #   group\t<id>\t<display>\t<description>
@@ -1308,7 +1308,7 @@ function Invoke-Main {
     $inventory = Build-Inventory $config
     $manifest = Load-Manifest $manifestPath
 
-    # Selective install (#358 parity): build the selected set, then plan
+    # Selective install (#366 parity): build the selected set, then plan
     # against that filtered subset (support entries always pass through).
     $upstreamSkillNames = New-Object System.Collections.Generic.HashSet[string]
     foreach ($entry in $inventory) {
@@ -1349,7 +1349,7 @@ function Invoke-Main {
     Ensure-ToolsJunction $arisDir $repoRoot
     Archive-LegacyCopy $legacy $arisDir
 
-    # #358: persist declined skills + global repo pointer (both best-effort,
+    # #366: persist declined skills + global repo pointer (both best-effort,
     # after manifest commit for the same reason as the tools junction above).
     Save-DeclinedSet $declinedPath $selection.DeclinedCandidates $selection.Selected
     Ensure-GlobalPointer $repoRoot

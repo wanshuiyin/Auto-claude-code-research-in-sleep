@@ -31,7 +31,7 @@
 # kept in sync and never subject to this confirmation.
 #
 # On successful --apply, writes $HOME/.aris/repo <- this repo's root (helper
-# resolution chain layer 4, #358) so copy-installed skills can find tools/.
+# resolution chain layer 4, #366) so copy-installed skills can find tools/.
 
 set -euo pipefail
 
@@ -167,7 +167,7 @@ catalog_group_of() {  # $1 = skill name -> group id, or "?" if unknown
     echo "${g:-?}"
 }
 
-# Layer-4 helper resolution (#358): a global pointer file lets globally/copy-
+# Layer-4 helper resolution (#366): a global pointer file lets globally/copy-
 # installed skills find $ARIS_REPO/tools without a per-project install.
 ensure_global_pointer() {
     local pointer="$HOME/.aris/repo"
