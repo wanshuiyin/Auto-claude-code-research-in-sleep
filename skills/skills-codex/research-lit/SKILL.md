@@ -296,6 +296,87 @@ If `exa_search.py` or the `exa-py` SDK is unavailable, skip this source graceful
 - If Exa returns an arXiv paper already found by other sources, prefer structured metadata from arXiv/S2
 - Exa results from non-academic domains (blogs, docs, news) are unique value not covered by other sources
 
+**Gemini search** (only when `gemini` is in sources):
+
+When the user explicitly requests `— sources: gemini` (or includes `gemini` in a combined source list), use Gemini for AI-powered broad literature discovery.
+
+**Priority 1 — Gemini MCP** (preferred): Call `mcp__gemini-cli__ask-gemini` with the search prompt:
+
+```
+mcp__gemini-cli__ask-gemini({
+  prompt: 'You are a research literature scout. Search comprehensively for papers on: "QUERY"
+
+IMPORTANT CONSTRAINTS:
+1. Search from MULTIPLE angles — decompose the topic into sub-problems, aliases, neighboring tasks, and common benchmark/settings variants.
+2. Prefer papers that are genuinely relevant, not merely keyword-adjacent.
+3. Include top venues, journals, surveys, recent preprints, and papers with code when available.
+4. Focus on papers from 2022 onward unless older foundational work is necessary.
+
+For EACH paper found, provide ALL of the following:
+- Title: [exact title]
+- Authors: [full author list]
+- Year: [publication year]
+- Venue: [exact conference/journal name + year, or "arXiv preprint"]
+- arXiv ID: [format 2401.12345, or "N/A"]
+- DOI: [if available, or "N/A"]
+- Code URL: [GitHub/GitLab link if available, or "No code"]
+- Summary: [one-sentence core contribution]
+
+Find at least 15 papers.',
+  model: 'auto-gemini-3'
+})
+```
+
+**Priority 2 — Gemini CLI fallback** (if MCP unavailable): Use `gemini -p "...same prompt..." 2>/dev/null` via Bash (timeout: 120s).
+
+If both MCP and CLI are unavailable, skip this source gracefully and continue with the remaining requested sources.
+
+**Why use Gemini?** Gemini provides AI-driven discovery that goes beyond keyword matching — it decomposes topics, explores naming variants, and surfaces papers that traditional API-based searches may miss. It fills a different retrieval niche from structured database queries.
+
+**De-duplication against other sources**:
+- Match by arXiv ID first, DOI second, normalized title third
+- If Gemini returns a paper already found by Semantic Scholar, prefer S2's citation count and venue metadata
+- If Gemini returns a paper already found by arXiv, prefer arXiv's structured metadata
+- Do not use Gemini-reported citation counts; they may be inaccurate
+
+**OpenAlex search** (only when `openalex` is in sources):
+
+When the user explicitly requests `— sources: openalex` (or includes `openalex` in a combined source list), use OpenAlex API for comprehensive academic metadata:
+
+```bash
+# Re-resolve $ARIS_REPO + $OPENALEX_FETCHER (SKILL bash blocks may run in separate shells).
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
+fi
+OPENALEX_FETCHER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/openalex_fetch.py" ] && OPENALEX_FETCHER="$ARIS_REPO/tools/openalex_fetch.py"
+[ -z "$OPENALEX_FETCHER" ] && [ -f tools/openalex_fetch.py ] && OPENALEX_FETCHER="tools/openalex_fetch.py"
+[ -z "$OPENALEX_FETCHER" ] && [ -f ~/.codex/skills/openalex/openalex_fetch.py ] && OPENALEX_FETCHER="$HOME/.codex/skills/openalex/openalex_fetch.py"
+
+# Skip OpenAlex when the helper or its optional dependency is unavailable.
+if [ -z "$OPENALEX_FETCHER" ] || ! python3 -c "import requests" >/dev/null 2>&1; then
+  echo "OpenAlex source not available (openalex_fetch.py unresolved or 'requests' module missing); skipping." >&2
+else
+  if python3 "$OPENALEX_FETCHER" search "QUERY" --max 10 \
+      --year "2022-" \
+      --type article \
+      --sort relevance; then
+    echo "D2 contribution: openalex (helper invocation exit 0)" >&2
+  else
+    echo "WARN: openalex_fetch.py invocation failed; D2 aggregate continues with remaining sources." >&2
+  fi
+fi
+```
+
+If `openalex_fetch.py` is not found or the `requests` module is missing, skip this source gracefully and continue with the remaining requested sources.
+
+**Why use OpenAlex?** OpenAlex provides an open citation graph, institutional affiliations, funding data, and broad work metadata across disciplines.
+
+**De-duplication against other sources**:
+- Match by DOI first, then arXiv ID, then normalized title
+- If OpenAlex and Semantic Scholar overlap, prefer S2 for citation counts and venue metadata
+- If OpenAlex and arXiv overlap, prefer arXiv's PDF link and metadata while retaining OpenAlex's citation and institution data
+
 **Optional PDF download** (only when `ARXIV_DOWNLOAD = true`):
 
 After all sources are searched and papers are ranked by relevance:

@@ -493,7 +493,7 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 </details>
 
 <details>
-<summary><b>Show all 16 inline parameters and 12 override examples</b> — AUTO_PROCEED / sources / arxiv download / DBLP_BIBTEX / code review / wandb / illustration / venue / base repo / gpu / compact / ref paper / effort / reviewer / difficulty (full per-skill defaults live in <a href="#customization">§ Customization</a>)</summary>
+<summary><b>Show all 16 inline parameters and 14 override examples</b> — AUTO_PROCEED / sources / arxiv download / DBLP_BIBTEX / code review / wandb / illustration / venue / base repo / gpu / compact / ref paper / effort / reviewer / difficulty (full per-skill defaults live in <a href="#customization">§ Customization</a>)</summary>
 
 All pipeline behaviors are configurable via inline overrides — append `— key: value` to any command:
 

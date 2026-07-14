@@ -456,7 +456,7 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 </details>
 
 <details>
-<summary><b>展开全部 15 个内联参数和 8 个 override 示例</b> —— AUTO_PROCEED / sources / arxiv download / DBLP_BIBTEX / code review / wandb / illustration / venue / base repo / compact / ref paper / effort / reviewer / difficulty（完整 per-skill 默认值见 <a href="#customization">§ 自定义</a>）</summary>
+<summary><b>展开全部 15 个内联参数和 10 个 override 示例</b> —— AUTO_PROCEED / sources / arxiv download / DBLP_BIBTEX / code review / wandb / illustration / venue / base repo / compact / ref paper / effort / reviewer / difficulty（完整 per-skill 默认值见 <a href="#customization">§ 自定义</a>）</summary>
 
 所有流水线行为均可通过内联参数配置——在命令后追加 `— key: value`：
 
