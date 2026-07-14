@@ -26,7 +26,8 @@ def parse_catalog():
             assert len(fields) == 4, f"malformed group record: {line!r}"
             groups[fields[1]] = (fields[2], fields[3])
         elif fields[0] == "skill":
-            assert len(fields) == 4, f"malformed skill record: {line!r}"
+            assert len(fields) == 5, f"malformed skill record (need 5 fields): {line!r}"
+            assert fields[4].strip(), f"empty short-description: {fields[1]}"
             assert fields[1] not in skills, f"duplicate skill record: {fields[1]}"
             skills[fields[1]] = (fields[2], fields[3])
         else:

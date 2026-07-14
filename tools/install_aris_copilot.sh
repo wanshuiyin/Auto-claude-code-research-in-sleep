@@ -27,8 +27,10 @@
 #   --add-new              reconcile: accept all upstream skills not yet installed
 #   --skip-new             reconcile: skip new upstream skills without prompting
 #   --list-groups          print the group catalog and exit
-#   With no selection flags: fresh install on a TTY walks an interactive group
-#   menu; fresh install with --quiet/no TTY installs everything (old behavior).
+#   With no selection flags: fresh install on a TTY opens a full-screen
+#   checkbox picker (Space toggles a skill / a whole group, Enter confirms;
+#   ARIS_NO_PICKER=1 or missing python3/curses falls back to per-group
+#   Y/n/e prompts); fresh install with --quiet/no TTY installs everything (old behavior).
 #   Reconcile keeps exactly what the manifest says is installed; NEW upstream
 #   skills need per-skill confirmation (declined ones are remembered in
 #   .aris/skills-declined-copilot.txt and never re-asked).
@@ -93,7 +95,7 @@ SELECT_ALL=false
 NEW_POLICY=""        # "" (prompt) | add | skip
 LIST_GROUPS=false
 
-usage() { sed -n '2,57p' "$0" | sed 's/^# \?//'; }
+usage() { sed -n '2,59p' "$0" | sed 's/^# \?//'; }
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -234,6 +236,7 @@ build_upstream_inventory() {
 catalog_ok() { [[ -n "${CATALOG_PATH:-}" && -f "$CATALOG_PATH" ]]; }
 catalog_groups() { awk -F'\t' '$1=="group"{print $2 "\t" $3 "\t" $4}' "$CATALOG_PATH"; }
 catalog_group_of() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s {print $3; exit}' "$CATALOG_PATH"; }
+catalog_desc_of() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s {print (NF>=5?$5:""); exit}' "$CATALOG_PATH"; }
 catalog_requires() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s && $4!="-" {print $4; exit}' "$CATALOG_PATH" | tr ',' '\n'; }
 catalog_skills_in_group() { awk -F'\t' -v g="$1" '$1=="skill" && $3==g {print $2}' "$CATALOG_PATH"; }
 catalog_has_skill() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s {found=1; exit} END{exit !found}' "$CATALOG_PATH"; }
@@ -292,8 +295,27 @@ expand_deps() {  # $1 = selected file, $2 = excludes file, $3 = upstream file
     done
 }
 
-# Interactive group menu (fresh install on a TTY, no selection flags).
+# Interactive selection (fresh install on a TTY, no selection flags).
+# Preferred UI: full-screen checkbox picker (tools/skill_picker.py, curses) —
+# Space toggles a skill / a whole group, Enter confirms, q aborts. Falls back
+# to the classic per-group Y/n/e prompts when python3/curses/tty are
+# unavailable or ARIS_NO_PICKER=1 is set.
 interactive_select() {  # $1 = upstream file, $2 = out (selected) file
+    if [[ "${ARIS_NO_PICKER:-0}" != "1" ]] && command -v python3 >/dev/null 2>&1 \
+       && [[ -f "$ARIS_REPO/tools/skill_picker.py" ]]; then
+        local avail_f rc=0
+        avail_f="$(mktemp -t aris-avail.XXXX)"
+        grep '^skill|' "$1" | cut -d'|' -f2 > "$avail_f" || true
+        python3 "$ARIS_REPO/tools/skill_picker.py" \
+            --catalog "$CATALOG_PATH" --available "$avail_f" --out "$2" \
+            </dev/tty >/dev/tty || rc=$?
+        rm -f "$avail_f"
+        if [[ $rc -eq 0 ]]; then return 0
+        elif [[ $rc -eq 1 ]]; then die "interactive selection aborted"
+        fi
+        # rc=2 (or unexpected): picker unusable — fall through to prompts.
+        warn "checkbox picker unavailable — using per-group prompts"
+    fi
     log ""
     log "Interactive skill selection — per group: Y=install all, n=skip, e=pick per skill."
     local gid display desc n reply r2 name glist
@@ -424,10 +446,11 @@ build_selection() {  # $1 = upstream file, $2 = declined-candidates out file, $3
             else
                 log ""
                 log "New skills appeared upstream since your last install:"
-                local reply grp
+                local reply grp sdesc
                 while read -r name; do
                     grp="$(catalog_group_of "$name")"
-                    printf "  install new skill %-30s (group: %s) [y/N] " "$name" "${grp:-?}" >&2
+                    sdesc="$(catalog_desc_of "$name")"
+                    printf "  install new skill %-30s (group: %s)%s [y/N] " "$name" "${grp:-?}" "${sdesc:+ — $sdesc}" >&2
                     read -r reply </dev/tty
                     if [[ "$reply" =~ ^[yY] ]]; then echo "$name" >> "$out"
                     else echo "$name" >> "$declined_out"

@@ -201,12 +201,15 @@ class SelectiveInstallTest(unittest.TestCase):
     def test_interactive_group_menu_edit_mode(self):
         """Fresh TTY install, no selection flags → per-group Y/n/e menu.
 
+        ARIS_NO_PICKER=1 forces the classic prompts (the default interactive
+        UI is the curses checkbox picker, covered by test_skill_picker.py).
         Group g1: 'e' (edit) then keep alpha, drop beta, keep gamma.
         Group g2: 'n' (skip whole group).
         """
         script = self.tmp / "menu.exp"
         script.write_text(
             "set timeout 30\n"
+            "set env(ARIS_NO_PICKER) 1\n"
             f"spawn bash {INSTALL_SCRIPT} {self.project} "
             f"--aris-repo {self.repo} --no-doc\n"
             'expect "Install group \'g1\'*\\[Y/n/e\\]" { send "e\\r" }\n'

@@ -82,7 +82,7 @@ bash ~/aris_repo/tools/install_aris.sh
 bash ~/aris_repo/tools/install_aris.sh --list-groups                  # show the 10 skill groups
 bash ~/aris_repo/tools/install_aris.sh --groups paper-core,lit-search # install by group
 bash ~/aris_repo/tools/install_aris.sh --skills paper-writing         # by skill (hard deps auto-included)
-# A fresh install with no selection flags (run in a terminal) walks an interactive per-group menu
+# A fresh install with no selection flags (run in a terminal) opens a checkbox picker (Space toggles, group rows toggle all)
 
 # Other useful flags:
 bash ~/aris_repo/tools/install_aris.sh --dry-run        # preview install plan, no changes
