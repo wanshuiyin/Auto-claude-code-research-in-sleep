@@ -1101,6 +1101,11 @@ function Remove-LeafAgentOnUninstall {
     param([string]$RepoRoot, [string]$ProjectRoot)
     $source = Join-Path $RepoRoot $LeafAgentSourceRel
     $target = Join-Path $ProjectRoot $LeafAgentTargetRel
+    $targetParent = Split-Path -Parent $target
+    if (Test-LinkItem (Get-PathItem $targetParent)) {
+        Write-Warning "$targetParent is a link; preserving the leaf-agent target"
+        return
+    }
     $targetItem = Get-PathItem $target
     if ($null -eq $targetItem -or $targetItem.LinkType -ne 'SymbolicLink') { return }
     if (-not (Same-Path (Get-LinkTarget $target) $source)) { return }
@@ -1352,21 +1357,12 @@ function Invoke-Main {
     Write-Host "  Target:   $targetRoot"
     Write-Host "  Mode:     $mode"
 
-    $guardedParents = if ($selectedPlatform -eq 'claude') {
-        @($arisDir, (Split-Path -Parent $targetRoot), $targetRoot, (Join-Path $projectRoot '.claude\agents'))
-    } else {
-        @($arisDir, (Split-Path -Parent $targetRoot), $targetRoot)
-    }
-    Check-NoSymlinkedParents $guardedParents
+    Check-NoSymlinkedParents @($arisDir, (Split-Path -Parent $targetRoot), $targetRoot)
 
     if ($Uninstall) {
         if (-not $DryRun) { Acquire-Lock $arisDir $lockPath }
         Do-Uninstall $config $projectRoot $manifestPath $manifestPrevPath $docPath
         return
-    }
-
-    if ($selectedPlatform -eq 'claude') {
-        Assert-LeafAgentCompatible $repoRoot $projectRoot
     }
 
     $legacy = Get-LegacyState $config $projectRoot
@@ -1400,11 +1396,22 @@ function Invoke-Main {
         Die "CONFLICT: $($conflicts.Count) existing path(s) must be resolved before install"
     }
 
+    $fanoutSkillNames = @('idea-creator', 'research-lit', 'proof-checker')
+    $activeFanoutEntries = @($plan | Where-Object {
+        $_.Name -in $fanoutSkillNames -and
+        $_.Action -in @('REUSE', 'ADOPT', 'CREATE', 'UPDATE_TARGET')
+    })
+    $requiresLeafAgent = $selectedPlatform -eq 'claude' -and $activeFanoutEntries.Count -gt 0
+    if ($requiresLeafAgent) {
+        Check-NoSymlinkedParents @((Join-Path $projectRoot '.claude'), (Join-Path $projectRoot '.claude\agents'))
+        Assert-LeafAgentCompatible $repoRoot $projectRoot
+    }
+
     if ($DryRun) {
         Apply-LegacyMigration $legacy $arisDir
         Archive-LegacyCopy $legacy $arisDir
         Ensure-ToolsJunction $arisDir $repoRoot
-        if ($selectedPlatform -eq 'claude') {
+        if ($requiresLeafAgent) {
             Ensure-LeafAgent $repoRoot $projectRoot
         }
         Write-Host ''
@@ -1413,7 +1420,7 @@ function Invoke-Main {
     }
 
     Acquire-Lock $arisDir $lockPath
-    if ($selectedPlatform -eq 'claude') {
+    if ($requiresLeafAgent) {
         Assert-LeafAgentCompatible $repoRoot $projectRoot
         Ensure-LeafAgent $repoRoot $projectRoot
     }

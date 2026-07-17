@@ -193,6 +193,82 @@ class SelectiveInstallTest(unittest.TestCase):
         self.assertFalse((self.home / ".aris" / "repo").exists())
         self.assertFalse((self.project / ".aris" / "skills-declined.txt").exists())
 
+    # ─── bounded fan-out leaf selection ─────────────────────────────────────
+
+    def test_non_fanout_selection_preserves_leaf_target_conflict(self):
+        target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        target.parent.mkdir(parents=True)
+        target.write_text("user-owned\n", encoding="utf-8")
+
+        self._run("--skills", "alpha")
+
+        self.assertEqual(target.read_text(encoding="utf-8"), "user-owned\n")
+        self.assertEqual(self._installed(), {"alpha"})
+
+    def test_non_fanout_selection_ignores_available_fanout_leaf_paths(self):
+        self._add_upstream_skill("idea-creator")
+        catalog = self.repo / "tools" / "skill-groups.tsv"
+        catalog.write_text(CATALOG + "skill\tidea-creator\tg1\t-\n", encoding="utf-8")
+        agents_dir = self.project / ".claude" / "agents"
+        linked_agents = self.tmp / "linked-agents"
+        linked_agents.mkdir()
+        user_leaf = linked_agents / "aris-fanout-leaf.md"
+        user_leaf.write_text("user-owned\n", encoding="utf-8")
+        agents_dir.symlink_to(linked_agents, target_is_directory=True)
+
+        self._run("--skills", "alpha")
+
+        self.assertTrue(agents_dir.is_symlink())
+        self.assertEqual(user_leaf.read_text(encoding="utf-8"), "user-owned\n")
+        self.assertEqual(self._installed(), {"alpha"})
+
+    def test_fanout_selection_requires_leaf_source_before_mutation(self):
+        self._add_upstream_skill("idea-creator")
+        catalog = self.repo / "tools" / "skill-groups.tsv"
+        catalog.write_text(CATALOG + "skill\tidea-creator\tg1\t-\n", encoding="utf-8")
+
+        result = self._run("--skills", "idea-creator", check=False)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bounded fan-out leaf agent not found", result.stderr)
+        self.assertFalse((self.project / ".claude" / "skills" / "idea-creator").exists())
+        self.assertFalse((self.project / ".aris" / "installed-skills.txt").exists())
+
+    def test_fanout_selection_installs_leaf_symlink(self):
+        self._add_upstream_skill("idea-creator")
+        catalog = self.repo / "tools" / "skill-groups.tsv"
+        catalog.write_text(CATALOG + "skill\tidea-creator\tg1\t-\n", encoding="utf-8")
+        source = self.repo / "agents" / "aris-fanout-leaf.md"
+        source.parent.mkdir()
+        source.write_text("---\nname: aris-fanout-leaf\n---\n", encoding="utf-8")
+
+        self._run("--skills", "idea-creator")
+
+        target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(target.resolve(), source.resolve())
+
+    def test_fanout_selection_rejects_linked_agents_parent_before_install(self):
+        self._add_upstream_skill("idea-creator")
+        catalog = self.repo / "tools" / "skill-groups.tsv"
+        catalog.write_text(CATALOG + "skill\tidea-creator\tg1\t-\n", encoding="utf-8")
+        source = self.repo / "agents" / "aris-fanout-leaf.md"
+        source.parent.mkdir()
+        source.write_text("---\nname: aris-fanout-leaf\n---\n", encoding="utf-8")
+        agents_dir = self.project / ".claude" / "agents"
+        linked_agents = self.tmp / "linked-agents"
+        linked_agents.mkdir()
+        agents_dir.symlink_to(linked_agents, target_is_directory=True)
+
+        result = self._run("--skills", "idea-creator", check=False)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("refusing to install the bounded fan-out leaf", result.stderr)
+        self.assertFalse((self.project / ".claude" / "skills" / "idea-creator").exists())
+        self.assertFalse((self.project / ".aris" / "installed-skills.txt").exists())
+        self.assertFalse((self.project / ".aris" / "tools").exists())
+        self.assertFalse((linked_agents / "aris-fanout-leaf.md").exists())
+
     # ─── interactive menu (needs a pty via expect) ─────────────────────────
 
     @unittest.skipUnless(

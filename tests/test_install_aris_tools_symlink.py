@@ -160,6 +160,25 @@ class InstallTest(unittest.TestCase):
         self.assertTrue(target.is_symlink())
         self.assertEqual(Path(os.readlink(target)), foreign_source)
 
+    def test_uninstall_preserves_leaf_under_linked_agents_parent(self):
+        install = self._run()
+        self.assertEqual(install.returncode, 0, msg=install.stdout + install.stderr)
+        agents_dir = self.project / ".claude" / "agents"
+        target = agents_dir / "aris-fanout-leaf.md"
+        target.unlink()
+        agents_dir.rmdir()
+        external_agents = self.tmp / "external-agents"
+        external_agents.mkdir()
+        external_target = external_agents / "aris-fanout-leaf.md"
+        external_target.symlink_to(LEAF_AGENT_SOURCE)
+        agents_dir.symlink_to(external_agents, target_is_directory=True)
+
+        result = self._run("--uninstall")
+
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+        self.assertTrue(external_target.is_symlink())
+        self.assertEqual(Path(os.readlink(external_target)), LEAF_AGENT_SOURCE)
+
     # ─── uninstall behaviour ──────────────────────────────────────────────
 
     def test_uninstall_removes_managed_symlink(self):

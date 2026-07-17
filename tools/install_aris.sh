@@ -659,7 +659,7 @@ fi
 # (.aris and .claude/skills may not exist yet — only check if present.)
 check_no_symlinked_parents() {
     local p
-    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR" "$(dirname "$LEAF_AGENT_TARGET")"; do
+    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR"; do
         if is_symlink "$p"; then
             die "S9: $p is a symlink — refusing to install (would mutate symlink target)"
         fi
@@ -994,6 +994,13 @@ remove_tools_symlink() {
     fi
 }
 
+check_leaf_agent_parent() {
+    local parent; parent="$(dirname "$LEAF_AGENT_TARGET")"
+    if is_symlink "$parent"; then
+        die "S9: $parent is a symlink — refusing to install the bounded fan-out leaf"
+    fi
+}
+
 check_leaf_agent_conflict() {
     [[ -f "$LEAF_AGENT_SOURCE" && ! -L "$LEAF_AGENT_SOURCE" ]] || \
         die "bounded fan-out leaf agent not found: $LEAF_AGENT_SOURCE"
@@ -1009,6 +1016,7 @@ check_leaf_agent_conflict() {
 }
 
 ensure_leaf_agent() {
+    check_leaf_agent_parent
     check_leaf_agent_conflict
     if [[ -e "$LEAF_AGENT_TARGET" || -L "$LEAF_AGENT_TARGET" ]]; then
         return 0
@@ -1027,6 +1035,11 @@ ensure_leaf_agent() {
 }
 
 remove_leaf_agent_on_uninstall() {
+    local parent; parent="$(dirname "$LEAF_AGENT_TARGET")"
+    if is_symlink "$parent"; then
+        warn "$parent is a symlink; preserving the leaf-agent target"
+        return 0
+    fi
     is_symlink "$LEAF_AGENT_TARGET" || return 0
     local current_target; current_target="$(read_link_target "$LEAF_AGENT_TARGET")"
     [[ "$current_target" != /* ]] && \
@@ -1167,8 +1180,6 @@ if [[ "$ACTION" == "uninstall" ]]; then
     exit 0
 fi
 
-check_leaf_agent_conflict
-
 # Migration check (only for install/reconcile)
 LEGACY_KIND="$(detect_legacy)"
 if [[ "$LEGACY_KIND" != "none" ]]; then
@@ -1178,7 +1189,6 @@ if [[ "$LEGACY_KIND" != "none" ]]; then
         log "  for COPY-style legacy installs, also pass --migrate-copy keep-user|prefer-upstream"
         exit 1
     fi
-    migrate_legacy
 fi
 
 # If --reconcile but no manifest, fail
@@ -1238,11 +1248,19 @@ if (( N_CONFLICT > 0 )); then
     fi
 fi
 
+REQUIRES_LEAF_AGENT=false
+if grep -Eq '^(idea-creator|research-lit|proof-checker)$' "$SELECTED_FILE"; then
+    REQUIRES_LEAF_AGENT=true
+    check_leaf_agent_parent
+    check_leaf_agent_conflict
+fi
+
 if $DRY_RUN; then
+    [[ "$LEGACY_KIND" == "none" ]] || migrate_legacy
     # #174 preview: print the planned `.aris/tools` symlink action (function
     # is idempotent + DRY_RUN-aware, so it just logs in this mode)
     ensure_tools_symlink
-    ensure_leaf_agent
+    if $REQUIRES_LEAF_AGENT; then ensure_leaf_agent; fi
     log ""
     log "(dry-run) no changes made"
     exit 0
@@ -1254,6 +1272,8 @@ if (( N_CHANGES > 0 )) && ! $QUIET; then
     prompt "Apply these $N_CHANGES changes?" || { log "aborted"; exit 0; }
 fi
 
+[[ "$LEGACY_KIND" == "none" ]] || migrate_legacy
+
 # Apply
 MANIFEST_TMP="$MANIFEST_PATH.tmp.$$"   # S12: same dir as destination
 mkdir -p "$PROJECT_ARIS_DIR"
@@ -1262,11 +1282,11 @@ log ""
 log "Applying:"
 apply_plan "$PLAN_FILE" "$MANIFEST_TMP"
 commit_manifest "$MANIFEST_TMP"
+if $REQUIRES_LEAF_AGENT; then ensure_leaf_agent; fi
 
 # #174 Phase 0: ensure project-local .aris/tools symlink (purely additive).
 # Runs after manifest commit so a failure here doesn't roll back skill links.
 ensure_tools_symlink
-ensure_leaf_agent
 
 # #366: persist declined skills + global repo pointer (both best-effort,
 # after manifest commit for the same reason as above).
