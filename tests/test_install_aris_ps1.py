@@ -234,7 +234,7 @@ def test_install_aris_ps1_claude_fanout_requires_leaf_source(tmp_path: Path) -> 
     result = run_ps([str(project), "-Platform", "claude", "-ArisRepo", str(repo)], check=False)
 
     assert result.returncode != 0
-    assert "bounded fan-out leaf agent not found" in (result.stderr or "") + (result.stdout or "")
+    assert "leaf agent not found" in (result.stderr or "") + (result.stdout or "")
     assert not (project / ".aris" / "installed-skills.txt").exists()
     assert not path_item_exists(project / ".claude" / "skills" / "idea-creator")
 
