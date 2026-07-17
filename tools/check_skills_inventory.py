@@ -72,6 +72,11 @@ def allowed_tools(text: str) -> list[str]:
     return [tok.strip() for tok in match.group(1).split(",") if tok.strip()]
 
 
+def base_tool(tool_rule: str) -> str:
+    """Return the base tool name from `Tool` or `Tool(scope)` syntax."""
+    return tool_rule.split("(", 1)[0].strip()
+
+
 def frontmatter_split(text: str) -> str:
     """Return the body after a leading YAML frontmatter block (whole text if
     no frontmatter). Anchors on the opening `---` fence and the first closing
@@ -200,7 +205,7 @@ def check_inventory() -> list[str]:
     # vestigial/boilerplate grant and fails the drift check.
     for skill_file in sorted(SKILLS_ROOT.glob("*/SKILL.md")):
         text = read(skill_file)
-        if "Agent" not in allowed_tools(text):
+        if not any(base_tool(rule) == "Agent" for rule in allowed_tools(text)):
             continue
         if "fan-out-pattern.md" not in frontmatter_split(text):
             rel = skill_file.relative_to(REPO_ROOT)

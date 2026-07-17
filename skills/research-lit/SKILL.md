@@ -2,7 +2,7 @@
 name: research-lit
 description: Search and analyze research papers, find related work, summarize key ideas. Use when user says "find papers", "related work", "literature review", "what does this paper say", or needs to understand academic papers.
 argument-hint: "[paper-topic-or-url]"
-allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
+allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent(aris-fanout-leaf), mcp__zotero__*, mcp__obsidian-vault__*
 ---
 
 # Research Literature Review
@@ -597,33 +597,39 @@ CrossRef rate limits to the polite pool.
 
 ### Step 2: Analyze Each Paper
 
-> **Fan-out (Tier-aware).** Per-paper extraction is pure breadth — each paper
-> is independent — so it parallelizes cleanly. **Tier 1** (Workflow): spawn
-> one Claude subagent per paper (or per small batch) to extract the fields
-> below. **Tier 2** (Agent tool, no Workflow): the same per-paper subagents
-> via the Agent tool. **Tier 3**: iterate sequentially. This follows the
-> *extraction* shard schema from
-> [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md)
-> — `{shard_id: "<paper-or-batch id>", entries: [{dedup_key: "<canonical
-> arXiv-id / DOI / title-hash, already assigned upstream in Step 1.5>",
-> problem, method, results, relevance, source, verification_status}]}`.
+> **Bounded fan-out (Tier-aware).** Per-paper extraction is breadth-bound, but
+> never create one worker per paper. Freeze every canonical paper ID from Step
+> 1.5, sort the IDs, and partition them deterministically into no more than
+> `max_shards: 8` non-overlapping batches. Run waves of at most
+> `max_concurrency: 4`, with `max_turns: 8` per leaf.
 >
-> The "jury" here is **not a model** — it is the **deterministic**
-> `verify_papers.py` gate already run in Step 1.5 (3-layer arXiv / CrossRef /
-> Semantic Scholar cross-check). Because the acceptance gate is a deterministic
-> verifier, not a model verdict, the cross-model-family rule is automatically
-> satisfied (a process is not a model family — see
-> [`acceptance-gate.md`](../shared-references/acceptance-gate.md)), so this is
-> the **near-zero-risk** corner of the fan-out design space. The per-paper work
-> is **extraction, not adjudication**: shards report what each paper says and
-> its verification status verbatim; they do **not** decide which papers
-> "count" (Step 1.5 already did, mechanically) and they do **not** drop a paper
-> for any status other than `verified`. Synthesis (Step 3) is *interpretive*
-> aggregation — grouping by theme, spotting gaps our work could fill — over an
-> already-admitted set; it is the executor's normal job, NOT an accept/reject
-> verdict on whether a paper *counts*. The cross-model-family rule governs
-> admission verdicts, and here admission is the deterministic Step-1.5 gate, so
-> the invariant is satisfied without a model jury.
+> - **Tier 1** (Workflow): explicitly select `aris-fanout-leaf` for each batch.
+> - **Tier 2** (Agent): call only `Agent(aris-fanout-leaf)`; never substitute an
+>   unrestricted worker.
+> - **Tier 3**: process the same frozen batches sequentially. If a leaf fails,
+>   returns malformed output, or times out, give that batch at most one
+>   executor-side **sequential fallback** and never launch a replacement Agent.
+>
+> Each leaf returns the extraction envelope from
+> [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md):
+> `{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}`.
+> Every entry keeps the canonical arXiv ID / DOI / title hash as `dedup_key` and
+> reports `problem`, `method`, `results`, `relevance`, `source`, and
+> `verification_status` verbatim. The leaf prompt repeats the no-delegation,
+> read-only, no-verdict, and assigned-ID boundaries because workers do not
+> inherit this skill body.
+>
+> **Coverage receipt:** after the one allowed sequential fallback, reconcile
+> `covered_unit_ids` against the frozen paper-ID set and record planned,
+> completed, failed, and uncovered IDs plus `coverage_complete`. Any unresolved
+> paper remains explicitly `UNPROCESSED`; absence must never be interpreted as
+> irrelevance or silently removed from the analyzed set.
+>
+> The "jury" here is **not a model** — it is the deterministic
+> `verify_papers.py` admission gate from Step 1.5. That gate verifies identity;
+> the coverage receipt separately verifies extraction completeness. Neither
+> leaf workers nor synthesis may reinterpret a missing extraction as an
+> admission decision.
 
 For **every** paper in `.aris/verify-papers/verified_papers.json`
 (verified, unverified, `verify_pending`, and `error` alike — see

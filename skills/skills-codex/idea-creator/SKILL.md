@@ -27,12 +27,19 @@ Given a broad research direction from the user, systematically generate, validat
 
 ### Fan-out contract
 
-Idea generation is breadth-bound, so use one fresh `spawn_agent` shard per
-analytic lens when delegation is available; otherwise run the same lenses
-sequentially in fresh contexts. Each shard is read-only and returns
-`{"shard_id": ..., "candidates": [{"payload": ..., "dedup_key": ...}]}`.
-Merge and mechanically deduplicate by `dedup_key`; shards must not rank, reject,
-or write shared files. The final Codex jury sees the full deduped set and records
+Idea generation is breadth-bound. Freeze the complete analytic-lens list before
+dispatch and partition it into `max_shards: 8` or fewer. Use at most
+`max_concurrency: 4` active `spawn_agent` shards with `max_turns: 8`; every
+worker prompt is leaf-equivalent, read-only, and declares `recursion: false`.
+It must forbid delegation, shell/mutation, ranking, and verdicts.
+
+If safe delegation is unavailable, process the same frozen lenses sequentially.
+A failed, malformed, or timed-out shard gets at most one executor-side
+**sequential fallback** and no replacement agent. Each shard returns
+`{shard_id, assigned_unit_ids, covered_unit_ids, status, candidates, errors}`.
+Before mechanical deduplication, emit a **coverage receipt** listing planned,
+completed, failed, and uncovered lens IDs plus `coverage_complete`. The final
+Codex jury receives both the receipt and full deduped candidate set and records
 same-family provisional, never accepted. See
 [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 

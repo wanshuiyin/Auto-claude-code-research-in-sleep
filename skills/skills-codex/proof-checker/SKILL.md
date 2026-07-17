@@ -130,12 +130,23 @@ When the proof invokes any of the following, require explicit verification of AL
 
 ### Proof-obligation fan-out
 
-Independent sections/theorems may be extracted by fresh read-only
-`spawn_agent` shards, with a sequential fresh-context fallback. Each shard
-returns `{"shard_id": ..., "entries": [{"payload": ..., "dedup_key":
-"<theorem-or-obligation-id>"}]}` and must not declare the proof valid. The
-parent mechanically merges obligations; the fresh Codex review that evaluates
-them records `review_independence: same-family` and
+Freeze the complete section/theorem/obligation ID set before extraction and
+partition source-ordered units into `max_shards: 8` or fewer groups. Run at most
+`max_concurrency: 4` active `spawn_agent` shards with `max_turns: 8`. Every
+worker prompt is leaf-equivalent, read-only, and declares `recursion: false`;
+it forbids further delegation, shell/mutation, and proof-validity verdicts.
+
+If safe delegation is unavailable, process the same frozen groups sequentially.
+A failed, malformed, or timed-out shard gets at most one executor-side
+**sequential fallback** and no replacement agent. Each shard returns
+`{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}` with
+canonical theorem/obligation IDs as `dedup_key`.
+
+Before building the global dependency DAG, emit a **coverage receipt** and
+require 100% declared-unit coverage. Any uncovered unit makes the proof check
+`INCOMPLETE`/`BLOCKED`; no complete validity verdict may be emitted. Only after
+complete coverage does the parent mechanically merge obligations. The fresh
+Codex review that evaluates them records `review_independence: same-family` and
 `acceptance_status: provisional`. See
 [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 

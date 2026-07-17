@@ -78,14 +78,24 @@ Examples:
 
 ### Per-source/per-paper fan-out
 
-Retrieval and extraction are breadth-bound. Use fresh `spawn_agent` shards when
-delegation is available, or the same work sequentially otherwise. Every shard
-is read-only and returns
-`{"shard_id": ..., "entries": [{"payload": ..., "dedup_key": "<DOI/arXiv/id>"}]}`.
-The parent invokes every resolved source, unions results, mechanically dedups on
-canonical IDs, and writes once. Shards do not rank paper quality. Source
-verification remains deterministic; optional Codex synthesis review is
-same-family provisional. See
+Retrieval and extraction are breadth-bound. Freeze and sort canonical paper IDs,
+then partition them deterministically into `max_shards: 8` or fewer batches.
+Use at most `max_concurrency: 4` active `spawn_agent` shards with
+`max_turns: 8`. Every worker prompt is leaf-equivalent, read-only, and declares
+`recursion: false`; it forbids further delegation, shell/mutation, paper-quality
+ranking, and verdicts.
+
+If safe delegation is unavailable, process the same frozen batches
+sequentially. A failed, malformed, or timed-out shard gets at most one
+executor-side **sequential fallback** and no replacement agent. Each shard
+returns `{shard_id, assigned_unit_ids, covered_unit_ids, status, entries,
+errors}`, with canonical DOI/arXiv/title IDs as `dedup_key`.
+
+Before synthesis, emit a **coverage receipt** that reconciles the frozen paper
+IDs with covered IDs and lists every failed or uncovered paper explicitly. The
+parent invokes every resolved source, unions results, mechanically dedups on
+canonical IDs, and writes once. Source verification remains deterministic;
+optional Codex synthesis review is same-family provisional. See
 [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 
 ### Step 0a: Search Zotero Library (if available)
