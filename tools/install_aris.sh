@@ -80,6 +80,8 @@ GLOBAL_POINTER="$HOME/.aris/repo"
 ARIS_DIR_NAME=".aris"
 LOCK_DIR_NAME=".install.lock.d"
 SKILLS_REL=".claude/skills"
+LEAF_AGENT_SOURCE_REL="agents/aris-fanout-leaf.md"
+LEAF_AGENT_TARGET_REL=".claude/agents/aris-fanout-leaf.md"
 DOC_FILE_NAME="CLAUDE.md"
 BLOCK_BEGIN="<!-- ARIS:BEGIN -->"
 BLOCK_END="<!-- ARIS:END -->"
@@ -642,6 +644,8 @@ PROJECT_ARIS_DIR="$PROJECT_PATH/$ARIS_DIR_NAME"
 MANIFEST_PATH="$PROJECT_ARIS_DIR/$MANIFEST_NAME"
 MANIFEST_PREV="$PROJECT_ARIS_DIR/$MANIFEST_PREV_NAME"
 LOCK_DIR="$PROJECT_ARIS_DIR/$LOCK_DIR_NAME"
+LEAF_AGENT_SOURCE="$ARIS_REPO/$LEAF_AGENT_SOURCE_REL"
+LEAF_AGENT_TARGET="$PROJECT_PATH/$LEAF_AGENT_TARGET_REL"
 DOC_FILE="$PROJECT_PATH/$DOC_FILE_NAME"
 CATALOG_PATH="$ARIS_REPO/$CATALOG_REL"
 DECLINED_PATH="$PROJECT_ARIS_DIR/$DECLINED_NAME"
@@ -655,7 +659,7 @@ fi
 # (.aris and .claude/skills may not exist yet — only check if present.)
 check_no_symlinked_parents() {
     local p
-    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR"; do
+    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR" "$(dirname "$LEAF_AGENT_TARGET")"; do
         if is_symlink "$p"; then
             die "S9: $p is a symlink — refusing to install (would mutate symlink target)"
         fi
@@ -990,6 +994,52 @@ remove_tools_symlink() {
     fi
 }
 
+check_leaf_agent_conflict() {
+    [[ -f "$LEAF_AGENT_SOURCE" && ! -L "$LEAF_AGENT_SOURCE" ]] || \
+        die "bounded fan-out leaf agent not found: $LEAF_AGENT_SOURCE"
+
+    [[ -e "$LEAF_AGENT_TARGET" || -L "$LEAF_AGENT_TARGET" ]] || return 0
+    if is_symlink "$LEAF_AGENT_TARGET"; then
+        local current_target; current_target="$(read_link_target "$LEAF_AGENT_TARGET")"
+        [[ "$current_target" != /* ]] && \
+            current_target="$(canonicalize "$(dirname "$LEAF_AGENT_TARGET")/$current_target")"
+        [[ "$current_target" == "$LEAF_AGENT_SOURCE" ]] && return 0
+    fi
+    die "CONFLICT: $LEAF_AGENT_TARGET exists and differs from the bundled leaf agent"
+}
+
+ensure_leaf_agent() {
+    check_leaf_agent_conflict
+    if [[ -e "$LEAF_AGENT_TARGET" || -L "$LEAF_AGENT_TARGET" ]]; then
+        return 0
+    fi
+
+    if $DRY_RUN; then
+        log "  (dry-run) ln -s $LEAF_AGENT_SOURCE_REL -> $LEAF_AGENT_TARGET_REL"
+        return 0
+    fi
+
+    check_no_symlinked_parents
+    mkdir -p "$(dirname "$LEAF_AGENT_TARGET")"
+    ln -s "$LEAF_AGENT_SOURCE" "$LEAF_AGENT_TARGET" || \
+        die "CONFLICT: $LEAF_AGENT_TARGET appeared during install"
+    log "  + $LEAF_AGENT_TARGET_REL (bounded fan-out leaf symlink)"
+}
+
+remove_leaf_agent_on_uninstall() {
+    is_symlink "$LEAF_AGENT_TARGET" || return 0
+    local current_target; current_target="$(read_link_target "$LEAF_AGENT_TARGET")"
+    [[ "$current_target" != /* ]] && \
+        current_target="$(canonicalize "$(dirname "$LEAF_AGENT_TARGET")/$current_target")"
+    [[ "$current_target" == "$LEAF_AGENT_SOURCE" ]] || return 0
+    if $DRY_RUN; then
+        log "  (dry-run) rm $LEAF_AGENT_TARGET_REL"
+    else
+        rm -f "$LEAF_AGENT_TARGET"
+        log "  - $LEAF_AGENT_TARGET_REL (managed symlink)"
+    fi
+}
+
 commit_manifest() {
     local manifest_tmp="$1"
     if $DRY_RUN; then log "  (dry-run) would commit manifest"; return; fi
@@ -1093,6 +1143,7 @@ do_uninstall() {
     # is exactly the managed symlink. Anything else (user-created dir, custom
     # symlink target) is left alone.
     remove_tools_symlink
+    remove_leaf_agent_on_uninstall
     if ! $DRY_RUN; then
         # Keep .prev for forensics, remove current manifest
         [[ -f "$MANIFEST_PATH" ]] && mv -f "$MANIFEST_PATH" "$MANIFEST_PREV"
@@ -1115,6 +1166,8 @@ if [[ "$ACTION" == "uninstall" ]]; then
     do_uninstall
     exit 0
 fi
+
+check_leaf_agent_conflict
 
 # Migration check (only for install/reconcile)
 LEGACY_KIND="$(detect_legacy)"
@@ -1189,6 +1242,7 @@ if $DRY_RUN; then
     # #174 preview: print the planned `.aris/tools` symlink action (function
     # is idempotent + DRY_RUN-aware, so it just logs in this mode)
     ensure_tools_symlink
+    ensure_leaf_agent
     log ""
     log "(dry-run) no changes made"
     exit 0
@@ -1212,6 +1266,7 @@ commit_manifest "$MANIFEST_TMP"
 # #174 Phase 0: ensure project-local .aris/tools symlink (purely additive).
 # Runs after manifest commit so a failure here doesn't roll back skill links.
 ensure_tools_symlink
+ensure_leaf_agent
 
 # #366: persist declined skills + global repo pointer (both best-effort,
 # after manifest commit for the same reason as above).

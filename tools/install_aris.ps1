@@ -99,12 +99,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $Utf8NoBom
+$OutputEncoding = $Utf8NoBom
 $ManifestVersion = '1'
 $SafeNameRegex = '^[A-Za-z0-9][A-Za-z0-9._-]*$'
 $SupportNames = @('shared-references')
 $CatalogRel = 'tools/skill-groups.tsv'
 $GlobalPointerDir = Join-Path $HOME '.aris'
 $GlobalPointerPath = Join-Path $GlobalPointerDir 'repo'
+$LeafAgentSourceRel = 'agents\aris-fanout-leaf.md'
+$LeafAgentTargetRel = '.claude\agents\aris-fanout-leaf.md'
 $script:LockDir = $null
 $script:LockAcquired = $false
 
@@ -1053,6 +1057,61 @@ function Remove-ToolsJunction {
     }
 }
 
+function Assert-LeafAgentCompatible {
+    param([string]$RepoRoot, [string]$ProjectRoot)
+    $source = Join-Path $RepoRoot $LeafAgentSourceRel
+    $target = Join-Path $ProjectRoot $LeafAgentTargetRel
+    $sourceItem = Get-PathItem $source
+    if ($null -eq $sourceItem -or (Test-LinkItem $sourceItem) -or -not (Test-Path -LiteralPath $source -PathType Leaf)) {
+        Die "bounded fan-out leaf agent not found: $source"
+    }
+
+    $targetItem = Get-PathItem $target
+    if ($null -eq $targetItem) { return }
+    if ($targetItem.LinkType -eq 'SymbolicLink' -and (Same-Path (Get-LinkTarget $target) $source)) {
+        return
+    }
+    Die "CONFLICT: $target exists and is not the managed leaf-agent symbolic link"
+}
+
+function Ensure-LeafAgent {
+    param([string]$RepoRoot, [string]$ProjectRoot)
+    Assert-LeafAgentCompatible $RepoRoot $ProjectRoot
+    $source = Join-Path $RepoRoot $LeafAgentSourceRel
+    $target = Join-Path $ProjectRoot $LeafAgentTargetRel
+    if ($null -ne (Get-PathItem $target)) { return }
+
+    if ($DryRun) {
+        Write-Host "  (dry-run) symbolic link agents/aris-fanout-leaf.md -> .claude/agents/aris-fanout-leaf.md"
+        return
+    }
+
+    $targetParent = Split-Path -Parent $target
+    Check-NoSymlinkedParents @((Join-Path $ProjectRoot '.claude'), $targetParent)
+    New-Item -ItemType Directory -Force -Path $targetParent | Out-Null
+    try {
+        New-Item -ItemType SymbolicLink -Path $target -Target $source -ErrorAction Stop | Out-Null
+    } catch {
+        Die "failed to create $target as a symbolic link; enable Windows Developer Mode or grant symbolic-link privilege"
+    }
+    Write-Host "  + .claude/agents/aris-fanout-leaf.md (bounded fan-out leaf symlink)"
+}
+
+function Remove-LeafAgentOnUninstall {
+    param([string]$RepoRoot, [string]$ProjectRoot)
+    $source = Join-Path $RepoRoot $LeafAgentSourceRel
+    $target = Join-Path $ProjectRoot $LeafAgentTargetRel
+    $targetItem = Get-PathItem $target
+    if ($null -eq $targetItem -or $targetItem.LinkType -ne 'SymbolicLink') { return }
+    if (-not (Same-Path (Get-LinkTarget $target) $source)) { return }
+    if ($DryRun) {
+        Write-Host "  (dry-run) remove .claude/agents/aris-fanout-leaf.md"
+    } else {
+        Remove-Item -LiteralPath $target -Force -Confirm:$false
+        Write-Host "  - .claude/agents/aris-fanout-leaf.md"
+    }
+}
+
 function Apply-Plan {
     param($Plan, [string]$RepoRoot)
     foreach ($entry in $Plan) {
@@ -1243,6 +1302,9 @@ function Do-Uninstall {
         }
     }
     Remove-ToolsJunction (Split-Path -Parent $ManifestPath) $recordedRepo $Config.ManifestName
+    if ($Config.Platform -eq 'claude') {
+        Remove-LeafAgentOnUninstall $recordedRepo $ProjectRoot
+    }
     if (-not $DryRun) {
         Move-Item -LiteralPath $ManifestPath -Destination $ManifestPrevPath -Force
     }
@@ -1290,12 +1352,21 @@ function Invoke-Main {
     Write-Host "  Target:   $targetRoot"
     Write-Host "  Mode:     $mode"
 
-    Check-NoSymlinkedParents @($arisDir, (Split-Path -Parent $targetRoot), $targetRoot)
+    $guardedParents = if ($selectedPlatform -eq 'claude') {
+        @($arisDir, (Split-Path -Parent $targetRoot), $targetRoot, (Join-Path $projectRoot '.claude\agents'))
+    } else {
+        @($arisDir, (Split-Path -Parent $targetRoot), $targetRoot)
+    }
+    Check-NoSymlinkedParents $guardedParents
 
     if ($Uninstall) {
         if (-not $DryRun) { Acquire-Lock $arisDir $lockPath }
         Do-Uninstall $config $projectRoot $manifestPath $manifestPrevPath $docPath
         return
+    }
+
+    if ($selectedPlatform -eq 'claude') {
+        Assert-LeafAgentCompatible $repoRoot $projectRoot
     }
 
     $legacy = Get-LegacyState $config $projectRoot
@@ -1333,12 +1404,19 @@ function Invoke-Main {
         Apply-LegacyMigration $legacy $arisDir
         Archive-LegacyCopy $legacy $arisDir
         Ensure-ToolsJunction $arisDir $repoRoot
+        if ($selectedPlatform -eq 'claude') {
+            Ensure-LeafAgent $repoRoot $projectRoot
+        }
         Write-Host ''
         Write-Host '(dry-run) no changes made'
         return
     }
 
     Acquire-Lock $arisDir $lockPath
+    if ($selectedPlatform -eq 'claude') {
+        Assert-LeafAgentCompatible $repoRoot $projectRoot
+        Ensure-LeafAgent $repoRoot $projectRoot
+    }
     Apply-LegacyMigration $legacy $arisDir
     New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
     Write-Host ''

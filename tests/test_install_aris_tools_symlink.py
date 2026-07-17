@@ -19,8 +19,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTALL_SCRIPT = REPO_ROOT / "tools" / "install_aris.sh"
+LEAF_AGENT_SOURCE = REPO_ROOT / "agents" / "aris-fanout-leaf.md"
 
 
+@unittest.skipIf(os.name == "nt", "Bash installer lifecycle requires POSIX symlink semantics")
 class InstallTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="aris-174-"))
@@ -118,6 +120,46 @@ class InstallTest(unittest.TestCase):
             "non-managed symlink must be preserved",
         )
 
+    def test_install_leaf_agent_is_idempotent_symlink(self):
+        target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+
+        first = self._run()
+        second = self._run()
+
+        self.assertEqual(first.returncode, 0, msg=first.stdout + first.stderr)
+        self.assertEqual(second.returncode, 0, msg=second.stdout + second.stderr)
+        self.assertTrue(target.is_symlink(), "POSIX installer must match skill symlink mode")
+        self.assertEqual(Path(os.readlink(target)), LEAF_AGENT_SOURCE)
+
+    def test_install_leaf_agent_preserves_conflict(self):
+        target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        target.parent.mkdir(parents=True)
+        user_content = "---\nname: aris-fanout-leaf\n---\nuser-owned\n"
+        target.write_text(user_content, encoding="utf-8")
+
+        result = self._run()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CONFLICT", result.stdout + result.stderr)
+        self.assertEqual(target.read_text(encoding="utf-8"), user_content)
+        self.assertFalse((self.project / ".aris" / "installed-skills.txt").exists())
+        self.assertFalse((self.project / ".claude" / "skills" / "idea-creator").exists())
+
+    def test_uninstall_preserves_foreign_leaf_symlink(self):
+        install = self._run()
+        self.assertEqual(install.returncode, 0, msg=install.stdout + install.stderr)
+        target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        target.unlink()
+        foreign_source = self.tmp / "foreign-agent.md"
+        foreign_source.write_text("foreign\n", encoding="utf-8")
+        target.symlink_to(foreign_source)
+
+        result = self._run("--uninstall")
+
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(Path(os.readlink(target)), foreign_source)
+
     # ─── uninstall behaviour ──────────────────────────────────────────────
 
     def test_uninstall_removes_managed_symlink(self):
@@ -128,6 +170,10 @@ class InstallTest(unittest.TestCase):
         self.assertFalse(
             (self.project / ".aris" / "tools").exists(),
             "uninstall must remove the managed symlink",
+        )
+        self.assertFalse(
+            (self.project / ".claude" / "agents" / "aris-fanout-leaf.md").exists(),
+            "uninstall must remove the managed POSIX leaf symlink",
         )
 
     def test_uninstall_preserves_non_managed_dir(self):
