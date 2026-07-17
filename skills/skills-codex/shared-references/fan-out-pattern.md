@@ -21,6 +21,36 @@ separately classified jury step — identical whether you fanned out across 8
 parallel workers or ran one shard at a time on a slow night. In the base mirror
 it is Codex/same-family/provisional; overlay or deterministic routes are accepted.
 
+## Bounded execution contract
+
+The Codex mirror preserves the same machine-readable limits:
+
+```yaml
+ARIS_FANOUT_AGENT_TYPE: aris-fanout-leaf
+ARIS_FANOUT_MAX_SHARDS: 8
+ARIS_FANOUT_MAX_CONCURRENCY: 4
+ARIS_FANOUT_SHARD_MAX_TURNS: 8
+ARIS_FANOUT_ALLOW_RECURSION: false
+ARIS_FANOUT_REQUIRE_COVERAGE_RECEIPT: true
+```
+
+`aris-fanout-leaf` names the canonical Claude worker. Codex does not pretend to
+install or invoke that Claude custom agent; each `spawn_agent` shard instead
+uses a leaf-equivalent prompt that forbids recursive delegation, shell/mutation,
+and verdicts. If the host cannot guarantee those restrictions, use the
+sequential fallback rather than an unrestricted worker.
+
+Freeze the complete unit list before dispatch, partition it into at most
+`max_shards: 8`, and run no more than `max_concurrency: 4` active shards. Treat
+`max_turns: 8` as the portable worker budget where the host exposes a turn cap.
+A failed, malformed, or timed-out shard gets at most one executor-side
+**sequential fallback** and no replacement agent.
+
+After collection and fallback, emit a **coverage receipt** with
+planned/completed/failed shard IDs, planned/covered/uncovered unit IDs, and a
+mechanically computed `coverage_complete` boolean. The receipt proves execution
+coverage only and does not upgrade the base mirror's provisional assurance.
+
 ## Core principle: decouple FAN-OUT from JURY
 
 These are two different operations and they are governed by two different

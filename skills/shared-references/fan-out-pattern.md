@@ -13,6 +13,42 @@ must not, change *who renders the verdict*. The verdict stays a single,
 heterogeneous, cross-model step — identical whether you fanned out across
 8 parallel workers or ran one shard at a time on a slow night.
 
+## Bounded execution contract
+
+Every ARIS fan-out uses the same machine-readable limits:
+
+```yaml
+ARIS_FANOUT_AGENT_TYPE: aris-fanout-leaf
+ARIS_FANOUT_MAX_SHARDS: 8
+ARIS_FANOUT_MAX_CONCURRENCY: 4
+ARIS_FANOUT_SHARD_MAX_TURNS: 8
+ARIS_FANOUT_ALLOW_RECURSION: false
+ARIS_FANOUT_REQUIRE_COVERAGE_RECEIPT: true
+```
+
+On Claude Code, every Tier-1/2 shard MUST select the installed
+`aris-fanout-leaf` custom agent. The leaf's tool allowlist excludes delegation,
+shell, and mutation tools, making it a real leaf rather than a prompt-only
+request. If the leaf is unavailable, use the Tier-3 sequential fallback; never
+substitute `general-purpose`, `Explore`, `Plan`, or another recursively capable
+worker.
+
+Before dispatch, freeze the complete unit list and partition it into at most
+`max_shards: 8`. Launch waves of at most `max_concurrency: 4`; each leaf is
+bounded by `max_turns: 8`. A failed, malformed, or timed-out shard gets at most
+one executor-side **sequential fallback**. That fallback must not launch a
+replacement Agent.
+
+After collection and fallback, the executor emits a **coverage receipt** with
+planned/completed/failed shard IDs, planned/covered/uncovered unit IDs, and a
+mechanically computed `coverage_complete` boolean. This receipt proves execution
+coverage only; it never judges candidate quality, paper relevance, or proof
+validity.
+
+`max_turns` is a portable hard limit. Wall-clock cancellation is host-dependent:
+use it when the runtime exposes task cancellation, but do not claim that an
+elapsed-time deadline is universally enforced at Tier 2.
+
 ## Core principle: decouple FAN-OUT from JURY
 
 These are two different operations and they are governed by two different
