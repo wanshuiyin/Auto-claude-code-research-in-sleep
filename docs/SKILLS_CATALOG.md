@@ -1,6 +1,6 @@
 # ARIS Skills Catalog
 
-Every skill that ships with ARIS, grouped by role. **80 skills** as of the
+Every skill that ships with ARIS, grouped by role. **83 skills** as of the
 latest update; new skills land via PR and get added to the table below.
 
 - Each `Skill` link goes to the canonical `SKILL.md` (the LLM-readable spec).
@@ -56,6 +56,7 @@ Paper retrieval, summarization, novelty verification.
 | [`/gemini-search`](../skills/gemini-search/SKILL.md) | Gemini-driven literature discovery — decomposes topics into sub-problems, aliases, variants | `gemini-cli` v0.40+ |
 | [`/alphaxiv`](../skills/alphaxiv/SKILL.md) | Quick single-paper lookup via [AlphaXiv](https://alphaxiv.org) — three-tier fallback (overview → markdown → LaTeX source) | None |
 | [`/comm-lit-review`](../skills/comm-lit-review/SKILL.md) | Communications-domain literature review with Claude-style knowledge-base-first retrieval — wireless / networking / satellite / Wi-Fi / cellular | None |
+| [`/geo-awareness`](../skills/geo-awareness/SKILL.md) | Geoscience domain awareness — CRS, spatial topology, earth system science, spatial analysis techniques (Moran's I, GWR, KDE, LISA, hot spot, space-time cube, remote sensing DL) for earth / environmental / geoscience research | None |
 | [`/novelty-check`](../skills/novelty-check/SKILL.md) | Verify a research idea is novel against recent literature — multi-source search + cross-model verification + closest-prior-work table | Codex MCP |
 
 ## 💡 Ideation & Method Design
@@ -110,6 +111,7 @@ LaTeX generation, figure / diagram production, prose polishing.
 | [`/paper-plan`](../skills/paper-plan/SKILL.md) | Generate a structured paper outline from review conclusions + experiment results — claims-evidence matrix, section structure, figure plan, citation scaffolding | None |
 | [`/paper-write`](../skills/paper-write/SKILL.md) | Section-by-section LaTeX generation (ICLR / NeurIPS / ICML / IEEE / ACL / AAAI / CVPR / ACM MM). Anti-hallucination BibTeX via DBLP / CrossRef | None |
 | [`/paper-figure`](../skills/paper-figure/SKILL.md) | Publication-quality matplotlib / seaborn plots + LaTeX comparison tables from experiment results | matplotlib / seaborn |
+| [`/geo-mapping`](../skills/geo-mapping/SKILL.md) | Scientific mapping for geoscience research — choropleth, hillshade/terrain, multi-panel layouts, remote sensing composites; uses QGIS (via `/qgis-mcp`) or Python fallback (geopandas, cartopy, rasterio) | None |
 | [`/figure-spec`](../skills/figure-spec/SKILL.md) | Deterministic JSON → SVG renderer for architecture / workflow / pipeline / audit-cascade diagrams. Shape-aware edge clipping, self-loops, CJK width estimation | None |
 | [`/paper-illustration`](../skills/paper-illustration/SKILL.md) | AI architecture + method illustrations via Gemini image generation, with Claude-supervised iterative refinement | `GEMINI_API_KEY` |
 | [`/paper-illustration-image2`](../skills/paper-illustration-image2/SKILL.md) | Codex-native image generation alternative — uses ChatGPT Plus / Pro quota via local Codex app-server bridge (no Gemini key) | Codex app-server + `codex-image2` MCP bridge |
@@ -163,6 +165,7 @@ Cross-cutting infrastructure used by other skills or run on demand.
 | [`/research-wiki`](../skills/research-wiki/SKILL.md) | Persistent research knowledge base — papers / ideas / experiments / claims with typed relationships. Workflow hooks auto-ingest across the research lifecycle | None (pure Python stdlib) |
 | [`/wiki-enrich`](../skills/wiki-enrich/SKILL.md) | Fill the per-paper TODO sections that `ingest_paper` leaves as scaffolds (Karpathy LLM-wiki principle). Fetch chain alphaxiv → deepxiv → arXiv → page abstract; idempotent by default, `--force` to rewrite | Python stdlib + WebFetch |
 | [`/render-html`](../skills/render-html/SKILL.md) | Render ARIS Markdown / JSON artifacts into reviewed single-file HTML views for human reading | Python stdlib; Codex MCP for review gate |
+| [`/qgis-mcp`](../skills/qgis-mcp/SKILL.md) | Geospatial analysis via QGIS-MCP — load GIS data, run processing algorithms, render maps, execute PyQGIS code from a research pipeline | QGIS Desktop 3.x, QGIS MCP plugin, `uv` |
 | [`/overleaf-sync`](../skills/overleaf-sync/SKILL.md) | Two-way sync between local paper directory and Overleaf project via Overleaf Git bridge (Premium) — `setup` / `pull` (diff protocol) / `push` (confirmation gate) / `status` | Overleaf Premium + macOS Keychain |
 | [`/feishu-notify`](../skills/feishu-notify/SKILL.md) | Send notifications to Feishu / Lark — push-only (webhook) or interactive (bidirectional) modes. Off by default | Feishu webhook URL |
 | [`/interview-cheatsheet`](../skills/interview-cheatsheet/SKILL.md) | Generate long-form Chinese ML / LLM interview-prep cheat sheets with formulas, code, Q&A, review, and HTML output | Codex MCP, Python |

@@ -41,6 +41,7 @@ skill	exa-search	lit-search	-	Exa AI 网页搜索+内容抽取
 skill	gemini-search	lit-search	-	Gemini 驱动的文献发现
 skill	research-lit	lit-search	-	文献综述与相关工作分析
 skill	comm-lit-review	lit-search	-	通信领域专用文献综述
+skill	geo-awareness	lit-search	-	地球科学领域感知与空间分析方法参考
 skill	idea-creator	ideation	-	给定方向生成并排序研究 idea
 skill	idea-discovery	ideation	idea-creator,novelty-check,research-lit,research-review,research-refine-pipeline,research-refine,render-html	W1:从方向到验证过的 idea 全流程
 skill	idea-discovery-robot	ideation	idea-creator,novelty-check,research-lit,research-review	W1 机器人/具身智能特化版
@@ -90,6 +91,7 @@ skill	paper-illustration	paper-visuals	-	AI 生成论文插图(Gemini)
 skill	paper-illustration-image2	paper-visuals	-	AI 插图备选(Codex 原生画图)
 skill	figure-spec	paper-visuals	-	确定性矢量架构/流程图(SVG)
 skill	mermaid-diagram	paper-visuals	-	Mermaid 流程/时序/类图
+skill	geo-mapping	paper-visuals	-	地学科学制图(QGIS/Python)
 skill	pixel-art	paper-visuals	-	像素画生成
 skill	paper-poster	paper-visuals	paper-poster-html	(已弃用)重定向到 poster-html
 skill	paper-poster-html	paper-visuals	-	学术海报生成(HTML 版)
@@ -108,6 +110,7 @@ skill	jurisdiction-format	patent	-	CN/US/EP 申请格式编译
 skill	patent-review	patent	-	专利申请质量审查
 skill	prior-art-search	patent	-	现有技术检索
 skill	patent-novelty-check	patent	-	专利新颖性核查
+skill	qgis-mcp	meta-utils	-	QGIS 地理空间分析与地图渲染
 skill	meta-optimize	meta-utils	-	skill 语料自优化提案
 skill	meta-apply	meta-utils	meta-optimize	落地已批准的语料补丁
 skill	feishu-notify	meta-utils	-	飞书通知
