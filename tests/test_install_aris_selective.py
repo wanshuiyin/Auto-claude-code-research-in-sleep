@@ -347,6 +347,45 @@ class SelectiveInstallTest(unittest.TestCase):
         self.assertEqual(ownership.read_bytes(), original_ownership)
         self.assertFalse(target.exists())
 
+    def test_agent_ownership_accepts_same_project_through_path_alias(self):
+        self._add_fanout_skill("idea-creator")
+        project_alias = self.tmp / "project-alias"
+        project_alias.symlink_to(self.project, target_is_directory=True)
+        self._run("--skills", "idea-creator")
+
+        original_project = self.project
+        self.project = project_alias
+        try:
+            self._run("--skills", "idea-creator")
+        finally:
+            self.project = original_project
+
+        target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        self.assertTrue(target.is_symlink())
+        self.assertTrue((self.project / ".aris" / "installed-agents.txt").is_file())
+
+    def test_agent_ownership_missing_project_root_reports_conflict(self):
+        self._add_fanout_skill("idea-creator")
+        self._run("--skills", "idea-creator")
+        ownership = self.project / ".aris" / "installed-agents.txt"
+        missing_project = self.tmp / "missing-project"
+        lines = ownership.read_text(encoding="utf-8").splitlines()
+        ownership.write_text(
+            "\n".join(
+                f"project_root\t{missing_project}"
+                if line.startswith("project_root\t")
+                else line
+                for line in lines
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        result = self._run("--skills", "idea-creator", check=False)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("belongs to a different project", result.stderr)
+
     def test_agent_ownership_manifest_cannot_be_copied_between_projects(self):
         self._add_fanout_skill("idea-creator")
         self._run("--skills", "idea-creator")

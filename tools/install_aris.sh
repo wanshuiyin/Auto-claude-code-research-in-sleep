@@ -220,10 +220,10 @@ canonicalize() {
     if command -v greadlink >/dev/null 2>&1; then greadlink -f "$1" 2>/dev/null || true
     elif readlink -f "$1" 2>/dev/null; then :
     else
-        # macOS fallback: cd + pwd
+        # macOS fallback: resolve directory aliases physically.
         local d f
-        if [[ -d "$1" ]]; then ( cd "$1" && pwd )
-        else d="$(dirname "$1")"; f="$(basename "$1")"; ( cd "$d" 2>/dev/null && echo "$(pwd)/$f" )
+        if [[ -d "$1" ]]; then ( cd -P "$1" && pwd -P )
+        else d="$(dirname "$1")"; f="$(basename "$1")"; ( cd -P "$d" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$f" )
         fi
     fi
 }
@@ -1095,7 +1095,7 @@ load_agent_ownership() {
     [[ -f "$AGENT_MANIFEST_PATH" && ! -L "$AGENT_MANIFEST_PATH" ]] || \
         die "CONFLICT: malformed agent ownership manifest: $AGENT_MANIFEST_PATH"
 
-    local version repo_root project_root row_count row header_counts
+    local version repo_root project_root project_root_canonical current_project_canonical row_count row header_counts
     version="$(awk -F'\t' '$1=="version"{print $2; exit}' "$AGENT_MANIFEST_PATH")"
     repo_root="$(awk -F'\t' '$1=="repo_root"{print $2; exit}' "$AGENT_MANIFEST_PATH")"
     project_root="$(awk -F'\t' '$1=="project_root"{print $2; exit}' "$AGENT_MANIFEST_PATH")"
@@ -1106,7 +1106,10 @@ load_agent_ownership() {
     [[ "$version" == "$AGENT_MANIFEST_VERSION" && -n "$repo_root" && -n "$project_root" && \
        "$header_counts" == "1:1:1" && "$row_count" == "1" ]] || \
         die "CONFLICT: malformed agent ownership manifest: $AGENT_MANIFEST_PATH"
-    [[ "$(canonicalize "$project_root")" == "$PROJECT_PATH" ]] || \
+    project_root_canonical="$(canonicalize "$project_root" || true)"
+    current_project_canonical="$(canonicalize "$PROJECT_PATH" || true)"
+    [[ -n "$project_root_canonical" && -n "$current_project_canonical" && \
+       "$project_root_canonical" == "$current_project_canonical" ]] || \
         die "CONFLICT: agent ownership manifest belongs to a different project: $project_root"
     [[ "$row" == $'agent\taris-fanout-leaf\tagents/aris-fanout-leaf.md\t.claude/agents/aris-fanout-leaf.md\tsymlink' ]] || \
         die "CONFLICT: unsupported agent ownership entry in $AGENT_MANIFEST_PATH"
