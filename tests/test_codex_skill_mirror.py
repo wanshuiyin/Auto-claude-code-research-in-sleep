@@ -532,3 +532,22 @@ def test_codex_experiment_queue_points_to_bundled_helpers() -> None:
     assert "tools/queue_manager.py" not in text
     assert "tools/build_manifest.py" not in text
     assert ".aris/installed-skills-codex.txt" in text
+
+
+def test_codex_experiment_queue_bundles_runnable_helpers() -> None:
+    main_scripts = MAIN_SKILLS / "experiment-queue" / "scripts"
+    codex_scripts = CODEX_SKILLS / "experiment-queue" / "scripts"
+
+    for name in ("queue_manager.py", "build_manifest.py"):
+        codex_script = codex_scripts / name
+        assert codex_script.is_file(), f"missing Codex helper: {codex_script}"
+        assert read(codex_script) == read(main_scripts / name)
+
+        result = subprocess.run(
+            [sys.executable, str(codex_script), "--help"],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
