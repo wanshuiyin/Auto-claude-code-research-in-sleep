@@ -551,3 +551,24 @@ def test_codex_experiment_queue_bundles_runnable_helpers() -> None:
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_experiment_queue_detects_real_screen_listing(monkeypatch) -> None:
+    script = MAIN_SKILLS / "experiment-queue" / "scripts" / "queue_manager.py"
+    spec = importlib.util.spec_from_file_location("experiment_queue_manager", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    session = "EQ_20260722T140640Z--cuda-recovery"
+    listing = f"There is a screen on:\n\t12345.{session}\t(Detached)\n"
+    commands: list[str] = []
+
+    def fake_run(command: str):
+        commands.append(command)
+        return listing, 0
+
+    monkeypatch.setattr(module, "run", fake_run)
+
+    assert module.screen_exists(session)
+    assert commands == ["screen -ls"]

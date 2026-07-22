@@ -123,8 +123,10 @@ def free_gpus(allowed, threshold_mib=DEFAULT_GPU_FREE_THRESHOLD_MIB):
 
 
 def screen_exists(name):
-    out, _ = run(f"screen -ls | grep -F '.{name}\\t'")
-    return name in out
+    out, _ = run("screen -ls")
+    return re.search(
+        rf"^\s*\d+\.{re.escape(name)}\s", out, re.MULTILINE
+    ) is not None
 
 
 def kill_screen(name):
