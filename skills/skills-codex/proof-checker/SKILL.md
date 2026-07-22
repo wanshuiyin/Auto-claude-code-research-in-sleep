@@ -130,23 +130,36 @@ When the proof invokes any of the following, require explicit verification of AL
 
 ### Proof-obligation fan-out
 
-Freeze the complete section/theorem/obligation ID set before extraction and
-partition source-ordered units into `max_shards: 8` or fewer groups. Run at most
-`max_concurrency: 4` active `spawn_agent` shards with `max_turns: 8`. Every
-worker prompt is leaf-equivalent, read-only, and declares `recursion: false`;
-it forbids further delegation, shell/mutation, and proof-validity verdicts.
+Freeze mechanically enumerable **source-unit IDs** before extraction: stable
+file spans, sections, theorem/lemma/proposition blocks, or proof environments.
+Partition the source-ordered units into `max_shards: 8` or fewer groups. The
+executor may use at most `max_concurrency: 4` active shards and requests
+`max_turns: 8`, read-only behavior, and `recursion: false` in every
+leaf-equivalent prompt.
 
-If safe delegation is unavailable, process the same frozen groups sequentially.
-A failed, malformed, or timed-out shard gets at most one executor-side
-**sequential fallback** and no replacement agent. Each shard returns
-`{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}` with
-canonical theorem/obligation IDs as `dedup_key`.
+**Stock Codex enforcement: prompt-only.** Standard Codex `spawn_agent` exposes
+no per-child tool allowlist, recursion flag, or child turn-cap parameter. These
+worker restrictions are prompt conventions unless the active host supplies
+structural enforcement, so stock Codex does not provide the same hard tool,
+non-recursion, and turn boundary as the Claude leaf. The executor still enforces
+fixed shard and concurrency limits, no replacement workers, and the coverage
+receipt. A failed, malformed, or timed-out shard gets at most one executor-side
+sequential fallback and no replacement agent.
+
+Each shard returns
+`{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}`.
+Assigned and covered IDs are source-unit IDs. Obligations are discovered from
+those units and receive deterministic IDs only **after extraction**, derived
+from the source-unit ID plus a stable ordinal or anchor.
 
 Before building the global dependency DAG, emit a **coverage receipt** and
-require 100% declared-unit coverage. Any uncovered unit makes the proof check
-`INCOMPLETE`/`BLOCKED`; no complete validity verdict may be emitted. Only after
-complete coverage does the parent mechanically merge obligations. The fresh
-Codex review that evaluates them records `review_independence: same-family` and
+require 100% declared source-unit coverage. The receipt proves **source-unit
+execution coverage only**; it does not prove that every relevant obligation was
+discovered or that the extracted ledger is mathematically complete. Any
+uncovered source unit makes the proof check `INCOMPLETE`/`BLOCKED`; no complete
+validity verdict may be emitted. Only after complete source-unit coverage does
+the parent mechanically merge the extracted ledger. The fresh Codex review
+that evaluates it records `review_independence: same-family` and
 `acceptance_status: provisional`. See
 [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
 

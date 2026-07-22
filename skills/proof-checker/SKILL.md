@@ -164,9 +164,13 @@ When the proof invokes any of the following, require explicit verification of AL
 ### Phase 0.5: Proof-Obligation Ledger
 
 > **Bounded fan-out — build the ledger in parallel; never judge in parallel.**
-> Freeze the complete section/theorem/obligation ID list before dispatch, sort
-> by source order, and partition it into no more than `max_shards: 8`. Run waves
-> of at most `max_concurrency: 4`, with `max_turns: 8` per leaf.
+> Freeze mechanically enumerable **source-unit IDs** before dispatch: file spans,
+> sections, theorem/lemma/proposition blocks, or proof environments with stable
+> source anchors. Sort them by source order and partition them into no more than
+> `max_shards: 8`. Run waves of at most `max_concurrency: 4`, with
+> `max_turns: 8` per leaf. Obligations are discovered from these units and receive
+> deterministic IDs only **after extraction**, derived from the source-unit ID
+> plus a stable ordinal or anchor (for example `THM-3:OB-004`).
 >
 > - **Tier 1** (Workflow): explicitly select `aris-fanout-leaf` for every shard.
 > - **Tier 2** (Agent): call only `Agent(aris-fanout-leaf)`.
@@ -191,22 +195,24 @@ When the proof invokes any of the following, require explicit verification of AL
 >
 > **Shard output:** each leaf returns
 > `{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}`.
-> Entries contain typed ledger items for the assigned units, each with its
-> canonical ID (for example `MC-17` or a symbol name) as `dedup_key`. Never
-> prose-only; never a validity-verdict field.
+> `assigned_unit_ids` and `covered_unit_ids` contain source-unit IDs. Entries
+> contain typed ledger items discovered in those units, each with a deterministic
+> post-extraction obligation ID or symbol key as `dedup_key`. Never prose-only;
+> never a validity-verdict field.
 >
 > **Coverage receipt:** reconcile the merged `covered_unit_ids` with the frozen
-> section/theorem/obligation set after the one allowed sequential fallback.
-> Record planned/completed/failed/uncovered IDs and `coverage_complete`. This
-> phase requires 100% declared-unit coverage; otherwise mark the proof check
-> `INCOMPLETE`/`BLOCKED` and do not request or publish a complete validity
-> verdict.
+> source-unit set after the one allowed sequential fallback. Record
+> planned/completed/failed/uncovered IDs and `coverage_complete`. The receipt
+> proves **source-unit execution coverage only**; it does not prove that every
+> relevant obligation was discovered or that the extracted ledger is
+> mathematically complete. Any uncovered source unit makes the proof check
+> `INCOMPLETE`/`BLOCKED` and blocks a complete validity verdict.
 >
-> 2. **Global artifacts are a barrier, computed on the complete merged ledger,
+> 2. **Global artifacts are a barrier, computed on the merged extracted ledger,
 >    not per shard.** Run the Dependency DAG, cycle detection, and cross-section
 >    symbol consistency only after the coverage receipt says
->    `coverage_complete: true`. A per-shard or incomplete DAG could miss exactly
->    the cross-section cycle this phase exists to catch.
+>    `coverage_complete: true`. Full source-unit coverage is necessary for these
+>    checks but is not itself a claim of obligation completeness or proof validity.
 
 Build formal accounting artifacts. Save to `PROOF_SKELETON.md`:
 

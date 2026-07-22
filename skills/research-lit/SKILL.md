@@ -595,6 +595,28 @@ fi
 Optional: set `ARIS_VERIFY_EMAIL=you@institution.edu` in your shell to lift
 CrossRef rate limits to the polite pool.
 
+### Step 1.6: Freeze Leaf-Readable Evidence (mandatory before dispatch)
+
+The parent still owns the retrieval context and all writes. Before Step 2, it
+must create one read-only file per shard under
+`.aris/verify-papers/research-lit-evidence/`. Each file contains only that
+shard's assigned papers and records `paper_id`, `title`,
+`verification_status`, `abstract`, `source_excerpt`, `local_pdf_path`,
+`local_note_paths`, and `evidence_status`.
+
+Populate these fields from already retrieved API abstracts/excerpts, Zotero or
+Obsidian text, or readable local PDF/note paths. Identity fields or remote URLs
+alone are not sufficient for a `Read`/`Grep`/`Glob`-only leaf. Pass the shard's
+absolute evidence-file path and assigned IDs in the leaf prompt; the leaf may
+extract only claims supported by that file.
+
+If a paper has no abstract, source excerpt, readable local PDF, or readable
+local note, record `evidence_status: UNPROCESSABLE_NO_LOCAL_EVIDENCE`. Do not
+dispatch it as completed work and do not infer method or results from its title.
+The parent may use the one allowed sequential fallback to gather/process local
+evidence; otherwise keep the paper explicitly uncovered and `UNPROCESSED` in
+the coverage receipt.
+
 ### Step 2: Analyze Each Paper
 
 > **Bounded fan-out (Tier-aware).** Per-paper extraction is breadth-bound, but

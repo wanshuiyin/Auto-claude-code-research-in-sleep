@@ -28,13 +28,17 @@ Given a broad research direction from the user, systematically generate, validat
 ### Fan-out contract
 
 Idea generation is breadth-bound. Freeze the complete analytic-lens list before
-dispatch and partition it into `max_shards: 8` or fewer. Use at most
-`max_concurrency: 4` active `spawn_agent` shards with `max_turns: 8`; every
-worker prompt is leaf-equivalent, read-only, and declares `recursion: false`.
-It must forbid delegation, shell/mutation, ranking, and verdicts.
+dispatch and partition it into `max_shards: 8` or fewer. The executor may use
+at most `max_concurrency: 4` active shards and requests `max_turns: 8`,
+read-only behavior, and `recursion: false` in every leaf-equivalent prompt.
 
-If safe delegation is unavailable, process the same frozen lenses sequentially.
-A failed, malformed, or timed-out shard gets at most one executor-side
+**Stock Codex enforcement: prompt-only.** Standard Codex `spawn_agent` exposes
+no per-child tool allowlist, recursion flag, or child turn-cap parameter. These
+worker restrictions are prompt conventions unless the active host supplies
+structural enforcement, so stock Codex does not provide the same hard tool,
+non-recursion, and turn boundary as the Claude leaf. The executor still enforces
+fixed shard and concurrency limits, no replacement workers, and the coverage
+receipt. A failed, malformed, or timed-out shard gets at most one executor-side
 **sequential fallback** and no replacement agent. Each shard returns
 `{shard_id, assigned_unit_ids, covered_unit_ids, status, candidates, errors}`.
 Before mechanical deduplication, emit a **coverage receipt** listing planned,
