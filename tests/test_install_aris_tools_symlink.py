@@ -145,6 +145,21 @@ class InstallTest(unittest.TestCase):
         self.assertFalse((self.project / ".aris" / "installed-skills.txt").exists())
         self.assertFalse((self.project / ".claude" / "skills" / "idea-creator").exists())
 
+    def test_uninstall_preserves_preexisting_matching_leaf_symlink(self):
+        target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        target.parent.mkdir(parents=True)
+        target.symlink_to(LEAF_AGENT_SOURCE)
+
+        install = self._run()
+        self.assertEqual(install.returncode, 0, msg=install.stdout + install.stderr)
+        self.assertFalse((self.project / ".aris" / "installed-agents.txt").exists())
+
+        result = self._run("--uninstall")
+
+        self.assertEqual(result.returncode, 0, msg=result.stdout + result.stderr)
+        self.assertTrue(target.is_symlink())
+        self.assertEqual(Path(os.readlink(target)), LEAF_AGENT_SOURCE)
+
     def test_uninstall_preserves_foreign_leaf_symlink(self):
         install = self._run()
         self.assertEqual(install.returncode, 0, msg=install.stdout + install.stderr)
