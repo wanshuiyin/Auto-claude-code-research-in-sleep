@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -527,6 +528,9 @@ def test_codex_skill_instructions_use_codex_paths() -> None:
 def test_codex_experiment_queue_points_to_bundled_helpers() -> None:
     text = read(CODEX_SKILLS / "experiment-queue" / "SKILL.md")
 
+    assert ".agents/skills/experiment-queue/scripts" in text
+    assert "$ARIS_REPO/skills/skills-codex/experiment-queue/scripts" in text
+    assert "$HOME/.codex/skills/experiment-queue/scripts" in text
     assert "tools/experiment_queue/queue_manager.py" in text
     assert "tools/experiment_queue/build_manifest.py" in text
     assert "tools/queue_manager.py" not in text
@@ -551,6 +555,45 @@ def test_codex_experiment_queue_bundles_runnable_helpers() -> None:
             check=False,
         )
         assert result.returncode == 0, result.stderr
+
+
+def test_codex_experiment_queue_helpers_survive_install_modes(tmp_path: Path) -> None:
+    source = CODEX_SKILLS / "experiment-queue"
+    project_skill = tmp_path / "project" / ".agents" / "skills" / "experiment-queue"
+    project_skill.parent.mkdir(parents=True)
+    project_skill.symlink_to(source, target_is_directory=True)
+
+    global_skill = tmp_path / "home" / ".codex" / "skills" / "experiment-queue"
+    shutil.copytree(source, global_skill)
+
+    for installed in (project_skill, global_skill):
+        for name in ("queue_manager.py", "build_manifest.py"):
+            helper = installed / "scripts" / name
+            assert helper.is_file(), f"missing installed Codex helper: {helper}"
+            result = subprocess.run(
+                [sys.executable, str(helper), "--help"],
+                cwd=REPO_ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
+
+
+def test_experiment_queue_adapter_declaration_fails_closed() -> None:
+    for skill_root in (MAIN_SKILLS, CODEX_SKILLS):
+        text = read(skill_root / "experiment-queue" / "SKILL.md")
+        assert "This declaration is authoritative" in text
+        assert re.search(r"do not\s+fall back to the generic queue", text)
+        assert "If any required adapter file is missing, stop" in text
+        for required in (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "docs/ARIS_PROJECT_LAYOUT.md",
+            "docs/GPU_REMOTE_WORKFLOW.md",
+            "code/scripts/ttad_aris_queue_wrapper.py",
+        ):
+            assert required in text
 
 
 def test_experiment_queue_detects_real_screen_listing(monkeypatch) -> None:

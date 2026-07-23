@@ -122,16 +122,20 @@ A "wave" is a batch of jobs that fit available GPUs. Next wave only starts when:
 ### Step 0: Honor a project-managed queue adapter
 
 Before parsing a manifest or running any generic pre-flight, resolve the project
-root and check whether it provides all of these files:
+root and inspect `CLAUDE.md`. If it declares `queue_status`, the project has
+opted into a managed queue adapter. This declaration is authoritative: do not
+fall back to the generic queue when adapter files are incomplete.
 
+Require all of these files:
+
+- `AGENTS.md`
 - `CLAUDE.md`
 - `docs/ARIS_PROJECT_LAYOUT.md`
+- `docs/GPU_REMOTE_WORKFLOW.md`
 - `code/scripts/ttad_aris_queue_wrapper.py`
 
-If they exist and `CLAUDE.md` declares an ARIS remote mapping with
-`queue_status`, this repository has a project-managed queue adapter. Read its
-root `AGENTS.md`, `CLAUDE.md`, `docs/ARIS_PROJECT_LAYOUT.md`, and
-`docs/GPU_REMOTE_WORKFLOW.md` completely before acting.
+If any required adapter file is missing, stop and report each missing path.
+Read all required documents completely before acting.
 
 - If `queue_status` is not `active`, stop and report the documented blocker.
 - If it is `active`, follow the project's wrapper workflow exactly. For the
@@ -143,8 +147,8 @@ root `AGENTS.md`, `CLAUDE.md`, `docs/ARIS_PROJECT_LAYOUT.md`, and
   GPUs independently, accept generic arbitrary `cmd` fields, launch a raw
   `queue_manager.py`, or treat a pre-existing expected output as completion.
 
-The remaining workflow is only for projects that do not declare a
-project-managed queue adapter.
+The remaining workflow is only for projects whose `CLAUDE.md` does not declare
+`queue_status`.
 
 ### Step 1: Parse Manifest / Build from Grid
 

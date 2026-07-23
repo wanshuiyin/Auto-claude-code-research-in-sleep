@@ -113,16 +113,20 @@ A "wave" is a batch of jobs that fit available GPUs. Next wave only starts when:
 ### Step 0: Honor a project-managed queue adapter
 
 Before parsing a manifest or running any generic pre-flight, resolve the project
-root and check whether it provides all of these files:
+root and inspect `CLAUDE.md`. If it declares `queue_status`, the project has
+opted into a managed queue adapter. This declaration is authoritative: do not
+fall back to the generic queue when adapter files are incomplete.
 
+Require all of these files:
+
+- `AGENTS.md`
 - `CLAUDE.md`
 - `docs/ARIS_PROJECT_LAYOUT.md`
+- `docs/GPU_REMOTE_WORKFLOW.md`
 - `code/scripts/ttad_aris_queue_wrapper.py`
 
-If they exist and `CLAUDE.md` declares an ARIS remote mapping with
-`queue_status`, this repository has a project-managed queue adapter. Read its
-root `AGENTS.md`, `CLAUDE.md`, `docs/ARIS_PROJECT_LAYOUT.md`, and
-`docs/GPU_REMOTE_WORKFLOW.md` completely before acting.
+If any required adapter file is missing, stop and report each missing path.
+Read all required documents completely before acting.
 
 - If `queue_status` is not `active`, stop and report the documented blocker.
 - If it is `active`, follow the project's wrapper workflow exactly. For the
@@ -134,8 +138,8 @@ root `AGENTS.md`, `CLAUDE.md`, `docs/ARIS_PROJECT_LAYOUT.md`, and
   GPUs independently, accept generic arbitrary `cmd` fields, launch a raw
   `queue_manager.py`, or treat a pre-existing expected output as completion.
 
-The remaining workflow is only for projects that do not declare a
-project-managed queue adapter.
+The remaining workflow is only for projects whose `CLAUDE.md` does not declare
+`queue_status`.
 
 ### Step 1: Parse Manifest / Build from Grid
 
@@ -168,17 +172,20 @@ If any precondition fails, show user which jobs are blocked and why.
 
 ### Step 3: Launch Scheduler
 
-Resolve the bundled helper directory (`$PROJECT_DIR` / `$RUN_TS` / `$LOCAL_RUN_DIR` already set in Step 1). Phase 3.3 (Arch C) moved the canonical scripts to `skills/experiment-queue/scripts/`; `tools/experiment_queue/` retains `os.execv` shims for legacy resolver layers:
+Resolve the bundled helper directory (`$PROJECT_DIR` / `$RUN_TS` / `$LOCAL_RUN_DIR` already set in Step 1). Prefer the scripts carried by the installed Codex skill, then fall back to repository and legacy shim locations:
 
 ```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
 fi
-[ -n "${ARIS_REPO:-}" ] || { echo "ERROR: ARIS_REPO not set. Use install_aris_codex.sh managed install or export ARIS_REPO=/path/to/ARIS."; exit 1; }
-# Prefer the new canonical location; fall back to legacy tools/ shim path.
-QUEUE_TOOLS="$ARIS_REPO/skills/experiment-queue/scripts"
-[ -f "$QUEUE_TOOLS/queue_manager.py" ] || QUEUE_TOOLS="$ARIS_REPO/tools/experiment_queue"
-[ -f "$QUEUE_TOOLS/queue_manager.py" ] || { echo "ERROR: queue_manager.py not found at $ARIS_REPO/skills/experiment-queue/scripts/ or $ARIS_REPO/tools/experiment_queue/"; exit 1; }
+QUEUE_TOOLS=""
+[ -f ".agents/skills/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS=".agents/skills/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/skills/skills-codex/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS="$ARIS_REPO/skills/skills-codex/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && [ -f "$HOME/.codex/skills/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS="$HOME/.codex/skills/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/skills/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS="$ARIS_REPO/skills/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/experiment_queue/queue_manager.py" ] && QUEUE_TOOLS="$ARIS_REPO/tools/experiment_queue"
+[ -n "$QUEUE_TOOLS" ] || { echo "ERROR: experiment_queue helpers not found in the installed Codex skill, ARIS repo, or legacy shim path."; exit 1; }
 ```
 
 Compute remote paths (note: modern `scp` runs in SFTP mode and does NOT reliably expand `$HOME` in destination paths — use remote-relative for `scp`, `$HOME`-prefixed for `ssh` command strings):
