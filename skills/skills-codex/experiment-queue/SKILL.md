@@ -180,12 +180,15 @@ if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
 fi
 QUEUE_TOOLS=""
-[ -f ".agents/skills/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS=".agents/skills/experiment-queue/scripts"
-[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/skills/skills-codex/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS="$ARIS_REPO/skills/skills-codex/experiment-queue/scripts"
-[ -z "$QUEUE_TOOLS" ] && [ -f "$HOME/.codex/skills/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS="$HOME/.codex/skills/experiment-queue/scripts"
-[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/skills/experiment-queue/scripts/queue_manager.py" ] && QUEUE_TOOLS="$ARIS_REPO/skills/experiment-queue/scripts"
-[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/experiment_queue/queue_manager.py" ] && QUEUE_TOOLS="$ARIS_REPO/tools/experiment_queue"
-[ -n "$QUEUE_TOOLS" ] || { echo "ERROR: experiment_queue helpers not found in the installed Codex skill, ARIS repo, or legacy shim path."; exit 1; }
+has_queue_helpers() {
+    [ -f "$1/queue_manager.py" ] && [ -f "$1/build_manifest.py" ]
+}
+has_queue_helpers ".agents/skills/experiment-queue/scripts" && QUEUE_TOOLS=".agents/skills/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && has_queue_helpers "$ARIS_REPO/skills/skills-codex/experiment-queue/scripts" && QUEUE_TOOLS="$ARIS_REPO/skills/skills-codex/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && has_queue_helpers "$HOME/.codex/skills/experiment-queue/scripts" && QUEUE_TOOLS="$HOME/.codex/skills/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && has_queue_helpers "$ARIS_REPO/skills/experiment-queue/scripts" && QUEUE_TOOLS="$ARIS_REPO/skills/experiment-queue/scripts"
+[ -z "$QUEUE_TOOLS" ] && [ -n "${ARIS_REPO:-}" ] && has_queue_helpers "$ARIS_REPO/tools/experiment_queue" && QUEUE_TOOLS="$ARIS_REPO/tools/experiment_queue"
+[ -n "$QUEUE_TOOLS" ] || { echo "ERROR: queue_manager.py and build_manifest.py must both exist in the installed Codex skill, ARIS repo, or legacy shim path."; exit 1; }
 ```
 
 Compute remote paths (note: modern `scp` runs in SFTP mode and does NOT reliably expand `$HOME` in destination paths — use remote-relative for `scp`, `$HOME`-prefixed for `ssh` command strings):

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
 import subprocess
@@ -578,6 +579,55 @@ def test_codex_experiment_queue_helpers_survive_install_modes(tmp_path: Path) ->
                 check=False,
             )
             assert result.returncode == 0, result.stderr
+
+
+def test_codex_experiment_queue_executes_resolver_precedence_and_fallback(
+    tmp_path: Path,
+) -> None:
+    text = read(CODEX_SKILLS / "experiment-queue" / "SKILL.md")
+    section = text.split("Resolve the bundled helper directory", 1)[1]
+    match = re.search(r"```bash\n(.*?)\n```", section, re.DOTALL)
+    assert match is not None
+    resolver = match.group(1) + '\nprintf "%s\\n" "$QUEUE_TOOLS"\n'
+
+    source = CODEX_SKILLS / "experiment-queue"
+    home = tmp_path / "home"
+    global_skill = home / ".codex" / "skills" / "experiment-queue"
+    shutil.copytree(source, global_skill)
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env.pop("ARIS_REPO", None)
+
+    healthy_project = tmp_path / "healthy-project"
+    project_skill = healthy_project / ".agents" / "skills" / "experiment-queue"
+    project_skill.parent.mkdir(parents=True)
+    project_skill.symlink_to(source, target_is_directory=True)
+    result = subprocess.run(
+        ["bash", "-c", resolver],
+        cwd=healthy_project,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ".agents/skills/experiment-queue/scripts"
+
+    partial_project = tmp_path / "partial-project"
+    partial_scripts = partial_project / ".agents" / "skills" / "experiment-queue" / "scripts"
+    partial_scripts.mkdir(parents=True)
+    shutil.copy2(source / "scripts" / "queue_manager.py", partial_scripts)
+    result = subprocess.run(
+        ["bash", "-c", resolver],
+        cwd=partial_project,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(global_skill / "scripts")
 
 
 def test_experiment_queue_adapter_declaration_fails_closed() -> None:
