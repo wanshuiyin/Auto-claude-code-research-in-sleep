@@ -7,9 +7,12 @@ end-to-end tests drive the real curses UI through a pty via expect
 """
 import importlib.util
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PICKER = REPO_ROOT / "tools" / "skill_picker.py"
@@ -105,6 +108,52 @@ class ModelTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 2)
         self.assertFalse(out.exists())
+
+    def test_run_picker_continues_when_cursor_visibility_is_unsupported(self):
+        class FakeCursesError(Exception):
+            pass
+
+        class FakeScreen:
+            def keypad(self, enabled):
+                self.keypad_enabled = enabled
+
+            def getmaxyx(self):
+                return 24, 80
+
+            def erase(self):
+                pass
+
+            def addnstr(self, *args):
+                pass
+
+            def refresh(self):
+                pass
+
+            def getch(self):
+                return 10
+
+        def curs_set(_visibility):
+            raise FakeCursesError("curs_set() returned ERR")
+
+        fake_curses = SimpleNamespace(
+            A_BOLD=1,
+            A_NORMAL=0,
+            A_REVERSE=2,
+            KEY_DOWN=258,
+            KEY_ENTER=343,
+            KEY_NPAGE=338,
+            KEY_PPAGE=339,
+            KEY_UP=259,
+            curs_set=curs_set,
+            error=FakeCursesError,
+            wrapper=lambda callback: callback(FakeScreen()),
+        )
+        rows = sp.build_rows(self.groups, self.skills, ["alpha"])
+
+        with mock.patch.dict(sys.modules, {"curses": fake_curses}):
+            confirmed = sp.run_picker(rows, set())
+
+        self.assertTrue(confirmed)
 
 
 @unittest.skipUnless(Path("/usr/bin/expect").exists(), "expect not available")

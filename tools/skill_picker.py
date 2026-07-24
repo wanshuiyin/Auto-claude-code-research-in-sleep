@@ -140,7 +140,11 @@ def run_picker(rows, selected):  # pragma: no cover — curses UI, tested via pt
     import curses
 
     def main(stdscr):
-        curses.curs_set(0)
+        # Some terminals support curses drawing but not cursor visibility changes.
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
         stdscr.keypad(True)
         cursor, offset = 0, 0
         while True:
