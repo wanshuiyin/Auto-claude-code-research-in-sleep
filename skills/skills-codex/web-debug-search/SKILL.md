@@ -228,7 +228,7 @@ matter, build a compact compatibility table:
 
 | Component | Observed version | Source version | Relation | Claim basis | Confidence |
 |---|---|---|---|---|---|
-| package/runtime/OS | ... | ... | compatible / conflict / unknown | official / reported / inferred | high / medium / low |
+| package/runtime/OS | ... | ... | compatible / conflict / unknown | official / maintainer-confirmed / reported / inferred | high / medium / low |
 
 Do not infer compatibility merely because two versions appear on the same page.
 Separate `reported`, `maintainer-confirmed`, `official`, and `inferred` claims.

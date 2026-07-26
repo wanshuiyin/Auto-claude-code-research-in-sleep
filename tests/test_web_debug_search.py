@@ -58,6 +58,7 @@ def test_web_debug_search_preserves_match_authority_and_version_boundaries() -> 
         assert authority in text
     assert "Match quality is not authority" in text
     assert "compatibility table" in text
+    assert "official / maintainer-confirmed / reported / inferred" in text
     assert "reported`, `maintainer-confirmed`, `official`, and `inferred`" in text
 
 
