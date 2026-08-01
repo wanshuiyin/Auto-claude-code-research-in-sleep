@@ -1,5 +1,71 @@
 # ARIS-Code Changelog
 
+## v0.4.23 (2026-08-02)
+
+The **output-folding release** — fixes the top real-user complaint that the
+CLI dumps the full content of every document it reads (and every command's
+full stdout) onto the screen — plus the bundled-skills refresh that brings in
+`/integrity-forensics`, and a real fix for bash timeouts not killing the child.
+
+### 🧹 Tool-output folding (display layer ONLY)
+
+- **What users saw**: reading a 2000-line paper printed all 2000 lines;
+  `pdftotext`-class bash commands dumped their entire stdout; grep content
+  mode dumped every matched line. (Thinking was NOT actually printed — that
+  perception came from these dumps; two new end-to-end sentinel tests now
+  lock "thinking/reasoning never reaches the terminal".)
+- **Now**: Read/Grep show the first 6 lines, Bash shows the first 4 + last 4
+  per stream (stderr keeps its red), then one dim line
+  "… (+N more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)".
+  Kept lines are capped at 240 chars so a minified single-line file can't
+  defeat the fold. The structured edit preview gets the same char cap.
+- **One escape hatch**: `ARIS_TOOL_OUTPUT_LINES` — unset = defaults, a
+  positive integer overrides every tool's budget, `0` = the exact old
+  display. The session, the model's context, `--output-format json` and
+  `/export` are UNTOUCHED and always carry complete payloads.
+- ⚠️ Compat note: external scripts that parse the human text UI as a full
+  transcript should set `ARIS_TOOL_OUTPUT_LINES=0` or use
+  `--output-format json`.
+- Ride-along: grep's content mode no longer reports a false "0 matches"
+  above real results.
+
+### 🐛 Bash timeout actually kills the command
+
+Previously a timed-out bash tool call reported `interrupted: true` while the
+command **kept running** — its side effects landed after the report (the
+dropped tokio future never killed the child). The foreground command now uses
+`kill_on_drop`; a real behavioral test locks it (a timed-out
+`sleep 1 && touch marker` must not create the marker). Escape hatch:
+`ARIS_BASH_KILL_ON_TIMEOUT=0`. Background tasks are untouched; process-group
+kill is deliberately out of scope. (The rest of the runtime-state package —
+compaction re-arm, failed-turn cleanup, /cost dollars, SSE tail — ships as
+v0.4.24; the cached-token cost fix is deliberately held back because it
+changes what the compaction trigger measures.)
+
+### 📦 Bundled skills: 79 → 81
+
+Resync to main (pin 7182624 → 3e49e63): **`/integrity-forensics`** — the
+Anti-Autoresearch SHA-pinned launcher (span-anchored evidence ledger → GPT
+auditors → deterministic rules-only adjudicator → typed BLOCK/WARN gate) —
+and **`/web-debug-search`** (GitHub Issues/Discussions debugging search);
++`tools/forensics_gate.py` (29 helpers, 104 embedded resources).
+
+### 🧪 Dev/test hygiene
+
+All four crates' local-mock-server tests scrub proxy env vars once per
+process — a developer shell with `http(s)_proxy` set used to turn 15 tests
+red on a released tag (127.0.0.1 routed through the proxy → 502). CI was
+never affected.
+
+### ✅ Tests / review
+
+- Full workspace green **under a live proxy**: api 35+6, aris-cli 212 (+8)
+  + 3 e2e (+2 thinking/reasoning sentinels), runtime 225 (+2), tools 69,
+  commands 5. New-code clippy delta zero.
+- Codex MCP (gpt-5.6-sol ultra) scope discussion adjudicated the design
+  (fold defaults, bash head+tail, 240-char cap, JSON untouched, B4a
+  exclusion) before implementation.
+
 ## v0.4.22 (2026-07-11)
 
 The **skills resync + GPT-5.6-Sol release**: the bundled skill set catches up

@@ -29,6 +29,8 @@
 
 ## 📰 What's New
 
+> **v0.4.23** (2026-08-02) — **The output-folding release** — fixes the top real-user complaint: the CLI dumped the FULL content of every document it read (a 2000-line paper = 2000 lines on screen), every bash command's full stdout, and grep's full content blob. **🧹 Tool-output folding (display only)**: Read/Grep show the first 6 lines, Bash shows first 4 + last 4 per stream (stderr stays red), then one dim "… (+N more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)"; kept lines capped at 240 chars (minified-file case); the session, model context, `--output-format json` and `/export` always keep COMPLETE payloads. Thinking was verified to never print (the perception came from these dumps) — two new end-to-end sentinel tests lock that thinking/reasoning never reaches the terminal. **🐛 Bash timeout now kills the command** — previously a timed-out call reported interrupted while the command kept running and its side effects landed afterwards; `ARIS_BASH_KILL_ON_TIMEOUT=0` restores the old behavior. **📦 79→81 bundled skills**: `/integrity-forensics` (the Anti-Autoresearch SHA-pinned launcher: evidence ledger → GPT auditors → deterministic adjudicator → typed BLOCK/WARN gate) and `/web-debug-search`. Grep no longer shows a false "0 matches" in content mode; all local-mock tests are now proxy-immune (15 tests used to go red under a shell proxy). Tests: api 41 / aris-cli 212 + 3 e2e / runtime 225 / tools 69 / commands 5, all green **under a live proxy**. Codex MCP (gpt-5.6-sol ultra) adjudicated the fold design + scope (the cost/compaction package deliberately waits for v0.4.24 — the two fixes are coupled).
+>
 > **v0.4.22** (2026-07-11) — **The skills-resync + GPT-5.6-Sol release.** **📦 Bundle catches up 93 commits** to the skills source-of-truth: **79 bundled skills** (+`meta-apply`, +`paper-poster-html` — the new measurement-gated HTML poster pipeline), 28 tools helpers (8 new), 11 new shared-references convention docs; sync now SHA-pins with an `ARIS_SYNC_EXPECT_SHA` guard and exact-inventory drift tests. **🎛 Reviewer control plane moves to the GPT-5.6-Sol two-tier doctrine** the new skills carry: the system prompt passes the skills' explicit `model: gpt-5.6-sol` + per-call effort pins through (the old "never pass a model" rule would have silently stripped deep audits from ultra down to xhigh), carries the canonical capability-only fallback chain, and pins `approval-policy: "never"` + explicit `sandbox` on every fresh codex call; the HTTP LlmReview fallback default deliberately **stays gpt-5.5** (gpt-5.6-sol is an EXPERIMENTAL opt-in until smoked with reasoning_effort); gpt-5.6 family pricing (sol $5/$30, terra $2.50/$15, luna $1/$6) lands; the banner/Reviewer line/`/reviewer` are now honest about primary-vs-fallback. **🐛 8 verified fixes**: explicit `--model` no longer silently overridden by the saved model (provenance-tracked; the 4.8→4.7 fallback respects explicit choices); saved models no longer leak across provider transports (and OpenAI transport with no model fails fast); `--output-format json` never prompts (single-JSON-document contract restored); **Windows `aris login` fixed** (PKCE read /dev/urandom → getrandom) and **Windows command probing fixed** (the PowerShell tool probed itself through `sh`); codex `.cmd` shims are classified honestly (setup won't write a config the MCP client can't spawn without explicit confirmation); nested config.json now warns instead of silently becoming all-defaults; NotebookEdit no longer mints duplicate cell ids. **🖥 New windows-latest CI job** (compile gate + 3 targeted test groups). Tests: api 41 / aris-cli 204 + 1 e2e / runtime 223 / tools 69 / commands 5 (+54), all green. Codex MCP (gpt-5.6-sol **ultra**): 5-round design gate (NO-GO ×4 → GO) + disk-verified subagent implementation.
 >
 > **v0.4.21** (2026-06-28) — **Bug-fix patch** (5 new user-facing bugs from a Codex adversarial hunt — all disk-verified, distinct from v0.4.20 — with design + implementation both cross-model reviewed). **🐛 Headline**: OpenAI-compatible streaming corrupted multi-byte UTF-8 (CJK / emoji) split across network chunks into `�` — each HTTP chunk was `from_utf8_lossy`'d independently, so a 3-byte Chinese character or 4-byte emoji straddling a chunk boundary broke on both sides (a frequent hit for Chinese users on domestic OpenAI-compatible providers — Kimi/GLM/MiniMax/DeepSeek/Qwen/Doubao). The stream buffer is now raw bytes, decoding only complete SSE lines. **Also**: a saved OpenAI/custom executor config no longer overrides a shell-set `EXECUTOR_PROVIDER` (the startup "shell wins" path had one ungated write → wrong executor / model-not-found); an Anthropic stream that ends after content but before a terminal signal now hard-errors (`premature_eof`) instead of saving a half-finished answer as a complete turn (symmetric to the OpenAI `#249` guard; the stop_reason-only compat path is preserved, and `ARIS_ALLOW_EOF_WITHOUT_STOP=1` opts a terminal-signal-less proxy back into the old behavior); `grep_search` with `multiline: true` actually matches across lines in content mode (was silently empty); MCP tool results carried only in `structuredContent` are no longer dropped. Tests (CI mode): api 35 / runtime 212 / tools 67 / aris-cli 181 / commands 5 (+21, incl. 2 stream-level integration tests), all green. Codex MCP (gpt-5.5 xhigh): design gate (NO-GO → GO after fixing an off-by-one) → implementation gate (NO-GO → GO after adding the stream-level integration tests). (Two latent-only candidates — Anthropic block-`index` routing, OpenAI multi-line SSE — remain deferred to a hardening pass.)
@@ -108,7 +110,7 @@
 - 🔍 **Reviewer**: An independent LLM that adversarially critiques the Executor's output via the `LlmReview` tool
 - 🔄 **Iterate**: Executor writes → Reviewer critiques → Executor revises → loop until quality converges
 
-With **79 bundled research skills**, ARIS covers the full pipeline from idea discovery to paper submission.
+With **81 bundled research skills**, ARIS covers the full pipeline from idea discovery to paper submission.
 
 ---
 
@@ -212,7 +214,7 @@ User input
 # Direct LlmReview tool invocation
 ```
 
-### 2. 📚 79 Bundled Research Skills
+### 2. 📚 81 Bundled Research Skills
 
 Use `/skills` to list all available skills:
 
@@ -227,14 +229,14 @@ Use `/skills` to list all available skills:
 /run-experiment      — Remote GPU deployment
 /peer-review         — Conference reviewer simulation
 /rebuttal            — Submission rebuttal generation
-...  (79 total)
+...  (81 total)
 ```
 
 **Three-tier skill priority** (higher overrides lower):
 ```
 ~/.config/aris/skills/   [user custom — highest priority]
 ~/.claude/skills/        [Claude Code compatible]
-bundled skills           [79 out-of-the-box skills]
+bundled skills           [81 out-of-the-box skills]
 ```
 
 ### 3. 🖥️ REPL Commands
@@ -254,7 +256,7 @@ bundled skills           [79 out-of-the-box skills]
 | `/version` | Version info |
 | `/research-review` | Invoke research review skill directly |
 | `/paper-write` | Invoke paper writing skill directly |
-| `...` | All 79 skill slash commands |
+| `...` | All 81 skill slash commands |
 
 ### 4. 🌐 Language Preference
 
@@ -409,7 +411,7 @@ The easiest way to set this up is `aris setup` → reviewer option 10
 - [x] Phase 0: Rust fork foundation (based on claw-code)
 - [x] Phase 1: Multi-provider support (Anthropic / OpenAI / Gemini / GLM / MiniMax)
 - [x] Phase 1: LlmReview adversarial critique tool
-- [x] Phase 1: Bundled research skills (42 at launch, 79 today)
+- [x] Phase 1: Bundled research skills (42 at launch, 81 today)
 - [x] Phase 1: Language preference & anti-hallucination system prompt
 - [ ] Phase 2: Skills system polish (three-tier priority UI)
 - [ ] Phase 2: Web UI dashboard

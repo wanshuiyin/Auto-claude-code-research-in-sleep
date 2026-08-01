@@ -29,6 +29,8 @@
 
 ## 📰 最新动态
 
+> **v0.4.23** (2026-08-02) — **输出折叠版** —— 修掉真实用户投诉第一名:CLI 会把读到的文档**全文** dump 到屏幕(2000 行论文=刷 2000 行)、bash 全量 stdout、grep 全量匹配内容。**🧹 工具输出折叠(仅显示层)**:Read/Grep 显示前 6 行,Bash 每流显示前 4 + 后 4(stderr 保持红色),然后一行暗色 "… (+N more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)";保留行截 240 字符(防 minified 单行);session、模型上下文、`--output-format json` 和 `/export` 始终保留**完整**内容。经核实 thinking 本来就不打屏(体感来自上述 dump)—— 新增两个端到端 sentinel 测试锁死 thinking/reasoning 永不落终端。**🐛 bash 超时现在真杀进程** —— 此前超时报告了 interrupted 但命令还在跑、副作用事后落地;`ARIS_BASH_KILL_ON_TIMEOUT=0` 可回旧行为。**📦 内置 skills 79→81**:`/integrity-forensics`(Anti-Autoresearch SHA-pin 启动器:证据台账→GPT 审计→确定性裁决→BLOCK/WARN 门)与 `/web-debug-search`。grep content 模式不再误报 "0 matches";全部本地 mock 测试代理免疫(此前 shell 挂代理会红 15 个测试)。测试:api 41 / aris-cli 212 + 3 e2e / runtime 225 / tools 69 / commands 5,**真代理环境下**全绿。Codex MCP(gpt-5.6-sol ultra)裁定折叠设计与 scope(cost/压缩包刻意留到 v0.4.24 —— 两项耦合)。
+>
 > **v0.4.22** (2026-07-11) — **skills 大同步 + GPT-5.6-Sol 版**。**📦 bundle 追平主仓 93 个 commit**:**79 个内置 skill**(新增 `meta-apply`、`paper-poster-html` —— 新的测量门控 HTML 海报流水线)、28 个 tools helper(+8)、11 篇新 shared-references 规范文档;同步脚本新增 `ARIS_SYNC_EXPECT_SHA` 钉版本护栏 + 精确清单漂移测试。**🎛 Reviewer 控制面升级到新 skills 携带的 GPT-5.6-Sol 双档制**:system prompt 现在放行 skills 显式 pin 的 `model: gpt-5.6-sol` + 每次调用的 effort(旧的"绝不传 model"规则会把深度审从 ultra 静默压到 xhigh)、携带规范的仅-能力型 fallback 链、并在每次 fresh codex 调用上 pin `approval-policy: "never"` + 显式 `sandbox`;HTTP LlmReview fallback 默认**刻意保持 gpt-5.5**(gpt-5.6-sol 在 chat-completions + reasoning_effort 真烟测通过前仅作实验性选项);落地 gpt-5.6 家族计价(sol $5/$30、terra $2.50/$15、luna $1/$6);banner / Reviewer 行 / `/reviewer` 全部诚实区分 primary 与 fallback。**🐛 8 个核实修复**:显式 `--model` 不再被 saved model 静默覆盖(来源全程追踪;4.8→4.7 可用性回落尊重显式选择);saved model 不再跨 provider 泄漏(OpenAI transport 无模型时 fail-fast);`--output-format json` 绝不弹审批(单 JSON 文档契约恢复);**Windows `aris login` 修好**(PKCE 读 /dev/urandom → getrandom)、**Windows 命令探测修好**(PowerShell 工具此前用 `sh` 探测自己);codex `.cmd` shim 诚实分类(setup 不再写下 MCP 起不来的配置);嵌套 config.json 现在会警告而非静默变全默认;NotebookEdit 不再铸重复 cell id。**🖥 新增 windows-latest CI job**(编译门 + 3 组定向测试)。测试:api 41 / aris-cli 204 + 1 e2e / runtime 223 / tools 69 / commands 5(+54)全绿。Codex MCP(gpt-5.6-sol **ultra**):5 轮设计 gate(NO-GO ×4 → GO)+ subagent 实现磁盘核实。
 >
 > **v0.4.21** (2026-06-28) — **bug-fix 补丁**(Codex 对抗式猎杀挖出的 5 个新真用户 bug —— 全部磁盘核实、与 v0.4.20 不重叠;设计 + 实现两道跨模型审)。**🐛 头条**:OpenAI-compatible 流式把跨网络 chunk 切断的多字节 UTF-8(中文 / emoji)解成 `�` —— 每个 HTTP chunk 单独 `from_utf8_lossy`,于是一个 3 字节中文字或 4 字节 emoji 落在 chunk 边界上就两边都坏(对中文用户 + 国产 OpenAI-compatible provider —— Kimi/GLM/MiniMax/DeepSeek/Qwen/豆包 —— 是高频命中)。流式缓冲改为原始字节,只解码完整 SSE 行。**还修**:saved 的 OpenAI/custom executor 配置不再覆盖 shell 设的 `EXECUTOR_PROVIDER`(启动"shell 优先"路径有一处没加 gate → 走错 executor / model not found);Anthropic 流在有内容但无终止信号时 clean-EOF 现在硬报错(`premature_eof`)而非把半截回答存成完整 turn(与 OpenAI `#249` guard 对称;stop_reason-only 兼容路径保留,且 `ARIS_ALLOW_EOF_WITHOUT_STOP=1` 让"合法地从不发终止信号"的代理回到旧行为);`grep_search` 的 `multiline: true` 在 content 模式真能跨行匹配了(此前静默返回空);只装在 `structuredContent` 里的 MCP 工具结果不再被丢弃。测试(CI 模式):api 35 / runtime 212 / tools 67 / aris-cli 181 / commands 5(+21,含 2 个流级集成测试)全绿。Codex MCP(gpt-5.5 xhigh):设计审(NO-GO → 修掉一个 off-by-one 后 GO)→ 实现审(NO-GO → 补流级集成测试后 GO)。(两个潜在候选 —— Anthropic block-`index` 路由、OpenAI 多行 SSE —— 仍留硬化 pass。)
@@ -108,7 +110,7 @@
 - 🔍 **Reviewer**（审查者）：独立 LLM，通过 `LlmReview` 工具对 Executor 的输出进行对抗性审查
 - 🔄 **迭代精进**：Executor 写 → Reviewer 批 → Executor 修 → 循环直至高质量
 
-内置 **79 个研究技能**（Skills），覆盖从选题到投稿的完整研究流水线。
+内置 **81 个研究技能**（Skills），覆盖从选题到投稿的完整研究流水线。
 
 ---
 
@@ -212,7 +214,7 @@ sudo mv aris /usr/local/bin/aris
 # 直接调用 LlmReview 工具
 ```
 
-### 2. 📚 79 个内置研究技能
+### 2. 📚 81 个内置研究技能
 
 通过 `/skills` 命令查看所有可用技能：
 
@@ -227,14 +229,14 @@ sudo mv aris /usr/local/bin/aris
 /run-experiment    — 远程 GPU 实验部署
 /peer-review       — 同行评审模拟
 /rebuttal          — 投稿 Rebuttal 生成
-...（共 79 个）
+...（共 81 个）
 ```
 
 **技能三级优先级**（高优先覆盖低优先）：
 ```
 ~/.config/aris/skills/   [用户自定义，最高优先]
 ~/.claude/skills/        [Claude Code 兼容]
-内置 bundled skills      [79 个开箱即用]
+内置 bundled skills      [81 个开箱即用]
 ```
 
 ### 3. 🖥️ REPL 交互命令
@@ -254,7 +256,7 @@ sudo mv aris /usr/local/bin/aris
 | `/version` | 版本信息 |
 | `/research-review` | 直接调用 review 技能 |
 | `/paper-write` | 直接调用写作技能 |
-| `...` | 以及全部 79 个技能命令 |
+| `...` | 以及全部 81 个技能命令 |
 
 ### 4. 🌐 多语言支持
 
@@ -394,7 +396,7 @@ sudo mv aris /usr/local/bin/aris
 - [x] Phase 0：Rust fork 基础架构（基于 claw-code）
 - [x] Phase 1：多 Provider 支持（Anthropic/OpenAI/Gemini/GLM/MiniMax）
 - [x] Phase 1：LlmReview 对抗审查工具
-- [x] Phase 1：研究技能内置（首发 42 个，现 79 个）
+- [x] Phase 1：研究技能内置（首发 42 个，现 81 个）
 - [x] Phase 1：语言偏好与防幻觉系统提示
 - [ ] Phase 2：Skills 系统完善（三级优先级 UI）
 - [ ] Phase 2：Web UI 仪表盘
