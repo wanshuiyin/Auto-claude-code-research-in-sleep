@@ -4190,6 +4190,26 @@ mod tests {
     use runtime::{ApiRequest, AssistantEvent, ConversationRuntime, RuntimeError, Session};
     use serde_json::json;
 
+    /// v0.4.23: web_fetch/web_search tests drive LOCAL mock servers through
+    /// reqwest — a developer shell's http(s)_proxy routes 127.0.0.1 through
+    /// the proxy and the tests fail (observed live). Scrub once per process.
+    fn scrub_proxy_env() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| {
+            for var in [
+                "http_proxy",
+                "https_proxy",
+                "HTTP_PROXY",
+                "HTTPS_PROXY",
+                "all_proxy",
+                "ALL_PROXY",
+            ] {
+                std::env::remove_var(var);
+            }
+            std::env::set_var("NO_PROXY", "127.0.0.1,localhost");
+        });
+    }
+
     fn env_lock() -> &'static Mutex<()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         LOCK.get_or_init(|| Mutex::new(()))
@@ -4812,6 +4832,7 @@ mod tests {
 
     #[test]
     fn web_fetch_returns_prompt_aware_summary() {
+        scrub_proxy_env();
         let server = TestServer::spawn(Arc::new(|request_line: &str| {
             assert!(request_line.starts_with("GET /page "));
             HttpResponse::html(
@@ -4852,6 +4873,7 @@ mod tests {
 
     #[test]
     fn web_fetch_supports_plain_text_and_rejects_invalid_url() {
+        scrub_proxy_env();
         let server = TestServer::spawn(Arc::new(|request_line: &str| {
             assert!(request_line.starts_with("GET /plain "));
             HttpResponse::text(200, "OK", "plain text response")
@@ -4886,6 +4908,7 @@ mod tests {
 
     #[test]
     fn web_search_extracts_and_filters_results() {
+        scrub_proxy_env();
         let server = TestServer::spawn(Arc::new(|request_line: &str| {
             assert!(request_line.contains("GET /search?q=rust+web+search "));
             HttpResponse::html(
@@ -4930,6 +4953,7 @@ mod tests {
 
     #[test]
     fn web_search_handles_generic_links_and_invalid_base_url() {
+        scrub_proxy_env();
         let _guard = env_lock()
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);

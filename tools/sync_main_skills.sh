@@ -227,7 +227,7 @@ done
 # NOTE: this script does NOT auto-prune assets/tools/ — the 29 helpers
 # above are the complete intended bundle as of v0.4.23. A stale extra file
 # is caught by the v0.4.22 exact-inventory test (asserts assets/tools has
-# EXACTLY these 28 entries) on next `cargo test`.
+# EXACTLY these 29 entries) on next `cargo test`.
 
 # ---------------------------------------------------------------
 # Step 7: Record source commit
@@ -243,14 +243,14 @@ echo "==> Sync complete."
 echo
 echo "Next steps (run manually, in order):"
 echo "  1. cargo build --release"
-echo "     # confirm warning: Embedded 79 bundled skills, 103 helper resources"
+echo "     # confirm warning: Embedded 81 bundled skills, 104 helper resources"
 echo "     # (second number counts ALL bundled resources, not just assets/tools)"
 echo
 echo "  2. cargo test -p runtime --lib cache -- --test-threads=1"
 echo "     # all cache tests pass (incl. the 3 v0.4.11 drift tests + the"
 echo "     # exact-inventory tests: 29 tools helpers, posterly MIT txt)"
 echo
-echo "  3. ./target/release/aris --version       # → 0.4.22 (or current after Cargo.toml bump)"
+echo "  3. ./target/release/aris --version       # → 0.4.23 (or current after Cargo.toml bump)"
 echo "  4. ./target/release/aris doctor          # smoke test"
 echo
 echo "  5. git diff --stat crates/runtime/assets/"

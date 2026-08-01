@@ -563,7 +563,7 @@ mod tests {
     /// tools/sync_main_skills.sh ships. Set-equality (not subset) so BOTH
     /// failure modes are caught: a helper missing after a sync (the
     /// pre-v0.4.22 gap — the script's RUNTIME_HELPERS lagged what synced
-    /// SKILL.md files referenced) AND a stale 29th file lingering in
+    /// SKILL.md files referenced) AND a stale 30th file lingering in
     /// assets/tools/ (the sync script never auto-prunes).
     #[test]
     fn bundled_tools_inventory_is_exactly_the_sync_whitelist() {

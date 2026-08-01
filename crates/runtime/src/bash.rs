@@ -110,6 +110,16 @@ async fn execute_bash_async(
     cwd: std::path::PathBuf,
 ) -> io::Result<BashCommandOutput> {
     let mut command = prepare_tokio_command(&input.command, &cwd, &sandbox_status, true);
+    // v0.4.23 (B2): a timed-out `output()` future is DROPPED — without
+    // kill_on_drop the child keeps running and its side effects land AFTER we
+    // reported `interrupted: true` (the tool contract lied). kill_on_drop
+    // SIGKILLs the immediate child on drop; process-group kill is explicitly
+    // out of scope. Escape hatch: ARIS_BASH_KILL_ON_TIMEOUT=0 restores the old
+    // let-it-run behavior. Successful completions reap before drop → no-op;
+    // the background path uses std spawn and is untouched.
+    if bash_kill_on_timeout_enabled(std::env::var("ARIS_BASH_KILL_ON_TIMEOUT").ok().as_deref()) {
+        command.kill_on_drop(true);
+    }
 
     let output_result = if let Some(timeout_ms) = input.timeout {
         match timeout(Duration::from_millis(timeout_ms), command.output()).await {
@@ -256,6 +266,12 @@ fn prepare_command(
     prepared
 }
 
+/// v0.4.23 (B2): only the exact opt-out `"0"` disables the timeout kill;
+/// unset or any other value keeps it on (pure for the truth-table test).
+fn bash_kill_on_timeout_enabled(env_value: Option<&str>) -> bool {
+    env_value != Some("0")
+}
+
 fn prepare_tokio_command(
     command: &str,
     cwd: &std::path::Path,
@@ -384,5 +400,82 @@ mod tests {
         .expect("bash command should execute");
 
         assert!(!output.sandbox_status.expect("sandbox status").enabled);
+    }
+
+    /// v0.4.23 (B2): only the exact "0" opts out of the timeout kill.
+    #[test]
+    fn bash_kill_on_timeout_gate_truth_table() {
+        use super::bash_kill_on_timeout_enabled;
+        assert!(bash_kill_on_timeout_enabled(None));
+        assert!(bash_kill_on_timeout_enabled(Some("1")));
+        assert!(bash_kill_on_timeout_enabled(Some("")));
+        assert!(bash_kill_on_timeout_enabled(Some("true")));
+        assert!(!bash_kill_on_timeout_enabled(Some("0")));
+    }
+
+    /// v0.4.23 (B2): the REAL behavioral lock — a timed-out command's side
+    /// effects must NOT land after the tool reported `interrupted: true`.
+    /// Pre-B2 the dropped `output()` future left the child running and the
+    /// marker file appeared ~1s later.
+    #[cfg(unix)]
+    #[test]
+    fn bash_timeout_kills_child_process() {
+        // Gate round-2 hermeticity: (a) a legitimately-set escape hatch in
+        // the developer's shell must not fail the CORRECT implementation —
+        // isolate it; (b) a strict sandbox config could block the marker
+        // write entirely and green-wash the OLD defect — prove writability
+        // with a control run first and skip when the env can't write.
+        std::env::remove_var("ARIS_BASH_KILL_ON_TIMEOUT");
+        let marker = std::env::temp_dir().join(format!(
+            "aris-b2-marker-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("time")
+                .as_nanos()
+        ));
+        let marker_str = marker.display().to_string();
+        let control = execute_bash(BashCommandInput {
+            command: format!("touch '{marker_str}.control'"),
+            timeout: Some(5_000),
+            description: None,
+            run_in_background: Some(false),
+            dangerously_disable_sandbox: Some(true),
+            namespace_restrictions: None,
+            isolate_network: None,
+            filesystem_mode: None,
+            allowed_mounts: None,
+        })
+        .expect("control bash command should execute");
+        let control_marker = std::path::PathBuf::from(format!("{marker_str}.control"));
+        if control.interrupted || !control_marker.exists() {
+            // Environment (e.g. strict sandbox) can't write the marker at all
+            // — the assertion below would be meaningless; skip honestly.
+            eprintln!("skipping bash_timeout_kills_child_process: env cannot write markers");
+            let _ = std::fs::remove_file(&control_marker);
+            return;
+        }
+        let _ = std::fs::remove_file(&control_marker);
+        let output = execute_bash(BashCommandInput {
+            command: format!("sleep 1 && touch '{marker_str}'"),
+            timeout: Some(120),
+            description: None,
+            run_in_background: Some(false),
+            dangerously_disable_sandbox: Some(true),
+            namespace_restrictions: None,
+            isolate_network: None,
+            filesystem_mode: None,
+            allowed_mounts: None,
+        })
+        .expect("bash command should execute");
+        assert!(output.interrupted, "the 120ms timeout must fire");
+        // Give a surviving child ample time to prove it survived (pre-B2 it
+        // touched the marker at ~1s).
+        std::thread::sleep(std::time::Duration::from_millis(1_800));
+        assert!(
+            !marker.exists(),
+            "child survived the timeout and touched the marker — kill_on_drop regressed"
+        );
+        let _ = std::fs::remove_file(&marker);
     }
 }

@@ -113,6 +113,15 @@ fn json_mode_denies_escalation_without_prompting_and_emits_single_json_doc() {
         .env("ARIS_NO_HISTORY", "1")
         .env_remove("EXECUTOR_PROVIDER")
         .env_remove("ANTHROPIC_AUTH_TOKEN")
+        // A developer shell with http(s)_proxy set would route the child's
+        // 127.0.0.1 mock-server requests through the proxy (502s) — scrub.
+        .env_remove("http_proxy")
+        .env_remove("https_proxy")
+        .env_remove("HTTP_PROXY")
+        .env_remove("HTTPS_PROXY")
+        .env_remove("all_proxy")
+        .env_remove("ALL_PROXY")
+        .env("NO_PROXY", "127.0.0.1,localhost")
         .current_dir(&home)
         // THE point of the test: stdin is CLOSED. A prompting JSON path would
         // block (pre-v0.4.22 behavior printed "Permission approval required"
@@ -176,6 +185,148 @@ fn json_mode_denies_escalation_without_prompting_and_emits_single_json_doc() {
     assert!(
         denied,
         "expected the bash escalation to be structurally denied, got: {doc}"
+    );
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// v0.4.23 (A, codex-mandated sentinel): Anthropic thinking deltas must NEVER
+/// reach stdout in text mode. (We deliberately do NOT assert on the word
+/// "Thinking" — the spinner legitimately prints "Thinking...".)
+fn sse_thinking_then_text_turn() -> String {
+    concat!(
+        "event: message_start\n",
+        "data: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_t\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"model\":\"claude-opus-4-8\",\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":5,\"output_tokens\":1}}}\n\n",
+        "event: content_block_start\n",
+        "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"ARIS_THINKING_SENTINEL_XK9\"}}\n\n",
+        "event: content_block_stop\n",
+        "data: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+        "event: content_block_start\n",
+        "data: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+        "event: content_block_delta\n",
+        "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"visible reply body\"}}\n\n",
+        "event: content_block_stop\n",
+        "data: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+        "event: message_delta\n",
+        "data: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"input_tokens\":5,\"output_tokens\":4}}\n\n",
+        "event: message_stop\n",
+        "data: {\"type\":\"message_stop\"}\n\n",
+    )
+    .to_string()
+}
+
+fn isolated_aris(home: &std::path::Path, base_url: &str) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_aris"));
+    cmd.env("HOME", home)
+        .env("CLAUDE_CONFIG_HOME", home.join("claude"))
+        .env("XDG_CONFIG_HOME", home.join("xdg"))
+        .env("ANTHROPIC_BASE_URL", base_url)
+        .env("ARIS_DISABLE_KEYCHAIN", "1")
+        .env("ARIS_NO_HISTORY", "1")
+        .env_remove("EXECUTOR_PROVIDER")
+        .env_remove("EXECUTOR_API_KEY")
+        .env_remove("EXECUTOR_BASE_URL")
+        .env_remove("ANTHROPIC_AUTH_TOKEN")
+        .env_remove("http_proxy")
+        .env_remove("https_proxy")
+        .env_remove("HTTP_PROXY")
+        .env_remove("HTTPS_PROXY")
+        .env_remove("all_proxy")
+        .env_remove("ALL_PROXY")
+        .env("NO_PROXY", "127.0.0.1,localhost")
+        .current_dir(home)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    cmd
+}
+
+fn wait_with_timeout(child: &mut std::process::Child, secs: u64) -> std::process::ExitStatus {
+    let deadline = Instant::now() + Duration::from_secs(secs);
+    loop {
+        match child.try_wait().expect("try_wait") {
+            Some(status) => return status,
+            None if Instant::now() > deadline => {
+                let _ = child.kill();
+                panic!("aris hung (>{secs}s)");
+            }
+            None => thread::sleep(Duration::from_millis(100)),
+        }
+    }
+}
+
+#[test]
+fn text_mode_never_prints_anthropic_thinking() {
+    let (base_url, _server) = spawn_mock_anthropic(vec![sse_thinking_then_text_turn()]);
+    let home = std::env::temp_dir().join(format!("aris-think-{}", std::process::id()));
+    std::fs::create_dir_all(&home).expect("temp home");
+
+    let mut child = isolated_aris(&home, &base_url);
+    child
+        .args(["--print", "say something"])
+        .env("ANTHROPIC_API_KEY", "test-key-thinking");
+    let mut child = child.spawn().expect("spawn aris");
+    let status = wait_with_timeout(&mut child, 60);
+
+    let mut stdout = String::new();
+    child.stdout.take().unwrap().read_to_string(&mut stdout).unwrap();
+    let mut stderr = String::new();
+    child.stderr.take().unwrap().read_to_string(&mut stderr).unwrap();
+
+    assert!(status.success(), "exit {status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stdout.contains("visible reply"),
+        "the visible text must render: {stdout}"
+    );
+    assert!(
+        !stdout.contains("ARIS_THINKING_SENTINEL_XK9")
+            && !stderr.contains("ARIS_THINKING_SENTINEL_XK9"),
+        "thinking content leaked to the terminal:\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+/// v0.4.23 (A, codex-mandated sentinel): Kimi-family `reasoning_content` must
+/// never reach the terminal either (it only feeds the replay cache).
+#[test]
+fn text_mode_never_prints_kimi_reasoning() {
+    let openai_sse = concat!(
+        "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"ARIS_KIMI_REASONING_SENTINEL_QZ7\"}}]}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"content\":\"kimi visible answer\"}}]}\n\n",
+        "data: {\"choices\":[{\"finish_reason\":\"stop\"}]}\n\n",
+        "data: [DONE]\n\n",
+    )
+    .to_string();
+    let (base_url, _server) = spawn_mock_anthropic(vec![openai_sse]);
+    let home = std::env::temp_dir().join(format!("aris-kimi-{}", std::process::id()));
+    std::fs::create_dir_all(&home).expect("temp home");
+
+    let mut child = isolated_aris(&home, &base_url);
+    child
+        .args(["--model", "kimi-k2.5", "--print", "say something"])
+        .env("EXECUTOR_PROVIDER", "openai")
+        .env("EXECUTOR_API_KEY", "test-key-kimi")
+        .env("EXECUTOR_BASE_URL", &base_url);
+    let mut child = child.spawn().expect("spawn aris");
+    let status = wait_with_timeout(&mut child, 60);
+
+    let mut stdout = String::new();
+    child.stdout.take().unwrap().read_to_string(&mut stdout).unwrap();
+    let mut stderr = String::new();
+    child.stderr.take().unwrap().read_to_string(&mut stderr).unwrap();
+
+    assert!(status.success(), "exit {status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}");
+    assert!(
+        stdout.contains("kimi visible answer"),
+        "the visible text must render: {stdout}"
+    );
+    assert!(
+        !stdout.contains("ARIS_KIMI_REASONING_SENTINEL_QZ7")
+            && !stderr.contains("ARIS_KIMI_REASONING_SENTINEL_QZ7"),
+        "reasoning_content leaked to the terminal:\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
 
     let _ = std::fs::remove_dir_all(&home);

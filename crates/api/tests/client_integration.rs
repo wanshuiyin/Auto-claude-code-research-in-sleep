@@ -1,6 +1,28 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Once};
 use std::time::Duration;
+
+/// v0.4.23: these tests drive LOCAL mock servers through reqwest, which
+/// honors proxy env vars — a developer shell with http(s)_proxy set routes
+/// 127.0.0.1 through the proxy and every request fails (observed live: all 6
+/// integration tests red purely from the shell's proxy). Scrub once per
+/// process; the test env is disposable and no test here needs a proxy.
+fn scrub_proxy_env() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        for var in [
+            "http_proxy",
+            "https_proxy",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "all_proxy",
+            "ALL_PROXY",
+        ] {
+            std::env::remove_var(var);
+        }
+        std::env::set_var("NO_PROXY", "127.0.0.1,localhost");
+    });
+}
 
 use api::{
     AnthropicClient, ApiError, ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStartEvent,
@@ -14,6 +36,7 @@ use tokio::sync::Mutex;
 
 #[tokio::test]
 async fn send_message_posts_json_and_parses_response() {
+    scrub_proxy_env();
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
     let body = concat!(
         "{",
@@ -77,6 +100,7 @@ async fn send_message_posts_json_and_parses_response() {
 
 #[tokio::test]
 async fn stream_message_parses_sse_events_with_tool_use() {
+    scrub_proxy_env();
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
     let sse = concat!(
         "event: message_start\n",
@@ -171,6 +195,7 @@ async fn stream_message_parses_sse_events_with_tool_use() {
 /// branch end-to-end (not just the pure helper).
 #[tokio::test]
 async fn stream_truncated_without_terminal_signal_errors() {
+    scrub_proxy_env();
     // Hermetic: this test asserts the DEFAULT (guard-on) behavior, which the
     // ARIS_ALLOW_EOF_WITHOUT_STOP=1 opt-out would suppress — ensure it's unset.
     std::env::remove_var("ARIS_ALLOW_EOF_WITHOUT_STOP");
@@ -225,6 +250,7 @@ async fn stream_truncated_without_terminal_signal_errors() {
 /// against the truncation fix regressing the stop_reason-only compat path.
 #[tokio::test]
 async fn stream_stop_reason_delta_without_message_stop_drains_cleanly() {
+    scrub_proxy_env();
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
     // Same as above but a stop_reason-bearing message_delta arrives before the
     // connection closes — no message_stop, but the stream IS terminal.
@@ -271,6 +297,7 @@ async fn stream_stop_reason_delta_without_message_stop_drains_cleanly() {
 
 #[tokio::test]
 async fn retries_retryable_failures_before_succeeding() {
+    scrub_proxy_env();
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
     let server = spawn_server(
         state.clone(),
@@ -304,6 +331,7 @@ async fn retries_retryable_failures_before_succeeding() {
 
 #[tokio::test]
 async fn surfaces_retry_exhaustion_for_persistent_retryable_errors() {
+    scrub_proxy_env();
     let state = Arc::new(Mutex::new(Vec::<CapturedRequest>::new()));
     let server = spawn_server(
         state.clone(),

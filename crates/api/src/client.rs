@@ -1178,9 +1178,28 @@ mod tests {
 
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
+        let guard = LOCK
+            .get_or_init(|| Mutex::new(()))
             .lock()
-            .expect("env lock")
+            .expect("env lock");
+        // v0.4.23: these tests drive LOCAL mock HTTP servers through reqwest,
+        // which honors proxy env vars — a developer shell with http(s)_proxy
+        // set routes 127.0.0.1 through the proxy and every request comes back
+        // 502 (observed live: 4 tests red on a released tag purely from the
+        // shell's proxy). Scrub the proxy env under the lock; tests never
+        // need a proxy and the test process env is disposable.
+        for var in [
+            "http_proxy",
+            "https_proxy",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "all_proxy",
+            "ALL_PROXY",
+        ] {
+            std::env::remove_var(var);
+        }
+        std::env::set_var("NO_PROXY", "127.0.0.1,localhost");
+        guard
     }
 
     fn temp_config_home() -> std::path::PathBuf {

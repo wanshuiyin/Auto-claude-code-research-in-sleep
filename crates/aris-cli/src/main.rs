@@ -19,7 +19,31 @@ pub(crate) static ENV_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(()
 
 #[cfg(test)]
 pub(crate) fn env_test_guard() -> std::sync::MutexGuard<'static, ()> {
-    ENV_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner())
+    let guard = ENV_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    scrub_proxy_env_for_tests();
+    guard
+}
+
+/// v0.4.23: tests that drive local mock HTTP servers through reqwest break
+/// under a developer shell's http(s)_proxy (127.0.0.1 gets routed through the
+/// proxy → 502; observed live on a released tag). Scrub once per process —
+/// no test needs a proxy and the test-process env is disposable.
+#[cfg(test)]
+pub(crate) fn scrub_proxy_env_for_tests() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        for var in [
+            "http_proxy",
+            "https_proxy",
+            "HTTP_PROXY",
+            "HTTPS_PROXY",
+            "all_proxy",
+            "ALL_PROXY",
+        ] {
+            std::env::remove_var(var);
+        }
+        std::env::set_var("NO_PROXY", "127.0.0.1,localhost");
+    });
 }
 
 use std::cell::RefCell;
@@ -5631,14 +5655,26 @@ fn format_bash_result(icon: &str, parsed: &serde_json::Value) -> String {
         lines[0].push_str(&format!(" {status}"));
     }
 
+    // v0.4.23 (A2): fold both streams for display, head+tail (the tail
+    // carries the error/summary). stderr keeps its red per KEPT line.
     if let Some(stdout) = parsed.get("stdout").and_then(|value| value.as_str()) {
         if !stdout.trim().is_empty() {
-            lines.push(stdout.trim_end().to_string());
+            lines.push(fold_tool_output(
+                stdout.trim_end(),
+                tool_output_line_budget(8),
+                FoldKeep::HeadTail,
+                None,
+            ));
         }
     }
     if let Some(stderr) = parsed.get("stderr").and_then(|value| value.as_str()) {
         if !stderr.trim().is_empty() {
-            lines.push(format!("\x1b[38;5;203m{}\x1b[0m", stderr.trim_end()));
+            lines.push(fold_tool_output(
+                stderr.trim_end(),
+                tool_output_line_budget(8),
+                FoldKeep::HeadTail,
+                Some("\x1b[38;5;203m"),
+            ));
         }
     }
 
@@ -5666,12 +5702,14 @@ fn format_read_result(icon: &str, parsed: &serde_json::Value) -> String {
         .unwrap_or_default();
     let end_line = start_line.saturating_add(num_lines.saturating_sub(1));
 
+    // v0.4.23 (A1): the main "dumps the whole document" offender — fold the
+    // read payload for display (session/model/JSON keep the full content).
     format!(
         "{icon} \x1b[2m📄 Read {path} (lines {}-{} of {})\x1b[0m\n{}",
         start_line,
         end_line.max(start_line),
         total_lines,
-        content
+        fold_tool_output(content, tool_output_line_budget(6), FoldKeep::Head, None)
     )
 }
 
@@ -5698,10 +5736,18 @@ fn format_structured_patch_preview(parsed: &serde_json::Value) -> Option<String>
     for hunk in hunks.iter().take(2) {
         let lines = hunk.get("lines")?.as_array()?;
         for line in lines.iter().filter_map(|value| value.as_str()).take(6) {
+            // v0.4.23 (A, codex catch): hunk/line COUNTS were capped but line
+            // LENGTH was not — editing a minified file could still print MB.
+            // ARIS_TOOL_OUTPUT_LINES=0 restores the uncapped preview too.
+            let line = if tool_output_line_budget(6) == usize::MAX {
+                line.to_string()
+            } else {
+                cap_fold_line(line)
+            };
             match line.chars().next() {
                 Some('+') => preview.push(format!("\x1b[38;5;70m{line}\x1b[0m")),
                 Some('-') => preview.push(format!("\x1b[38;5;203m{line}\x1b[0m")),
-                _ => preview.push(line.to_string()),
+                _ => preview.push(line),
             }
         }
     }
@@ -5790,15 +5836,128 @@ fn format_grep_result(icon: &str, parsed: &serde_json::Value) -> String {
                 .join("\n")
         })
         .unwrap_or_default();
-    let summary = format!(
-        "{icon} \x1b[38;5;245mgrep_search\x1b[0m {num_matches} matches across {num_files} files"
-    );
+    // v0.4.23 ride-along (codex): content mode returns numLines with NO
+    // numMatches — the old summary showed a false "0 matches" above real
+    // content. Report per-mode: returned lines when that's what we have.
+    // Gate round-2 (codex): num_matches is an Option WITHOUT
+    // skip_serializing_if — content mode serializes `"numMatches": null`, so
+    // a bare `.get(...).is_some()` was ALWAYS true and the ride-along never
+    // fired. Detect the mode by whether a real NUMBER is present.
+    let matches_value = parsed
+        .get("numMatches")
+        .and_then(serde_json::Value::as_u64);
+    let num_lines = parsed.get("numLines").and_then(serde_json::Value::as_u64);
+    let stat = match (matches_value, num_lines) {
+        (Some(n), _) => format!("{n} matches across {num_files} files"),
+        (None, Some(l)) => format!("{l} returned lines across {num_files} files"),
+        (None, None) => format!("{num_matches} matches across {num_files} files"),
+    };
+    let summary = format!("{icon} \x1b[38;5;245mgrep_search\x1b[0m {stat}");
     if !content.trim().is_empty() {
-        format!("{summary}\n{}", content.trim_end())
+        // v0.4.23 (A3): fold the content-mode blob for display.
+        format!(
+            "{summary}\n{}",
+            fold_tool_output(
+                content.trim_end(),
+                tool_output_line_budget(6),
+                FoldKeep::Head,
+                None
+            )
+        )
     } else if !filenames.is_empty() {
         format!("{summary}\n{filenames}")
     } else {
         summary
+    }
+}
+
+/// v0.4.23 (A): how [`fold_tool_output`] keeps lines when folding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FoldKeep {
+    /// Keep the FIRST `budget` lines (read/grep — the opening matters).
+    Head,
+    /// Keep the first `budget/2` and last `budget - budget/2` lines (bash —
+    /// the tail carries the error/summary; odd budgets favor the tail).
+    HeadTail,
+}
+
+/// v0.4.23 (A): kept lines are additionally capped at this many chars so a
+/// single million-char minified-JSON/SVG line can't defeat line folding.
+/// `ARIS_TOOL_OUTPUT_LINES=0` disables BOTH the folding and this cap.
+const FOLD_LINE_CHAR_CAP: usize = 240;
+
+/// Resolve the per-tool display line budget: env unset → `default_lines`;
+/// a positive integer overrides every tool's default; `0` → unlimited
+/// (exact pre-v0.4.23 display, char cap included).
+fn tool_output_line_budget(default_lines: usize) -> usize {
+    match std::env::var("ARIS_TOOL_OUTPUT_LINES")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+    {
+        Some(0) => usize::MAX,
+        Some(n) => n,
+        None => default_lines,
+    }
+}
+
+/// Cap one kept line at [`FOLD_LINE_CHAR_CAP`] chars (char-boundary safe).
+fn cap_fold_line(line: &str) -> String {
+    if line.chars().count() <= FOLD_LINE_CHAR_CAP {
+        return line.to_string();
+    }
+    let kept: String = line.chars().take(FOLD_LINE_CHAR_CAP).collect();
+    format!("{kept}\x1b[2m…\x1b[0m")
+}
+
+/// v0.4.23 (A): the tool-output folding fix for the real-user report "aris
+/// dumps the full content of documents it reads onto the screen". Display
+/// layer ONLY — the session, model context, JSON output and /export always
+/// keep the complete payload. `line_style` wraps each KEPT content line
+/// (used to preserve bash stderr's red); the fold hint is always dim.
+fn fold_tool_output(
+    text: &str,
+    budget: usize,
+    keep: FoldKeep,
+    line_style: Option<&str>,
+) -> String {
+    let style = |line: &str| match line_style {
+        Some(color) => format!("{color}{}\x1b[0m", cap_fold_line(line)),
+        None => cap_fold_line(line),
+    };
+    if budget == usize::MAX {
+        // Unlimited: exact old display (no folding, no char cap), styling only.
+        return match line_style {
+            Some(color) => text
+                .lines()
+                .map(|l| format!("{color}{l}\x1b[0m"))
+                .collect::<Vec<_>>()
+                .join("\n"),
+            None => text.to_string(),
+        };
+    }
+    let lines: Vec<&str> = text.lines().collect();
+    if lines.len() <= budget {
+        return lines.iter().map(|l| style(l)).collect::<Vec<_>>().join("\n");
+    }
+    let hidden_hint = |n: usize| {
+        format!(
+            "\x1b[2m… (+{n} more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)\x1b[0m"
+        )
+    };
+    match keep {
+        FoldKeep::Head => {
+            let mut out: Vec<String> = lines[..budget].iter().map(|l| style(l)).collect();
+            out.push(hidden_hint(lines.len() - budget));
+            out.join("\n")
+        }
+        FoldKeep::HeadTail => {
+            let head = budget / 2;
+            let tail = budget - head;
+            let mut out: Vec<String> = lines[..head].iter().map(|l| style(l)).collect();
+            out.push(hidden_hint(lines.len() - budget));
+            out.extend(lines[lines.len() - tail..].iter().map(|l| style(l)));
+            out.join("\n")
+        }
     }
 }
 
@@ -7124,10 +7283,11 @@ mod tests {
         format_resume_report, format_status_report, format_tool_call_start, format_tool_result,
         normalize_permission_mode, parse_args, parse_git_status_metadata, print_help_to,
         push_output_block, render_config_report, render_memory_report, render_repl_help,
-        resolve_model_alias, resolve_startup_model, response_to_events,
+        fold_tool_output, resolve_model_alias, resolve_startup_model, response_to_events,
         resume_supported_slash_commands, reviewer_display_for, reviewer_model_matches_provider,
         reviewer_routing_nudge, status_context, turn_has_visible_assistant_text, CliAction,
-        CliOutputFormat, ModelSource, SlashCommand, StatusUsage, BANNER_CENTER, DEFAULT_MODEL,
+        CliOutputFormat, FoldKeep, ModelSource, SlashCommand, StatusUsage, BANNER_CENTER,
+        DEFAULT_MODEL,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
     use runtime::{
@@ -7411,6 +7571,108 @@ mod tests {
             }
             assert_eq!(visible, 34, "banner center line {i} is {visible} visible chars: {line:?}");
         }
+    }
+
+    // v0.4.23 (A): tool-output folding — display layer only.
+    #[test]
+    fn fold_head_keeps_first_lines_and_hints_the_rest() {
+        let text = (1..=10).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+        let folded = fold_tool_output(&text, 6, FoldKeep::Head, None);
+        let lines: Vec<&str> = folded.lines().collect();
+        assert_eq!(lines.len(), 7, "6 kept + 1 hint: {folded}");
+        assert!(lines[0].contains("line1") && lines[5].contains("line6"));
+        assert!(
+            lines[6].contains("+4 more lines")
+                && lines[6].contains("ARIS_TOOL_OUTPUT_LINES=0"),
+            "hint must name the count and the escape hatch: {}",
+            lines[6]
+        );
+        assert!(!folded.contains("line7"), "hidden lines must not appear");
+    }
+
+    #[test]
+    fn fold_headtail_splits_budget_and_keeps_tail() {
+        let text = (1..=20).map(|i| format!("line{i}")).collect::<Vec<_>>().join("\n");
+        let folded = fold_tool_output(&text, 8, FoldKeep::HeadTail, None);
+        let lines: Vec<&str> = folded.lines().collect();
+        assert_eq!(lines.len(), 9, "4 head + hint + 4 tail: {folded}");
+        assert!(lines[3].contains("line4"), "head keeps first budget/2");
+        assert!(lines[4].contains("+12 more lines"));
+        assert!(lines[5].contains("line17") && lines[8].contains("line20"), "tail keeps the end");
+    }
+
+    #[test]
+    fn fold_within_budget_adds_no_hint() {
+        let text = "a\nb\nc";
+        let folded = fold_tool_output(text, 6, FoldKeep::Head, None);
+        assert_eq!(folded, text);
+    }
+
+    #[test]
+    fn fold_caps_single_huge_line() {
+        // The minified-JSON case: line folding alone would keep a 500-char
+        // line intact; the 240-char cap must trim it.
+        let huge = "x".repeat(500);
+        let folded = fold_tool_output(&huge, 6, FoldKeep::Head, None);
+        let first = folded.lines().next().unwrap();
+        assert!(first.starts_with(&"x".repeat(240)));
+        assert!(!first.contains(&"x".repeat(241)), "must cap at 240 chars");
+        assert!(first.contains('…'));
+    }
+
+    #[test]
+    fn fold_unlimited_budget_is_exact_old_display() {
+        let huge = format!("{}\n{}", "x".repeat(500), (1..=50).map(|i| i.to_string()).collect::<Vec<_>>().join("\n"));
+        let folded = fold_tool_output(&huge, usize::MAX, FoldKeep::Head, None);
+        assert_eq!(folded, huge, "budget=MAX (env 0) must be byte-identical");
+    }
+
+    #[test]
+    fn fold_styles_kept_lines_but_not_the_hint() {
+        let text = (1..=10).map(|i| format!("e{i}")).collect::<Vec<_>>().join("\n");
+        let folded = fold_tool_output(&text, 4, FoldKeep::HeadTail, Some("\x1b[38;5;203m"));
+        let lines: Vec<&str> = folded.lines().collect();
+        assert!(lines[0].starts_with("\x1b[38;5;203m"), "kept stderr lines stay red");
+        assert!(lines[2].starts_with("\x1b[2m…"), "the hint is dim, not red: {}", lines[2]);
+    }
+
+    // v0.4.23 (A): env resolution — unset → default, N → N, 0 → unlimited.
+    #[test]
+    fn tool_output_line_budget_env_resolution() {
+        let _g = crate::env_test_guard();
+        std::env::remove_var("ARIS_TOOL_OUTPUT_LINES");
+        assert_eq!(super::tool_output_line_budget(6), 6);
+        std::env::set_var("ARIS_TOOL_OUTPUT_LINES", "17");
+        assert_eq!(super::tool_output_line_budget(6), 17);
+        std::env::set_var("ARIS_TOOL_OUTPUT_LINES", "0");
+        assert_eq!(super::tool_output_line_budget(6), usize::MAX);
+        std::env::set_var("ARIS_TOOL_OUTPUT_LINES", "junk");
+        assert_eq!(super::tool_output_line_budget(6), 6, "unparsable falls back to default");
+        std::env::remove_var("ARIS_TOOL_OUTPUT_LINES");
+    }
+
+    // v0.4.23 ride-along (gate round-2 lock): grep content mode serializes
+    // `"numMatches": null` (Option without skip_serializing_if) — the summary
+    // must say "returned lines", never a false "0 matches".
+    #[test]
+    fn grep_content_mode_summary_reports_returned_lines() {
+        let done = super::format_tool_result(
+            "grep_search",
+            r#"{"numFiles":2,"numMatches":null,"numLines":5,"content":"a\nb\nc\nd\ne","filenames":["x","y"]}"#,
+            false,
+        );
+        assert!(
+            done.contains("5 returned lines across 2 files"),
+            "content mode must report returned lines: {done}"
+        );
+        assert!(!done.contains("0 matches"), "false zero-matches banner: {done}");
+        // matches-bearing mode unchanged.
+        let counted = super::format_tool_result(
+            "grep_search",
+            r#"{"numFiles":1,"numMatches":7,"content":"","filenames":["x"]}"#,
+            false,
+        );
+        assert!(counted.contains("7 matches across 1 files"), "{counted}");
     }
 
     // v0.4.22 (B6/Δ4-6): deterministic codex version oracle, real output shape.

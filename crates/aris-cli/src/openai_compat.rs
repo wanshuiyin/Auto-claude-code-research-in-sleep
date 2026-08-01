@@ -192,6 +192,7 @@ mod tests {
 
     #[test]
     fn fetch_openai_models_uses_models_endpoint_and_deduplicates_ids() {
+        crate::scrub_proxy_env_for_tests();
         let request_capture = Arc::new(Mutex::new(String::new()));
         let request_capture_for_thread = Arc::clone(&request_capture);
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test listener");
