@@ -83,8 +83,9 @@ raw text is preserved depends on the store:
 
 ## The helper
 
-> A calling SKILL must resolve `threat_scan.py` via the canonical 3-layer chain
-> (`integration-contract.md` §2: `.aris/tools/` → `tools/` → `$ARIS_REPO/tools/`) and
+> A calling SKILL must resolve `threat_scan.py` via the canonical 4-layer chain
+> (`integration-contract.md` §2: `.aris/tools/` → `tools/` → `$ARIS_REPO/tools/` →
+> `$ARIS_REPO/tools/` via `~/.aris/repo`) and
 > invoke `python3 "$THREAT_SCANNER" …`. The literal `tools/threat_scan.py` paths below are
 > illustrative of the bundled location — do NOT hardcode them in a SKILL (the hardcoded
 > form silently fails in a project without `tools/` on disk).

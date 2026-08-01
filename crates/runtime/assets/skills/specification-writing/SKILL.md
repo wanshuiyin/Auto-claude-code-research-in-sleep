@@ -1,7 +1,7 @@
 ---
 name: specification-writing
 description: "Write the full patent specification from claims and invention disclosure. Use when user says \"撰写说明书\", \"write specification\", \"写说明书\", \"patent description\", or wants to draft the complete patent specification."
-argument-hint: [claims-path]
+argument-hint: "[claims-path]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
 ---
 

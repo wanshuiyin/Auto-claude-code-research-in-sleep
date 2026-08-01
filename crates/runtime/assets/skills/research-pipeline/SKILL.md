@@ -20,8 +20,9 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skil
 > `loop` type (so a silent death surfaces as STALE); unregister on completion. The
 > watchdog only detects — it never acquits. Each tick also record the new-finding count
 > via the `iteration_log.py` helper (resolve through the canonical
-> `.aris/tools → tools → $ARIS_REPO/tools` chain, integration-contract §2; warn-and-skip
-> if unresolved): `python3 "$ITER_LOG" note <root> <run_id> <phase> <n>`. On the returned
+> `.aris/tools → tools → $ARIS_REPO/tools → $ARIS_REPO/tools via ~/.aris/repo`
+> chain, integration-contract §2; warn-and-skip if unresolved):
+> `python3 "$ITER_LOG" note <root> <run_id> <phase> <n>`. On the returned
 > `pivot=structural` (stale ≥ 2) the nudge must change a STRUCTURAL constraint and pick an
 > untried direction; on `pivot=human` (stale ≥ 4) flag for attention. Counting only —
 > never a quality verdict.
@@ -65,6 +66,7 @@ Skip this whole section if `RESUMABLE = false`.
 
 Resolve the helper via the canonical chain (integration-contract §2):
 `.aris/tools/run_state.py` → `tools/run_state.py` → `$ARIS_REPO/tools/run_state.py`
+→ `$ARIS_REPO/tools/run_state.py` via `~/.aris/repo`
 (warn-and-skip if unresolved — never block the pipeline).
 
 **Phases**, in order: `idea-discovery, experiment-bridge, auto-review-loop, summary, paper-writing`.
@@ -111,6 +113,8 @@ if unresolved (never block the run):
 ```bash
 ITER_LOG=".aris/tools/iteration_log.py"
 [ -f "$ITER_LOG" ] || ITER_LOG="tools/iteration_log.py"
+[ -f "$ITER_LOG" ] || ITER_LOG="${ARIS_REPO:-}/tools/iteration_log.py"
+[ -f "$ITER_LOG" ] || { [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ] && ARIS_REPO="$(cat "$HOME/.aris/repo" 2>/dev/null)"; } || true
 [ -f "$ITER_LOG" ] || ITER_LOG="${ARIS_REPO:-}/tools/iteration_log.py"
 [ -f "$ITER_LOG" ] || { echo "WARN: iteration_log.py not resolved; skipping stall detection" >&2; ITER_LOG=""; }
 ```

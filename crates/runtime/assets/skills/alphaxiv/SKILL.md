@@ -1,7 +1,7 @@
 ---
 name: alphaxiv
 description: Quick single-paper lookup via AlphaXiv LLM-optimized summaries with tiered source fallback. Use when user says "explain this paper", "summarize paper", pastes an arXiv/AlphaXiv URL, or provides a bare arXiv ID for quick understanding - not for broad literature search.
-argument-hint: [arxiv-id-or-url]
+argument-hint: "[arxiv-id-or-url]"
 allowed-tools: Bash(*), Read, Write, Glob
 ---
 
@@ -135,11 +135,14 @@ Substitute only `<paper_arxiv_id>` and `<thesis>`; keep `${ARIS_REPO:-...}` as-i
 if [ -d research-wiki/ ]; then
   cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
   ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+  if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+  fi
   WIKI_SCRIPT=".aris/tools/research_wiki.py"
   [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
   [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
   [ -f "$WIKI_SCRIPT" ] || {
-    echo "WARN: research_wiki.py not found; paper summary delivered, wiki ingest skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+    echo "WARN: research_wiki.py not found; paper summary delivered, wiki ingest skipped. Fix: bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
     WIKI_SCRIPT=""
   }
   [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \

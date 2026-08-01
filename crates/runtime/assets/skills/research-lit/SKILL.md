@@ -1,7 +1,7 @@
 ---
 name: research-lit
 description: Search and analyze research papers, find related work, summarize key ideas. Use when user says "find papers", "related work", "literature review", "what does this paper say", or needs to understand academic papers.
-argument-hint: [paper-topic-or-url]
+argument-hint: "[paper-topic-or-url]"
 allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
 ---
 
@@ -173,6 +173,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 ARXIV_FETCHER=".aris/tools/arxiv_fetch.py"
 [ -f "$ARXIV_FETCHER" ] || ARXIV_FETCHER="tools/arxiv_fetch.py"
 [ -f "$ARXIV_FETCHER" ] || { [ -n "${ARIS_REPO:-}" ] && ARXIV_FETCHER="$ARIS_REPO/tools/arxiv_fetch.py"; }
@@ -214,6 +217,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 # Resolve $S2_FETCHER (Policy D2 — warn-and-skip on missing).
 S2_FETCHER=".aris/tools/semantic_scholar_fetch.py"
 [ -f "$S2_FETCHER" ] || S2_FETCHER="tools/semantic_scholar_fetch.py"
@@ -251,6 +257,9 @@ When the user explicitly requests `— sources: deepxiv` (or includes `deepxiv` 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 # Resolve $DEEPXIV_FETCHER (Policy D2 — warn-and-skip on missing).
 DEEPXIV_FETCHER=".aris/tools/deepxiv_fetch.py"
@@ -294,6 +303,9 @@ When the user explicitly requests `— sources: exa` (or includes `exa` in a com
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 # Resolve $EXA_FETCHER (Policy D2 — warn-and-skip on missing).
 EXA_FETCHER=".aris/tools/exa_search.py"
@@ -383,6 +395,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 # Resolve $OPENALEX_FETCHER (Policy D2 — warn-and-skip on missing).
 OPENALEX_FETCHER=".aris/tools/openalex_fetch.py"
 [ -f "$OPENALEX_FETCHER" ] || OPENALEX_FETCHER="tools/openalex_fetch.py"
@@ -464,6 +479,9 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 ARXIV_FETCHER=".aris/tools/arxiv_fetch.py"
 [ -f "$ARXIV_FETCHER" ] || ARXIV_FETCHER="tools/arxiv_fetch.py"
 [ -f "$ARXIV_FETCHER" ] || { [ -n "${ARIS_REPO:-}" ] && ARXIV_FETCHER="$ARIS_REPO/tools/arxiv_fetch.py"; }
@@ -494,6 +512,9 @@ rather than silently dropping candidates.
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
 fi
 VERIFY_PAPERS=".aris/tools/verify_papers.py"
 [ -f "$VERIFY_PAPERS" ] || VERIFY_PAPERS="tools/verify_papers.py"
@@ -527,8 +548,8 @@ if [ -n "$VERIFY_PAPERS" ]; then
     echo "WARN: verify_papers.py invocation failed (resolved at $VERIFY_PAPERS); falling back to [UNVERIFIED] tagging." >&2
   fi
 else
-  echo "WARN: verify_papers.py not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
-  echo "      Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+  echo "WARN: verify_papers.py not resolved at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
+  echo "      Fix: rerun bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or copy the helper to tools/." >&2
 fi
 if [ "$verify_ok" = "false" ]; then
   if ! command -v python3 >/dev/null 2>&1; then
@@ -672,11 +693,14 @@ chain documented in
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+  ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 WIKI_SCRIPT=".aris/tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
 [ -f "$WIKI_SCRIPT" ] || {
-  echo "WARN: research_wiki.py not found; literature synthesis will be reported but wiki ingest will be skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+  echo "WARN: research_wiki.py not found; literature synthesis will be reported but wiki ingest will be skipped. Fix: bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
   WIKI_SCRIPT=""
 }
 ```

@@ -1,7 +1,7 @@
 ---
 name: experiment-audit
 description: "Audit experiment integrity before claiming results. Uses cross-model review (external reviewer backend) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
-argument-hint: [experiment-dir-or-results-path]
+argument-hint: "[experiment-dir-or-results-path]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 

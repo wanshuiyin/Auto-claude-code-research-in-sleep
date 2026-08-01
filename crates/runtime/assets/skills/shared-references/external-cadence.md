@@ -225,7 +225,8 @@ tuning of the same frame.
   added entries — new evidence, a falsified hypothesis, a candidate direction — *not* a
   subjective "valuable result"). Resolve the helper via the canonical chain
   (integration-contract §2): `.aris/tools/iteration_log.py` → `tools/iteration_log.py` →
-  `$ARIS_REPO/tools/iteration_log.py` (warn-and-skip if unresolved), then
+  `$ARIS_REPO/tools/iteration_log.py` → `$ARIS_REPO/tools/iteration_log.py` via
+  `~/.aris/repo` (warn-and-skip if unresolved), then
   `python3 "$ITER_LOG" note <root> <run_id> <phase> <new_findings> [--direction "..."]`.
   Consecutive zero-finding iterations accumulate a `stale_count` in
   `.aris/runs/<run_id>.iterations.jsonl` — a sidecar that does **not** touch run_state's

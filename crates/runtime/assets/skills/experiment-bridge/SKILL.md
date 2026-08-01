@@ -1,7 +1,7 @@
 ---
 name: experiment-bridge
 description: "Workflow 1.5: Bridge between idea discovery and auto review. Reads EXPERIMENT_PLAN.md, implements experiment code, deploys to GPU, collects initial results. Use when user says \"实现实验\", \"implement experiments\", \"bridge\", \"从计划到跑实验\", \"deploy the plan\", or has an experiment plan ready to execute."
-argument-hint: [experiment-plan-path-or-topic]
+argument-hint: "[experiment-plan-path-or-topic]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__codex__codex, mcp__codex__codex-reply
 ---
 

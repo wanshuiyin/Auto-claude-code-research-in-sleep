@@ -302,6 +302,25 @@ If extra round queue is non-empty AND user-budget allows: one extra Phase 2 roun
 
 Verifies no Phase 2 microedit accidentally introduced a numerical claim that's not backed by results.
 
+**Integrity forensics re-run** (default ON; `— self_forensics: false` to skip):
+resubmits are exactly where numbers drift, and a text-only pass is cheap. Run
+[`/integrity-forensics`](../integrity-forensics/SKILL.md) on `$NEW_VENUE_DIR/`
+AFTER all microedits (never between rounds — see its One Forbidden Loop). Let
+upstream derive the observability level from what's present (don't assume L1 —
+if `code/`+`results/` are linked it runs stricter). Gate `BLOCK` → stop before
+the Overleaf push, surface obligations verbatim. One resubmit-specific rule:
+the bib is frozen in this pipeline, so `citation-replaced` is NOT a legal
+fix-type here — a citation obligation either gets a `waive` with human
+sign-off or escalates to the user to relax the bib freeze.
+
+Immediately before the Overleaf push (and again whenever the run was
+resumed), re-parse the CURRENT `$ARGUMENTS`: unless it contains
+`— self_forensics: false`, require
+`python3 "$GATE_HELPER" fresh --paper-dir "$NEW_VENUE_DIR/" --anti-ar-commit "$ANTI_AR_COMMIT"`
+to exit 0 — any
+microedit or recompile after the gate reads as STALE and forces the re-run.
+A previous run's opt-out never carries over.
+
 **Diff report**:
 
 ```bash
@@ -355,6 +374,7 @@ Every resubmit run writes one master report at `$NEW_VENUE_DIR/RESUBMIT_REPORT.{
 
 - Source dir, target venue, target style files used, run start / end timestamps
 - Pointers to all artifacts: `BASELINE.md`, `PROOF_AUDIT.json`, `PAPER_CLAIM_AUDIT.json`, `CITATION_AUDIT.json`, `KNOWN_WEAKNESSES.md`, `PAPER_IMPROVEMENT_LOG.md`, `KILL_ARGUMENT.json`, `COMPILE_REPORT.json`, `DIFF_REPORT.md`
+- Forensics outcome (unless opted out): the gate decision from `.aris/forensics/gate.json` **plus every OPEN obligation listed verbatim** — a `WARN` that passes `fresh` still carries findings awaiting human disposition; they must appear in this ledger, never silently drop out of the deliverables
 - SHA256 hashes of every input file consumed (for `verify_paper_audits.sh` compatibility)
 - All thread IDs (Phase 1 audits + Phase 2 reviewer rounds + Phase 3 kill-argument's two threads)
 - `audit_skill: resubmit-pipeline`, `verdict ∈ {PASS, WARN, FAIL, NOT_APPLICABLE, BLOCKED, ERROR}`, `reason_code: <one of the listed codes>`

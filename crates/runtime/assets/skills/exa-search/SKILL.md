@@ -1,7 +1,7 @@
 ---
 name: exa-search
 description: AI-powered web search via Exa with content extraction. Use when user says "exa search", "web search with content", "find similar pages", or needs broad web results beyond academic databases (arXiv, Semantic Scholar).
-argument-hint: [search-query-or-url]
+argument-hint: "[search-query-or-url]"
 allowed-tools: Bash(*), Read, Write
 ---
 
@@ -88,12 +88,15 @@ cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
     ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
 fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 EXA_FETCHER=".aris/tools/exa_search.py"
 [ -f "$EXA_FETCHER" ] || EXA_FETCHER="tools/exa_search.py"
 [ -f "$EXA_FETCHER" ] || { [ -n "${ARIS_REPO:-}" ] && EXA_FETCHER="$ARIS_REPO/tools/exa_search.py"; }
 [ -f "$EXA_FETCHER" ] || {
-  echo "ERROR: exa_search.py not resolved at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
-  echo "       Fix: rerun bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
+  echo "ERROR: exa_search.py not resolved at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
+  echo "       Fix: rerun bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or copy the helper to tools/." >&2
   echo "       Also ensure 'exa-py' is installed: pip install exa-py" >&2
   exit 1
 }
@@ -170,11 +173,14 @@ use `--arxiv-id`. Otherwise fall back to manual metadata:
 if [ -d research-wiki/ ] and query category was "research paper":
     cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
     ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+    if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+      ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+    fi
     WIKI_SCRIPT=".aris/tools/research_wiki.py"
     [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
     [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
     [ -f "$WIKI_SCRIPT" ] || {
-      echo "WARN: research_wiki.py not found; exa-search results delivered, wiki ingest skipped. Fix: bash tools/install_aris.sh, export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
+      echo "WARN: research_wiki.py not found; exa-search results delivered, wiki ingest skipped. Fix: bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or cp <ARIS-repo>/tools/research_wiki.py tools/." >&2
       WIKI_SCRIPT=""
     }
     [ -n "$WIKI_SCRIPT" ] && for each research-paper hit in results:

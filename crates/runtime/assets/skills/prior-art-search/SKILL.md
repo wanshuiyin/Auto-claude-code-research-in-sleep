@@ -1,7 +1,7 @@
 ---
 name: prior-art-search
 description: "Search patent databases and academic literature for prior art relevant to an invention. Use when user says \"现有技术检索\", \"prior art search\", \"专利检索\", \"check patents\", or wants to find relevant prior art."
-argument-hint: [invention-description-or-path]
+argument-hint: "[invention-description-or-path]"
 allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write
 ---
 

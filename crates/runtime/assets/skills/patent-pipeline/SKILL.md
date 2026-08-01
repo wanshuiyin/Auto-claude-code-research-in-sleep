@@ -1,7 +1,7 @@
 ---
 name: patent-pipeline
 description: "Full patent drafting pipeline from invention description to jurisdiction-formatted filing documents. Supports CN (CNIPA), US (USPTO), EP (EPO). Supports invention patents and utility models. Use when user says \"写专利\", \"patent pipeline\", \"专利申请\", \"draft patent\", \"写权利要求书\", or wants to draft a complete patent application."
-argument-hint: [invention-description — jurisdiction]
+argument-hint: "[invention-description — jurisdiction]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skill, mcp__codex__codex
 ---
 

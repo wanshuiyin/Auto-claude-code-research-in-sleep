@@ -11,6 +11,11 @@ left a real user's `research-wiki/` empty for a week.
 ```bash
 cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
 ARIS_REPO="${ARIS_REPO:-$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null)}"
+# Layer 4: global pointer file written by the installer/updater at
+# ~/.aris/repo (#366) — covers global copy-installs with no project manifest.
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
 WIKI_SCRIPT=".aris/tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || WIKI_SCRIPT="tools/research_wiki.py"
 [ -f "$WIKI_SCRIPT" ] || { [ -n "${ARIS_REPO:-}" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"; }
@@ -27,11 +32,12 @@ The skill **is** the wiki tool. If the helper is missing, fail loudly.
 
 ```bash
 [ -f "$WIKI_SCRIPT" ] || {
-  echo "ERROR: research_wiki.py not found at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "ERROR: research_wiki.py not found at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
   echo "       Fix one of:" >&2
-  echo "         1. rerun 'bash tools/install_aris.sh' from the ARIS repo (creates .aris/tools symlink)" >&2
-  echo "         2. export ARIS_REPO=<path-to-ARIS-repo>" >&2
-  echo "         3. cp <ARIS-repo>/tools/research_wiki.py tools/" >&2
+  echo "         1. rerun 'bash tools/install_aris.sh' from the ARIS repo (creates .aris/tools symlink, refreshes ~/.aris/repo)" >&2
+  echo "         2. rerun 'bash tools/smart_update.sh' (refreshes ~/.aris/repo)" >&2
+  echo "         3. export ARIS_REPO=<path-to-ARIS-repo>" >&2
+  echo "         4. cp <ARIS-repo>/tools/research_wiki.py tools/" >&2
   exit 1
 }
 ```
@@ -46,9 +52,9 @@ skipped.
 
 ```bash
 [ -f "$WIKI_SCRIPT" ] || {
-  echo "WARN: research_wiki.py not found at .aris/tools/, tools/, or \$ARIS_REPO/tools/." >&2
+  echo "WARN: research_wiki.py not found at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
   echo "      Primary output will still be produced; wiki update is skipped." >&2
-  echo "      Fix: rerun 'bash tools/install_aris.sh', export ARIS_REPO, or 'cp <ARIS-repo>/tools/research_wiki.py tools/'." >&2
+  echo "      Fix: rerun 'bash tools/install_aris.sh' or 'smart_update.sh' (refreshes ~/.aris/repo), export ARIS_REPO, or 'cp <ARIS-repo>/tools/research_wiki.py tools/'." >&2
   WIKI_SCRIPT=""
 }
 ```
@@ -59,34 +65,42 @@ After Variant B, every helper invocation must be guarded:
 [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ --arxiv-id "$id"
 ```
 
-## Why three locations and not one
+## Why four locations and not one
 
-Three locations correspond to three legitimate install / dev paths:
+Four locations correspond to four legitimate install / dev paths:
 
 | Location | When applicable |
 |---|---|
 | `.aris/tools/research_wiki.py` | After running `bash tools/install_aris.sh` in the user project (Phase 0 symlink, added in #174 / #192) |
 | `tools/research_wiki.py` | (a) Manual copy of the helper into the user project (a documented temporary workaround); (b) running a SKILL from inside the ARIS repo itself |
 | `$ARIS_REPO/tools/research_wiki.py` | Env var explicitly set, or auto-resolved from `.aris/installed-skills.txt`'s `repo_root` field |
+| `$ARIS_REPO/tools/research_wiki.py` via `~/.aris/repo` | Global pointer file written by `install_aris*.{sh,ps1}` / `smart_update*.{sh,ps1}` (#366); the only layer that resolves for a **global copy-install** (`~/.claude/skills/research-wiki`) where none of the first three apply — there is no project-local `.aris/`, no `tools/` copy, and no manifest to read `ARIS_REPO` from |
 
 Order matters: the symlinked install is preferred because the symlink
 auto-tracks upstream tool fixes; the manual copy is second because it
-catches users who haven't run `install_aris.sh`; the env var is last
-because it's the most fragile.
+catches users who haven't run `install_aris.sh`; the manifest-derived
+env var is next because a project-local manifest is more precise than
+a global pointer; the global pointer file is last because it is
+per-user rather than per-project and only fires when the first three
+all miss.
 
 ## What NOT to add
 
-- ❌ A 4th layer that searches up the directory tree for `tools/` —
-  too much path magic, surprising failure modes.
-- ❌ A 4th layer at `~/.local/share/aris/...` or `/usr/local/share/...`
-  — no installer precedent in ARIS today.
+- ❌ A layer that searches up the directory tree for `tools/` — too
+  much path magic, surprising failure modes.
+- ❌ A layer at `/usr/local/share/...` or another OS-specific system
+  path — `~/.aris/repo` already covers the global-install gap with a
+  single per-user file, no OS branching needed.
 - ❌ Adding `~/.codex/skills/research-wiki/research_wiki.py` — that's
   Codex-side global install, lives in the **Codex** mirror's chain
   (`skills/skills-codex/...`), not the CC chain.
 
-If a fourth layer is genuinely needed in the future, add an explicit
-env var (`ARIS_WIKI_SCRIPT=<path>`) rather than another implicit
-location.
+`~/.aris/repo` (layer 4, #366) is the one exception to the earlier
+"no 4th layer" stance in this doc's history: it exists because the
+installer/updater now writes it, giving the previously-missing
+precedent. If a 5th layer is ever proposed, it should still meet the
+same bar — a concrete writer, not just a hopeful lookup — rather than
+an implicit env var or path-walk.
 
 ## ⚠️ Do not wrap the chain in `set -e` / `set -eu`
 

@@ -1,7 +1,7 @@
 ---
 name: meta-apply
 description: "Privileged applier that LANDS meta-optimize / corpus-audit patches the user approved — the ONLY skill permitted to mutate the skill corpus from a self-modification proposal, with cross-model jury and human approval at landing. Use when the user says \"meta apply\", \"/meta-apply\", \"land the staged patches\", \"应用优化\", after a /meta-optimize run."
-argument-hint: [patch-number-or-all]
+argument-hint: "[patch-number-or-all]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply
 ---
 
@@ -36,7 +36,7 @@ never silently apply:
 1. **The human named THIS patch.** Apply only patches the user listed (`/meta-apply 1,3`
    or `all`); default to applying nothing.
 2. **Fresh cross-model jury PASS, obtained now.** Run `mcp__codex__codex` (fresh thread,
-   NOT codex-reply; `model: gpt-5.6-sol`, `reasoning: ultra`, `sandbox: read-only`,
+   NOT codex-reply; `model: gpt-5.6-sol`, `config: {"model_reasoning_effort": "ultra"}`, `sandbox: read-only`,
    paths-only per [`reviewer-independence.md`](../shared-references/reviewer-independence.md))
    on the staged `.diff` + its target. Ask: *does this change improve the harness without
    regressions; PASS or KILL + one-line reason.* **KILL ⇒ refuse.** The human cannot
@@ -57,9 +57,10 @@ PENDING=".aris/meta/pending"
 echo "Staged:"; cat "$PENDING/manifest.jsonl"
 ```
 
-Resolve `provenance.py` via the 3-layer chain in
+Resolve `provenance.py` via the 4-layer chain in
 [`integration-contract.md`](../shared-references/integration-contract.md) §2
-(`.aris/tools/` → `tools/` → `$ARIS_REPO/tools/`).
+(`.aris/tools/` → `tools/` → `$ARIS_REPO/tools/` → `$ARIS_REPO/tools/` via
+`~/.aris/repo`).
 
 ### Step 1: Jury-at-landing for each requested patch
 

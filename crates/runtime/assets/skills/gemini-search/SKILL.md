@@ -1,7 +1,7 @@
 ---
 name: gemini-search
 description: Search research papers via Gemini for broad literature discovery. Use when user says "gemini search", "gemini papers", "search with gemini", or wants AI-powered literature discovery beyond arXiv/Semantic Scholar indexes.
-argument-hint: [search-query]
+argument-hint: "[search-query]"
 allowed-tools: Bash(*), Read, Write, mcp__gemini-cli__*
 ---
 
