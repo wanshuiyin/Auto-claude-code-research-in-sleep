@@ -10,8 +10,9 @@
 # - Excludes skills-codex* mirror directories (codex agent install path,
 #   not user-facing). build.rs already excludes them via
 #   EXCLUDED_SKILL_PREFIXES; rsync exclude is double-defense.
-# - Bundles 28 runtime helpers from tools/ (9 baseline refresh + 9 v0.4.11
-#   additions + 2 v0.4.13 meta_opt hooks + 8 v0.4.22 additions).
+# - Bundles 29 runtime helpers from tools/ (9 baseline refresh + 9 v0.4.11
+#   additions + 2 v0.4.13 meta_opt hooks + 8 v0.4.22 additions + 1 v0.4.23
+#   forensics gate).
 #   `install_aris*` / `smart_update*` / `lint_skills_helpers.sh` etc. stay
 #   out of the binary.
 # - v0.4.13 introduced `meta_opt/{log_event,check_ready}.sh` so `aris init`
@@ -148,9 +149,9 @@ for d in "${SKILLS_CODEX_DIRS[@]}"; do
 done
 
 # ---------------------------------------------------------------
-# Step 6: Tools selective rsync (FULL 28 runtime helpers — codex round-3 #1, v0.4.13 +2, v0.4.22 +8)
+# Step 6: Tools selective rsync (FULL 29 runtime helpers — codex round-3 #1, v0.4.13 +2, v0.4.22 +8, v0.4.23 +1)
 # ---------------------------------------------------------------
-echo "==> Syncing 28 runtime helpers from tools/"
+echo "==> Syncing 29 runtime helpers from tools/"
 
 # Codex round-3 #1 caught that the v0.4.8/0.4.9 helpers also drift on
 # main (e.g. research_wiki.py went 315 -> 767 lines with the canonical
@@ -207,6 +208,8 @@ RUNTIME_HELPERS=(
     threat_scan.py
     meta_opt/trigger_eval.py
     meta_opt/trigger_evals.sample.json
+    # === v0.4.23 addition: integrity-forensics deterministic policy gate ===
+    forensics_gate.py
 )
 
 for helper in "${RUNTIME_HELPERS[@]}"; do
@@ -221,8 +224,8 @@ for helper in "${RUNTIME_HELPERS[@]}"; do
     rsync -av "$src" "$target"
 done
 
-# NOTE: this script does NOT auto-prune assets/tools/ — the 28 helpers
-# above are the complete intended bundle as of v0.4.22. A stale extra file
+# NOTE: this script does NOT auto-prune assets/tools/ — the 29 helpers
+# above are the complete intended bundle as of v0.4.23. A stale extra file
 # is caught by the v0.4.22 exact-inventory test (asserts assets/tools has
 # EXACTLY these 28 entries) on next `cargo test`.
 
@@ -245,7 +248,7 @@ echo "     # (second number counts ALL bundled resources, not just assets/tools)
 echo
 echo "  2. cargo test -p runtime --lib cache -- --test-threads=1"
 echo "     # all cache tests pass (incl. the 3 v0.4.11 drift tests + the"
-echo "     # v0.4.22 exact-inventory tests: 28 tools helpers, posterly MIT txt)"
+echo "     # exact-inventory tests: 29 tools helpers, posterly MIT txt)"
 echo
 echo "  3. ./target/release/aris --version       # → 0.4.22 (or current after Cargo.toml bump)"
 echo "  4. ./target/release/aris doctor          # smoke test"

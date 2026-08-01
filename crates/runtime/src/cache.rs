@@ -559,7 +559,7 @@ mod tests {
     }
 
     /// v0.4.22 exact-inventory drift test: the `tools/` slice of
-    /// BUNDLED_RESOURCES is EXACTLY the 28-helper whitelist that
+    /// BUNDLED_RESOURCES is EXACTLY the 29-helper whitelist that
     /// tools/sync_main_skills.sh ships. Set-equality (not subset) so BOTH
     /// failure modes are caught: a helper missing after a sync (the
     /// pre-v0.4.22 gap — the script's RUNTIME_HELPERS lagged what synced
@@ -603,8 +603,10 @@ mod tests {
             "tools/threat_scan.py",
             "tools/meta_opt/trigger_eval.py",
             "tools/meta_opt/trigger_evals.sample.json",
+            // v0.4.23 addition (integrity-forensics deterministic policy gate)
+            "tools/forensics_gate.py",
         ];
-        assert_eq!(EXPECTED.len(), 28, "whitelist mirror must stay at 28");
+        assert_eq!(EXPECTED.len(), 29, "whitelist mirror must stay at 29");
 
         let expected: BTreeSet<&str> = EXPECTED.iter().copied().collect();
         let actual: BTreeSet<&str> = crate::BUNDLED_RESOURCES
