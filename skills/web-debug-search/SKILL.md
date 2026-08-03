@@ -288,7 +288,7 @@ version answer, or only community leads were found. Then return one row per
 source:
 
 | Match quality | Finding type | Evidence use | Authority | Profile | URL | Version/environment | Finding | Status |
-|---|---|---|---|---|---|---|
+|---|---|---|---|---|---|---|---|---|
 
 Use canonical source URLs. Include state and last-updated date when visible.
 Every result must carry exactly one label from each of the four axes above.

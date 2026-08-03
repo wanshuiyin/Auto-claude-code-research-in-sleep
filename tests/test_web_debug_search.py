@@ -139,3 +139,19 @@ def test_web_debug_search_documents_failure_paths_and_coverage() -> None:
         "Search coverage",
     ):
         assert marker in text
+
+
+def test_web_debug_search_tables_are_well_formed() -> None:
+    # A GFM table only renders when the separator row has the same cell count
+    # as its header row (regression: the report-table separator once had 7
+    # cells under a 9-cell header, silently downgrading it to a paragraph).
+    for path in SKILLS:
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines[:-1]):
+            nxt = lines[i + 1]
+            if line.strip().startswith("|") and set(nxt.strip()) <= {"|", "-", ":", " "} and "-" in nxt:
+                header_cells = len([c for c in line.strip().strip("|").split("|")])
+                sep_cells = len([c for c in nxt.strip().strip("|").split("|")])
+                assert header_cells == sep_cells, (
+                    f"{path}:{i + 1} header has {header_cells} cells but separator has {sep_cells}"
+                )
