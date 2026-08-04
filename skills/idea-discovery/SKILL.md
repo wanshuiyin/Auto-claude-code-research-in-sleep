@@ -33,8 +33,47 @@ Each phase builds on the previous one's output. The final deliverables are a val
 - **COMPACT = false** — When `true`, generate compact summary files for short-context models and session recovery. Writes `idea-stage/IDEA_CANDIDATES.md` (top 3-5 ideas only) at the end of this workflow. Downstream skills read this instead of the full `idea-stage/IDEA_REPORT.md`.
 - **RENDER_HTML = true** — When `true` (default), auto-render `idea-stage/IDEA_REPORT.md` to HTML at workflow end via `/render-html`. Uses `--no-review` (the source MD already went through novelty + cross-model review during Phase 3). Set `false` to skip, or pass `— render html: false`.
 - **REF_PAPER = false** — Reference paper to base ideas on. Accepts: local PDF path, arXiv URL, or any paper URL. When set, the paper is summarized first (`idea-stage/REF_PAPER_SUMMARY.md`), then idea generation uses it as context. Combine with `base repo` for "improve this paper with this codebase" workflows.
+- **RESUMABLE = true** — Record stage evidence under `.aris/runs/<run_id>.json` and require a deterministic evidence gate before declaring the final report complete.
 
 > 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — ref paper: https://arxiv.org/abs/2406.04329` or `/idea-discovery "topic" — compact: true`.
+
+## Per-stage evidence gate (`RESUMABLE = true`)
+
+Resolve `run_state.py` and `idea_discovery_gate.py` through the same canonical
+helper chain used by `/research-pipeline`: `.aris/tools/` → `tools/` →
+`$ARIS_REPO/tools/` → `~/.aris/repo/tools/`. If either helper is unavailable,
+the final report is `BLOCKED`; do not silently continue without a state record.
+
+For a new run, derive `<run_id>` from the direction slug and date, then start
+this ordered state record:
+
+```text
+research-lit,idea-creator,novelty-check,research-review,research-refine-pipeline
+```
+
+For each phase, mark `running` on entry and `done --artifact <path>` only after
+its artifact is present. Use these artifact locators so the final gate can
+check the canonical report rather than scattered scratch files:
+
+| Phase | Artifact locator |
+|---|---|
+| `research-lit` | `idea-stage/IDEA_REPORT.md#literature-landscape` |
+| `idea-creator` | `idea-stage/IDEA_REPORT.md#ranked-ideas` |
+| `novelty-check` | `idea-stage/IDEA_REPORT.md#novelty-verification` |
+| `research-review` | `idea-stage/IDEA_REPORT.md#external-critical-review` |
+| `research-refine-pipeline` | `refine-logs/FINAL_PROPOSAL.md` |
+
+At the end of Phase 5, run:
+
+```text
+<resolved-python> <resolved-idea_discovery_gate.py> . <run_id> --report idea-stage/IDEA_REPORT.md
+```
+
+The gate writes its result to `gates.idea-discovery-evidence` in the run state.
+On `PASS`, it records deterministic acceptance for each completed phase. On a
+non-zero exit, it writes explicit `BLOCKED: <stage> evidence missing` lines to
+the report; do not present the workflow as complete. On `— resume <run_id>`,
+start from the first non-terminal phase and re-run the gate before finalizing.
 
 ## Pipeline
 
@@ -275,6 +314,12 @@ Finalize `idea-stage/IDEA_REPORT.md` with all accumulated information:
 ## Ranked Ideas
 [from Phase 2, updated with Phase 3-4 results]
 
+## Novelty Verification
+[from Phase 3]
+
+## External Critical Review
+[from Phase 4]
+
 ### 🏆 Idea 1: [title] — RECOMMENDED
 - Pilot: POSITIVE (+X%)
 - Novelty: CONFIRMED (closest: [paper], differentiation: [what's different])
@@ -297,6 +342,9 @@ Finalize `idea-stage/IDEA_REPORT.md` with all accumulated information:
 - [ ] /auto-review-loop to iterate until submission-ready
 - [ ] Or invoke /research-pipeline for the complete end-to-end flow
 ```
+
+Before presenting this report as complete, run the per-stage evidence gate
+above. A `BLOCKED` gate result is part of the report, not a warning to omit.
 
 ### Phase 5.5: Write Compact Files (when COMPACT = true)
 

@@ -7,6 +7,10 @@ live complaint in issue #272: "the survey run failed — can it continue from th
 last task?"). `tools/run_state.py` fixes that: a run is an **ordered list of
 phases with status**, persisted at `<root>/.aris/runs/<run_id>.json`.
 
+Workflow-level deterministic checks are recorded separately under `gates` in
+the same state file. A gate may emit `PASS` or `BLOCKED` with durable reasons;
+it does not replace the per-phase acceptance record.
+
 ## The one idea that makes this ARIS, not just "reopen the session"
 
 Resumption is not "reopen the id" — it is **resolve FORWARD to where progress
@@ -62,10 +66,11 @@ triggers resume, it does not own the verdict).
 ## Helper API / CLI
 
 ```
-from run_state import start_run, set_status, accept, resume_point
+from run_state import start_run, set_status, accept, record_gate_result, resume_point
 start_run(root, run_id, phases)                 # phases: ["W1","W1.5","W2","W3"]
 set_status(root, run_id, phase, "running"|"done"|"failed", artifact=path)
 accept(root, run_id, phase, verdict_id, reviewer)   # the ONLY path to `accepted`
+record_gate_result(root, run_id, gate, "PASS"|"BLOCKED", reasons)
 resume_point(root, run_id)  # -> first NON-TERMINAL phase ({accepted,skipped} skipped), or None
 ```
 
