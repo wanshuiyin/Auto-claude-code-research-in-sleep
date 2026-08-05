@@ -40,5 +40,35 @@ class TestWikiEncoding(unittest.TestCase):
         rw.rebuild_index(self.root)
 
 
+class TestSlugifyKeepsNonAsciiLetters(unittest.TestCase):
+    """Non-ASCII titles used to collapse to `<year>_untitled`, so a second paper
+    by the same author in the same year was silently dropped as a duplicate."""
+
+    def test_two_chinese_papers_get_distinct_slugs(self):
+        a = rw.slugify("扩散语言模型的表征视角", "张三", 2026)
+        b = rw.slugify("图神经网络的可解释性研究", "张三", 2026)
+        self.assertNotEqual(a, b)
+        self.assertNotIn("untitled", a)
+
+    def test_ascii_titles_slugify_exactly_as_before(self):
+        # Locking the pre-existing behavior: these strings must not drift.
+        self.assertEqual(
+            rw.slugify("Attention Is All You Need", "Vaswani", 2017),
+            "vaswani2017_attention_all_you",
+        )
+        self.assertEqual(
+            rw.slugify("BERT: Pre-training of Deep Bidirectional Transformers", "Devlin", 2019),
+            "devlin2019_bert_pretraining_deep",
+        )
+
+    def test_second_chinese_paper_is_actually_ingested(self):
+        root = tempfile.mkdtemp()
+        rw.init_wiki(root)
+        rw.ingest_paper(root, title="扩散语言模型的表征视角", authors="张三", year=2026)
+        rw.ingest_paper(root, title="图神经网络的可解释性研究", authors="张三", year=2026)
+        pages = list((Path(root) / "papers").glob("*.md"))
+        self.assertEqual(len(pages), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

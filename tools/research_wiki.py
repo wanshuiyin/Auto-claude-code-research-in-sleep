@@ -50,6 +50,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
@@ -93,14 +94,29 @@ def _arxiv_user_agent() -> str:
 
 
 def slugify(title: str, author_last: str = "", year: int = 0) -> str:
-    """Generate a canonical slug: author_last + year + keyword."""
-    # Extract first meaningful word from title
+    """Generate a canonical slug: author_last + year + keyword.
+
+    Letters outside ASCII are kept. Stripping them used to collapse every
+    Chinese paper to `<year>_untitled`, so two different papers by the same
+    author in the same year produced the same slug and the second was silently
+    dropped as a duplicate. ASCII titles and authors slugify exactly as before.
+    """
     stop_words = {"a", "an", "the", "of", "for", "in", "on", "with", "via", "and", "to", "by"}
-    words = re.sub(r"[^a-z0-9\s]", "", title.lower()).split()
+    # `[^\w\s]|_` keeps letters/digits in any script while still dropping the
+    # underscore that \w would otherwise let through (ASCII behavior unchanged).
+    normalized_title = unicodedata.normalize("NFC", title.lower())
+    words = re.sub(r"[^\w\s]|_", "", normalized_title, flags=re.UNICODE).split()
     keywords = [w for w in words if w not in stop_words and len(w) > 2]
     keyword = "_".join(keywords[:3]) if keywords else "untitled"
+    # Scripts without spaces yield one long token; cap it so the filename stays sane.
+    if not keyword.isascii():
+        keyword = keyword[:48]
 
-    author = re.sub(r"[^a-z]", "", author_last.lower()) if author_last else "unknown"
+    if author_last:
+        normalized_author = unicodedata.normalize("NFC", author_last.lower())
+        author = "".join(ch for ch in normalized_author if ch.isalpha())
+    else:
+        author = "unknown"
     yr = str(year) if year else "0000"
     return f"{author}{yr}_{keyword}"
 
