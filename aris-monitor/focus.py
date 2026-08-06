@@ -55,6 +55,39 @@ def _pid_tty(pid: int) -> Optional[str]:
     return out if out.startswith("/dev/") else f"/dev/{out}"
 
 
+def _focus_script_error(script):
+    try:
+        if not script.exists():
+            return {"ok": False, "code": None,
+                    "error": f"bundled focus-tty.sh missing at {script}"}
+    except Exception:
+        return {"ok": False, "code": None, "error": "focus-tty.sh not accessible"}
+    return None
+
+
+def _run_focus_script(script, tty):
+    try:
+        return subprocess.run([str(script), tty],
+                              capture_output=True, text=True, timeout=10)
+    except PermissionError:
+        return subprocess.run(["bash", str(script), tty],
+                              capture_output=True, text=True, timeout=10)
+
+
+def _focus_script_result(script, tty):
+    try:
+        proc = _run_focus_script(script, tty)
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "code": None, "error": "focus timed out after 10s"}
+    except Exception as e:  # noqa: BLE001 -- best-effort, never raise to the UI
+        return {"ok": False, "code": None, "error": str(e)}
+    return {
+        "ok": proc.returncode == 0,
+        "code": proc.returncode,
+        "error": (proc.stderr or "").strip(),
+    }
+
+
 def focus(pid: int) -> dict:
     """Raise the terminal tab that owns <pid>. Best-effort; never destructive.
 
@@ -66,28 +99,11 @@ def focus(pid: int) -> dict:
         return {"ok": False, "code": None,
                 "error": "no tty for pid (session may have no terminal)"}
     script = _FOCUS_SCRIPT
-    try:
-        if not script.exists():
-            return {"ok": False, "code": None,
-                    "error": f"bundled focus-tty.sh missing at {script}"}
-    except Exception:
-        return {"ok": False, "code": None, "error": "focus-tty.sh not accessible"}
+    script_error = _focus_script_error(script)
+    if script_error:
+        return script_error
     # Direct exec respects the script's own shebang; fall back to bash only if the
     # +x bit was lost on an odd checkout. A blocking macOS Automation prompt is
     # bounded by the timeout; nothing here can hang the caller indefinitely.
-    try:
-        try:
-            proc = subprocess.run([str(script), tty],
-                                  capture_output=True, text=True, timeout=10)
-        except PermissionError:
-            proc = subprocess.run(["bash", str(script), tty],
-                                  capture_output=True, text=True, timeout=10)
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "code": None, "error": "focus timed out after 10s"}
-    except Exception as e:  # noqa: BLE001 -- best-effort, never raise to the UI
-        return {"ok": False, "code": None, "error": str(e)}
-    return {
-        "ok": proc.returncode == 0,
-        "code": proc.returncode,
-        "error": (proc.stderr or "").strip(),
-    }
+    return _focus_script_result(script, tty)
+
