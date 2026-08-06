@@ -320,6 +320,45 @@ def _status_for(data: dict, transcript: Optional[Path], now: float) -> Tuple[str
 # ---------------------------------------------------------------------------
 # Public API.
 # ---------------------------------------------------------------------------
+def _session_from_data(data, base, now):
+    try:
+        session_id = str(data.get("sessionId") or "")
+        cwd = str(data.get("cwd") or "")
+        transcript = _transcript_path(session_id, cwd)
+        triage, reason = _status_for(data, transcript, now)
+
+        updated_at = _as_int(data.get("updatedAt", 0))
+        idle_seconds = max(0, int(now - updated_at / 1000)) if updated_at else 0
+
+        fname_pid = _as_int(base[:-5]) if base.endswith(".json") else 0
+
+        return Session(
+            pid=_as_int(data.get("pid"), fname_pid),
+            name=str(data.get("name") or os.path.basename(cwd) or "?"),
+            cwd=cwd,
+            status=data.get("status", "unknown"),
+            triage=triage,
+            reason=reason,
+            idle_seconds=idle_seconds,
+            updated_at=updated_at,
+        )
+    except Exception:
+        return None
+
+
+def _session_from_file(f, now):
+    base = os.path.basename(f)
+    # Legacy session-<ts>.json files carry no pid/status -- skip them.
+    if base.startswith("session-"):
+        return None
+
+    data = _load_session_file(Path(f))
+    if not data:
+        return None
+
+    return _session_from_data(data, base, now)
+
+
 def scan() -> List[Session]:
     """Read ~/.claude/sessions/*.json, classify each, sort.
 
@@ -335,55 +374,16 @@ def scan() -> List[Session]:
         out: List[Session] = []
 
         for f in sorted(glob.glob(str(SESSIONS_DIR / "*.json"))):
-            base = os.path.basename(f)
-            # Legacy session-<ts>.json files carry no pid/status -- skip them.
-            if base.startswith("session-"):
-                continue
-            data = _load_session_file(Path(f))
-            if not data:
-                continue
-
-            # Per-file guard: one malformed/half-written registry file (e.g. a
-            # truncated value that slips past _load_session_file but trips a
-            # later coercion) must be SKIPPED, not allowed to blank the whole
-            # fleet -- otherwise a real needs_approval could vanish.
-            try:
-                # str(): cwd/sessionId are external; a non-string from a half
-                # write would make slug derivation raise and skip the ENTIRE
-                # session -- including one that is genuinely waiting.
-                session_id = str(data.get("sessionId") or "")
-                cwd = str(data.get("cwd") or "")
-                transcript = _transcript_path(session_id, cwd)
-                triage, reason = _status_for(data, transcript, now)
-
-                updated_at = _as_int(data.get("updatedAt", 0))
-                idle_seconds = max(0, int(now - updated_at / 1000)) if updated_at else 0
-
-                # Recover pid from the "<pid>.json" filename when the field is
-                # absent/half-written (see _load_session_file).
-                fname_pid = _as_int(base[:-5]) if base.endswith(".json") else 0
-
-                out.append(
-                    Session(
-                        pid=_as_int(data.get("pid"), fname_pid),
-                        name=str(data.get("name") or os.path.basename(cwd) or "?"),
-                        cwd=cwd,
-                        status=data.get("status", "unknown"),
-                        triage=triage,
-                        reason=reason,
-                        idle_seconds=idle_seconds,
-                        updated_at=updated_at,
-                    )
-                )
-            except Exception:
-                # Skip just this file; keep scanning siblings.
-                continue
+            session = _session_from_file(f, now)
+            if session:
+                out.append(session)
 
         out.sort(key=lambda x: (SORT_PRIORITY.get(x.triage, 5), -x.updated_at, x.pid))
         return out
     except Exception:
         # A read-only scan must never raise; degrade to empty.
         return []
+
 
 
 def summary(sessions: Optional[List[Session]] = None) -> dict:
