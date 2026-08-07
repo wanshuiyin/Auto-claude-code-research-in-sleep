@@ -169,7 +169,7 @@ def add_edge(wiki_root: str, from_id: str, to_id: str, edge_type: str, evidence:
     # Dedup check
     existing_edges = []
     if edges_path.exists():
-        for line in edges_path.read_text(encoding="utf-8").strip().split("\n"):
+        for line in _read_wiki_text(edges_path).strip().split("\n"):
             if line.strip():
                 try:
                     existing_edges.append(json.loads(line))
@@ -230,7 +230,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     # Deterministic, no LLM.
     brief_path = root.parent / "RESEARCH_BRIEF.md"
     if brief_path.exists():
-        raw = brief_path.read_text(encoding="utf-8")
+        raw = _read_wiki_text(brief_path)
 
         # Parse ## sections from the brief
         sections_map: dict[str, str] = {}
@@ -292,7 +292,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     # 2. Gap map (1200 chars)
     gap_path = root / "gap_map.md"
     if gap_path.exists():
-        gaps = gap_path.read_text(encoding="utf-8")[:1200]
+        gaps = _read_wiki_text(gap_path)[:1200]
         if gaps.strip() and gaps.strip() != "# Gap Map\n\n_Field gaps with stable IDs._":
             sections.append(f"## Open Gaps\n{gaps}\n")
 
@@ -306,7 +306,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
             # `pending` idea whose body discusses an "outcome: negative" failure mode
             # must NOT be banlisted.
             if meta.get("outcome") in ("negative", "mixed"):
-                content = f.read_text(encoding="utf-8")
+                content = _read_wiki_text(f)
                 lines = content.split("\n")
                 title = meta.get("title", "")
                 failure = ""
@@ -325,7 +325,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     if papers_dir.exists():
         paper_summaries = []
         for f in sorted(papers_dir.glob("*.md")):
-            content = f.read_text(encoding="utf-8")
+            content = _read_wiki_text(f)
             # Extract one-line thesis and key fields
             node_id = ""
             title = ""
@@ -351,7 +351,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     edges_path = root / "graph" / "edges.jsonl"
     if edges_path.exists():
         edges = []
-        for line in edges_path.read_text(encoding="utf-8").strip().split("\n"):
+        for line in _read_wiki_text(edges_path).strip().split("\n"):
             if line.strip():
                 try:
                     edges.append(json.loads(line))
@@ -430,7 +430,7 @@ def get_stats(wiki_root: str):
     edges_path = root / "graph" / "edges.jsonl"
     edge_count = 0
     if edges_path.exists():
-        edge_count = sum(1 for line in edges_path.read_text(encoding="utf-8").strip().split("\n") if line.strip())
+        edge_count = sum(1 for line in _read_wiki_text(edges_path).strip().split("\n") if line.strip())
 
     print(f"📚 Research Wiki Stats")
     print(f"Papers:      {papers}")
@@ -612,21 +612,28 @@ def _last_name(full_name: str) -> str:
     return parts[-1] if parts else ""
 
 
-def _load_paper_frontmatter(path: Path) -> dict:
-    """Parse the YAML-ish frontmatter of a wiki paper page. Returns {} on failure."""
-    if not path.exists():
-        return {}
+def _read_wiki_text(path: Path) -> str:
+    """Read a wiki file as UTF-8, naming the file if it was written in a legacy codepage.
+
+    A wiki produced by an older ARIS on a non-UTF-8 locale (e.g. cp936) would
+    otherwise surface as a bare UnicodeDecodeError traceback. Silently replacing
+    bytes is not an option here: this store exists to accumulate faithfully.
+    """
     try:
-        text = path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        # A wiki written by an older ARIS on a non-UTF-8 locale (e.g. cp936).
-        # Fail loudly and name the file — silently replacing bytes would corrupt
-        # a store whose whole point is faithful accumulation.
         raise SystemExit(
             f"ERROR: {path} is not valid UTF-8.\n"
             "  This wiki was likely written by an older ARIS on a non-UTF-8 locale.\n"
             "  Convert the file to UTF-8 (back it up first), then re-run."
         )
+
+
+def _load_paper_frontmatter(path: Path) -> dict:
+    """Parse the YAML-ish frontmatter of a wiki paper page. Returns {} on failure."""
+    if not path.exists():
+        return {}
+    text = _read_wiki_text(path)
     m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return {}
@@ -644,7 +651,7 @@ def _find_existing_page_by_arxiv(wiki_root: Path, arxiv_id: str) -> Path | None:
     if not papers.exists():
         return None
     for p in papers.glob("*.md"):
-        text = p.read_text(encoding="utf-8")
+        text = _read_wiki_text(p)
         # Match either the frontmatter line or a URL reference
         if re.search(r'arxiv:\s*["\']?' + re.escape(arxiv_id) + r'["\']?', text):
             return p
@@ -1026,7 +1033,7 @@ def add_claim(wiki_root: str, slug: str, name: str, *, description: str = "",
         elif kind == "gap":
             gm = root / "gap_map.md"
             exists = gm.exists() and re.search(
-                rf"\b{re.escape(rest)}\b", gm.read_text(encoding="utf-8"))
+                rf"\b{re.escape(rest)}\b", _read_wiki_text(gm))
         if not exists:
             print(f"⚠️  add_claim: edge target {nid} not found in this wiki "
                   f"(dangling edge recorded — create the node or fix the id).",
@@ -1230,7 +1237,7 @@ def upsert_idea(wiki_root: str, slug: str, title: str, *, description: str = "",
         elif kind == "gap":
             gm = root / "gap_map.md"
             exists = gm.exists() and re.search(
-                rf"\b{re.escape(rest)}\b", gm.read_text(encoding="utf-8"))
+                rf"\b{re.escape(rest)}\b", _read_wiki_text(gm))
         if not exists:
             print(f"⚠️  upsert_idea: edge target {nid} not found in this wiki "
                   f"(dangling edge recorded — create the node or fix the id).",

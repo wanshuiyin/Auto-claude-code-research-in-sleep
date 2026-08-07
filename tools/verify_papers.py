@@ -206,7 +206,7 @@ def load_cache(path: Path, ttl_days: int) -> dict[str, dict[str, Any]]:
         return {}
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return {}
     now = time.time()
     cutoff = now - ttl_days * 86400
