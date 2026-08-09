@@ -331,3 +331,104 @@ fn text_mode_never_prints_kimi_reasoning() {
 
     let _ = std::fs::remove_dir_all(&home);
 }
+
+/// Mock variant that can answer with non-200 statuses: each queued entry is
+/// `(status_line, content_type, body)`. Used by the availability-chain test
+/// (the plain `spawn_mock_anthropic` always answers 200/SSE).
+fn spawn_mock_anthropic_raw(
+    responses: Vec<(&'static str, &'static str, String)>,
+) -> (String, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock server");
+    let addr = listener.local_addr().expect("mock server addr");
+    let handle = thread::spawn(move || {
+        for (status_line, content_type, body) in responses {
+            let (mut socket, _) = match listener.accept() {
+                Ok(pair) => pair,
+                Err(_) => return,
+            };
+            socket.set_read_timeout(Some(Duration::from_secs(10))).ok();
+            let mut buf = Vec::new();
+            let mut chunk = [0u8; 4096];
+            while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                match socket.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                    Err(_) => break,
+                }
+            }
+            let response = format!(
+                "{status_line}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                body.len(),
+            );
+            let _ = socket.write_all(response.as_bytes());
+            let _ = socket.flush();
+        }
+    });
+    (format!("http://{addr}"), handle)
+}
+
+/// v0.4.24 (codex-mandated wiring test): the default-model availability chain
+/// must walk Opus 5 → 4.8 → 4.7 END-TO-END. The mock answers the precise
+/// Anthropic "model unavailable" shape (404 + `not_found_error`) for the
+/// first two requests and a normal SSE turn for the third; the run must
+/// succeed and report `model=claude-opus-4-7`. This locks the regression the
+/// v0.4.24 review caught: the pre-chain single-hop latch stranded
+/// 4.7-only accounts at the 4.8 step.
+#[test]
+fn default_model_availability_chain_walks_to_opus_4_7() {
+    let not_found = r#"{"type":"error","error":{"type":"not_found_error","message":"model not found"}}"#;
+    let (base_url, _server) = spawn_mock_anthropic_raw(vec![
+        (
+            "HTTP/1.1 404 Not Found",
+            "application/json",
+            not_found.to_string(),
+        ),
+        (
+            "HTTP/1.1 404 Not Found",
+            "application/json",
+            not_found.to_string(),
+        ),
+        (
+            "HTTP/1.1 200 OK",
+            "text/event-stream",
+            sse_final_text_turn(),
+        ),
+    ]);
+    let home = std::env::temp_dir().join(format!("aris-chain-{}", std::process::id()));
+    std::fs::create_dir_all(&home).expect("temp home");
+
+    // No --model flag and no saved config in the isolated home →
+    // ModelSource::BuiltInDefault, the only source besides Configured that
+    // may silently walk the chain.
+    let mut child = isolated_aris(&home, &base_url);
+    child
+        .args(["--output-format", "json", "say ok"])
+        .env("ANTHROPIC_API_KEY", "test-key-chain");
+    let mut child = child.spawn().expect("spawn aris");
+    let status = wait_with_timeout(&mut child, 60);
+
+    let mut stdout = String::new();
+    child.stdout.take().unwrap().read_to_string(&mut stdout).unwrap();
+    let mut stderr = String::new();
+    child.stderr.take().unwrap().read_to_string(&mut stderr).unwrap();
+
+    assert!(
+        status.success(),
+        "chain walk should recover on 4.7: exit {status:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    let doc: serde_json::Value = serde_json::from_str(stdout.trim())
+        .unwrap_or_else(|e| panic!("stdout is not a single JSON document ({e}):\n{stdout}"));
+    assert_eq!(
+        doc.get("model").and_then(serde_json::Value::as_str),
+        Some("claude-opus-4-7"),
+        "the session must end on the chain's last entry: {doc}"
+    );
+    // Both hops warned on stderr (never stdout — the single-JSON contract).
+    assert!(
+        stderr.contains("claude-opus-5 is not available")
+            && stderr.contains("claude-opus-4-8 is not available"),
+        "expected one warning per chain hop on stderr:\n{stderr}"
+    );
+
+    let _ = std::fs::remove_dir_all(&home);
+}

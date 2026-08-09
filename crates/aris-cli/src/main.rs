@@ -82,11 +82,27 @@ use tools::{
     execute_tool, mcp_tool_specs, mvp_tool_specs, McpToolCatalog, RuntimeToolSpec, ToolSpec,
 };
 
-const DEFAULT_MODEL: &str = "claude-opus-4-8";
-/// v0.4.18: model the main session falls back to if `DEFAULT_MODEL` is not
-/// available on the user's account (Anthropic returns 404 `not_found_error`).
-/// The bump to Opus 4.8 must not regress users who only have 4.7 access.
-const DEFAULT_MODEL_FALLBACK: &str = "claude-opus-4-7";
+/// v0.4.24: ordered availability chain for the built-in default model. On the
+/// precise "model unavailable on this account" failure (404
+/// `not_found_error`), a non-explicit session walks FORWARD through this
+/// chain — Opus 5 → Opus 4.8 → Opus 4.7 — one step per failed request,
+/// warning each time. Strictly-forward stepping replaces the v0.4.18
+/// single-hop latch: no retry loop is possible (the walk terminates at the
+/// last entry), and the v0.4.18 guarantee is preserved for accounts with only
+/// 4.7 access AND for configs saved by older versions whose `executor_model`
+/// is a former default (e.g. `claude-opus-4-8` written by v0.4.23's setup).
+const DEFAULT_MODEL_CHAIN: [&str; 3] = ["claude-opus-5", "claude-opus-4-8", "claude-opus-4-7"];
+const DEFAULT_MODEL: &str = DEFAULT_MODEL_CHAIN[0];
+
+/// v0.4.24: the chain entry after `current`, or `None` when `current` is not
+/// a chain member (a model the user explicitly named never silently changes)
+/// or is the chain's last entry (nothing left to fall back to).
+fn next_default_fallback(current: &str) -> Option<&'static str> {
+    let position = DEFAULT_MODEL_CHAIN
+        .iter()
+        .position(|model| *model == current)?;
+    DEFAULT_MODEL_CHAIN.get(position + 1).copied()
+}
 fn max_tokens_for_model(model: &str) -> u32 {
     if model.contains("opus") {
         32_000
@@ -552,7 +568,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
 
 /// v0.4.22 (C1): where the session's model came from. Decides whether the
 /// saved executor model applies and whether the v0.4.18 availability fallback
-/// (4.8 → 4.7) is allowed to fire.
+/// (a forward walk over `DEFAULT_MODEL_CHAIN`) is allowed to fire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ModelSource {
     /// `--model` on the command line — a reproducibility contract; never
@@ -560,7 +576,7 @@ enum ModelSource {
     /// availability fallback, even when it names the default id).
     CliExplicit,
     /// Chosen interactively via `/model` in the REPL — same contract as
-    /// `CliExplicit`; selecting it also re-arms the availability fallback.
+    /// `CliExplicit`.
     ReplExplicit,
     /// Adopted from the saved `aris setup` config (`executor_model`).
     /// The availability fallback may fire.
@@ -572,7 +588,7 @@ enum ModelSource {
 
 impl ModelSource {
     /// v0.4.22 (C1): only non-explicit sources may silently fall back
-    /// 4.8 → 4.7 on account unavailability.
+    /// along `DEFAULT_MODEL_CHAIN` on account unavailability.
     fn allows_availability_fallback(self) -> bool {
         matches!(self, Self::Configured | Self::BuiltInDefault)
     }
@@ -762,8 +778,9 @@ fn resolve_model_alias(model: &str) -> &str {
         return model;
     }
     match model {
-        "opus" => "claude-opus-4-8",
-        "sonnet" => "claude-sonnet-4-6",
+        "fable" => "claude-fable-5",
+        "opus" => "claude-opus-5",
+        "sonnet" => "claude-sonnet-5",
         "haiku" => "claude-haiku-4-5-20251001",
         _ => model,
     }
@@ -1559,7 +1576,7 @@ const BANNER_CENTER: [&str; 6] = [
 struct LiveCli {
     model: String,
     /// v0.4.22 (C1): provenance of `model` — gates the saved-model
-    /// substitution (startup) and the availability fallback (latch).
+    /// substitution (startup) and the availability-chain walk.
     model_source: ModelSource,
     reviewer_model: String,
     allowed_tools: Option<AllowedToolSet>,
@@ -1580,11 +1597,6 @@ struct LiveCli {
     /// than silently run). Threaded into every `build_runtime` so plan-mode
     /// rebuilds keep the same posture.
     may_prompt: bool,
-    /// v0.4.18: set once we've fallen back from the default `DEFAULT_MODEL`
-    /// (Opus 4.8) to `DEFAULT_MODEL_FALLBACK` (4.7) because 4.8 was unavailable
-    /// on this account. Latches the fallback for the session and prevents a
-    /// retry loop.
-    model_fell_back: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1665,7 +1677,6 @@ impl LiveCli {
             plan_mode: None,
             mcp,
             may_prompt,
-            model_fell_back: false,
         };
         cli.persist_session()?;
         Ok(cli)
@@ -1920,10 +1931,11 @@ impl LiveCli {
                     return Ok(());
                 }
                 Err(error) => {
-                    // v0.4.18: if the default Opus 4.8 is unavailable on this
-                    // account, fall back to 4.7 — rebuilding BOTH the runtime
-                    // and the system-prompt model identity so they stay coherent
-                    // — and retry once before surfacing the failure.
+                    // v0.4.18: if the default model is unavailable on this
+                    // account, step along DEFAULT_MODEL_CHAIN — rebuilding BOTH
+                    // the runtime and the system-prompt model identity so they
+                    // stay coherent — and retry (once per chain step) before
+                    // surfacing the failure.
                     if self.fall_back_default_model_if_needed(&error)? {
                         spinner.finish(
                             "\x1b[33m●\x1b[0m \x1b[2mretrying with the fallback model…\x1b[0m",
@@ -1954,37 +1966,40 @@ impl LiveCli {
         }
     }
 
-    /// v0.4.18: when `error` is "model unavailable on this account" and we are
-    /// still on the default `DEFAULT_MODEL` (Opus 4.8), switch to
-    /// `DEFAULT_MODEL_FALLBACK` (4.7), rebuild the system prompt so the model
-    /// identity the model is told about stays coherent, warn once, and return
-    /// `true` so the caller rebuilds its runtime from the new
-    /// `self.model`/`self.system_prompt` and retries. Returns `false` (no state
-    /// change) otherwise — including after a fallback already happened (latched
-    /// by `self.model_fell_back`, which also prevents a retry loop), and for an
-    /// explicitly-chosen model (the user owns that choice).
+    /// v0.4.18: when `error` is "model unavailable on this account" and the
+    /// session's model has a next step in `DEFAULT_MODEL_CHAIN`, step to it,
+    /// rebuild the system prompt so the model identity the model is told
+    /// about stays coherent, warn, and return `true` so the caller rebuilds
+    /// its runtime from the new `self.model`/`self.system_prompt` and
+    /// retries. Returns `false` (no state change) otherwise — for a model
+    /// outside the chain, at the chain's end, and for an explicitly-chosen
+    /// model (the user owns that choice).
     ///
     /// v0.4.22 (C1): "explicitly-chosen" now includes an explicit `--model`
     /// or `/model` selection that NAMES the default id — an explicit choice is
     /// a reproducibility contract, so only `Configured`/`BuiltInDefault`
     /// sources may silently fall back (`ModelSource::allows_availability_fallback`).
+    ///
+    /// v0.4.24: single-hop constant + latch → forward walk over
+    /// `DEFAULT_MODEL_CHAIN` (Opus 5 → 4.8 → 4.7). The walk is strictly
+    /// forward, so it terminates without a latch; a saved `executor_model`
+    /// naming a former default (e.g. v0.4.23's `claude-opus-4-8`) keeps its
+    /// pre-existing fallback protection.
     fn fall_back_default_model_if_needed(
         &mut self,
         error: &RuntimeError,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        if !error.is_model_unavailable()
-            || self.model != DEFAULT_MODEL
-            || self.model_fell_back
-            || !self.model_source.allows_availability_fallback()
-        {
+        if !error.is_model_unavailable() || !self.model_source.allows_availability_fallback() {
             return Ok(false);
         }
-        self.model_fell_back = true;
-        self.model = DEFAULT_MODEL_FALLBACK.to_string();
+        let Some(next) = next_default_fallback(&self.model) else {
+            return Ok(false);
+        };
+        let unavailable = std::mem::replace(&mut self.model, next.to_string());
         self.system_prompt = build_system_prompt(Some(&self.model))?;
         eprintln!(
-            "\x1b[33mwarning:\x1b[0m {DEFAULT_MODEL} is not available on this account; \
-             falling back to {DEFAULT_MODEL_FALLBACK} for this session."
+            "\x1b[33mwarning:\x1b[0m {unavailable} is not available on this account; \
+             falling back to {next} for this session."
         );
         Ok(true)
     }
@@ -2002,8 +2017,9 @@ impl LiveCli {
 
     fn run_prompt_json(&mut self, input: &str) -> Result<(), Box<dyn std::error::Error>> {
         // v0.4.18: same default-model fallback as the text path. On a
-        // "model unavailable" failure we switch to 4.7, rebuild the local
-        // runtime from the new model + system prompt, and retry once.
+        // "model unavailable" failure we step along DEFAULT_MODEL_CHAIN,
+        // rebuild the local runtime from the new model + system prompt, and
+        // retry (once per chain step).
         let summary = loop {
             let session = self.runtime.session().clone();
             let mut runtime = build_runtime(
@@ -2289,10 +2305,16 @@ impl LiveCli {
                     // Anthropic mode
                     vec![
                         (
-                            "claude-opus-4-8",
-                            "Opus 4.8 · Most capable for complex work",
+                            "claude-fable-5",
+                            "Fable 5 · Frontier Mythos-class, most intelligent",
                         ),
-                        ("claude-sonnet-4-6", "Sonnet 4.6 · Best for everyday tasks"),
+                        ("claude-opus-5", "Opus 5 · Most capable for complex work"),
+                        ("claude-sonnet-5", "Sonnet 5 · Best for everyday tasks"),
+                        (
+                            "claude-opus-4-8",
+                            "Opus 4.8 · Previous-generation Opus",
+                        ),
+                        ("claude-sonnet-4-6", "Sonnet 4.6 · Previous-generation Sonnet"),
                         (
                             "claude-haiku-4-5-20251001",
                             "Haiku 4.5 · Fastest for quick answers",
@@ -2320,12 +2342,11 @@ impl LiveCli {
 
         if model == self.model {
             // v0.4.22 (C1): re-selecting the CURRENT model via /model is still
-            // an explicit choice — mark it and re-arm the availability
-            // fallback latch (covers "4.8 fell back to 4.7, user explicitly
-            // re-selects 4.7/4.8": the old early-return kept the stale latch
-            // and the stale Configured/BuiltInDefault source forever).
+            // an explicit choice — mark it so the availability fallback stops
+            // firing (covers "the default fell back mid-session, user
+            // explicitly re-selects the served model": the old early-return
+            // kept the stale Configured/BuiltInDefault source forever).
             self.model_source = ModelSource::ReplExplicit;
-            self.model_fell_back = false;
             println!(
                 "{}",
                 format_model_report(
@@ -2355,9 +2376,8 @@ impl LiveCli {
         )?;
         self.system_prompt = new_system_prompt;
         self.model.clone_from(&model);
-        // v0.4.22 (C1): /model is an explicit choice; re-arm the latch.
+        // v0.4.22 (C1): /model is an explicit choice.
         self.model_source = ModelSource::ReplExplicit;
-        self.model_fell_back = false;
         println!(
             "{}",
             format_model_switch_report(&previous, &model, message_count)
@@ -2659,16 +2679,15 @@ impl LiveCli {
             println!("  Executor model: {previous_model} → \x1b[1;32m{effective_model}\x1b[0m");
         }
         // v0.4.22 (Δ4-5/C1): a successful /setup re-establishes the model's
-        // provenance and UNCONDITIONALLY re-arms the availability-fallback
-        // latch — even when the model string did not change (covers "4.8 fell
-        // back to 4.7 mid-session, user re-selects 4.8 via /setup": the stale
-        // latch would otherwise block the retry-and-fallback path forever).
+        // provenance — even when the model string did not change (covers "the
+        // default fell back mid-session, user re-selects it via /setup": the
+        // stale source would otherwise mis-gate the fallback). v0.4.24: the
+        // latch this used to re-arm is gone — the chain walk needs none.
         self.model_source = if new_config.executor_model().is_some() {
             ModelSource::Configured
         } else {
             ModelSource::BuiltInDefault
         };
-        self.model_fell_back = false;
 
         // Update reviewer model
         if let Some(new_reviewer) = &new_config.reviewer_model {
@@ -4532,6 +4551,9 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
     // ARIS identity: tell the model exactly who it is to prevent hallucination.
     let model_name = model_id.unwrap_or("unknown");
     let friendly_name = match model_name {
+        "claude-fable-5" => "Claude Fable 5",
+        "claude-opus-5" => "Claude Opus 5",
+        "claude-sonnet-5" => "Claude Sonnet 5",
         "claude-opus-4-8" => "Claude Opus 4.8",
         "claude-opus-4-7" => "Claude Opus 4.7",
         "claude-sonnet-4-6" => "Claude Sonnet 4.6",
@@ -5171,8 +5193,8 @@ impl ApiClient for AnthropicRuntimeClient {
         self.runtime.block_on(async {
             // v0.4.18: tag a "model unavailable on this account" failure (404
             // not_found_error from the initial POST, before any stream event) so
-            // the CLI can fall back from the default Opus 4.8 to 4.7. All other
-            // errors keep the plain `new` form.
+            // the CLI can walk DEFAULT_MODEL_CHAIN toward an available model.
+            // All other errors keep the plain `new` form.
             let mut stream = self
                 .client
                 .stream_message(&message_request)
@@ -7283,11 +7305,11 @@ mod tests {
         format_resume_report, format_status_report, format_tool_call_start, format_tool_result,
         normalize_permission_mode, parse_args, parse_git_status_metadata, print_help_to,
         push_output_block, render_config_report, render_memory_report, render_repl_help,
-        fold_tool_output, resolve_model_alias, resolve_startup_model, response_to_events,
-        resume_supported_slash_commands, reviewer_display_for, reviewer_model_matches_provider,
-        reviewer_routing_nudge, status_context, turn_has_visible_assistant_text, CliAction,
-        CliOutputFormat, FoldKeep, ModelSource, SlashCommand, StatusUsage, BANNER_CENTER,
-        DEFAULT_MODEL,
+        fold_tool_output, next_default_fallback, resolve_model_alias, resolve_startup_model,
+        response_to_events, resume_supported_slash_commands, reviewer_display_for,
+        reviewer_model_matches_provider, reviewer_routing_nudge, status_context,
+        turn_has_visible_assistant_text, CliAction, CliOutputFormat, FoldKeep, ModelSource,
+        SlashCommand, StatusUsage, BANNER_CENTER, DEFAULT_MODEL, DEFAULT_MODEL_CHAIN,
     };
     use api::{MessageResponse, OutputContentBlock, Usage};
     use runtime::{
@@ -7368,7 +7390,7 @@ mod tests {
         std::env::remove_var("EXECUTOR_PROVIDER");
     }
 
-    // v0.4.22 (C1): only non-explicit sources may silently fall back 4.8→4.7.
+    // v0.4.22 (C1): only non-explicit sources may silently walk the chain.
     #[test]
     fn model_source_gates_availability_fallback() {
         assert!(ModelSource::Configured.allows_availability_fallback());
@@ -7810,9 +7832,36 @@ mod tests {
 
     #[test]
     fn resolves_known_model_aliases() {
-        assert_eq!(resolve_model_alias("opus"), "claude-opus-4-8");
-        assert_eq!(resolve_model_alias("sonnet"), "claude-sonnet-4-6");
+        // `resolve_model_alias` reads EXECUTOR_PROVIDER (aliases are
+        // deliberately inert in OpenAI-compat mode) — hold the crate-wide env
+        // guard and pin the var, or a concurrent env-writing test flakes this.
+        let _g = crate::env_test_guard();
+        std::env::remove_var("EXECUTOR_PROVIDER");
+        assert_eq!(resolve_model_alias("fable"), "claude-fable-5");
+        assert_eq!(resolve_model_alias("opus"), "claude-opus-5");
+        assert_eq!(resolve_model_alias("sonnet"), "claude-sonnet-5");
         assert_eq!(resolve_model_alias("haiku"), "claude-haiku-4-5-20251001");
+        std::env::set_var("EXECUTOR_PROVIDER", "openai");
+        assert_eq!(resolve_model_alias("opus"), "opus");
+        std::env::remove_var("EXECUTOR_PROVIDER");
+    }
+
+    /// v0.4.24: the availability chain walks Opus 5 → 4.8 → 4.7 and stops.
+    /// The 4.8 entry point is the regression population codex flagged: a
+    /// config saved by v0.4.23's setup (`executor_model: claude-opus-4-8`)
+    /// on an account with only 4.7 access must keep its fallback.
+    #[test]
+    fn default_model_chain_walks_forward_and_terminates() {
+        assert_eq!(DEFAULT_MODEL, DEFAULT_MODEL_CHAIN[0]);
+        assert_eq!(next_default_fallback("claude-opus-5"), Some("claude-opus-4-8"));
+        assert_eq!(
+            next_default_fallback("claude-opus-4-8"),
+            Some("claude-opus-4-7")
+        );
+        assert_eq!(next_default_fallback("claude-opus-4-7"), None);
+        // Non-chain models (explicitly named or saved) never silently change.
+        assert_eq!(next_default_fallback("claude-fable-5"), None);
+        assert_eq!(next_default_fallback("claude-sonnet-4-6"), None);
         assert_eq!(resolve_model_alias("claude-opus"), "claude-opus");
     }
 

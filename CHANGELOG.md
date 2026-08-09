@@ -1,5 +1,53 @@
 # ARIS-Code Changelog
 
+## v0.4.24 (2026-08-09)
+
+The **Claude 5 model refresh** ([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)):
+first-class support for **Claude Opus 5** and **Claude Fable 5** (the new
+Mythos-class flagship). Explicit `--model claude-opus-5` / `claude-fable-5`
+already worked on every platform — this release makes them visible and priced
+correctly.
+
+### 🆕 Claude 5 family
+
+- **Default model → `claude-opus-5`** (same $5/$25 tier as Opus 4.8) for the
+  main session, subagents, and `aris setup`. The v0.4.18 availability
+  fallback becomes an ordered **chain**: on the precise `404
+  not_found_error`, a non-explicit session walks Opus 5 → Opus 4.8 → Opus
+  4.7, one step per failed request, warning each time (explicit `--model` /
+  `/model` choices still never silently change). The chain replaces the old
+  single-hop latch — which, with the new default, would have stranded
+  4.7-only accounts at the 4.8 step and dropped the fallback entirely for
+  configs saved by v0.4.23's setup (`executor_model: claude-opus-4-8`); the
+  cross-model review caught that regression, and a new end-to-end test (mock
+  404/404/success) locks the full walk. Subagents mirror the same chain.
+- **`/model` picker**: Fable 5, Opus 5, and Sonnet 5 join the Anthropic list
+  (Opus 4.8 / Sonnet 4.6 / Haiku 4.5 remain selectable).
+- **Aliases**: `fable` → `claude-fable-5` (new); `opus` → `claude-opus-5`;
+  `sonnet` → `claude-sonnet-5`; `haiku` unchanged.
+
+### 💰 Pricing (verified against Anthropic's published schedule, 2026-08)
+
+- **New Mythos-class tier**: `fable` / `mythos` ids = **$10 / $50** (cache
+  write $12.50, read $1). Previously `claude-fable-5` matched no Claude
+  family substring and fell through to the conservative unknown-model
+  fallback ($15/$75) — a 1.5× `/cost` over-estimate across every category.
+- `claude-opus-5` was already priced correctly by the existing current-Opus
+  branch ($5/$25) — now pinned by test so a future legacy-tier tweak can't
+  regress it. `claude-sonnet-5` rides the Sonnet branch at the standard
+  $3/$15 (its $2/$10 introductory price through 2026-08-31 is deliberately
+  not modelled — a ≤1-month conservative over-estimate isn't worth a
+  time-dependent price table).
+
+### Tests
+
+- api 35 + 6 integration / aris-cli 213 + 4 e2e / runtime 226 / tools 70 /
+  commands 5 — all green (+4: Mythos-tier pricing, both chain unit tests,
+  and the end-to-end chain walk against a mock 404 server; Opus 5 / Sonnet 5
+  pricing pins ride existing tests). Live smoke: `--model claude-opus-5`,
+  `--model claude-fable-5`, and the `fable` alias all return correct
+  responses end-to-end.
+
 ## v0.4.23 (2026-08-02)
 
 The **output-folding release** — fixes the top real-user complaint that the

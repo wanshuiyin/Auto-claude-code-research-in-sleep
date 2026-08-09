@@ -2015,11 +2015,22 @@ pub fn render_skill_discovery_section() -> Option<String> {
     Some(lines.join("\n"))
 }
 
-const DEFAULT_AGENT_MODEL: &str = "claude-opus-4-8";
-/// v0.4.18: subagent fallback when `DEFAULT_AGENT_MODEL` is unavailable on the
-/// account (404 `not_found`). Mirrors the main session's `DEFAULT_MODEL_FALLBACK`
-/// so a user without Opus 4.8 access doesn't hit hard subagent failures.
-const DEFAULT_AGENT_MODEL_FALLBACK: &str = "claude-opus-4-7";
+/// v0.4.18/v0.4.24: subagent availability chain, mirroring the main
+/// session's `DEFAULT_MODEL_CHAIN` (Opus 5 → 4.8 → 4.7). On the precise
+/// "model unavailable" 404 the subagent steps forward one entry per failed
+/// request so background Agent tasks don't hard-fail for accounts without
+/// Claude 5 (or 4.8) access. Strictly forward — terminates without a latch.
+const DEFAULT_AGENT_MODEL_CHAIN: [&str; 3] =
+    ["claude-opus-5", "claude-opus-4-8", "claude-opus-4-7"];
+const DEFAULT_AGENT_MODEL: &str = DEFAULT_AGENT_MODEL_CHAIN[0];
+
+/// v0.4.24: the chain entry after `current`, or `None` off-chain / at the end.
+fn next_agent_default_fallback(current: &str) -> Option<&'static str> {
+    let position = DEFAULT_AGENT_MODEL_CHAIN
+        .iter()
+        .position(|model| *model == current)?;
+    DEFAULT_AGENT_MODEL_CHAIN.get(position + 1).copied()
+}
 const DEFAULT_AGENT_MAX_ITERATIONS: usize = 32;
 
 /// Subagent system date — use the same dynamic today as the main runtime
@@ -2353,9 +2364,6 @@ struct AnthropicRuntimeClient {
     client: AnthropicClient,
     model: String,
     allowed_tools: BTreeSet<String>,
-    /// v0.4.18: latches the subagent's Opus 4.8 → 4.7 fallback (see `stream`)
-    /// so it warns once and never re-probes on subsequent turns.
-    model_fell_back: bool,
 }
 
 impl AnthropicRuntimeClient {
@@ -2368,7 +2376,6 @@ impl AnthropicRuntimeClient {
             client,
             model,
             allowed_tools,
-            model_fell_back: false,
         })
     }
 }
@@ -2404,31 +2411,31 @@ impl ApiClient for AnthropicRuntimeClient {
         };
 
         self.runtime.block_on(async {
-            // v0.4.18: subagent default-model fallback. If the default
-            // DEFAULT_AGENT_MODEL (Opus 4.8) is unavailable on this account
-            // (404 not_found from the initial POST, before any stream event),
-            // fall back to 4.7 and retry once so background Agent tasks don't
-            // hard-fail for users without 4.8 access. Latched + warn-once.
-            let mut stream = match self.client.stream_message(&message_request).await {
-                Ok(stream) => stream,
-                Err(error)
-                    if error.is_model_unavailable()
-                        && message_request.model == DEFAULT_AGENT_MODEL
-                        && !self.model_fell_back =>
-                {
-                    self.model_fell_back = true;
-                    self.model = DEFAULT_AGENT_MODEL_FALLBACK.to_string();
-                    message_request.model = DEFAULT_AGENT_MODEL_FALLBACK.to_string();
-                    eprintln!(
-                        "\x1b[33mwarning:\x1b[0m {DEFAULT_AGENT_MODEL} is not available on this \
-                         account; subagent falling back to {DEFAULT_AGENT_MODEL_FALLBACK}."
-                    );
-                    self.client
-                        .stream_message(&message_request)
-                        .await
-                        .map_err(|error| RuntimeError::new(error.to_string()))?
+            // v0.4.18: subagent default-model fallback. On a "model
+            // unavailable on this account" failure (404 not_found from the
+            // initial POST, before any stream event) walk forward through
+            // DEFAULT_AGENT_MODEL_CHAIN (v0.4.24: Opus 5 → 4.8 → 4.7), one
+            // step per failed request, so background Agent tasks don't
+            // hard-fail. The walk is strictly forward and terminates at the
+            // chain's end — off-chain (caller-specified) models never change.
+            let mut stream = loop {
+                match self.client.stream_message(&message_request).await {
+                    Ok(stream) => break stream,
+                    Err(error) if error.is_model_unavailable() => {
+                        let Some(next) = next_agent_default_fallback(&message_request.model)
+                        else {
+                            return Err(RuntimeError::new(error.to_string()));
+                        };
+                        eprintln!(
+                            "\x1b[33mwarning:\x1b[0m {} is not available on this account; \
+                             subagent falling back to {next}.",
+                            message_request.model
+                        );
+                        self.model = next.to_string();
+                        message_request.model = next.to_string();
+                    }
+                    Err(error) => return Err(RuntimeError::new(error.to_string())),
                 }
-                Err(error) => return Err(RuntimeError::new(error.to_string())),
             };
             let mut events = Vec::new();
             let mut pending_tool: Option<(String, String, String)> = None;
@@ -4183,6 +4190,7 @@ mod tests {
     use super::{
         agent_permission_policy, allowed_tools_for_subagent, build_agent_runtime,
         execute_agent_with_spawn, execute_tool, final_assistant_text, mvp_tool_specs,
+        next_agent_default_fallback, DEFAULT_AGENT_MODEL, DEFAULT_AGENT_MODEL_CHAIN,
         persist_agent_terminal_state, resolve_reviewer_model, reviewer_supports_reasoning_effort,
         route_openai_compat_model, AgentInput, AgentJob, AnthropicClient, SubagentToolExecutor,
     };
@@ -4221,6 +4229,25 @@ mod tests {
             .expect("time")
             .as_nanos();
         std::env::temp_dir().join(format!("clawd-tools-{unique}-{name}"))
+    }
+
+    /// v0.4.24: the subagent availability chain walks Opus 5 → 4.8 → 4.7 and
+    /// stops; off-chain (caller-specified) models never silently change.
+    /// Mirrors the main session's `default_model_chain_walks_forward_and_terminates`.
+    #[test]
+    fn agent_default_model_chain_walks_forward_and_terminates() {
+        assert_eq!(DEFAULT_AGENT_MODEL, DEFAULT_AGENT_MODEL_CHAIN[0]);
+        assert_eq!(
+            next_agent_default_fallback("claude-opus-5"),
+            Some("claude-opus-4-8")
+        );
+        assert_eq!(
+            next_agent_default_fallback("claude-opus-4-8"),
+            Some("claude-opus-4-7")
+        );
+        assert_eq!(next_agent_default_fallback("claude-opus-4-7"), None);
+        assert_eq!(next_agent_default_fallback("claude-fable-5"), None);
+        assert_eq!(next_agent_default_fallback("claude-sonnet-4-6"), None);
     }
 
     /// v0.4.17 (T11): when no reviewer credentials are set, the LlmReview error

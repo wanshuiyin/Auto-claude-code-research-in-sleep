@@ -33,9 +33,10 @@ impl ApiError {
     /// v0.4.18: true when the API rejected the request because the *model* is
     /// not available on this account — Anthropic returns HTTP 404 with
     /// `error.type == "not_found_error"` for an unknown/unavailable model on the
-    /// messages endpoint. Used to drive the Opus 4.8 → 4.7 fallback (the only
-    /// not-found case for this endpoint). Deliberately NOT matching 400, which
-    /// covers a broad range of unrelated request errors.
+    /// messages endpoint. Used to drive the default-model availability chain
+    /// (v0.4.24: Opus 5 → 4.8 → 4.7; the only not-found case for this
+    /// endpoint). Deliberately NOT matching 400, which covers a broad range of
+    /// unrelated request errors.
     #[must_use]
     pub fn is_model_unavailable(&self) -> bool {
         match self {
@@ -166,7 +167,7 @@ mod tests {
         }
     }
 
-    // v0.4.18: is_model_unavailable drives the Opus 4.8 -> 4.7 fallback. It must
+    // v0.4.18: is_model_unavailable drives the default-model availability chain. It must
     // fire ONLY on the precise "model not found" signal (404 + not_found_error)
     // and never on unrelated request errors.
     #[test]

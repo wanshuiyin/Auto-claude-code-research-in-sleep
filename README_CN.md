@@ -16,7 +16,7 @@
 
 ![ARIS-Code Screenshot](docs/screenshot.png)
 
-*截图来自较早版本 —— 当前默认 executor 为 Claude Opus 4.8，reviewer 为经由 Codex MCP 的 GPT-5.6-Sol。*
+*截图来自较早版本 —— 当前默认 executor 为 Claude Opus 5，reviewer 为经由 Codex MCP 的 GPT-5.6-Sol。*
 
 > **对抗·多智能体研究自动化 CLI**
 > Executor 执行 · Reviewer 审查 · 迭代精进
@@ -29,6 +29,8 @@
 
 ## 📰 最新动态
 
+> **v0.4.24** (2026-08-09) — **Claude 5 模型刷新**([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)):**Claude Opus 5** 与 **Claude Fable 5**(Mythos 级旗舰)一等公民支持。显式 `--model claude-opus-5` / `claude-fable-5` 本来在所有平台就能透传使用 —— 这一版让它们进菜单、算对钱。**🆕 默认模型 → `claude-opus-5`**(与 Opus 4.8 同为 $5/$25 档),覆盖主会话、子代理与 `aris setup`;可用性 fallback 升级为有序**链**:非显式会话在精确的 `404 not_found_error` 上沿 Opus 5 → Opus 4.8 → Opus 4.7 逐步前进、每步警告一次(显式选择的模型永不静默更换);旧的单跳 latch 在新默认下会把仅有 4.7 权限的账号卡死在 4.8、并让 v0.4.23 setup 存下的配置彻底失去回落 —— 该回归被跨模型审当场抓住,现由端到端 mock-404 链测试锁死。`/model` 选择器新增 Fable 5 / Opus 5 / Sonnet 5(4.8 / 4.6 / Haiku 仍可选);别名:`fable` → `claude-fable-5`(新增)、`opus` → `claude-opus-5`、`sonnet` → `claude-sonnet-5`。**💰 新增 Mythos 级计价档**(2026-08 联网核实):`fable`/`mythos` = $10/$50(cache write $12.50、read $1)—— 此前 `claude-fable-5` 不含任何家族子串,落到保守的未知模型兜底档($15/$75),`/cost` 全项高估 1.5×;Opus 5 本就被现行 Opus 档算对,现加测试钉死。测试:api 41 / aris-cli 213 + 4 e2e / runtime 226 / tools 70 / commands 5 全绿;`claude-opus-5`、`claude-fable-5`、`fable` 别名三发真机冒烟端到端通过。Codex MCP(gpt-5.6-sol xhigh):实现 gate NO-GO(抓到 fallback 链回归 + 定价史实错误)→ 修复后 GO。
+>
 > **v0.4.23** (2026-08-02) — **输出折叠版** —— 修掉真实用户投诉第一名:CLI 会把读到的文档**全文** dump 到屏幕(2000 行论文=刷 2000 行)、bash 全量 stdout、grep 全量匹配内容。**🧹 工具输出折叠(仅显示层)**:Read/Grep 显示前 6 行,Bash 每流显示前 4 + 后 4(stderr 保持红色),然后一行暗色 "… (+N more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)";保留行截 240 字符(防 minified 单行);session、模型上下文、`--output-format json` 和 `/export` 始终保留**完整**内容。经核实 thinking 本来就不打屏(体感来自上述 dump)—— 新增两个端到端 sentinel 测试锁死 thinking/reasoning 永不落终端。**🐛 bash 超时现在真杀进程** —— 此前超时报告了 interrupted 但命令还在跑、副作用事后落地;`ARIS_BASH_KILL_ON_TIMEOUT=0` 可回旧行为。**📦 内置 skills 79→81**:`/integrity-forensics`(Anti-Autoresearch SHA-pin 启动器:证据台账→GPT 审计→确定性裁决→BLOCK/WARN 门)与 `/web-debug-search`。grep content 模式不再误报 "0 matches";全部本地 mock 测试代理免疫(此前 shell 挂代理会红 15 个测试)。测试:api 41 / aris-cli 212 + 3 e2e / runtime 225 / tools 69 / commands 5,**真代理环境下**全绿。Codex MCP(gpt-5.6-sol ultra)裁定折叠设计与 scope(cost/压缩包刻意留到 v0.4.24 —— 两项耦合)。
 >
 > **v0.4.22** (2026-07-11) — **skills 大同步 + GPT-5.6-Sol 版**。**📦 bundle 追平主仓 93 个 commit**:**79 个内置 skill**(新增 `meta-apply`、`paper-poster-html` —— 新的测量门控 HTML 海报流水线)、28 个 tools helper(+8)、11 篇新 shared-references 规范文档;同步脚本新增 `ARIS_SYNC_EXPECT_SHA` 钉版本护栏 + 精确清单漂移测试。**🎛 Reviewer 控制面升级到新 skills 携带的 GPT-5.6-Sol 双档制**:system prompt 现在放行 skills 显式 pin 的 `model: gpt-5.6-sol` + 每次调用的 effort(旧的"绝不传 model"规则会把深度审从 ultra 静默压到 xhigh)、携带规范的仅-能力型 fallback 链、并在每次 fresh codex 调用上 pin `approval-policy: "never"` + 显式 `sandbox`;HTTP LlmReview fallback 默认**刻意保持 gpt-5.5**(gpt-5.6-sol 在 chat-completions + reasoning_effort 真烟测通过前仅作实验性选项);落地 gpt-5.6 家族计价(sol $5/$30、terra $2.50/$15、luna $1/$6);banner / Reviewer 行 / `/reviewer` 全部诚实区分 primary 与 fallback。**🐛 8 个核实修复**:显式 `--model` 不再被 saved model 静默覆盖(来源全程追踪;4.8→4.7 可用性回落尊重显式选择);saved model 不再跨 provider 泄漏(OpenAI transport 无模型时 fail-fast);`--output-format json` 绝不弹审批(单 JSON 文档契约恢复);**Windows `aris login` 修好**(PKCE 读 /dev/urandom → getrandom)、**Windows 命令探测修好**(PowerShell 工具此前用 `sh` 探测自己);codex `.cmd` shim 诚实分类(setup 不再写下 MCP 起不来的配置);嵌套 config.json 现在会警告而非静默变全默认;NotebookEdit 不再铸重复 cell id。**🖥 新增 windows-latest CI job**(编译门 + 3 组定向测试)。测试:api 41 / aris-cli 204 + 1 e2e / runtime 223 / tools 69 / commands 5(+54)全绿。Codex MCP(gpt-5.6-sol **ultra**):5 轮设计 gate(NO-GO ×4 → GO)+ subagent 实现磁盘核实。
@@ -285,11 +287,12 @@ sudo mv aris /usr/local/bin/aris
 ### 切换模型
 ```
 ❯ /model
-  当前 Executor: claude-opus-4-8
+  当前 Executor: claude-opus-5
   切换为:
-  > claude-sonnet-4-6
-    gpt-5.5
-    gemini-2.5-pro
+  > claude-fable-5
+    claude-sonnet-5
+    claude-opus-4-8
+    claude-haiku-4-5-20251001
 ```
 
 ### 切换 Reviewer(HTTP fallback)

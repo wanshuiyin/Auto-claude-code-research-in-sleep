@@ -86,6 +86,18 @@ pub fn pricing_for_model(model: &str) -> Option<ModelPricing> {
     let m = model.to_ascii_lowercase();
 
     // ── Anthropic Claude family ──────────────────────────────────
+    // v0.4.24: Mythos-class tier (Fable 5 / Mythos 5) = $10/$50, cache write
+    // $12.50 / read $1 (verified against Anthropic's published schedule,
+    // 2026-08). Checked before the opus/sonnet branches so a Mythos-class id
+    // can never be mis-tiered by a family substring.
+    if m.contains("fable") || m.contains("mythos") {
+        return Some(ModelPricing {
+            input_cost_per_million: 10.0,
+            output_cost_per_million: 50.0,
+            cache_creation_cost_per_million: 12.5,
+            cache_read_cost_per_million: 1.0,
+        });
+    }
     if m.contains("haiku") {
         return Some(ModelPricing {
             input_cost_per_million: 1.0,
@@ -712,9 +724,23 @@ mod tests {
     /// matrix[40] price_opus — `contains("opus")`, CURRENT tier.
     /// v0.4.18 DELIBERATE: current Opus (4.5–4.8) is $5/$25/$6.25/$0.50, NOT
     /// the old $15/$75 (which was the deprecated Opus-4 tier).
+    /// v0.4.24: Opus 5 shares the current tier (verified 2026-08) — pinned so
+    /// a future legacy-classification tweak can't accidentally mis-tier it.
     #[test]
     fn price_opus() {
         assert_pricing("claude-opus-4-8", 5.0, 25.0, 6.25, 0.5);
+        assert_pricing("claude-opus-5", 5.0, 25.0, 6.25, 0.5);
+    }
+
+    /// v0.4.24 — Mythos-class tier (Fable 5 / Mythos 5) = $10/$50/$12.50/$1,
+    /// verified against Anthropic's published schedule 2026-08. `fable`
+    /// contains no other family substring, so without this branch it fell
+    /// through to the conservative unknown-model tier ($15/$75) — a 1.5×
+    /// over-estimate.
+    #[test]
+    fn price_fable_mythos() {
+        assert_pricing("claude-fable-5", 10.0, 50.0, 12.5, 1.0);
+        assert_pricing("claude-mythos-5", 10.0, 50.0, 12.5, 1.0);
     }
 
     /// v0.4.18 — deprecated Opus 4.0 / 4.1 keep the legacy $15/$75 tier; locks
@@ -730,9 +756,15 @@ mod tests {
     /// matrix[41] price_sonnet — `contains("sonnet")`.
     /// v0.4.18 DELIBERATE: Sonnet 4.x is $3/$15/$3.75/$0.30 (was wrongly the
     /// $15/$75 deprecated-Opus tier). No longer aligned with opus.
+    /// v0.4.24: Sonnet 5 rides the same branch. Its $2/$10 introductory
+    /// pricing (through 2026-08-31) is DELIBERATELY not modelled — the
+    /// standard $3/$15 takes effect 2026-09-01 and a time-dependent price
+    /// table isn't worth the complexity for a ≤1-month conservative
+    /// over-estimate.
     #[test]
     fn price_sonnet() {
         assert_pricing("claude-sonnet-4-6", 3.0, 15.0, 3.75, 0.30);
+        assert_pricing("claude-sonnet-5", 3.0, 15.0, 3.75, 0.30);
     }
 
     // ── OpenAI GPT families (`contains`, ORDER-SENSITIVE) ───────────────

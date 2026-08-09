@@ -16,7 +16,7 @@
 
 ![ARIS-Code Screenshot](docs/screenshot.png)
 
-*Screenshot from an earlier build — current default executor is Claude Opus 4.8, reviewer GPT-5.6-Sol via Codex MCP.*
+*Screenshot from an earlier build — current default executor is Claude Opus 5, reviewer GPT-5.6-Sol via Codex MCP.*
 
 > **Adversarial · Multi-Agent Research Automation CLI**
 > Executor acts · Reviewer critiques · Iterate to excellence
@@ -29,6 +29,8 @@
 
 ## 📰 What's New
 
+> **v0.4.24** (2026-08-09) — **The Claude 5 model refresh** ([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)): first-class **Claude Opus 5** and **Claude Fable 5** (Mythos-class flagship) support. Explicit `--model claude-opus-5` / `claude-fable-5` already worked on every platform — this release makes them visible and priced right. **🆕 Default model → `claude-opus-5`** (same $5/$25 tier as Opus 4.8) for the main session, subagents, and `aris setup`; the availability fallback becomes an ordered **chain** — on the precise `404 not_found_error` a non-explicit session walks Opus 5 → Opus 4.8 → Opus 4.7, one step per failed request (explicit choices never silently change); the old single-hop latch would have stranded 4.7-only accounts and configs saved by v0.4.23's setup, a regression the cross-model review caught, now locked by an end-to-end mock-404 chain test. The `/model` picker adds Fable 5 / Opus 5 / Sonnet 5 (4.8 / 4.6 / Haiku stay selectable); aliases: `fable` → `claude-fable-5` (new), `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. **💰 New Mythos-class pricing tier** (verified 2026-08): `fable`/`mythos` = $10/$50 (cache write $12.50, read $1) — previously `claude-fable-5` matched no family substring and fell to the conservative unknown-model fallback ($15/$75), a 1.5× `/cost` over-estimate; Opus 5 was already priced right by the current-Opus branch and is now test-pinned. Tests: api 41 / aris-cli 213 + 4 e2e / runtime 226 / tools 70 / commands 5, all green; live smoke on `claude-opus-5`, `claude-fable-5`, and the `fable` alias end-to-end. Codex MCP (gpt-5.6-sol xhigh): implementation gate NO-GO (caught the fallback-chain regression + a pricing-history error) → GO after fixes.
+>
 > **v0.4.23** (2026-08-02) — **The output-folding release** — fixes the top real-user complaint: the CLI dumped the FULL content of every document it read (a 2000-line paper = 2000 lines on screen), every bash command's full stdout, and grep's full content blob. **🧹 Tool-output folding (display only)**: Read/Grep show the first 6 lines, Bash shows first 4 + last 4 per stream (stderr stays red), then one dim "… (+N more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)"; kept lines capped at 240 chars (minified-file case); the session, model context, `--output-format json` and `/export` always keep COMPLETE payloads. Thinking was verified to never print (the perception came from these dumps) — two new end-to-end sentinel tests lock that thinking/reasoning never reaches the terminal. **🐛 Bash timeout now kills the command** — previously a timed-out call reported interrupted while the command kept running and its side effects landed afterwards; `ARIS_BASH_KILL_ON_TIMEOUT=0` restores the old behavior. **📦 79→81 bundled skills**: `/integrity-forensics` (the Anti-Autoresearch SHA-pinned launcher: evidence ledger → GPT auditors → deterministic adjudicator → typed BLOCK/WARN gate) and `/web-debug-search`. Grep no longer shows a false "0 matches" in content mode; all local-mock tests are now proxy-immune (15 tests used to go red under a shell proxy). Tests: api 41 / aris-cli 212 + 3 e2e / runtime 225 / tools 69 / commands 5, all green **under a live proxy**. Codex MCP (gpt-5.6-sol ultra) adjudicated the fold design + scope (the cost/compaction package deliberately waits for v0.4.24 — the two fixes are coupled).
 >
 > **v0.4.22** (2026-07-11) — **The skills-resync + GPT-5.6-Sol release.** **📦 Bundle catches up 93 commits** to the skills source-of-truth: **79 bundled skills** (+`meta-apply`, +`paper-poster-html` — the new measurement-gated HTML poster pipeline), 28 tools helpers (8 new), 11 new shared-references convention docs; sync now SHA-pins with an `ARIS_SYNC_EXPECT_SHA` guard and exact-inventory drift tests. **🎛 Reviewer control plane moves to the GPT-5.6-Sol two-tier doctrine** the new skills carry: the system prompt passes the skills' explicit `model: gpt-5.6-sol` + per-call effort pins through (the old "never pass a model" rule would have silently stripped deep audits from ultra down to xhigh), carries the canonical capability-only fallback chain, and pins `approval-policy: "never"` + explicit `sandbox` on every fresh codex call; the HTTP LlmReview fallback default deliberately **stays gpt-5.5** (gpt-5.6-sol is an EXPERIMENTAL opt-in until smoked with reasoning_effort); gpt-5.6 family pricing (sol $5/$30, terra $2.50/$15, luna $1/$6) lands; the banner/Reviewer line/`/reviewer` are now honest about primary-vs-fallback. **🐛 8 verified fixes**: explicit `--model` no longer silently overridden by the saved model (provenance-tracked; the 4.8→4.7 fallback respects explicit choices); saved models no longer leak across provider transports (and OpenAI transport with no model fails fast); `--output-format json` never prompts (single-JSON-document contract restored); **Windows `aris login` fixed** (PKCE read /dev/urandom → getrandom) and **Windows command probing fixed** (the PowerShell tool probed itself through `sh`); codex `.cmd` shims are classified honestly (setup won't write a config the MCP client can't spawn without explicit confirmation); nested config.json now warns instead of silently becoming all-defaults; NotebookEdit no longer mints duplicate cell ids. **🖥 New windows-latest CI job** (compile gate + 3 targeted test groups). Tests: api 41 / aris-cli 204 + 1 e2e / runtime 223 / tools 69 / commands 5 (+54), all green. Codex MCP (gpt-5.6-sol **ultra**): 5-round design gate (NO-GO ×4 → GO) + disk-verified subagent implementation.
@@ -285,11 +287,12 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
 ### Switch Executor Model
 ```
 ❯ /model
-  Current Executor: claude-opus-4-8
+  Current Executor: claude-opus-5
   Switch to:
-  > claude-sonnet-4-6
-    gpt-5.5
-    gemini-2.5-pro
+  > claude-fable-5
+    claude-sonnet-5
+    claude-opus-4-8
+    claude-haiku-4-5-20251001
 ```
 
 ### Switch Reviewer (HTTP fallback)

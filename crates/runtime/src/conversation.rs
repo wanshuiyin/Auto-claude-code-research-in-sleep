@@ -82,8 +82,9 @@ pub struct RuntimeError {
     message: String,
     /// v0.4.18: set when the failure was specifically "the requested model is
     /// not available on this account" (Anthropic 404 `not_found_error`). The
-    /// CLI reads this to fall back from the default Opus 4.8 to 4.7. `new()`
-    /// leaves it false, so every existing call site is unchanged.
+    /// CLI reads this to walk the default-model availability chain (v0.4.24:
+    /// Opus 5 → 4.8 → 4.7). `new()` leaves it false, so every existing call
+    /// site is unchanged.
     model_unavailable: bool,
 }
 
@@ -97,7 +98,7 @@ impl RuntimeError {
     }
 
     /// v0.4.18: construct an error flagged as "model unavailable" so the CLI can
-    /// drive its default-model fallback (Opus 4.8 → 4.7).
+    /// drive its default-model availability chain (Opus 5 → 4.8 → 4.7).
     #[must_use]
     pub fn model_unavailable(message: impl Into<String>) -> Self {
         Self {
@@ -590,7 +591,7 @@ mod tests {
     use crate::usage::TokenUsage;
     use std::path::PathBuf;
 
-    // v0.4.18: the CLI's Opus 4.8 -> 4.7 fallback keys off this flag, so the
+    // v0.4.18: the CLI's default-model availability chain keys off this flag, so the
     // `new` (default) vs `model_unavailable` constructors must stay distinct.
     #[test]
     fn runtime_error_model_unavailable_flag() {
