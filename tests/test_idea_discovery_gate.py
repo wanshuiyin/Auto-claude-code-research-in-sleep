@@ -56,7 +56,10 @@ def test_gate_accepts_complete_evidence_and_records_pass():
         assert result.verdict == "PASS"
         state = run_state.load_run(root, "idea-run")
         assert state["gates"][gate.GATE_NAME]["verdict"] == "PASS"
-        assert all(phase["status"] == "accepted" for phase in state["phases"])
+        # The gate proves execution evidence only — it must NOT upgrade the
+        # semantic phases to `accepted` (resumable-runs.md: done-but-not-
+        # accepted marks a stage whose own audit is still pending).
+        assert all(phase["status"] == "done" for phase in state["phases"])
         report = (root / "idea-stage/IDEA_REPORT.md").read_text(encoding="utf-8")
         assert "## Evidence Gate" in report
         assert "**Status:** PASS" in report
@@ -119,23 +122,20 @@ def test_gate_blocks_artifact_outside_project_root():
         assert any("artifact escapes project root" in reason for reason in result.reasons)
 
 
-def test_gate_downgrades_to_blocked_when_acceptance_cannot_be_recorded(monkeypatch):
+def test_gate_never_calls_accept(monkeypatch):
+    # Doctrine: the gate records its verdict under gates.<name> and must not
+    # confer phase-level acceptance — that belongs to each stage's own gate.
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         _complete_run(root)
 
-        def reject_accept(*args, **kwargs):
-            raise ValueError("simulated acceptance failure")
+        def forbidden_accept(*args, **kwargs):
+            raise AssertionError("gate must not call run_state.accept")
 
-        monkeypatch.setattr(gate.run_state, "accept", reject_accept)
+        monkeypatch.setattr(gate.run_state, "accept", forbidden_accept)
         result = gate.run(root, "idea-run", "idea-stage/IDEA_REPORT.md")
 
-        assert result.verdict == "BLOCKED"
-        state = run_state.load_run(root, "idea-run")
-        assert state["gates"][gate.GATE_NAME]["verdict"] == "BLOCKED"
-        assert "BLOCKED: gate acceptance failed: simulated acceptance failure" in (
-            root / "idea-stage/IDEA_REPORT.md"
-        ).read_text(encoding="utf-8")
+        assert result.verdict == "PASS"
 
 
 def test_idea_discovery_mirrors_require_the_evidence_gate():

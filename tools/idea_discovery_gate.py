@@ -134,22 +134,12 @@ def run(root: str | Path, run_id: str, report: str | Path) -> GateResult:
         return result
 
     result = evaluate(root, state)
-    if result.verdict == "PASS":
-        try:
-            for phase in REQUIRED_PHASES:
-                current = next(item for item in state["phases"] if item["phase"] == phase)
-                if current["status"] == "accepted":
-                    continue
-                artifact = current["artifact"]
-                run_state.accept(
-                    str(root),
-                    run_id,
-                    phase,
-                    verdict_id=f"{GATE_NAME}:{artifact}",
-                    reviewer="deterministic:idea_discovery_gate.py",
-                )
-        except (FileNotFoundError, KeyError, ValueError) as exc:
-            result = GateResult("BLOCKED", (f"gate acceptance failed: {exc}",))
+    # The gate's verdict lives ONLY in gates.<GATE_NAME>. It must not mark the
+    # semantic phases `accepted`: per resumable-runs.md, file-exists evidence
+    # can accept a purely mechanical phase, while these five stages carry
+    # quality semantics whose acceptance belongs to their own cross-model or
+    # stage-level deterministic gates — and resume relies on done-but-not-
+    # accepted to know a stage still needs its audit.
     run_state.record_gate_result(str(root), run_id, GATE_NAME, result.verdict, list(result.reasons))
     write_report_gate(root, report, result)
     return result

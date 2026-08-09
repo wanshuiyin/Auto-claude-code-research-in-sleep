@@ -70,7 +70,9 @@ At the end of Phase 5, run:
 ```
 
 The gate writes its result to `gates.idea-discovery-evidence` in the run state.
-On `PASS`, it records deterministic acceptance for each completed phase. On a
+On `PASS`, it records the gate verdict under `gates.idea-discovery-evidence` —
+per-phase acceptance stays with each stage's own cross-model or deterministic
+gate (the evidence gate proves execution, never quality). On a
 non-zero exit, it writes explicit `BLOCKED: <stage> evidence missing` lines to
 the report; do not present the workflow as complete. On `— resume <run_id>`,
 start from the first non-terminal phase and re-run the gate before finalizing.
