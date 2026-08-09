@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -540,8 +542,139 @@ def test_codex_skill_instructions_use_codex_paths() -> None:
 def test_codex_experiment_queue_points_to_bundled_helpers() -> None:
     text = read(CODEX_SKILLS / "experiment-queue" / "SKILL.md")
 
+    assert ".agents/skills/experiment-queue/scripts" in text
+    assert "$ARIS_REPO/skills/skills-codex/experiment-queue/scripts" in text
+    assert "$HOME/.codex/skills/experiment-queue/scripts" in text
     assert "tools/experiment_queue/queue_manager.py" in text
     assert "tools/experiment_queue/build_manifest.py" in text
     assert "tools/queue_manager.py" not in text
     assert "tools/build_manifest.py" not in text
     assert ".aris/installed-skills-codex.txt" in text
+
+
+def test_codex_experiment_queue_bundles_runnable_helpers() -> None:
+    main_scripts = MAIN_SKILLS / "experiment-queue" / "scripts"
+    codex_scripts = CODEX_SKILLS / "experiment-queue" / "scripts"
+
+    for name in ("queue_manager.py", "build_manifest.py"):
+        codex_script = codex_scripts / name
+        assert codex_script.is_file(), f"missing Codex helper: {codex_script}"
+        assert read(codex_script) == read(main_scripts / name)
+
+        result = subprocess.run(
+            [sys.executable, str(codex_script), "--help"],
+            cwd=REPO_ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+
+
+def test_codex_experiment_queue_helpers_survive_install_modes(tmp_path: Path) -> None:
+    source = CODEX_SKILLS / "experiment-queue"
+    project_skill = tmp_path / "project" / ".agents" / "skills" / "experiment-queue"
+    project_skill.parent.mkdir(parents=True)
+    project_skill.symlink_to(source, target_is_directory=True)
+
+    global_skill = tmp_path / "home" / ".codex" / "skills" / "experiment-queue"
+    shutil.copytree(source, global_skill)
+
+    for installed in (project_skill, global_skill):
+        for name in ("queue_manager.py", "build_manifest.py"):
+            helper = installed / "scripts" / name
+            assert helper.is_file(), f"missing installed Codex helper: {helper}"
+            result = subprocess.run(
+                [sys.executable, str(helper), "--help"],
+                cwd=REPO_ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
+
+
+def test_codex_experiment_queue_executes_resolver_precedence_and_fallback(
+    tmp_path: Path,
+) -> None:
+    text = read(CODEX_SKILLS / "experiment-queue" / "SKILL.md")
+    section = text.split("Resolve the bundled helper directory", 1)[1]
+    match = re.search(r"```bash\n(.*?)\n```", section, re.DOTALL)
+    assert match is not None
+    resolver = match.group(1) + '\nprintf "%s\\n" "$QUEUE_TOOLS"\n'
+
+    source = CODEX_SKILLS / "experiment-queue"
+    home = tmp_path / "home"
+    global_skill = home / ".codex" / "skills" / "experiment-queue"
+    shutil.copytree(source, global_skill)
+
+    env = os.environ.copy()
+    env["HOME"] = str(home)
+    env.pop("ARIS_REPO", None)
+
+    healthy_project = tmp_path / "healthy-project"
+    project_skill = healthy_project / ".agents" / "skills" / "experiment-queue"
+    project_skill.parent.mkdir(parents=True)
+    project_skill.symlink_to(source, target_is_directory=True)
+    result = subprocess.run(
+        ["bash", "-c", resolver],
+        cwd=healthy_project,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ".agents/skills/experiment-queue/scripts"
+
+    partial_project = tmp_path / "partial-project"
+    partial_scripts = partial_project / ".agents" / "skills" / "experiment-queue" / "scripts"
+    partial_scripts.mkdir(parents=True)
+    shutil.copy2(source / "scripts" / "queue_manager.py", partial_scripts)
+    result = subprocess.run(
+        ["bash", "-c", resolver],
+        cwd=partial_project,
+        env=env,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(global_skill / "scripts")
+
+
+def test_experiment_queue_adapter_declaration_fails_closed() -> None:
+    for skill_root in (MAIN_SKILLS, CODEX_SKILLS):
+        text = read(skill_root / "experiment-queue" / "SKILL.md")
+        assert "This declaration is authoritative" in text
+        assert re.search(r"do not\s+fall back to the generic queue", text)
+        assert "If any required adapter file is missing, stop" in text
+        for required in (
+            "AGENTS.md",
+            "CLAUDE.md",
+            "docs/ARIS_PROJECT_LAYOUT.md",
+            "docs/GPU_REMOTE_WORKFLOW.md",
+            "code/scripts/ttad_aris_queue_wrapper.py",
+        ):
+            assert required in text
+
+
+def test_experiment_queue_detects_real_screen_listing(monkeypatch) -> None:
+    script = MAIN_SKILLS / "experiment-queue" / "scripts" / "queue_manager.py"
+    spec = importlib.util.spec_from_file_location("experiment_queue_manager", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    session = "EQ_20260722T140640Z--cuda-recovery"
+    listing = f"There is a screen on:\n\t12345.{session}\t(Detached)\n"
+    commands: list[str] = []
+
+    def fake_run(command: str):
+        commands.append(command)
+        return listing, 0
+
+    monkeypatch.setattr(module, "run", fake_run)
+
+    assert module.screen_exists(session)
+    assert commands == ["screen -ls"]

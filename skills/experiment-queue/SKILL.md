@@ -119,6 +119,37 @@ A "wave" is a batch of jobs that fit available GPUs. Next wave only starts when:
 
 ## Workflow
 
+### Step 0: Honor a project-managed queue adapter
+
+Before parsing a manifest or running any generic pre-flight, resolve the project
+root and inspect `CLAUDE.md`. If it declares `queue_status`, the project has
+opted into a managed queue adapter. This declaration is authoritative: do not
+fall back to the generic queue when adapter files are incomplete.
+
+Require all of these files:
+
+- `AGENTS.md`
+- `CLAUDE.md`
+- `docs/ARIS_PROJECT_LAYOUT.md`
+- `docs/GPU_REMOTE_WORKFLOW.md`
+- `code/scripts/ttad_aris_queue_wrapper.py`
+
+If any required adapter file is missing, stop and report each missing path.
+Read all required documents completely before acting.
+
+- If `queue_status` is not `active`, stop and report the documented blocker.
+- If it is `active`, follow the project's wrapper workflow exactly. For the
+  TTAD adapter this means selecting/locking GPUs with `./check_gpu.sh
+  --gpu --select`, preparing with
+  `code/scripts/ttad_aris_queue_wrapper.py prepare`, and supervising the remote
+  canonical manager with the same wrapper's `supervise` command.
+- Do not continue into generic Steps 1-5. In particular, do not scan or select
+  GPUs independently, accept generic arbitrary `cmd` fields, launch a raw
+  `queue_manager.py`, or treat a pre-existing expected output as completion.
+
+The remaining workflow is only for projects whose `CLAUDE.md` does not declare
+`queue_status`.
+
 ### Step 1: Parse Manifest / Build from Grid
 
 Input can be:
