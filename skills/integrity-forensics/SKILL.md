@@ -25,7 +25,7 @@ Audit target: **$ARGUMENTS**
 ## Constants
 
 - **ANTI_AR_REPO = `https://github.com/wanshuiyin/Anti-Autoresearch.git`**
-- **ANTI_AR_COMMIT = `98a75fc1252937e700ff98f261db716781e51fa4`** — the SHA-pin.
+- **ANTI_AR_COMMIT = `b47af6f983b38347b6d2110379e266400597cf66`** — the SHA-pin.
   The launcher NEVER tracks upstream HEAD; bumping this constant is a reviewed
   change (see Pin-bump checklist).
 - **CLONE_DIR = `~/.claude/anti-autoresearch`** — the pinned working copy.
@@ -44,7 +44,7 @@ Audit target: **$ARGUMENTS**
 
 ```bash
 CLONE_DIR="$HOME/.claude/anti-autoresearch"
-ANTI_AR_COMMIT="98a75fc1252937e700ff98f261db716781e51fa4"
+ANTI_AR_COMMIT="b47af6f983b38347b6d2110379e266400597cf66"
 
 if [ ! -d "$CLONE_DIR/.git" ]; then
     git clone --no-checkout https://github.com/wanshuiyin/Anti-Autoresearch.git "$CLONE_DIR"
