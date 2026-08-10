@@ -33,12 +33,12 @@ When calling the reviewer, branch on REVIEWER_BACKEND:
 **If REVIEWER_BACKEND = `manual`:**
   Use `mcp__manual_review__review` for new review threads with:
     prompt: [exact same prompt that would go to Codex]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
   Save the returned `threadId`.
   Use `mcp__manual_review__review_reply` for follow-up rounds with:
     threadId: [saved manual-review threadId]
     prompt: [follow-up prompt]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
 
 Content fidelity: the manual reviewer should see the same substantive review
 brief Codex would read. If the manual UI supports file upload / attachment,
@@ -189,3 +189,9 @@ Update project memory/notes with key review conclusions.
 ## Review Tracing
 
 After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+  A verdict-bearing manual response MUST begin with
+  `Reviewer-Model: <exact-model-id>` — pass the model THIS session is actually
+  running as in `executor_model`. Missing, unknown, or same-family identity
+  cannot acquit; emit `REVIEW_UNAVAILABLE` rather than guessing. If the executor
+  model cannot be named, manual review's cross-family claim is unprovable — say
+  so in the report instead of asserting it.

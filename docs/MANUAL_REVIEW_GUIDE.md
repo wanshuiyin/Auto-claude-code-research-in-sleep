@@ -44,8 +44,11 @@ Add `— reviewer: manual` to any wired skill (see Supported Skills below):
 1. The pipeline reaches a review step
 2. A browser page opens automatically at `http://127.0.0.1:<port>`
 3. **Left panel**: the full review prompt (click "Copy Prompt")
-4. **Right panel**: paste the model's response here
-5. Click "Submit" — the pipeline continues
+4. **Right panel**: paste the model's response here — **its first line must be
+   `Reviewer-Model: <exact-model-id>`** (see below)
+5. Click "Submit" — the pipeline continues. If the header is missing or the model
+   is the same family as the executor, the page tells you why and you can fix the
+   line in place.
 
 ### File Mode (headless Linux / SSH)
 
@@ -55,7 +58,8 @@ Set `MANUAL_REVIEW_MODE=file` in your environment.
 2. Check `.aris/pending_review/pending_review.json` for the `prompt_file` and `response_file` paths.
 3. Open the file at `prompt_file` to read the prompt.
 4. Copy to your model, get the response.
-5. Write the response to the file at `response_file`.
+5. Write the response to the file at `response_file`, with
+   `Reviewer-Model: <exact-model-id>` as its first line (see below).
 6. The server detects the file (after confirming it's stable) and continues.
 
 **Important**: The server waits for the response file to be non-empty AND stable (unchanged across two reads). Do not hardcode `.aris/pending_review/response.md` — always use the path from `pending_review.json`. Don't create an empty file first — write the full content in one operation, or use a temporary name and rename.
@@ -66,12 +70,36 @@ For skills that use multiple review rounds (e.g., `/auto-review-loop`), the brow
 
 **Tip**: Keep the same model conversation open across rounds for best continuity.
 
+## The `Reviewer-Model:` header
+
+Verdict-bearing reviews require the response to begin with one line naming the
+model that actually wrote it:
+
+```
+Reviewer-Model: deepseek-v3
+
+Score: 7/10
+...
+```
+
+ARIS derives the reviewer's model family from that line and refuses a review by
+the executor's own family — that is the whole point of routing the review outside
+the executor. Recognized families are OpenAI (`gpt*`, `o1/o3/o4`, `codex`),
+Anthropic (`claude*`), Google (`gemini*`), DeepSeek, Moonshot (`kimi*`), and
+Qwen (`qwen*`, `tongyi`). A model outside that list cannot be classified, so it
+cannot acquit — name it exactly as the provider does.
+
+This is a declared identity, not an attestation: ARIS checks the line you write,
+it does not independently discover which web UI you used.
+
 ## Tips for Best Results
 
 1. **Use a reasoning-capable model** — the config badge shows `reasoning_effort = xhigh`, meaning the prompt is designed for deep reasoning. Models like GPT-4o, DeepSeek-V3, Kimi, or Gemini work well. Do NOT use any Claude-family model if the executor is Claude Code.
-2. **Paste the FULL response** — don't truncate or summarize. The pipeline parses specific fields (scores, verdicts, action items) from the response.
-3. **Don't modify the prompt** — paste it exactly as shown. The prompt is identical to what Codex would receive.
-4. **For multi-round reviews** — maintain the conversation in your model (don't start a new chat for round 2).
+2. **Keep the `Reviewer-Model:` line first** — before any blank line, heading, or
+   preamble your model may have added.
+3. **Paste the FULL response** — don't truncate or summarize. The pipeline parses specific fields (scores, verdicts, action items) from the response.
+4. **Don't modify the prompt** — paste it exactly as shown. The prompt is identical to what Codex would receive.
+5. **For multi-round reviews** — maintain the conversation in your model (don't start a new chat for round 2).
 
 ## Recovery
 

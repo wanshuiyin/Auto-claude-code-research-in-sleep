@@ -37,12 +37,12 @@ When calling the reviewer, branch on REVIEWER_BACKEND:
 **If REVIEWER_BACKEND = `manual`:**
   Use `mcp__manual_review__review` for new review threads with:
     prompt: [exact same prompt that would go to Codex]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
   Save the returned `threadId`.
   Use `mcp__manual_review__review_reply` for follow-up rounds with:
     threadId: [saved manual-review threadId]
     prompt: [follow-up prompt]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
 
 Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
 Review tracing applies equally to both backends.
@@ -352,6 +352,13 @@ If the user passed `--deep-fix` on invocation, append the following block to the
     NOT add a deep-fix-only category (e.g. UNCLEAR_DEEP_FIX) into the
     standard issue list, since that contaminates default-call output.
 ```
+  A verdict-bearing manual response MUST begin with
+  `Reviewer-Model: <exact-model-id>` — pass the model THIS session is actually
+  running as in `executor_model`. Missing, unknown, or same-family identity
+  cannot acquit; emit `REVIEW_UNAVAILABLE` rather than guessing. If the executor
+  model cannot be named, manual review's cross-family claim is unprovable — say
+  so in the report instead of asserting it.
+
 
 **Save the threadId.** Parse into structured issue list. Write to `PROOF_AUDIT.md`.
 
