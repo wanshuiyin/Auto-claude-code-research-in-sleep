@@ -151,11 +151,21 @@ def output_exists(path_pattern, cwd):
     return bool(glob.glob(full))
 
 
+def _normalize_depends_on(value):
+    """A bare string was the shape our own docs showed until 2026-08; without this
+    it would be iterated character by character and the phase never becomes ready."""
+    return [value] if isinstance(value, str) else (value or [])
+
+
 def load_state(state_file, manifest):
     """Load state from disk or initialize from manifest."""
     if Path(state_file).exists():
         with open(state_file) as f:
-            return json.load(f)
+            state = json.load(f)
+        # a state file written before the fix carries the un-normalized shape
+        for phase in state.get("phases", []):
+            phase["depends_on"] = _normalize_depends_on(phase.get("depends_on"))
+        return state
     # Initialize from manifest
     state = {
         "meta": {
@@ -165,11 +175,7 @@ def load_state(state_file, manifest):
         },
         "phases": [
             {"name": p.get("name", f"phase_{i}"),
-             # A bare string was the shape our own docs showed until 2026-08; without
-             # this it would be iterated character by character and the phase would
-             # never become ready.
-             "depends_on": ([p["depends_on"]] if isinstance(p.get("depends_on"), str)
-                            else p.get("depends_on", [])),
+             "depends_on": _normalize_depends_on(p.get("depends_on")),
              "status": "pending"}
             for i, p in enumerate(manifest.get("phases", []))
         ],

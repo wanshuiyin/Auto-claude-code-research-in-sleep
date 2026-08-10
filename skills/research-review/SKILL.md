@@ -19,7 +19,7 @@ Get a multi-round critical review of research work from the selected external re
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier). Must be an OpenAI model (e.g., `gpt-5.6-sol`, `gpt-5.5`, `o3`). Manual backend uses whatever model the user chooses.
+- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier). Must be an OpenAI model (e.g., `gpt-5.6-sol`, `gpt-5.5`, `o3`). Manual backend uses a model the user chooses — it must be a recognized model from a different family (OpenAI, Anthropic, Google, DeepSeek, Moonshot/Kimi, Qwen).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 
 ## Reviewer Calling Convention
@@ -160,6 +160,7 @@ Update project memory/notes with key review conclusions.
 ## Key Rules
 
 - ALWAYS pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` for reviews (deep-audit tier; capability fallback per `reviewer-routing.md`, never below `xhigh`)
+- That pin is the **Codex** backend's. For `manual`, use the identity-bearing config from the Reviewer Calling Convention above; `model`, `sandbox` and `cwd` are Codex-only
 - Put comprehensive context in the review brief. Codex can read local files
   when you pass an absolute path; manual reviewers usually cannot, so attach or
   paste the same brief there.

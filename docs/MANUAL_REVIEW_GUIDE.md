@@ -4,7 +4,7 @@
 
 ## Overview
 
-The Manual Review MCP server is a human-in-the-loop alternative to the default Codex MCP reviewer. Instead of requiring a GPT Plus/Pro subscription for automated cross-model review, it lets you manually mediate the review using a **different** model family. If the executor is Claude Code, do NOT use Claude products as the reviewer. Recommended: ChatGPT, DeepSeek, Kimi, Gemini, Qwen, or any non-Claude model.
+The Manual Review MCP server is a human-in-the-loop alternative to the default Codex MCP reviewer. Instead of requiring a GPT Plus/Pro subscription for automated cross-model review, it lets you manually mediate the review using a **different** model family. If the executor is Claude Code, do NOT use Claude products as the reviewer. Recommended: ChatGPT, DeepSeek, Kimi, Gemini or Qwen. The reviewer's model must be one ARIS can classify — a name outside the recognized families cannot be shown to differ from the executor's, so it cannot acquit. See the `Reviewer-Model:` section below for the list.
 
 The trade-off: you lose full automation (you need to copy/paste), but gain complete flexibility in model choice and zero API cost.
 

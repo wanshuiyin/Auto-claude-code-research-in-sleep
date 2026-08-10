@@ -4,7 +4,7 @@
 
 ## 概述
 
-手动评审 MCP 服务器是默认 Codex MCP 评审器的人工中转替代方案。无需 GPT Plus/Pro 订阅即可实现跨模型评审——你可以使用**不同**模型家族。如果执行器是 Claude Code，请勿使用 Claude 产品作为评审者。推荐：ChatGPT、DeepSeek、Kimi、Gemini、Qwen 等非 Claude 模型。
+手动评审 MCP 服务器是默认 Codex MCP 评审器的人工中转替代方案。无需 GPT Plus/Pro 订阅即可实现跨模型评审——你可以使用**不同**模型家族。如果执行器是 Claude Code，请勿使用 Claude 产品作为评审者。推荐：ChatGPT、DeepSeek、Kimi、Gemini 或 Qwen。评审模型必须是 ARIS 能够归类的——无法归类的名字也就无法证明它与执行器不同家族，因而不能用于验收。可识别的家族见下方 `Reviewer-Model:` 一节。
 
 代价：失去完全自动化（需要手动复制粘贴），换来模型选择的完全自由和零 API 成本。
 

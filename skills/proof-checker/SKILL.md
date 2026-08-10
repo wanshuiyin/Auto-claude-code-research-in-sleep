@@ -22,7 +22,7 @@ Systematically verify a mathematical proof via cross-model adversarial review, f
 ## Constants
 
 - MAX_REVIEW_ROUNDS = 3
-- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier; capability fallback `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh` per `shared-references/reviewer-routing.md`, capability errors only — never below `xhigh`). Manual backend uses whatever model the user chooses, **but it must be a non-Claude model** — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
+- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier; capability fallback `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh` per `shared-references/reviewer-routing.md`, capability errors only — never below `xhigh`). Manual backend uses a model the user chooses, **but it must be a non-Claude model ARIS can classify** (OpenAI, Google, DeepSeek, Moonshot/Kimi, Qwen) — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 
 ## Reviewer Calling Convention

@@ -617,10 +617,12 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
         if error is None and response is None and not cancel_event.is_set():
             error = f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for {response_path}"
     finally:
-        # On an identity error the response the user just pasted is still there and
-        # is almost right. Keep the directory so that work survives — the retry is a
-        # new call with a new directory, so they copy the corrected text across
-        # rather than resuming this one.
+        if identity_error is not None and response_path.exists():
+            # The paste is almost right — only its first line is wrong. Park it under
+            # a name the next round will not clear (a retried review_reply reuses this
+            # same directory and unlinks response.md), so the text survives to be
+            # corrected and re-pasted.
+            response_path.replace(pdir / "response.rejected.md")
         clear_pending_state(thread_id, keep_thread_dir=identity_error is not None)
 
     return response, error
