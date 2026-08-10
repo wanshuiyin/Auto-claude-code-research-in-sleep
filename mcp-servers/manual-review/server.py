@@ -3,10 +3,12 @@
 
 A human-in-the-loop reviewer bridge: when the pipeline needs cross-model
 review, this server opens a browser page (or writes a file on headless Linux)
-where the user can copy the prompt to any model and paste the response back.
+where the user can copy the prompt to a different-family model and paste the
+response back.
 
-Zero API cost. Works with any text-capable model (ChatGPT web, DeepSeek,
-Kimi, local models, etc.).
+Zero API cost. The reviewer must be a model this server can classify by family
+(OpenAI, Anthropic, Google, DeepSeek, Moonshot/Kimi, Qwen) — an unclassifiable
+name cannot be shown to differ from the executor's, so it cannot acquit.
 """
 
 from __future__ import annotations
@@ -621,7 +623,9 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
             # The paste is almost right — only its first line is wrong. Park it under
             # a name the next round will not clear (a retried review_reply reuses this
             # same directory and unlinks response.md), so the text survives to be
-            # corrected and re-pasted.
+            # corrected and re-pasted. A second rejection replaces this file: the
+            # newest attempt is the one worth keeping, and rotating copies would be
+            # scaffolding for a case nobody wants back.
             response_path.replace(pdir / "response.rejected.md")
         clear_pending_state(thread_id, keep_thread_dir=identity_error is not None)
 

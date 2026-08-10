@@ -187,9 +187,9 @@ claude mcp add gemini-review --env GEMINI_REVIEW_BACKEND=agy -- python3 <path>/m
 
 If the gemini-review (agy) MCP isn't configured, `— reviewer: agy` gracefully falls back to Codex at the call's declared tier (deep-audit: ultra / regular: xhigh). No error, no breakage, just a warning.
 
-## Optional: Manual Review (any model, zero API cost)
+## Optional: Manual Review (any classifiable model, zero API cost)
 
-When the user explicitly passes `— reviewer: manual`, route the review through the manual-review MCP server. Instead of calling an API, it opens a browser page (or writes a file on headless Linux) where the user copies the prompt to any model and pastes the response back.
+When the user explicitly passes `— reviewer: manual`, route the review through the manual-review MCP server. Instead of calling an API, it opens a browser page (or writes a file on headless Linux) where the user copies the prompt to a model of their choice and pastes the response back. The reviewer model must be one ARIS can classify by family (OpenAI, Anthropic, Google, DeepSeek, Moonshot/Kimi, Qwen); an unclassifiable name cannot be shown to differ from the executor's.
 
 **Zero API cost. Works with any text-capable model.**
 
@@ -219,7 +219,7 @@ If `— reviewer: manual`:
 ### Invariants
 
 - `— reviewer: manual` ONLY takes effect when explicitly passed
-- **Cross-model family is mandatory, not optional.** "any model" above means any *non-executor-family* model, determined dynamically from the actual executor model — not merely "non-Claude." Every verdict-bearing response must start with `Reviewer-Model: <exact-model-id>`; derive its family and compare it with the model-derived executor family. Missing, unknown, ambiguous, or same-family identity is `REVIEW_UNAVAILABLE` for an acceptance gate. The UI warning is advisory; the traced model identities and derivation are the gate.
+- **Cross-model family is mandatory, not optional.** "a model of their choice" above means any *classifiable, non-executor-family* model, determined dynamically from the actual executor model — not merely "non-Claude." Every verdict-bearing response must start with `Reviewer-Model: <exact-model-id>`; derive its family and compare it with the model-derived executor family. Missing, unknown, ambiguous, or same-family identity is `REVIEW_UNAVAILABLE` for an acceptance gate. The UI warning is advisory; the traced model identities and derivation are the gate.
 - Prompt fidelity: the review task text is exactly what Codex would receive; the manual transport wrapper may add only the model-identity response-format line used by the provenance gate
 - `config.model_reasoning_effort` is shown as a recommendation badge, not embedded in the prompt
 - Thread continuity: `review_reply` shows previous exchanges so the user can maintain context in their chosen model

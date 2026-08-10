@@ -10,7 +10,7 @@
 
 A human-in-the-loop MCP server for ARIS cross-model review. Instead of calling Codex/GPT API automatically, it opens a browser page where you copy the review prompt to a **different** model family and paste the response back.
 
-**Zero API cost. Works with any text model.**
+**Zero API cost.** Works with any text model ARIS can classify by family (OpenAI, Anthropic, Google, DeepSeek, Moonshot/Kimi, Qwen) — a name outside those cannot be shown to differ from the executor's, so it cannot acquit.
 
 ## When to use
 

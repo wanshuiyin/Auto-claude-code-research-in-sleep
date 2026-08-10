@@ -253,7 +253,7 @@ Flag any statement where limit order is ambiguous or uniformity is unclear.
 
 Submit the **complete proof content** with the checklist below, using the selected backend.
 
-For `codex`, call `mcp__codex__codex`. For `manual`, call `mcp__manual_review__review` with the identity-bearing config from the Reviewer Calling Convention above. Always pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` (deep-audit tier).
+For `codex`, call `mcp__codex__codex` and always pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` (deep-audit tier). For `manual`, call `mcp__manual_review__review` with the identity-bearing config from the Reviewer Calling Convention above — `model`, `sandbox` and `cwd` are Codex-only.
 
 Use this exact prompt for both backends:
 
