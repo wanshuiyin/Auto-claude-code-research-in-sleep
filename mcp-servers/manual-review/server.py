@@ -239,7 +239,8 @@ def clear_pending_state(thread_id: str | None = None,
     keep_thread_dir preserves the per-thread directory when the round ended on a
     fixable authoring error: in file mode that directory holds the prompt AND the
     reviewer response the user just pasted, and deleting it would throw away
-    their work over a wrong first line.
+    their work over a wrong first line. It does not make the call resumable — the
+    retry is a new call with a new directory.
     """
     # Clear per-thread dir
     if thread_id and not keep_thread_dir:
@@ -616,10 +617,11 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
         if error is None and response is None and not cancel_event.is_set():
             error = f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for {response_path}"
     finally:
-        # An identity error is the user's paste missing its first line — keep the
-        # directory so they can fix that line in place and re-run.
-        clear_pending_state(thread_id, keep_thread_dir=(error is not None
-                                                        and error == identity_error))
+        # On an identity error the response the user just pasted is still there and
+        # is almost right. Keep the directory so that work survives — the retry is a
+        # new call with a new directory, so they copy the corrected text across
+        # rather than resuming this one.
+        clear_pending_state(thread_id, keep_thread_dir=identity_error is not None)
 
     return response, error
 

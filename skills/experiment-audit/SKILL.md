@@ -94,7 +94,7 @@ For `codex`, call `mcp__codex__codex` with:
 - `prompt: [the exact full prompt below]`
 
 For `manual`, call `mcp__manual_review__review` with:
-- `config: {"model_reasoning_effort": "xhigh"}`
+- `config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}`
 - `prompt: [the exact full prompt below]`
 
 Manual review cannot use Codex-only `model`, `sandbox`, or `cwd`; include the same file paths in the prompt so the user can inspect them.

@@ -289,7 +289,7 @@ mcp__codex__codex:
     Verdict: safe to submit / needs revision
 ```
 
-*For manual:* use `mcp__manual_review__review` with the same prompt and `config: {"model_reasoning_effort": "xhigh"}`.
+*For manual:* use `mcp__manual_review__review` with the same prompt and the identity-bearing config from the Reviewer Calling Convention above (`executor_model` + `require_reviewer_model: true`).
 
 **Iterations.** Run the base round on the full draft. Then run focused follow-up rounds on each `reviewer_priority: pivotal` response, terminating when the reviewer returns no new substantive issues. Hard cap at 5 rounds total. Save each round to `rebuttal/MCP_STRESS_TEST_round<N>.md`; the highest round number represents the final state. If any hard safety blocker remains → revise before finalizing.
 

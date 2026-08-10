@@ -326,7 +326,7 @@ paper after running the audit.
 | `FAIL` | `unresolved_critical` | ≥1 `still_unresolved` at `critical` severity |
 | `WARN` | `unresolved_major_or_minor` | ≥1 `still_unresolved` at `major` or `minor` severity (and no `critical`) |
 | `WARN` | `partial_critical_or_repeated_major` | 0 `still_unresolved`, AND ≥1 `partially_answered` at `critical` or `major` |
-| `PASS` | `defense_survives_with_minor_partial_only` | 0 `still_unresolved`, AND all `partially_answered` are at `minor` severity |
+| `PASS` | `defense_survives_with_minor_partial_only` | 0 `still_unresolved`, AND ≥1 `partially_answered`, all at `minor` severity |
 | `PASS` | `defense_survives` | 0 `still_unresolved`, AND 0 `partially_answered` |
 | `NOT_APPLICABLE` | `not_theory_or_scope_paper` | Paper has <2 `\begin{theorem\|lemma\|proposition\|corollary}` AND no scope / generality claims in abstract |
 | `NOT_APPLICABLE` | `headline_unstable` | Title or abstract changed within the last 2 commits — re-run after headline stabilizes |
