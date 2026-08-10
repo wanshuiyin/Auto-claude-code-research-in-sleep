@@ -21,7 +21,7 @@ TOOLS_DIR = str(Path(__file__).resolve().parent)
 if TOOLS_DIR not in sys.path:
     sys.path.insert(0, TOOLS_DIR)
 
-KNOWN_FAMILIES = {"openai", "anthropic", "google"}
+KNOWN_FAMILIES = {"openai", "anthropic", "google", "deepseek", "moonshot", "qwen"}
 POSITIVE_VERDICTS = {"ready", "almost"}
 VALID_BACKENDS = {"codex", "manual", "copilot", "copilot-native", "oracle-pro", "agy"}
 VALID_VERDICTS = POSITIVE_VERDICTS | {"not ready"}
@@ -62,6 +62,13 @@ def derive_model_family(model: str) -> str:
         families.add("anthropic")
     if re.search(r"(^|[^a-z0-9])(gemini|google)([^a-z0-9]|$)", name):
         families.add("google")
+    # [0-9.]* so versioned names (qwen3-max, qwen2.5-72b) still match.
+    if re.search(r"(^|[^a-z0-9])(deepseek)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("deepseek")
+    if re.search(r"(^|[^a-z0-9])(kimi|moonshot)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("moonshot")
+    if re.search(r"(^|[^a-z0-9])(qwen|tongyi)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("qwen")
     return next(iter(families)) if len(families) == 1 else "unknown"
 
 

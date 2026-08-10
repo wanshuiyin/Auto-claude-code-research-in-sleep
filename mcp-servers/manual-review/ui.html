@@ -164,6 +164,9 @@ function modelFamily(model) {
   if (/(^|[^a-z0-9])(gpt|chatgpt|codex|oracle|o1|o3|o4)([^a-z0-9]|$)/.test(name)) families.add("openai");
   if (/(^|[^a-z0-9])(claude|sonnet|opus|haiku|anthropic)([^a-z0-9]|$)/.test(name)) families.add("anthropic");
   if (/(^|[^a-z0-9])(gemini|google)([^a-z0-9]|$)/.test(name)) families.add("google");
+  if (/(^|[^a-z0-9])(deepseek)[0-9.]*([^a-z0-9]|$)/.test(name)) families.add("deepseek");
+  if (/(^|[^a-z0-9])(kimi|moonshot)[0-9.]*([^a-z0-9]|$)/.test(name)) families.add("moonshot");
+  if (/(^|[^a-z0-9])(qwen|tongyi)[0-9.]*([^a-z0-9]|$)/.test(name)) families.add("qwen");
   return families.size === 1 ? Array.from(families)[0] : "unknown";
 }
 
@@ -255,7 +258,14 @@ async function submitResponse() {
     body: JSON.stringify({response: text}),
   });
   if (res.ok) document.getElementById("successOverlay").classList.remove("hidden");
-  else { document.getElementById("submitBtn").disabled = false; alert("Submit failed. Please try again."); }
+  else {
+    document.getElementById("submitBtn").disabled = false;
+    // The server explains WHY (e.g. a missing Reviewer-Model: line). Show it —
+    // a generic retry prompt makes an identity rejection undiagnosable.
+    let why = "";
+    try { why = (await res.json()).error || ""; } catch (e) { why = await res.text().catch(() => ""); }
+    alert(why ? "Submit rejected: " + why : "Submit failed. Please try again.");
+  }
 }
 
 document.getElementById("responseArea").addEventListener("input", function() {
