@@ -482,6 +482,11 @@ def cmd_gate(args):
 
     exec_family = _executor_family(args.executor_model)
     claims = os.path.join(args.paper_dir, "claims.json")
+    # Which dimensions never ran. The upstream verdict folds incompleteness in only
+    # when it would otherwise be CLEAN, so a SOFT_FLAGS sweep can silently be a
+    # partial one. This gate does not re-decide on it — it says so out loud.
+    unavailable_dims = sorted(k for k, v in (report.get("coverage") or {}).items()
+                              if v == "review_unavailable")
     gate = {
         "gate_version": GATE_VERSION,
         "generated_at": _now(),
@@ -504,6 +509,7 @@ def cmd_gate(args):
         "claims_ledger_sha256": _sha256_file(claims) if os.path.isfile(claims) else None,
         "observability_level": report.get("observability_level"),
         "coverage": report.get("coverage", {}),
+        "unavailable_dimensions": unavailable_dims,
         "open_obligations": len(open_obl),
         "open_critical_obligations": len(open_critical),
         # honest provenance: the sweep's auditors are GPT-family. For a Claude
@@ -520,8 +526,10 @@ def cmd_gate(args):
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         json.dump(gate, fh, indent=2, ensure_ascii=False)
     os.replace(tmp, out)
+    never_ran = (f"; never ran: {', '.join(unavailable_dims)}" if unavailable_dims else "")
     print(f"forensics gate: {decision} (upstream: {verdict or '(missing)'}; "
-          f"open obligations: {len(open_obl)}, critical: {len(open_critical)}) -> {out}")
+          f"open obligations: {len(open_obl)}, critical: {len(open_critical)}"
+          f"{never_ran}) -> {out}")
     return 0 if decision != BLOCK else 1
 
 
@@ -584,8 +592,10 @@ def cmd_fresh(args):
     if decision not in (WARN, NO_NEW_BLOCKER):
         print(f"forensics fresh: {decision} — not pass-capable; the gate is closed")
         return 1
+    stale_dims = gate.get("unavailable_dimensions", [])
+    never_ran = (f"; never ran: {', '.join(stale_dims)}" if stale_dims else "")
     print(f"forensics fresh: OK ({decision}; recomputed from the archived report "
-          "and current ledger)")
+          f"and current ledger{never_ran})")
     return 0
 
 

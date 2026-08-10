@@ -335,10 +335,13 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
                     node_id = line.split(":", 1)[1].strip()
                 if line.startswith("title:"):
                     title = line.split(":", 1)[1].strip().strip('"')
-                if line.startswith("# One-line thesis"):
+                if line.startswith("## One-line thesis"):
                     idx = content.split("\n").index(line)
                     next_lines = content.split("\n")[idx+1:idx+3]
-                    thesis = " ".join(l for l in next_lines if l.strip() and not l.startswith("#"))
+                    # skip the scaffold placeholder an un-enriched page still carries
+                    thesis = " ".join(l for l in next_lines
+                                      if l.strip() and not l.startswith("#")
+                                      and not l.strip().startswith("_TODO"))
             if title:
                 suffix = f": {thesis[:150]}" if thesis.strip() else ""
                 paper_summaries.append(f"- [{node_id}] {title}{suffix}")

@@ -156,13 +156,13 @@ When the user explicitly passes `— reviewer: agy`, route the review through th
 Parse $ARGUMENTS for `— reviewer:` directive.
 
 If `— reviewer: agy`:
-    → Check if the gemini-review MCP tool is available (mcp__gemini_review__review).
+    → Check if the gemini-review MCP tool is available (mcp__gemini-review__review).
     → If available (server configured with GEMINI_REVIEW_BACKEND=agy):
-        Use mcp__gemini_review__review with:
+        Use mcp__gemini-review__review with:
           prompt: [same prompt you would send to Codex]
-        For round 2+: mcp__gemini_review__review_reply with the saved threadId.
+        For round 2+: mcp__gemini-review__review_reply with the saved threadId.
         For long paper/project reviews (avoid the ~120s MCP tool timeout):
-          mcp__gemini_review__review_start + mcp__gemini_review__review_status (async).
+          mcp__gemini-review__review_start + mcp__gemini-review__review_status (async).
     → If NOT available:
         Print: "⚠️ gemini-review (agy) MCP not configured. Falling back to Codex at this call's declared tier."
         Use mcp__codex__codex as normal.
