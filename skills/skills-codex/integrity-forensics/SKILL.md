@@ -1,6 +1,6 @@
 ---
 name: integrity-forensics
-description: "Run the Anti-Autoresearch integrity-forensics DETERMINISTIC slice (numeric core + rules-only adjudicator) against a paper via a SHA-pinned thin launcher, then convert the verdict into a typed policy gate (BLOCK/WARN/NO_NEW_BLOCKER) and an append-only obligations ledger. Codex-native limitation: upstream ships no Codex-native auditor pack, so the full nine-dimension semantic sweep requires a Claude Code session — this pack runs the honestly-scoped deterministic-only mode (it can flag, it can never say CLEAN). Use when user says \"integrity forensics\", \"forensic audit this paper\", \"投稿前自查诚信\"."
+description: "Run the Anti-Autoresearch integrity-forensics DETERMINISTIC slice (numeric core + rules-only reporter) against a paper via a SHA-pinned thin launcher, then convert the verdict into a typed policy gate (BLOCK/WARN/NO_NEW_BLOCKER) and an append-only obligations ledger. Codex-native limitation: upstream ships no Codex-native auditor pack, so the full nine-dimension semantic sweep requires a Claude Code session — this pack runs the honestly-scoped deterministic-only mode (it can flag, it can never say CLEAN). Use when user says \"integrity forensics\", \"forensic audit this paper\", \"投稿前自查诚信\"."
 argument-hint: "[paper-dir | pdf | arxiv-id]"
 ---
 
@@ -13,7 +13,7 @@ Audit target: **$ARGUMENTS**
 > reviewer knobs**. The one Codex-native difference: upstream's nine auditor
 > skills are Claude-Code contracts, so this pack runs upstream's
 > **deterministic-only mode** — the numeric forensic core (GRIM / GRIMMER /
-> statcheck / delta arithmetic) plus the rules-only adjudicator with an
+> statcheck / delta arithmetic) plus the rules-only reporter with an
 > all-`review_unavailable` coverage map. That mode is honestly scoped by
 > upstream: it can raise HARD/SOFT flags; it can NEVER return
 > `CLEAN_GIVEN_EVIDENCE`. Translating upstream's reviewer calls into
@@ -22,7 +22,7 @@ Audit target: **$ARGUMENTS**
 ## Constants
 
 - **ANTI_AR_REPO = `https://github.com/wanshuiyin/Anti-Autoresearch.git`**
-- **ANTI_AR_COMMIT = `d8f510c49c29ccb5f98ecb1f8e397a7a27eb97c4`** — never
+- **ANTI_AR_COMMIT = `98a75fc1252937e700ff98f261db716781e51fa4`** — never
   tracks HEAD; bumping is a reviewed change (mainline Pin-bump checklist).
 - **CLONE_DIR = `~/.claude/anti-autoresearch`**
 - **NO REVIEWER KNOBS** — and no `— effort:` mapping onto upstream settings.
@@ -31,7 +31,7 @@ Audit target: **$ARGUMENTS**
 
 ```bash
 CLONE_DIR="$HOME/.claude/anti-autoresearch"
-ANTI_AR_COMMIT="d8f510c49c29ccb5f98ecb1f8e397a7a27eb97c4"
+ANTI_AR_COMMIT="98a75fc1252937e700ff98f261db716781e51fa4"
 if [ ! -d "$CLONE_DIR/.git" ]; then
     git clone --no-checkout https://github.com/wanshuiyin/Anti-Autoresearch.git "$CLONE_DIR"
 fi

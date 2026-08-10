@@ -305,7 +305,7 @@ Verifies no Phase 2 microedit accidentally introduced a numerical claim that's n
 **Integrity forensics re-run** (opt-in here: `— self_forensics: true`): the
 mainline pipeline defaults to an Anti-Autoresearch re-sweep after microedits;
 in a Codex-native session only upstream's **deterministic-only slice** is
-runnable (numeric core + rules-only adjudicator — it can flag, it can never
+runnable (numeric core + rules-only reporter — it can flag, it can never
 say CLEAN), so it is off unless requested. If opted in, run
 `/integrity-forensics` on `$NEW_VENUE_DIR/` AFTER all microedits (never
 between rounds — its One Forbidden Loop), gate `BLOCK` → stop before the

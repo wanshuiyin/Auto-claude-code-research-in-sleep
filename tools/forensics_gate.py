@@ -156,9 +156,10 @@ def _assert_report_not_stale(report_path, paper_dir):
     """A report older than any audited paper file was generated BEFORE those
     edits — folding or gating it would bind new text to a sweep that never saw
     it. Refuse (fail closed); re-run the sweep instead. NOTE this is an mtime
-    net for the honest resumed-run case, not proof of provenance — true
-    content binding needs upstream to stamp a paper fingerprint into
-    report.json (filed upstream)."""
+    net for the honest resumed-run case, not proof of provenance. That is where
+    it stops on purpose: this is a research-workflow gate, not a provenance
+    system, and upstream deliberately removed its report fingerprints in 2026-08
+    because nothing consumed them."""
     rep_mtime = os.path.getmtime(report_path)
     for root, dirs, files in os.walk(paper_dir, followlinks=True):
         dirs[:] = [x for x in dirs if not x.startswith(".")]

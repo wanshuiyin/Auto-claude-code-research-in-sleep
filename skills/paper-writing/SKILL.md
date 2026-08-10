@@ -591,11 +591,18 @@ not silently skip the default-ON gate):
   citations → `/citation-audit`; proof → `/proof-checker`; scope/baseline/
   eval-design → `/auto-review-loop` as reviewer input, or the human.
 - Close obligations ONLY via `forensics_gate.py resolve` (typed, hashed
-  evidence) or a human `waive`. **Never edit the paper with the objective
-  "make the sweep stop flagging"** — a vanished-but-unresolved finding keeps
-  the gate closed (`UNRESOLVED_DISAPPEARANCE`).
+  evidence) or a human `waive`. Since 2026-08 upstream reports every proposal an
+  auditor made rather than deciding which ones do not count, so expect more
+  obligations and expect some to be proposals you judge wrong — `waive` with a
+  reason is the normal disposition for those, not a last resort. **Never edit the
+  paper with the objective "make the sweep stop flagging"** — a
+  vanished-but-unresolved finding keeps the gate closed
+  (`UNRESOLVED_DISAPPEARANCE`).
 - `WARN` (SOFT_FLAGS / open non-critical obligations): proceed, but the Final
-  Report must list them under `Forensics`.
+  Report must list them under `Forensics` — including the dimensions the sweep
+  never ran, which `evaluate` and `fresh` both print. A WARN can sit on top of an
+  incomplete sweep: upstream folds incompleteness into the verdict only when it
+  would otherwise read clean.
 - Zero-weight AIS style impressions: FYI only — may feed
   `/auto-paper-improvement-loop` context, never gate.
 
