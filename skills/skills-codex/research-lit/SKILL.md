@@ -171,16 +171,19 @@ ARXIV_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/arxiv_fetch.py" ] && ARXIV_FETCHER="$ARIS_REPO/tools/arxiv_fetch.py"
 [ -z "$ARXIV_FETCHER" ] && [ -f tools/arxiv_fetch.py ] && ARXIV_FETCHER="tools/arxiv_fetch.py"
 [ -z "$ARXIV_FETCHER" ] && [ -f ~/.codex/skills/arxiv/arxiv_fetch.py ] && ARXIV_FETCHER="$HOME/.codex/skills/arxiv/arxiv_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 
-if [ -n "$ARXIV_FETCHER" ]; then
+if [ -n "$ARXIV_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ]; then
   # Search arXiv API for structured results (title, abstract, authors, categories).
-  if python3 "$ARXIV_FETCHER" search "QUERY" --max 10; then
+  if bash "$ARIS_PY_RUNNER" "$ARXIV_FETCHER" search "QUERY" --max 10; then
     echo "D2 contribution: arxiv (helper invocation exit 0)" >&2
   else
     echo "WARN: arxiv_fetch.py invocation failed; D2 aggregate continues with WebSearch results." >&2
   fi
 else
-  echo "WARN: arxiv_fetch.py not resolved; falling back to WebSearch for arXiv hits." >&2
+  echo "WARN: arxiv_fetch.py or uv_run_helper.sh not resolved; falling back to WebSearch for arXiv hits." >&2
 fi
 ```
 
@@ -201,15 +204,18 @@ S2_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/semantic_scholar_fetch.py" ] && S2_FETCHER="$ARIS_REPO/tools/semantic_scholar_fetch.py"
 [ -z "$S2_FETCHER" ] && [ -f tools/semantic_scholar_fetch.py ] && S2_FETCHER="tools/semantic_scholar_fetch.py"
 [ -z "$S2_FETCHER" ] && [ -f ~/.codex/skills/semantic-scholar/semantic_scholar_fetch.py ] && S2_FETCHER="$HOME/.codex/skills/semantic-scholar/semantic_scholar_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 
-if [ -n "$S2_FETCHER" ]; then
-    if python3 "$S2_FETCHER" search "QUERY" --max 10 --fields title,authors,year,venue,citationCount,externalIds,tldr,url; then
+if [ -n "$S2_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ]; then
+    if bash "$ARIS_PY_RUNNER" "$S2_FETCHER" search "QUERY" --max 10 --fields title,authors,year,venue,citationCount,externalIds,tldr,url; then
       echo "D2 contribution: semantic_scholar (helper invocation exit 0)" >&2
     else
       echo "WARN: semantic_scholar_fetch.py invocation failed; D2 aggregate continues." >&2
     fi
 else
-    echo "Semantic Scholar unavailable: $S2_FETCHER unresolved; skipping this optional source." >&2
+    echo "Semantic Scholar unavailable: fetcher or uv runner unresolved; skipping this optional source." >&2
 fi
 ```
 
@@ -233,13 +239,16 @@ DEEPXIV_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/deepxiv_fetch.py" ] && DEEPXIV_FETCHER="$ARIS_REPO/tools/deepxiv_fetch.py"
 [ -z "$DEEPXIV_FETCHER" ] && [ -f tools/deepxiv_fetch.py ] && DEEPXIV_FETCHER="tools/deepxiv_fetch.py"
 [ -z "$DEEPXIV_FETCHER" ] && [ -f ~/.codex/skills/deepxiv/deepxiv_fetch.py ] && DEEPXIV_FETCHER="$HOME/.codex/skills/deepxiv/deepxiv_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 
-if [ -n "$DEEPXIV_FETCHER" ]; then
-    if python3 "$DEEPXIV_FETCHER" search "QUERY" --max 10; then
+if [ -n "$DEEPXIV_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ]; then
+    if bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" search "QUERY" --max 10; then
       echo "D2 contribution: deepxiv (helper invocation exit 0)" >&2
-      python3 "$DEEPXIV_FETCHER" paper-brief ARXIV_ID || echo "WARN: deepxiv paper-brief failed" >&2
-      python3 "$DEEPXIV_FETCHER" paper-head ARXIV_ID || echo "WARN: deepxiv paper-head failed" >&2
-      python3 "$DEEPXIV_FETCHER" paper-section ARXIV_ID "Experiments" || echo "WARN: deepxiv paper-section failed" >&2
+      bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" paper-brief ARXIV_ID || echo "WARN: deepxiv paper-brief failed" >&2
+      bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" paper-head ARXIV_ID || echo "WARN: deepxiv paper-head failed" >&2
+      bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" paper-section ARXIV_ID "Experiments" || echo "WARN: deepxiv paper-section failed" >&2
     else
       echo "WARN: deepxiv_fetch.py search invocation failed; D2 aggregate continues." >&2
     fi
@@ -274,17 +283,20 @@ EXA_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/exa_search.py" ] && EXA_FETCHER="$ARIS_REPO/tools/exa_search.py"
 [ -z "$EXA_FETCHER" ] && [ -f tools/exa_search.py ] && EXA_FETCHER="tools/exa_search.py"
 [ -z "$EXA_FETCHER" ] && [ -f ~/.codex/skills/exa-search/exa_search.py ] && EXA_FETCHER="$HOME/.codex/skills/exa-search/exa_search.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 
-if [ -n "$EXA_FETCHER" ]; then
+if [ -n "$EXA_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ]; then
   exa_contributed=false
   # Search for research papers with highlights.
-  if python3 "$EXA_FETCHER" search "QUERY" --max 10 --category "research paper" --content highlights; then
+  if bash "$ARIS_PY_RUNNER" "$EXA_FETCHER" search "QUERY" --max 10 --category "research paper" --content highlights; then
     exa_contributed=true
   else
     echo "WARN: exa_search.py research-paper invocation failed; D2 aggregate continues." >&2
   fi
   # Search for broader web content (blogs, docs, news).
-  if python3 "$EXA_FETCHER" search "QUERY" --max 10 --content highlights; then
+  if bash "$ARIS_PY_RUNNER" "$EXA_FETCHER" search "QUERY" --max 10 --content highlights; then
     exa_contributed=true
   else
     echo "WARN: exa_search.py broad-web invocation failed; D2 aggregate continues." >&2
@@ -358,12 +370,15 @@ OPENALEX_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/openalex_fetch.py" ] && OPENALEX_FETCHER="$ARIS_REPO/tools/openalex_fetch.py"
 [ -z "$OPENALEX_FETCHER" ] && [ -f tools/openalex_fetch.py ] && OPENALEX_FETCHER="tools/openalex_fetch.py"
 [ -z "$OPENALEX_FETCHER" ] && [ -f ~/.codex/skills/openalex/openalex_fetch.py ] && OPENALEX_FETCHER="$HOME/.codex/skills/openalex/openalex_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 
-# Skip OpenAlex when the helper or its optional dependency is unavailable.
-if [ -z "$OPENALEX_FETCHER" ] || ! python3 -c "import requests" >/dev/null 2>&1; then
-  echo "OpenAlex source not available (openalex_fetch.py unresolved or 'requests' module missing); skipping." >&2
+# The isolated uv runtime owns requests; skip only when helper or runner is unavailable.
+if [ -z "$OPENALEX_FETCHER" ] || [ -z "$ARIS_PY_RUNNER" ]; then
+  echo "OpenAlex source not available (openalex_fetch.py or uv runner unresolved); skipping." >&2
 else
-  if python3 "$OPENALEX_FETCHER" search "QUERY" --max 10 \
+  if bash "$ARIS_PY_RUNNER" "$OPENALEX_FETCHER" search "QUERY" --max 10 \
       --year "2022-" \
       --type article \
       --sort relevance; then
@@ -395,9 +410,12 @@ ARXIV_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/arxiv_fetch.py" ] && ARXIV_FETCHER="$ARIS_REPO/tools/arxiv_fetch.py"
 [ -z "$ARXIV_FETCHER" ] && [ -f tools/arxiv_fetch.py ] && ARXIV_FETCHER="tools/arxiv_fetch.py"
 [ -z "$ARXIV_FETCHER" ] && [ -f ~/.codex/skills/arxiv/arxiv_fetch.py ] && ARXIV_FETCHER="$HOME/.codex/skills/arxiv/arxiv_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 
 # Download top N most relevant arXiv papers; skip silently if helper unresolved.
-[ -n "$ARXIV_FETCHER" ] && python3 "$ARXIV_FETCHER" download ARXIV_ID --dir papers/
+[ -n "$ARXIV_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ] && bash "$ARIS_PY_RUNNER" "$ARXIV_FETCHER" download ARXIV_ID --dir papers/
 ```
 - Only download papers ranked in the top ARXIV_MAX_DOWNLOAD by relevance
 - Skip papers already in the local library

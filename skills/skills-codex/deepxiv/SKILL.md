@@ -25,7 +25,10 @@ Use DeepXiv when you want to inspect papers incrementally instead of loading the
 - **DEEPXIV_FETCHER** — canonical name `deepxiv_fetch.py`, resolved per
   [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2
   (Codex-side chain: `$ARIS_REPO/tools/` → `tools/` → `~/.codex/skills/deepxiv/`).
-  Policy D1 — if unresolved (canonical chain exhausted), fall back to raw `deepxiv` CLI.
+  Policy D1 — if unresolved (canonical chain exhausted), stop explicitly rather
+  than using an ambient `deepxiv` CLI.
+- **ARIS_PY_RUNNER** — `tools/uv_run_helper.sh`; it executes the adapter in the
+  locked `tools/uv-runtime` environment.
 - **MAX_RESULTS = 10** — Default number of search results.
 
 > Overrides (append to arguments):
@@ -39,11 +42,8 @@ Use DeepXiv when you want to inspect papers incrementally instead of loading the
 
 ## Setup
 
-DeepXiv is optional:
-
-```bash
-pip install deepxiv-sdk
-```
+DeepXiv is optional. `deepxiv-sdk` is declared and locked in the isolated
+`tools/uv-runtime` project.
 
 On first use, `deepxiv` auto-registers a free token and stores it in `~/.env`.
 
@@ -78,39 +78,33 @@ DEEPXIV_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/deepxiv_fetch.py" ] && DEEPXIV_FETCHER="$ARIS_REPO/tools/deepxiv_fetch.py"
 [ -z "$DEEPXIV_FETCHER" ] && [ -f tools/deepxiv_fetch.py ] && DEEPXIV_FETCHER="tools/deepxiv_fetch.py"
 [ -z "$DEEPXIV_FETCHER" ] && [ -f ~/.codex/skills/deepxiv/deepxiv_fetch.py ] && DEEPXIV_FETCHER="$HOME/.codex/skills/deepxiv/deepxiv_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 
 # Smoke test (optional): resolved-but-non-functional adapter is not currently auto-demoted.
-if [ -n "$DEEPXIV_FETCHER" ]; then
+if [ -n "$DEEPXIV_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ]; then
   echo "DeepXiv adapter resolved at: $DEEPXIV_FETCHER" >&2
 else
-  echo "DeepXiv adapter unresolved (canonical chain exhausted); raw deepxiv CLI fallback will be used." >&2
+  echo "ERROR: DeepXiv adapter or locked uv runner is unresolved." >&2
+  echo "       Rerun install_aris_codex.sh or export ARIS_REPO to the complete ARIS checkout." >&2
+  exit 1
 fi
 ```
 
-If the adapter is unresolved, fall back to raw `deepxiv` commands.
+Do not fall back to an ambient `deepxiv` command; that would bypass the locked
+runtime.
 
 ### Step 3: Execute the Minimal Command
 
 ```bash
-[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER" search "QUERY" --max MAX_RESULTS
-[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER" paper-brief ARXIV_ID
-[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER" paper-head ARXIV_ID
-[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER" paper-section ARXIV_ID "SECTION_NAME"
-[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER" trending --days 7 --max MAX_RESULTS
-[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER" wsearch "QUERY"
-[ -n "$DEEPXIV_FETCHER" ] && python3 "$DEEPXIV_FETCHER" sc "SEMANTIC_SCHOLAR_ID"
-```
-
-Fallbacks:
-
-```bash
-deepxiv search "QUERY" --limit MAX_RESULTS --format json
-deepxiv paper ARXIV_ID --brief --format json
-deepxiv paper ARXIV_ID --head --format json
-deepxiv paper ARXIV_ID --section "SECTION_NAME" --format json
-deepxiv trending --days 7 --limit MAX_RESULTS --output json
-deepxiv wsearch "QUERY" --output json
-deepxiv sc "SEMANTIC_SCHOLAR_ID" --output json
+bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" search "QUERY" --max MAX_RESULTS
+bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" paper-brief ARXIV_ID
+bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" paper-head ARXIV_ID
+bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" paper-section ARXIV_ID "SECTION_NAME"
+bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" trending --days 7 --max MAX_RESULTS
+bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" wsearch "QUERY"
+bash "$ARIS_PY_RUNNER" "$DEEPXIV_FETCHER" sc "SEMANTIC_SCHOLAR_ID"
 ```
 
 ### Step 4: Present Results
@@ -137,6 +131,7 @@ Follow [`shared-references/integration-contract.md`](../shared-references/integr
 ## Key Rules
 
 - Prefer the adapter script over raw `deepxiv` commands when available.
-- If DeepXiv is missing, give the install command and suggest `/arxiv` or `/research-lit "topic" - sources: web`.
+- If DeepXiv is missing from the locked runtime, report the runtime error and
+  suggest `/arxiv` or `/research-lit "topic" - sources: web`.
 - Use DeepXiv as an additive source, not a replacement for existing ARIS literature tooling.
 - If the result overlaps with a published venue paper from Semantic Scholar, keep the richer venue metadata in the final summary.
