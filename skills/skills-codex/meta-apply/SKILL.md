@@ -44,7 +44,11 @@ never silently apply:
    reviewer via `spawn_agent` (`reasoning_effort: ultra`, read-only, paths-only per
    [`reviewer-independence.md`](../shared-references/reviewer-independence.md)) on the
    staged `.diff` + its target. Ask: *does this change improve the harness without
-   regressions; PASS or KILL + one-line reason.* **KILL ⇒ refuse.** The human cannot
+   regressions; PASS or KILL + one-line reason.* Include the scope-limits block from
+   [`review-scope-limits.md`](../shared-references/review-scope-limits.md): this jury
+   judges ARIS's own mechanism, so an over-defensive KILL permanently blocks a good
+   patch. The block bans *proposing new* hash binding — it is not a reason to KILL a
+   patch that touches the existing provenance stamp. **KILL ⇒ refuse.** The human cannot
    override a KILL — they may only pick among reviewer-PASSED survivors.
 3. **Record the review class honestly.** Base Codex review is same-family and
    lands only with `stamp-provisional`; it can complete this explicit

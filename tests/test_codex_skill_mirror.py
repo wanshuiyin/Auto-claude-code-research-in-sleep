@@ -42,7 +42,7 @@ def test_codex_skill_set_matches_mainline() -> None:
 def test_codex_shared_reference_set_matches_mainline() -> None:
     main_refs = {p.name for p in (MAIN_SKILLS / "shared-references").glob("*.md")}
     codex_refs = {p.name for p in (CODEX_SKILLS / "shared-references").glob("*.md")}
-    assert len(main_refs) == 30
+    assert len(main_refs) == 31
     assert codex_refs == main_refs
 
 

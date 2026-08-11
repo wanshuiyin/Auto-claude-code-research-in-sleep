@@ -387,6 +387,26 @@ mcp__codex__codex:
 
     Be brutally honest. If, after genuinely trying to break it, the work holds
     up and is ready, say so clearly.
+
+    === SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+    Report anything that is actually wrong here — including a rare-looking case, if
+    this repo actually produces it. Then keep the fix in scope:
+    1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+       welcome; over-defense is not. Assume a cooperating operator on their own
+       machine — a malicious local user is NOT in the threat model.
+    2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+       Reporting a real defect in hashing code that already exists is fine.
+    3. NO defensive scaffolding: no feature flags, migration frameworks, compat
+       layers, or wrappers added for cases that do not occur in practice.
+    4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+       millisecond races are out of scope unless you can show the case arises here.
+    5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+       judgement. A clear sentence a human reads beats a scored table nobody
+       maintains.
+    Exception: code that runs remote commands, starts a network service, or installs
+    an MCP server runs on the user's machine with their credentials — trust-boundary
+    findings there are in scope and the default is strict.
+    Say plainly when something is correct. Do not manufacture findings.
 ```
 
 *For manual backend:* use `mcp__manual_review__review` with the `prompt` text above and `config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}`. Save the returned `threadId`.
@@ -428,6 +448,26 @@ mcp__codex__codex:
        or patterns you want to track in future rounds.
 
     Be brutally honest. Actively look for things the author might be hiding.
+
+    === SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+    Report anything that is actually wrong here — including a rare-looking case, if
+    this repo actually produces it. Then keep the fix in scope:
+    1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+       welcome; over-defense is not. Assume a cooperating operator on their own
+       machine — a malicious local user is NOT in the threat model.
+    2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+       Reporting a real defect in hashing code that already exists is fine.
+    3. NO defensive scaffolding: no feature flags, migration frameworks, compat
+       layers, or wrappers added for cases that do not occur in practice.
+    4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+       millisecond races are out of scope unless you can show the case arises here.
+    5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+       judgement. A clear sentence a human reads beats a scored table nobody
+       maintains.
+    Exception: code that runs remote commands, starts a network service, or installs
+    an MCP server runs on the user's machine with their credentials — trust-boundary
+    findings there are in scope and the default is strict.
+    Say plainly when something is correct. Do not manufacture findings.
 ```
 
 ##### Nightmare — Codex Exec (GPT reads repo directly)
@@ -463,6 +503,26 @@ OUTPUT FORMAT:
 - Memory update: [new suspicions and patterns to track next round]
 
 Be adversarial. Trust nothing the author tells you — verify everything yourself.
+
+=== SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+Report anything that is actually wrong here — including a rare-looking case, if
+this repo actually produces it. Then keep the fix in scope:
+1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+   welcome; over-defense is not. Assume a cooperating operator on their own
+   machine — a malicious local user is NOT in the threat model.
+2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+   Reporting a real defect in hashing code that already exists is fine.
+3. NO defensive scaffolding: no feature flags, migration frameworks, compat
+   layers, or wrappers added for cases that do not occur in practice.
+4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+   millisecond races are out of scope unless you can show the case arises here.
+5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+   judgement. A clear sentence a human reads beats a scored table nobody
+   maintains.
+Exception: code that runs remote commands, starts a network service, or installs
+an MCP server runs on the user's machine with their credentials — trust-boundary
+findings there are in scope and the default is strict.
+Say plainly when something is correct. Do not manufacture findings.
 PROMPT
 )" --skip-git-repo-check 2>&1
 ```
@@ -955,6 +1015,26 @@ cat <<'ARIS_ROUND_INSTRUCTIONS'
 Please re-score and re-assess. Are the remaining concerns addressed?
 Same format: Score, Verdict, Remaining Weaknesses, Minimum Fixes.
 
+=== SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+Report anything that is actually wrong here — including a rare-looking case, if
+this repo actually produces it. Then keep the fix in scope:
+1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+   welcome; over-defense is not. Assume a cooperating operator on their own
+   machine — a malicious local user is NOT in the threat model.
+2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+   Reporting a real defect in hashing code that already exists is fine.
+3. NO defensive scaffolding: no feature flags, migration frameworks, compat
+   layers, or wrappers added for cases that do not occur in practice.
+4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+   millisecond races are out of scope unless you can show the case arises here.
+5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+   judgement. A clear sentence a human reads beats a scored table nobody
+   maintains.
+Exception: code that runs remote commands, starts a network service, or installs
+an MCP server runs on the user's machine with their credentials — trust-boundary
+findings there are in scope and the default is strict.
+Say plainly when something is correct. Do not manufacture findings.
+
 At the end of your review, include a Memory Update section — this will
 be passed back to you next round.
 ARIS_ROUND_INSTRUCTIONS
@@ -977,6 +1057,26 @@ copilot --agent "$REVIEWER_PROFILE" --model "$REVIEWER_MODEL" \
 
     Please re-score and re-assess. Are the remaining concerns addressed?
     Same format: Score, Verdict, Remaining Weaknesses, Minimum Fixes.
+
+    === SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+    Report anything that is actually wrong here — including a rare-looking case, if
+    this repo actually produces it. Then keep the fix in scope:
+    1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+       welcome; over-defense is not. Assume a cooperating operator on their own
+       machine — a malicious local user is NOT in the threat model.
+    2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+       Reporting a real defect in hashing code that already exists is fine.
+    3. NO defensive scaffolding: no feature flags, migration frameworks, compat
+       layers, or wrappers added for cases that do not occur in practice.
+    4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+       millisecond races are out of scope unless you can show the case arises here.
+    5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+       judgement. A clear sentence a human reads beats a scored table nobody
+       maintains.
+    Exception: code that runs remote commands, starts a network service, or installs
+    an MCP server runs on the user's machine with their credentials — trust-boundary
+    findings there are in scope and the default is strict.
+    Say plainly when something is correct. Do not manufacture findings.
 ```
 
 ## Review Tracing
