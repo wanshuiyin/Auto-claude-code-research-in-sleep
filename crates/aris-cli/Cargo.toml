@@ -16,7 +16,9 @@ compat-harness = { path = "../compat-harness" }
 crossterm = "0.28"
 ctrlc = "3"
 serde = { version = "1", features = ["derive"] }
-reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls"] }
+# Keep OS proxy discovery explicit: disabling reqwest's defaults also disables
+# its `system-proxy` feature, which Windows/macOS desktop proxy users rely on.
+reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls", "system-proxy"] }
 pulldown-cmark = "0.13"
 runtime = { path = "../runtime" }
 serde_json = "1"
