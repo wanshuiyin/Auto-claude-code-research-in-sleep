@@ -6,7 +6,7 @@ Don't have Claude / OpenAI API access? You can swap in other models — same cro
 
 > ⭐ **We strongly recommend Claude + GPT-5.6-Sol (default setup).** It's the most tested and reliable combination. Alternative setups work but may require prompt tuning.
 
-Beyond the default Claude × GPT-5.6-Sol route, ARIS ships **10 alternative routes (Alt A-I + C.1)** covering Z.ai's GLM, Alibaba's Kimi/Qwen/GLM/MiniMax bundle, ModelScope's free DeepSeek-V3.1, Codex-as-executor with Claude or Gemini reviewers, and Google Antigravity as the executor.
+Beyond the default Claude × GPT-5.6-Sol route, ARIS ships **11 alternative routes (Alt A-I + C.1 + C.2)** covering Z.ai's GLM, Alibaba's Kimi/Qwen/GLM/MiniMax bundle, ModelScope's free DeepSeek-V3.1, OpenRouter and OrcaRouter as one-key-many-models reviewer backends, Codex-as-executor with Claude or Gemini reviewers, and Google Antigravity as the executor.
 
 <details>
 <summary><b>Show full routing table</b> — Default + Alt A-I × executor / reviewer / Claude-API needed / OpenAI-API needed / guide link</summary>
@@ -18,6 +18,7 @@ Beyond the default Claude × GPT-5.6-Sol route, ARIS ships **10 alternative rout
 | **Alt B** | GLM-5 (Z.ai) | MiniMax-M3 | No | No | [MINIMAX_MCP_GUIDE](MINIMAX_MCP_GUIDE.md) |
 | **Alt C** | Any CC-compatible | Any OpenAI-compatible | No | No | [LLM_API_MIX_MATCH_GUIDE](LLM_API_MIX_MATCH_GUIDE.md) |
 | **Alt C.1** | Claude / any CC-compatible | OpenRouter pinned model via `llm-chat` | Optional | No | [OPENROUTER_GUIDE](OPENROUTER_GUIDE.md) |
+| **Alt C.2** 🆕 | Claude via OrcaRouter, or any CC-compatible | OrcaRouter pinned model via `llm-chat` | Optional | No | [ORCAROUTER_GUIDE](ORCAROUTER_GUIDE.md) |
 | **Alt D** | Kimi-K2.5 / Qwen3.5+ | GLM-5 / MiniMax-M3 | No | No | [ALI_CODING_PLAN_GUIDE](ALI_CODING_PLAN_GUIDE.md) |
 | **Alt E** 🆓 | DeepSeek-V3.1 / Qwen3-Coder | DeepSeek-R1 / Qwen3-235B | No | No | [MODELSCOPE_GUIDE](MODELSCOPE_GUIDE.md) |
 | **Alt F** | Codex CLI (GPT-5.6-Sol) | Codex `spawn_agent` (GPT-5.6-Sol) | No | Yes | [skills-codex/](../skills/skills-codex/) |
@@ -34,6 +35,7 @@ Beyond the default Claude × GPT-5.6-Sol route, ARIS ships **10 alternative rout
 - **Alt B** or **Alt E** — no Claude API, no OpenAI API (Alt E is free via ModelScope).
 - **Alt C** or **Alt D** — OpenAI-compatible mix-and-match (Alt D = one Alibaba key for both sides).
 - **Alt C.1** — [OpenRouter](OPENROUTER_GUIDE.md) as an opt-in `llm-chat` reviewer backend: one key, many models; pin a concrete reviewer model and keep it in a different family from the executor.
+- **Alt C.2** — [OrcaRouter](ORCAROUTER_GUIDE.md) as an opt-in `llm-chat` reviewer backend. Same one-key-many-models shape as Alt C.1, and because it also exposes an Anthropic-compatible endpoint, the *same* key can drive the Claude Code executor — so a cross-family executor/reviewer split needs only one account. Pin the reviewer model explicitly (`ANTHROPIC_DEFAULT_*_MODEL` pins are mandatory on the executor side).
 - **Alt G** or **Alt I** — Codex stays as executor, only the reviewer changes (Claude or Gemini).
 - **Alt H** — Antigravity as the executor (Claude Opus 4.6 or Gemini 3.1 Pro), GPT-5.6-Sol or any `llm-chat` reviewer.
 

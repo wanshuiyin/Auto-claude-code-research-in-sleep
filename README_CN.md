@@ -1500,7 +1500,7 @@ Skills 都是纯 Markdown,fork 了随便改。各 skill 的环境变量(GPU 目�
 
 <a id="alt-a-glm--gpt"></a>
 
-没有 Claude / OpenAI API?换别的 provider —— 同样的跨模型架构。ARIS 内置 **10 条替代路线**(Z.ai GLM、阿里 Kimi/Qwen/MiniMax、ModelScope 免费 DeepSeek-V3.1、OpenRouter 一 Key 多模型审稿后端、Codex 当 executor 配 Claude/Gemini reviewer、Google Antigravity)。完整路由表 + 各路线配置见 **[docs/MODEL_COMBINATIONS_CN.md](docs/MODEL_COMBINATIONS_CN.md)**。
+没有 Claude / OpenAI API?换别的 provider —— 同样的跨模型架构。ARIS 内置 **11 条替代路线**(Z.ai GLM、阿里 Kimi/Qwen/MiniMax、ModelScope 免费 DeepSeek-V3.1、OpenRouter 与 OrcaRouter 一 Key 多模型审稿后端、Codex 当 executor 配 Claude/Gemini reviewer、Google Antigravity)。完整路由表 + 各路线配置见 **[docs/MODEL_COMBINATIONS_CN.md](docs/MODEL_COMBINATIONS_CN.md)**。
 
 <a id="community"></a>
 

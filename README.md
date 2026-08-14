@@ -1716,7 +1716,7 @@ Skills are plain Markdown — fork and tune them. Per-skill environment variable
 
 <a id="alt-a-glm--gpt"></a>
 
-No Claude / OpenAI API? Swap in other providers — same cross-model architecture. ARIS ships **10 alternative routes** (Z.ai GLM, Alibaba Kimi/Qwen/MiniMax, free DeepSeek-V3.1 via ModelScope, OpenRouter as a pin-one-of-many reviewer backend, Codex-as-executor with Claude/Gemini reviewers, Google Antigravity). Full routing table + per-route setup in **[docs/MODEL_COMBINATIONS.md](docs/MODEL_COMBINATIONS.md)**.
+No Claude / OpenAI API? Swap in other providers — same cross-model architecture. ARIS ships **11 alternative routes** (Z.ai GLM, Alibaba Kimi/Qwen/MiniMax, free DeepSeek-V3.1 via ModelScope, OpenRouter and OrcaRouter as pin-one-of-many reviewer backends, Codex-as-executor with Claude/Gemini reviewers, Google Antigravity). Full routing table + per-route setup in **[docs/MODEL_COMBINATIONS.md](docs/MODEL_COMBINATIONS.md)**.
 
 <a id="community"></a>
 

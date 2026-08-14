@@ -13,6 +13,7 @@ Supported Providers (examples):
     DeepSeek:    LLM_BASE_URL=https://api.deepseek.com/v1 LLM_MODEL=deepseek-chat
     Kimi:        LLM_BASE_URL=https://api.moonshot.cn/v1 LLM_MODEL=moonshot-v1-32k
     MiniMax:     LLM_BASE_URL=https://api.minimax.io/v1 LLM_MODEL=MiniMax-M3
+    OrcaRouter:  LLM_BASE_URL=https://api.orcarouter.ai/v1 LLM_MODEL=minimax/minimax-m3
 """
 
 import datetime

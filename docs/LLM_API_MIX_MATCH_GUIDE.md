@@ -71,7 +71,20 @@
 }
 ```
 
-### 5. 自定义兼容端点
+### 5. OrcaRouter
+```json
+{
+  "ANTHROPIC_AUTH_TOKEN": "sk-orca-xxx",
+  "ANTHROPIC_BASE_URL": "https://api.orcarouter.ai",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL": "anthropic/claude-haiku-4.5",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL": "anthropic/claude-sonnet-5",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL": "anthropic/claude-opus-5"
+}
+```
+
+`ANTHROPIC_BASE_URL` 不带 `/v1`，且三个模型 pin 都要写全（OrcaRouter 按带命名空间的 ID 路由，裸模型名会 `model_not_found`）。同一个 Key 也能直接作为下面的审查器使用。详见 [ORCAROUTER_GUIDE_CN](ORCAROUTER_GUIDE_CN.md)。
+
+### 6. 自定义兼容端点
 ```json
 {
   "ANTHROPIC_AUTH_TOKEN": "your-key",
@@ -112,6 +125,7 @@
 |--------|--------------|-----------|
 | DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
 | MiniMax | `https://api.minimax.io/v1` | `MiniMax-M3` |
+| OrcaRouter | `https://api.orcarouter.ai/v1` | `minimax/minimax-m3`、`deepseek/deepseek-v4-pro`、`z-ai/glm-5.2` 等（[完整列表](https://www.orcarouter.ai/models)） |
 
 ---
 
