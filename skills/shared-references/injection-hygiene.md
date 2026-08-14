@@ -64,6 +64,13 @@ raw text is preserved depends on the store:
   banner — **non-destructive (the pack is not blanked)**, since it's a multi-node
   assembly. (So for `query_pack` the strict-table "block" is specifically a
   scan-and-banner.)
+- **`/idea-creator` query-pack load**: both the main skill and Codex mirror run
+  cached **and rebuilt** packs through `threat_scan.py --quarantine` into a
+  private, read-only snapshot, then inject only that snapshot. They never scan
+  and reopen the raw file. A hit may trigger one rebuild + rescan; an unresolved
+  scanner, scanner error, or repeat hit skips wiki context while primary idea
+  ranking continues. The raw pack (and a private evidence copy before rebuild)
+  remains available for human inspection.
 - **To extend** (same helper, same scopes): MEMORY.md write + load; fetched
   abstracts (`research-lit` / `exa-search` / `deepxiv` / `alphaxiv`) at
   `context` (warn); **community-PR `SKILL.md` / fixtures** at `strict` before a
@@ -73,12 +80,11 @@ raw text is preserved depends on the store:
   allowlist before enabling strict scan on skill docs.
 
 ## Known gaps (honest)
-- **Cached `query_pack.md` read-side.** `/idea-creator` reads a `query_pack.md`
-  younger than 7 days *directly* without a rebuild. A stale or hand-edited pack
-  therefore bypasses the rebuild-time scan. Mitigation: run
-  `python3 tools/threat_scan.py <wiki>/query_pack.md --scope strict` before
-  reusing a cached pack, or force a `rebuild_query_pack`. (A read-side scan hook
-  in `/idea-creator` is the proper fix — a follow-up.)
+- **Fetched web content.** The query-pack read-side is now gated, but raw
+  WebSearch/WebFetch results and fetched abstracts are not yet uniformly routed
+  through the `context`-scope warning layer. This change therefore narrows one
+  re-injection path; it does **not** claim to sanitize the full web-research
+  surface.
 - Layer 1 is a regex tripwire, not a boundary — see the two-layer rule above.
 
 ## The helper
