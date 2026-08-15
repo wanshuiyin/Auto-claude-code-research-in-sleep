@@ -240,7 +240,8 @@ def test_download_rejects_cached_non_pdf_response(tmp_path):
     with pytest.raises(ValueError, match="not a PDF"):
         mod.download("2509.14933", output_dir=str(tmp_path))
 
-    assert cached.read_bytes() == html_error
+    # The poisoned entry is evicted so the next call re-downloads.
+    assert not cached.exists()
 
 
 def test_download_retries_on_429_then_succeeds(monkeypatch, tmp_path):

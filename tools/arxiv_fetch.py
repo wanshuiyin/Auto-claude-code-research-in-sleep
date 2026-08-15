@@ -182,7 +182,15 @@ def download(arxiv_id: str, output_dir: str = "papers") -> dict:
     if dest.exists():
         size_bytes = dest.stat().st_size
         with dest.open("rb") as cached_file:
-            _validate_pdf(size_bytes, cached_file.read(1024))
+            first_bytes = cached_file.read(1024)
+        try:
+            _validate_pdf(size_bytes, first_bytes)
+        except ValueError:
+            # Poisoned cache entry (e.g. an HTML error page saved as .pdf by an
+            # older version): drop it so the next call re-downloads instead of
+            # failing forever.
+            dest.unlink()
+            raise
         return {
             "id": clean_id,
             "path": str(dest),
