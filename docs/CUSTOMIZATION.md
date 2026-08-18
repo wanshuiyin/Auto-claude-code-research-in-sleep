@@ -26,7 +26,7 @@ Override inline: `/research-pipeline "topic" — auto proceed: false, illustrati
 
 | Constant | Default | Description | Pass-through |
 |----------|---------|-------------|:---:|
-| `AUTO_PROCEED` | true | Auto-continue with top-ranked option if user doesn't respond | → `idea-discovery` |
+| `AUTO_PROCEED` | true | At each selection checkpoint, report the top-ranked option and continue in the same turn; `false` asks for explicit confirmation | → `idea-discovery` → `paper-writing` when `AUTO_WRITE=true` |
 | `ARXIV_DOWNLOAD` | false | Download top arXiv PDFs after literature search | → `idea-discovery` → `research-lit` |
 | `HUMAN_CHECKPOINT` | false | When `true`, pause after each review round for approval | → `auto-review-loop` |
 | `WANDB` | false | Auto-add W&B logging to experiments | → `experiment-bridge` → `run-experiment` |
@@ -69,10 +69,15 @@ Override inline: `/idea-discovery "topic" — pilot budget: 4h per idea, sources
 | `PILOT_TIMEOUT_HOURS` | 3h | Hard timeout — kill runaway pilots, collect partial results | — |
 | `MAX_PILOT_IDEAS` | 3 | Maximum number of ideas to pilot in parallel | — |
 | `MAX_TOTAL_GPU_HOURS` | 8h | Total GPU budget across all pilots | — |
-| `AUTO_PROCEED` | true | Auto-continue with top-ranked option if user doesn't respond | — |
+| `AUTO_PROCEED` | true | Report the top-ranked option and continue in the same turn; `false` asks for explicit confirmation | — |
 | `ARXIV_DOWNLOAD` | false | Download top arXiv PDFs after literature search | → `research-lit` |
 
 </details>
+
+`AUTO_PROCEED=true` applies to its own selection checkpoints only. Explicit
+user-controlled gates, such as Feishu interactive approval, a missing venue,
+or required manual figures, remain blocking. The pipeline never relies on a
+silent-response timeout to resume after a turn ends.
 
 ### Experiment Bridge (`experiment-bridge`)
 
@@ -147,5 +152,4 @@ Tune the reviewer model used by every Codex MCP call (default `gpt-5.6-sol`), or
 | `REVIEWER_MODEL` | `gpt-5.6-sol` | OpenAI model used via Codex MCP. Also available: `gpt-5.3-codex`, `gpt-5.2-codex`, `o3`. See [supported models](https://developers.openai.com/codex/models/) for full list. |
 
 </details>
-
 

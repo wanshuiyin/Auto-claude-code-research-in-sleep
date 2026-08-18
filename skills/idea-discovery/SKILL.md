@@ -26,7 +26,7 @@ Each phase builds on the previous one's output. The final deliverables are a val
 - **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill any running pilot that exceeds 3 hours. Collect partial results if available.
 - **MAX_PILOT_IDEAS = 3** — Run pilots for at most 3 top ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget across all pilots. If exceeded, skip remaining pilots and note in report.
-- **AUTO_PROCEED = true** — If user doesn't respond at a checkpoint, automatically proceed with the best option after presenting results. Set to `false` to always wait for explicit user confirmation.
+- **AUTO_PROCEED = true** — When `true`, checkpoints are informational: report the selected option and continue in the same turn. Set to `false` to ask for explicit user confirmation and end the turn at each selection checkpoint.
 - **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`). Passed to sub-skills.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 - **ARXIV_DOWNLOAD = false** — When `true`, `/research-lit` downloads the top relevant arXiv PDFs during Phase 1. When `false` (default), only fetches metadata. Passed through to `/research-lit`.
@@ -36,6 +36,28 @@ Each phase builds on the previous one's output. The final deliverables are a val
 - **RESUMABLE = true** — Record stage evidence under `.aris/runs/<run_id>.json` and require a deterministic evidence gate before declaring the final report complete.
 
 > 💡 These are defaults. Override by telling the skill, e.g., `/idea-discovery "topic" — ref paper: https://arxiv.org/abs/2406.04329` or `/idea-discovery "topic" — compact: true`.
+
+## Checkpoint execution rule
+
+Resolve `AUTO_PROCEED` once from `$ARGUMENTS` before Phase 0 and keep that mode
+for the entire workflow.
+
+- **`AUTO_PROCEED=true` is non-blocking.** A checkpoint is a progress update,
+  not a question. State the result and the automatically selected next action,
+  then continue executing in the **same turn**. Do not ask for confirmation,
+  request user input, sleep, wait for silence, or end the turn at a checkpoint.
+- **`AUTO_PROCEED=false` is blocking.** Present the options, ask the user, and
+  end the turn. Resume only after an explicit reply.
+
+Never implement auto-proceed as “ask, then continue if there is no response.”
+Once a turn ends, silence cannot resume the workflow. The user can still
+interrupt a non-blocking run at any time.
+
+This rule governs only `AUTO_PROCEED`-controlled selection checkpoints. If the
+user explicitly enables a Feishu **interactive** gate, that external approval
+or reply is an intentional blocking exception; wait for that user-controlled
+gate rather than treating it as a silence timeout. Feishu off/push-only modes
+remain non-blocking under `AUTO_PROCEED=true`.
 
 ## Per-stage evidence gate (`RESUMABLE = true`)
 
@@ -175,17 +197,23 @@ If `gemini-cli` is not installed, `/research-lit` skips the Gemini source gracef
 - Identify structural gaps and recurring limitations
 - Output a literature summary (saved to working notes)
 
-**🚦 Checkpoint:** Present the landscape summary to the user. Ask:
+**🚦 Checkpoint:** Present the landscape summary to the user.
+
+**When `AUTO_PROCEED=true` (non-blocking):** report the selected direction and
+continue immediately in the same turn, without a question:
 
 ```
 📚 Literature survey complete. Here's what I found:
 - [key findings, gaps, open problems]
 
-Does this match your understanding? Should I adjust the scope before generating ideas?
-(If no response, I'll proceed with the top-ranked direction.)
+AUTO_PROCEED: selected [top-ranked direction]. Continuing to Phase 2.
 ```
 
-- **User approves** (or no response + AUTO_PROCEED=true) → proceed to Phase 2 with best direction.
+**When `AUTO_PROCEED=false` (blocking):** present the same findings, ask
+`Does this match your understanding? Should I adjust the scope before generating ideas?`,
+then end the turn.
+
+- **User approves** → proceed to Phase 2 with the best direction.
 - **User requests changes** (e.g., "focus more on X", "ignore Y", "too broad") → refine the search with updated queries, re-run `/research-lit` with adjusted scope, and present again. Repeat until the user is satisfied.
 
 ### Phase 2: Idea Generation + Filtering + Pilots
@@ -207,7 +235,10 @@ Invoke `/idea-creator` with the landscape context (and `idea-stage/REF_PAPER_SUM
 - Rank by empirical signal
 - Output `idea-stage/IDEA_REPORT.md`
 
-**🚦 Checkpoint:** Present `idea-stage/IDEA_REPORT.md` ranked ideas to the user. Ask:
+**🚦 Checkpoint:** Present `idea-stage/IDEA_REPORT.md` ranked ideas to the user.
+
+**When `AUTO_PROCEED=true` (non-blocking):** report the automatic selection and
+continue immediately in the same turn, without a question:
 
 ```
 💡 Generated X ideas, filtered to Y, piloted Z. Top results:
@@ -216,11 +247,14 @@ Invoke `/idea-creator` with the landscape context (and `idea-stage/REF_PAPER_SUM
 2. [Idea 2] — Pilot: WEAK POSITIVE (+Y%)
 3. [Idea 3] — Pilot: NEGATIVE, eliminated
 
-Which ideas should I validate further? Or should I regenerate with different constraints?
-(If no response, I'll proceed with the top-ranked ideas.)
+AUTO_PROCEED: selected [top-ranked idea(s)]. Continuing to Phase 3.
 ```
 
-- **User picks ideas** (or no response + AUTO_PROCEED=true) → proceed to Phase 3 with top-ranked ideas.
+**When `AUTO_PROCEED=false` (blocking):** present the same ranking, ask
+`Which ideas should I validate further? Or should I regenerate with different constraints?`,
+then end the turn.
+
+- **User picks ideas** → proceed to Phase 3 with the selected ideas.
 - **User unhappy with all ideas** → collect feedback ("what's missing?", "what direction do you prefer?"), update the prompt with user's constraints, and re-run Phase 2 (idea generation). Before
   regenerating, read the already-tried directions (research-wiki Failed Ideas + any
   `.aris/runs/<run_id>.iterations.jsonl`) and forbid a candidate too close to one already
@@ -279,7 +313,10 @@ After review, refine the top idea into a concrete proposal and plan experiments:
 - Generate a claim-driven experiment roadmap with ablations, budgets, and run order
 - Output: `refine-logs/FINAL_PROPOSAL.md`, `refine-logs/EXPERIMENT_PLAN.md`, `refine-logs/EXPERIMENT_TRACKER.md`
 
-**🚦 Checkpoint:** Present the refined proposal summary:
+**🚦 Checkpoint:** Present the refined proposal summary.
+
+**When `AUTO_PROCEED=true` (non-blocking):** report that the proposal was
+selected and continue immediately in the same turn, without a question:
 
 ```
 🔬 Method refined and experiment plan ready:
@@ -289,10 +326,13 @@ After review, refine the top idea into a concrete proposal and plan experiments:
 - Must-run experiments: [N blocks]
 - First 3 runs to launch: [list]
 
-Proceed to implementation? Or adjust the proposal?
+AUTO_PROCEED: accepted the top proposal. Continuing to Final Report.
 ```
 
-- **User approves** (or AUTO_PROCEED=true) → proceed to Final Report.
+**When `AUTO_PROCEED=false` (blocking):** present the same summary, ask
+`Proceed to implementation? Or adjust the proposal?`, then end the turn.
+
+- **User approves** → proceed to Final Report.
 - **User requests changes** → pass feedback to `/research-refine` for another round.
 - **Lite mode:** If reviewer score < 6 or pilot was weak, run `/research-refine` only (skip `/experiment-plan`) and note remaining risks in the report.
 
@@ -441,7 +481,7 @@ Skip this step if `RENDER_HTML = false`.
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - **Don't skip phases.** Each phase filters and validates — skipping leads to wasted effort later.
-- **Checkpoint between phases.** Briefly summarize what was found before moving on.
+- **Checkpoint between phases.** Briefly summarize what was found. With `AUTO_PROCEED=true`, state the selected next action and keep executing in the same turn; with `false`, ask and end the turn.
 - **Kill ideas early.** It's better to kill 10 bad ideas in Phase 3 than to implement one and fail.
 - **Empirical signal > theoretical appeal.** An idea with a positive pilot outranks a "sounds great" idea without evidence.
 - **Document everything — inside the one report, not in scattered files.** Dead ends and eliminated ideas are valuable, so record them as sections of `idea-stage/IDEA_REPORT.md` (see *Output hygiene* above). Do not spawn a separate `.md` per phase.
