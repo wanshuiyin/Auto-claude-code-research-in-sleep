@@ -62,6 +62,33 @@ check the canonical report rather than scattered scratch files:
 | `research-review` | `idea-stage/IDEA_REPORT.md#external-critical-review` |
 | `research-refine-pipeline` | `refine-logs/FINAL_PROPOSAL.md` |
 
+`novelty-check` and `research-review` are **reviewer-bearing phases**. A
+`done` status or a heading alone is not review evidence. After each phase has
+folded substantive findings into its anchored report section, first record it
+`done`, then, only after the secondary Codex reviewer actually returns a
+positive, identity-bearing verdict, record its honest same-family receipt using the
+actual reviewer model and durable agent/trace id:
+
+```text
+python3 <resolved-run_state.py> mark-provisional . <run_id> novelty-check --verdict-id "<agent-or-trace-id>" --reviewer "<actual-Codex-reviewer-model>"
+python3 <resolved-run_state.py> mark-provisional . <run_id> research-review --verdict-id "<agent-or-trace-id>" --reviewer "<actual-Codex-reviewer-model>"
+```
+
+Never invent either value and never mark a phase provisional without the
+positive verdict required by the run-state contract. A negative verdict does not grant a review receipt.
+Leave the phase `done` and the final gate `BLOCKED`,
+select a surviving or new idea, then re-run that reviewer-bearing phase. Do the
+same if the reviewer is unavailable, returns no valid identity/response, or its
+output was not folded into the report. `--provisional-advances` is required
+because these same-family receipts are explicitly provisional, not
+cross-family acceptance.
+
+If a reviewer overlay actually returns a recognized **different-family** model
+(for example Claude reviewing a Codex run), use `accept` with that overlay's
+real model and trace id instead. Do not mislabel a cross-family receipt as
+provisional; the evidence gate validates either honest route from the recorded
+families.
+
 At the end of Phase 5, run:
 
 ```text
@@ -69,12 +96,13 @@ python3 <resolved-idea_discovery_gate.py> . <run_id> --report idea-stage/IDEA_RE
 ```
 
 The gate writes its result to `gates.idea-discovery-evidence` in the run state.
-On `PASS`, it records the gate verdict under `gates.idea-discovery-evidence` —
-per-phase acceptance stays with each stage's own cross-model or deterministic
-gate (the evidence gate proves execution, never quality). On a
-non-zero exit, it writes explicit `BLOCKED: <stage> evidence missing` lines to
-the report; do not present the workflow as complete. On `— resume <run_id>`,
-start from the first non-terminal phase and re-run the gate before finalizing.
+On `PASS`, it has validated (but never created) the two review receipts, all
+required artifacts, and non-empty anchored report sections. Per-phase
+acceptance or provisional status stays with the reviewer route that produced
+the receipt. On a non-zero exit, the gate writes explicit
+`BLOCKED: <stage> evidence missing` lines to the report; do not present the
+workflow as complete. On `— resume <run_id>`, start from the first non-terminal
+phase and re-run the gate before finalizing.
 
 ## Pipeline
 

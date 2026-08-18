@@ -45,7 +45,8 @@ helper chain used by `/research-pipeline`: `.aris/tools/` → `tools/` →
 the final report is `BLOCKED`; do not silently continue without a state record.
 
 For a new run, derive `<run_id>` from the direction slug and date, then start
-this ordered state record:
+this ordered state record with `--executor <actual-Claude-model>` (for example,
+`claude-sonnet-4.5`):
 
 ```text
 research-lit,idea-creator,novelty-check,research-review,research-refine-pipeline
@@ -63,6 +64,25 @@ check the canonical report rather than scattered scratch files:
 | `research-review` | `idea-stage/IDEA_REPORT.md#external-critical-review` |
 | `research-refine-pipeline` | `refine-logs/FINAL_PROPOSAL.md` |
 
+`novelty-check` and `research-review` are **reviewer-bearing phases**. A
+`done` status or a heading alone is not review evidence. After each phase has
+folded substantive findings into its anchored report section, first record it
+`done`, then, only after the configured reviewer actually returns a positive,
+identity-bearing verdict, record the cross-family receipt using the actual
+returned model and durable thread/trace id:
+
+```text
+<resolved-python> <resolved-run_state.py> accept . <run_id> novelty-check --verdict-id "<thread-or-trace-id>" --reviewer "<actual-reviewer-model>"
+<resolved-python> <resolved-run_state.py> accept . <run_id> research-review --verdict-id "<thread-or-trace-id>" --reviewer "<actual-reviewer-model>"
+```
+
+Never invent either value and never call `accept` without the positive verdict
+required by the run-state contract. A negative verdict does not grant a review receipt.
+Leave the phase `done` and the final gate `BLOCKED`, select a surviving
+or new idea, then re-run that reviewer-bearing phase. Do the same if the
+reviewer is unavailable, returns no valid identity/response, or its output was
+not folded into the report.
+
 At the end of Phase 5, run:
 
 ```text
@@ -70,12 +90,12 @@ At the end of Phase 5, run:
 ```
 
 The gate writes its result to `gates.idea-discovery-evidence` in the run state.
-On `PASS`, it records the gate verdict under `gates.idea-discovery-evidence` —
-per-phase acceptance stays with each stage's own cross-model or deterministic
-gate (the evidence gate proves execution, never quality). On a
-non-zero exit, it writes explicit `BLOCKED: <stage> evidence missing` lines to
-the report; do not present the workflow as complete. On `— resume <run_id>`,
-start from the first non-terminal phase and re-run the gate before finalizing.
+On `PASS`, it has validated (but never created) the two review receipts, all
+required artifacts, and non-empty anchored report sections. Per-phase
+acceptance stays with each stage's own cross-model gate. On a non-zero exit, it
+writes explicit `BLOCKED: <stage> evidence missing` lines to the report; do not
+present the workflow as complete. On `— resume <run_id>`, start from the first
+non-terminal phase and re-run the gate before finalizing.
 
 ## Pipeline
 
