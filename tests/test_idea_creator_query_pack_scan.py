@@ -94,10 +94,13 @@ def test_full_resolver_is_set_eu_safe_across_fallbacks(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
 
-    def assert_resolves(home: Path, expected: str) -> None:
+    def assert_resolves(home: Path | None, expected: str) -> None:
         env = os.environ.copy()
         env.pop("ARIS_REPO", None)
-        env["HOME"] = str(home)
+        if home is None:
+            env.pop("HOME", None)
+        else:
+            env["HOME"] = str(home)
         for skill in SKILLS:
             shell = (
                 "set -eu\n"
@@ -125,6 +128,9 @@ def test_full_resolver_is_set_eu_safe_across_fallbacks(tmp_path: Path) -> None:
     empty_home = tmp_path / "empty-home"
     empty_home.mkdir()
     assert_resolves(empty_home, "")
+    # HOME is optional in non-login shells. The resolver must remain safe when
+    # callers enable `set -u` and omit it from the environment entirely.
+    assert_resolves(None, "")
 
     project_tools = project / "tools"
     project_tools.mkdir()
@@ -208,12 +214,15 @@ def test_skill_wiring_forbids_scan_then_raw_read_drift() -> None:
 
     for skill in SKILLS:
         text = skill.read_text(encoding="utf-8")
+        phase_zero = _phase_zero_shell(skill)
         manifest = (
             "installed-skills-codex.txt"
             if "skills-codex" in skill.parts
             else "installed-skills.txt"
         )
         assert 'ARIS_REPO="${ARIS_REPO:-}"' in text
+        assert 'ARIS_HOME="${HOME:-}"' in phase_zero
+        assert '"$HOME' not in phase_zero, "Phase-0 resolver must tolerate HOME unset"
         assert f"[ -f .aris/{manifest} ]" in text
         assert f".aris/{manifest} 2>/dev/null) || true" in text
         assert '--scope strict --quarantine >"$query_pack_candidate"' in text

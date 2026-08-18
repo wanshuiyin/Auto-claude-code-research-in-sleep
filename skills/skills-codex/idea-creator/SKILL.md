@@ -45,16 +45,17 @@ Resolve the wiki helper using the Codex-side canonical chain (see
 
 ```bash
 ARIS_REPO="${ARIS_REPO:-}"
+ARIS_HOME="${HOME:-}"
 if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills-codex.txt ]; then
   ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills-codex.txt 2>/dev/null) || true
 fi
-if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
-  ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+if [ -z "${ARIS_REPO:-}" ] && [ -n "$ARIS_HOME" ] && [ -f "$ARIS_HOME/.aris/repo" ]; then
+  ARIS_REPO=$(cat "$ARIS_HOME/.aris/repo" 2>/dev/null) || true
 fi
 WIKI_SCRIPT=""
 [ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
 [ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
-[ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
+[ -z "$WIKI_SCRIPT" ] && [ -n "$ARIS_HOME" ] && [ -f "$ARIS_HOME/.codex/skills/research-wiki/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_HOME/.codex/skills/research-wiki/research_wiki.py"
 THREAT_SCANNER=""
 [ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/threat_scan.py" ] && THREAT_SCANNER="$ARIS_REPO/tools/threat_scan.py"
 [ -z "$THREAT_SCANNER" ] && [ -f tools/threat_scan.py ] && THREAT_SCANNER="tools/threat_scan.py"
