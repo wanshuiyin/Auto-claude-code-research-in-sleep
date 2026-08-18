@@ -43,8 +43,8 @@ unavailable, the final report is `BLOCKED`; do not silently continue without a
 state record.
 
 For a new run, derive `<run_id>` from the direction slug and date, then start
-this ordered state record with `--executor codex-gpt-5.6-sol
---provisional-advances`:
+this ordered state record with `--executor <actual-Codex-model>
+--provisional-advances` (for example, `codex-gpt-5.6-sol`):
 
 ```text
 research-lit,idea-creator,novelty-check,research-review,research-refine-pipeline

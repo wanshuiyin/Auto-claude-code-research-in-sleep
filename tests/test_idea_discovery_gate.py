@@ -446,6 +446,19 @@ def test_gate_blocks_artifact_outside_project_root():
         assert any("artifact escapes project root" in reason for reason in result.reasons)
 
 
+@pytest.mark.parametrize("artifact", ["idea-stage/IDEA_REPORT.md#", "idea-stage/IDEA_REPORT.md#   "])
+def test_gate_blocks_artifact_with_empty_anchor(artifact: str):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        _complete_run(root)
+        run_state.set_status(root, "idea-run", "research-lit", "done", artifact=artifact)
+
+        result = gate.run(root, "idea-run", "idea-stage/IDEA_REPORT.md")
+
+        assert result.verdict == "BLOCKED"
+        assert any("artifact anchor is empty" in reason for reason in result.reasons)
+
+
 def test_gate_never_grants_review_status(monkeypatch):
     # Doctrine: the gate records its verdict under gates.<name> and must not
     # confer phase-level acceptance — that belongs to each stage's own gate.
@@ -505,5 +518,6 @@ def test_idea_discovery_mirrors_require_the_evidence_gate():
 
     assert " accept . <run_id> novelty-check" in mainline
     assert " accept . <run_id> research-review" in mainline
+    assert "--executor <actual-Codex-model>" in codex
     assert "mark-provisional . <run_id> novelty-check" in codex
     assert "mark-provisional . <run_id> research-review" in codex

@@ -43,6 +43,8 @@ def _artifact_target(root: Path, artifact: str) -> tuple[Path, str | None]:
     path_text, separator, anchor = artifact.partition("#")
     if not path_text:
         raise ValueError("artifact path is empty")
+    if separator and not anchor.strip():
+        raise ValueError(f"artifact anchor is empty: {artifact}")
     candidate = (root / path_text).resolve()
     try:
         candidate.relative_to(root.resolve())
