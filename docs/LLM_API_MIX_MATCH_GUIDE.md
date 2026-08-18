@@ -108,10 +108,34 @@
 
 ### 常用审查器提供商
 
-| 提供商 | LLM_BASE_URL | LLM_MODEL |
-|--------|--------------|-----------|
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| MiniMax | `https://api.minimax.io/v1` | `MiniMax-M3` |
+| 提供商 | LLM_BASE_URL | LLM_MODEL | 附加设置 |
+|--------|--------------|-----------|----------|
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` | - |
+| MiniMax | `https://api.minimax.io/v1` | `MiniMax-M3` | - |
+| Atlas Cloud | `https://api.atlascloud.ai/v1` | `deepseek-ai/deepseek-v4-pro` | `LLM_RETRY_ON_504=false` |
+
+Atlas Cloud 使用同一个 OpenAI-compatible Chat Completions 协议。对于可能产生计费的
+POST 请求，请关闭 504 自动重试，避免在网关超时后重复提交：
+
+```json
+{
+  "mcpServers": {
+    "llm-chat": {
+      "command": "/usr/bin/python3",
+      "args": ["/Users/yourname/.claude/mcp-servers/llm-chat/server.py"],
+      "env": {
+        "LLM_API_KEY": "your-atlascloud-api-key",
+        "LLM_BASE_URL": "https://api.atlascloud.ai/v1",
+        "LLM_MODEL": "deepseek-ai/deepseek-v4-pro",
+        "LLM_FALLBACK_MODEL": "deepseek-ai/deepseek-v4-pro",
+        "LLM_RETRY_ON_504": "false"
+      }
+    }
+  }
+}
+```
+
+`LLM_RETRY_ON_504` 默认为 `true`，因此现有配置的重试与 fallback 行为保持不变。
 
 ---
 

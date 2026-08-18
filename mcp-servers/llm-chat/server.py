@@ -6,6 +6,7 @@ Environment Variables:
     LLM_BASE_URL        - API base URL (default: https://api.openai.com/v1)
     LLM_MODEL           - Model name (default: gpt-4o)
     LLM_FALLBACK_MODEL  - Fallback model on 504 timeout (default: gpt-4o)
+    LLM_RETRY_ON_504    - Retry POST requests after 504 responses (default: true)
     LLM_SERVER_NAME     - Server name for MCP (default: llm-chat)
 
 Supported Providers (examples):
@@ -13,6 +14,7 @@ Supported Providers (examples):
     DeepSeek:    LLM_BASE_URL=https://api.deepseek.com/v1 LLM_MODEL=deepseek-chat
     Kimi:        LLM_BASE_URL=https://api.moonshot.cn/v1 LLM_MODEL=moonshot-v1-32k
     MiniMax:     LLM_BASE_URL=https://api.minimax.io/v1 LLM_MODEL=MiniMax-M3
+    Atlas Cloud: LLM_BASE_URL=https://api.atlascloud.ai/v1 LLM_MODEL=deepseek-ai/deepseek-v4-pro
 """
 
 import datetime
@@ -48,6 +50,9 @@ API_KEY = os.environ.get("LLM_API_KEY", "")
 BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
 DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", "gpt-4o")
+RETRY_ON_504 = os.environ.get("LLM_RETRY_ON_504", "true").lower() not in {
+    "0", "false", "no", "off"
+}
 SERVER_NAME = os.environ.get("LLM_SERVER_NAME", "llm-chat")
 
 # Debug logging
@@ -72,6 +77,7 @@ debug_log(f"=== {SERVER_NAME} MCP Server Starting (v2.1) ===")
 debug_log(f"BASE_URL: {BASE_URL}")
 debug_log(f"MODEL: {DEFAULT_MODEL}")
 debug_log(f"FALLBACK_MODEL: {FALLBACK_MODEL}")
+debug_log(f"RETRY_ON_504: {RETRY_ON_504}")
 debug_log(f"API_KEY set: {bool(API_KEY)}")
 
 _use_ndjson = False
@@ -102,8 +108,10 @@ def call_llm(messages, model=None):
         "Authorization": f"Bearer {API_KEY}"
     }
 
-    # Try: original model → retry same model → fallback model
-    for attempt in range(3):
+    max_attempts = 3 if RETRY_ON_504 else 1
+
+    # When enabled: original model → retry same model → fallback model.
+    for attempt in range(max_attempts):
         current_model = use_model if attempt < 2 else FALLBACK_MODEL
         payload = {
             "model": current_model,
@@ -119,7 +127,7 @@ def call_llm(messages, model=None):
 
                 if response.status_code == 504:
                     debug_log(f"504 Gateway Timeout on attempt {attempt + 1} with model {current_model}")
-                    if attempt < 2:
+                    if attempt < max_attempts - 1:
                         continue  # retry or fallback
 
                 if response.status_code != 200:

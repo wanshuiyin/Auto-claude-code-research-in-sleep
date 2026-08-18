@@ -303,6 +303,28 @@ class TestCallLlm504Retry(unittest.TestCase):
         third_call_payload = mock_client.post.call_args_list[2][1]["json"]
         self.assertEqual(third_call_payload["model"], "fallback-model")
 
+    @patch("tests._llm_chat_helpers.LLM_API_KEY", "test-key")
+    @patch("tests._llm_chat_helpers.RETRY_ON_504", False)
+    @patch("httpx.Client")
+    def test_retry_can_be_disabled_for_non_idempotent_post(self, mock_client_cls):
+        """A 504 should return immediately when POST retries are disabled."""
+        resp_504 = MagicMock()
+        resp_504.status_code = 504
+        resp_504.text = "Gateway Timeout"
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = resp_504
+        mock_client_cls.return_value = mock_client
+
+        from tests._llm_chat_helpers import call_llm
+        content, error = call_llm([{"role": "user", "content": "test"}])
+
+        self.assertIsNone(content)
+        self.assertIn("504", error)
+        self.assertEqual(mock_client.post.call_count, 1)
+
 
 class TestToolCallFullFlow(unittest.TestCase):
     """Test the complete tools/call path through handle_request."""

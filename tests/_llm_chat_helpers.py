@@ -11,6 +11,9 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
 DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
 FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", "gpt-4o")
+RETRY_ON_504 = os.environ.get("LLM_RETRY_ON_504", "true").lower() not in {
+    "0", "false", "no", "off"
+}
 SERVER_NAME = os.environ.get("LLM_SERVER_NAME", "llm-chat")
 
 DEBUG_LOG = os.path.join(tempfile.gettempdir(), f"{SERVER_NAME}-mcp-debug.log")
@@ -36,8 +39,10 @@ def call_llm(messages, model=None):
         "Authorization": f"Bearer {LLM_API_KEY}"
     }
 
-    # Try: original model → retry same model → fallback model
-    for attempt in range(3):
+    max_attempts = 3 if RETRY_ON_504 else 1
+
+    # When enabled: original model → retry same model → fallback model.
+    for attempt in range(max_attempts):
         current_model = use_model if attempt < 2 else FALLBACK_MODEL
         payload = {
             "model": current_model,
@@ -50,7 +55,7 @@ def call_llm(messages, model=None):
                 response = client.post(url, headers=headers, json=payload)
 
                 if response.status_code == 504:
-                    if attempt < 2:
+                    if attempt < max_attempts - 1:
                         continue  # retry or fallback
 
                 if response.status_code != 200:
