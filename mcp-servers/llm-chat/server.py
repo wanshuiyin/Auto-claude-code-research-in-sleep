@@ -25,6 +25,7 @@ import re
 import sys
 import tempfile
 import uuid
+from pathlib import Path
 
 import httpx
 
@@ -292,6 +293,37 @@ def _tool_error(request_id, message):
     }
 
 
+def _read_review_files(paths):
+    """Read explicit local text artifacts for the HTTP reviewer transport.
+
+    This is only reachable through the opt-in review tools. Callers must pass
+    primary artifacts, not executor summaries, to preserve reviewer independence.
+    """
+    if paths is None:
+        return ""
+    if not isinstance(paths, list):
+        raise ValueError("files must be an array of file paths")
+
+    sections = []
+    for raw_path in paths:
+        path = Path(str(raw_path)).expanduser()
+        if not path.is_file():
+            raise ValueError(f"review file not found or not a regular file: {path}")
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            raise ValueError(f"cannot read review file {path}: {exc}") from exc
+        sections.append(
+            f"\n\n--- ARIS PRIMARY ARTIFACT: {path} ---\n{text}"
+            f"\n--- END ARIS PRIMARY ARTIFACT: {path} ---"
+        )
+    return "".join(sections)
+
+
+def _review_user_content(prompt, files):
+    return prompt + _read_review_files(files)
+
+
 def _review_messages(history, prompt, system=""):
     messages = []
     if system:
@@ -306,6 +338,7 @@ def _handle_review(arguments, request_id):
     executor_model = str(arguments.get("executor_model", "")).strip()
     model = str(arguments.get("model", DEFAULT_MODEL)).strip() or DEFAULT_MODEL
     system = str(arguments.get("system", "")).strip()
+    files = arguments.get("files", [])
 
     if not prompt:
         return _tool_error(request_id, "prompt is required")
@@ -315,7 +348,12 @@ def _handle_review(arguments, request_id):
             "executor_model is required for cross-family review",
         )
 
-    messages = _review_messages([], prompt, system)
+    try:
+        user_content = _review_user_content(prompt, files)
+    except ValueError as exc:
+        return _tool_error(request_id, str(exc))
+
+    messages = _review_messages([], user_content, system)
     content, error, actual_model = _call_llm_detailed(messages, model)
     if error:
         return _tool_error(request_id, error)
@@ -329,7 +367,7 @@ def _handle_review(arguments, request_id):
     thread_id = uuid.uuid4().hex[:12]
     _review_threads[thread_id] = {
         "messages": [
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": user_content},
             {"role": "assistant", "content": content},
         ],
         "model": model,
@@ -366,14 +404,20 @@ def _handle_review_reply(arguments, request_id):
     ).strip()
     model = str(arguments.get("model", thread["model"])).strip() or thread["model"]
     system = str(arguments.get("system", thread["system"])).strip()
+    files = arguments.get("files", [])
     if not executor_model:
         return _tool_error(
             request_id,
             "executor_model is required for cross-family review",
         )
 
+    try:
+        user_content = _review_user_content(prompt, files)
+    except ValueError as exc:
+        return _tool_error(request_id, str(exc))
+
     history = list(thread["messages"])
-    messages = _review_messages(history, prompt, system)
+    messages = _review_messages(history, user_content, system)
     content, error, actual_model = _call_llm_detailed(messages, model)
     if error:
         return _tool_error(request_id, error)
@@ -386,7 +430,7 @@ def _handle_review_reply(arguments, request_id):
 
     thread["messages"].extend(
         [
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": user_content},
             {"role": "assistant", "content": content},
         ]
     )
@@ -452,6 +496,14 @@ def _review_tool_definitions():
         "system": {
             "type": "string",
             "description": "Optional reviewer system prompt",
+        },
+        "files": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Local primary-artifact file paths to read verbatim and send "
+                "to the configured HTTP reviewer endpoint"
+            ),
         },
     }
     return [
