@@ -279,6 +279,41 @@ def test_review_rejects_provider_reported_same_family_alias():
     assert "different model family" in parse_tool_payload(resp)["error"]
 
 
+def test_review_sends_primary_files_verbatim(tmp_path):
+    server = load_server()
+    server.REVIEW_FALLBACK_ENABLED = True
+    server.API_KEY = "test-key"
+
+    artifact = tmp_path / "paper.md"
+    artifact.write_text("PRIMARY_EVIDENCE=42\n", encoding="utf-8")
+    response = mock_http_response("Reviewed evidence", "gemini-2.5-pro")
+    client = mock_client_with(response)
+
+    with patch.object(server.httpx, "Client", return_value=client):
+        resp = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 10,
+                "method": "tools/call",
+                "params": {
+                    "name": "review",
+                    "arguments": {
+                        "prompt": "Review the attached primary artifact.",
+                        "executor_model": "claude-sonnet-4-5",
+                        "model": "gemini-2.5-pro",
+                        "files": [str(artifact)],
+                    },
+                },
+            }
+        )
+
+    assert not resp["result"].get("isError", False)
+    api_payload = client.post.call_args.kwargs["json"]
+    user_content = api_payload["messages"][-1]["content"]
+    assert "PRIMARY_EVIDENCE=42" in user_content
+    assert f"ARIS PRIMARY ARTIFACT: {artifact}" in user_content
+
+
 def test_disabled_review_call_fails_with_opt_in_instruction():
     server = load_server()
     server.REVIEW_FALLBACK_ENABLED = False
