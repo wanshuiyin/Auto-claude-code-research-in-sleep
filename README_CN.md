@@ -1533,7 +1533,7 @@ Skills 都是纯 Markdown,fork 了随便改。各 skill 的环境变量(GPU 目�
 
 ![GitHub stars](https://img.shields.io/github/stars/wanshuiyin/Auto-claude-code-research-in-sleep?style=social)
 
-[![Star History Chart](https://api.star-history.com/svg?repos=wanshuiyin/Auto-claude-code-research-in-sleep&type=Date&v=20260328)](https://star-history.com/#wanshuiyin/Auto-claude-code-research-in-sleep&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=wanshuiyin/Auto-claude-code-research-in-sleep&type=Date&v=20260328)](https://star-history.dera.page/#wanshuiyin/Auto-claude-code-research-in-sleep&type=Date)
 
 <a id="acknowledgements"></a>
 
