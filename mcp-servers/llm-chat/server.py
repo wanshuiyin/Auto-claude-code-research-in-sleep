@@ -308,7 +308,8 @@ def _handle_review(arguments, request_id):
         "reviewer_family": model_family(actual_model),
         "executor_model": executor_model,
         "executor_family": model_family(executor_model),
-        "independence_verified": True,
+        "family_relation": "different",
+        "independence_verified": "unverified",
     })
 
 def _handle_review_reply(arguments, request_id):
@@ -326,6 +327,8 @@ def _handle_review_reply(arguments, request_id):
     if executor_model != thread["executor_model"]:
         return _tool_error(request_id, "executor_model cannot change within a review thread")
     model = str(arguments.get("model", thread["model"])).strip() or thread["model"]
+    if model != thread["model"]:
+        return _tool_error(request_id, "reviewer model cannot change within a review thread")
     system = str(arguments.get("system", thread["system"])).strip()
     files = arguments.get("files", [])
 
@@ -356,7 +359,8 @@ def _handle_review_reply(arguments, request_id):
         "reviewer_family": model_family(actual_model),
         "executor_model": executor_model,
         "executor_family": model_family(executor_model),
-        "independence_verified": True,
+        "family_relation": "different",
+        "independence_verified": "unverified",
     })
 
 def _review_tool_definitions():
