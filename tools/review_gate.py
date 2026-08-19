@@ -21,9 +21,12 @@ TOOLS_DIR = str(Path(__file__).resolve().parent)
 if TOOLS_DIR not in sys.path:
     sys.path.insert(0, TOOLS_DIR)
 
-KNOWN_FAMILIES = {"openai", "anthropic", "google", "deepseek", "moonshot", "qwen"}
+KNOWN_FAMILIES = {
+    "openai", "anthropic", "google", "deepseek", "moonshot", "qwen",
+    "zhipu", "minimax", "xiaomi", "bytedance", "xai", "meta", "mistral",
+}
 POSITIVE_VERDICTS = {"ready", "almost"}
-VALID_BACKENDS = {"codex", "manual", "copilot", "copilot-native", "oracle-pro", "agy"}
+VALID_BACKENDS = {"codex", "manual", "copilot", "copilot-native", "oracle-pro", "agy", "llm-chat"}
 VALID_VERDICTS = POSITIVE_VERDICTS | {"not ready"}
 
 
@@ -69,6 +72,20 @@ def derive_model_family(model: str) -> str:
         families.add("moonshot")
     if re.search(r"(^|[^a-z0-9])(qwen|tongyi)[0-9.]*([^a-z0-9]|$)", name):
         families.add("qwen")
+    if re.search(r"(^|[^a-z0-9])(glm|zhipu)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("zhipu")
+    if re.search(r"(^|[^a-z0-9])(minimax|abab)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("minimax")
+    if re.search(r"(^|[^a-z0-9])(mimo|xiaomi)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("xiaomi")
+    if re.search(r"(^|[^a-z0-9])(doubao|bytedance|volcengine)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("bytedance")
+    if re.search(r"(^|[^a-z0-9])(grok)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("xai")
+    if re.search(r"(^|[^a-z0-9])(llama)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("meta")
+    if re.search(r"(^|[^a-z0-9])(mistral|mixtral)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("mistral")
     return next(iter(families)) if len(families) == 1 else "unknown"
 
 
@@ -311,6 +328,39 @@ def evaluate_transition(
             requires_external_acquittal,
             "unverified",
             "positive threshold not met",
+        )
+
+    if backend == "llm-chat":
+        if requires_external_acquittal:
+            return Transition(
+                "review_unavailable",
+                None,
+                True,
+                "unverified",
+                "Copilot finalizer state permits only codex or manual",
+            )
+        if executor not in KNOWN_FAMILIES or reviewer not in KNOWN_FAMILIES:
+            return Transition(
+                "review_unavailable",
+                None,
+                False,
+                "unverified",
+                "HTTP reviewer family relation cannot be derived",
+            )
+        if executor == reviewer:
+            return Transition(
+                "review_unavailable",
+                None,
+                False,
+                "failed",
+                "HTTP reviewer is same-family as the declared executor model",
+            )
+        return Transition(
+            "stop",
+            None,
+            False,
+            "caller_declared",
+            "HTTP reviewer returned a positive cross-family verdict; executor identity remains caller-declared",
         )
 
     if backend in {"codex", "oracle-pro", "agy"} and not requires_external_acquittal:
