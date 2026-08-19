@@ -64,6 +64,8 @@ The user must explicitly configure the `llm-chat` server with
 `LLM_REVIEW_FALLBACK_ENABLED=true`; only then does it expose
 `mcp__llm-chat__review` and `mcp__llm-chat__review_reply`. The legacy
 `mcp__llm-chat__chat` tool by itself is **not** a verdict-bearing fallback.
+This transport fallback applies to Codex **MCP** review calls; Codex-exec
+nightmare-mode behavior is unchanged.
 
 #### Safe switch boundary
 
@@ -110,7 +112,8 @@ endpoint; this is necessary because a remote OpenAI-compatible API cannot read
 local Linux paths. Pass primary artifacts, not executor-written summaries, per
 `reviewer-independence.md`.
 
-For round 2+ after the HTTP fallback owns the reviewer thread, use:
+For every follow-up after the HTTP fallback owns the reviewer thread — including
+round 2+ and a hard-mode rebuttal ruling in the same round — use:
 
 ```
 mcp__llm-chat__review_reply:
@@ -122,6 +125,21 @@ mcp__llm-chat__review_reply:
 
 `review_reply` carries the prior user/reviewer exchanges in the MCP server, so
 multi-round skills do not silently lose continuity when the fallback activates.
+
+For `/auto-review-loop`, a safe HTTP fallback means the HTTP reviewer is the
+backend that actually ran the current round. **Before the HTTP call**, replace
+the current-round snapshot as well as the forward-looking backend:
+
+```
+REVIEWER_BACKEND=llm-chat
+round_backend=llm-chat
+round_requires_external_acquittal=false
+```
+
+Then pass the returned `reviewer_model` (not merely the requested alias) to
+`review_gate.py --round-backend llm-chat`. The fallback is not a Copilot
+compatibility finalizer and must not inherit a stale external-acquittal
+obligation from some unrelated round.
 
 The HTTP reviewer transport fails closed unless it can derive known, different
 families for `executor_model` and the **actual reviewer model**. The response
@@ -274,7 +292,7 @@ If `— reviewer: agy`:
 - `— reviewer: agy` ONLY takes effect when explicitly passed.
 - **Cross-model family holds by construction.** The `agy` backend is fail-closed on ARIS's invariant: it recovers the *actual* Gemini-family model id from the current invocation's Antigravity transcript, **refuses** to return a verdict if the routed model is non-Gemini (no `"agy-cli"` placeholder), and binds the recovered transcript to *this* call via a **user-event nonce** (a model echo can't spoof the binding). So when the executor is Claude, `— reviewer: agy` (Gemini) satisfies the cross-model gate.
 - Reviewer independence still applies — pass prompt context only (the `tools` arg is accepted for compatibility but ignored).
-- `effort` and `difficulty` are orthogonal — they don't change reviewer backend.
+- `effort` and `difficulty` are orthogonal — they don't change the reviewer backend.
 
 ### Install
 
@@ -309,7 +327,7 @@ If `— reviewer: manual`:
           config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
         For round 2+ in multi-round skills:
           Use mcp__manual_review__review_reply with:
-            threadId: [saved manual-review threadId]
+            threadId: [saved from prior call]
             prompt: [follow-up prompt]
             config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
     → If NOT available:
@@ -578,6 +596,7 @@ The selected reviewer model family MUST differ from the family derived from the 
 Unlike the previous broken model-inheritance approach, the router reads the selected profile's `model:` field and passes that same value through the subprocess-level `--model` flag. This outer pin is mandatory because Copilot CLI may ignore a custom agent's model when the session model is Auto.
 
 **Family detection requires `--executor-model`:**
+
 The skill MUST receive `--executor-model` as a parameter. From it, derive `executor_family`:
 - Model names containing `gpt`, `o1`, `o3`, `o4`, `chatgpt` → `openai`
 - Model names containing `claude`, `sonnet`, `opus`, `haiku` → `anthropic`
