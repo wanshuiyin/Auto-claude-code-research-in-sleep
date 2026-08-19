@@ -16,6 +16,7 @@ def test_http_fallback_is_explicit_opt_in_and_pre_dispatch_only():
     assert "pre-dispatch-only" in ROUTING
     assert "mcp__llm-chat__review" in ROUTING
     assert "mcp__llm-chat__review_reply" in ROUTING
+    assert "Codex-exec\nnightmare-mode behavior is unchanged" in ROUTING
 
 
 def test_http_fallback_keeps_ambiguous_codex_failures_closed():
@@ -28,3 +29,15 @@ def test_http_fallback_requires_primary_artifacts_and_cross_family_identity():
     assert "Pass primary artifacts, not executor-written summaries" in ROUTING
     assert "actual reviewer model" in ROUTING
     assert "same-family identity is `REVIEW_UNAVAILABLE`" in ROUTING
+
+
+def test_http_fallback_preserves_multi_round_and_rebuttal_continuity():
+    assert "hard-mode rebuttal ruling in the same round" in ROUTING
+    assert "review_reply` carries the prior user/reviewer exchanges" in ROUTING
+
+
+def test_auto_review_loop_relabels_the_backend_that_actually_ran():
+    assert "REVIEWER_BACKEND=llm-chat" in ROUTING
+    assert "round_backend=llm-chat" in ROUTING
+    assert "round_requires_external_acquittal=false" in ROUTING
+    assert "review_gate.py --round-backend llm-chat" in ROUTING
