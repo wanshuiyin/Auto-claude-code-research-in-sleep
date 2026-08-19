@@ -95,7 +95,8 @@ def test_review_returns_identity_and_thread_for_cross_family_model():
     assert payload["reviewer_model"] == "gemini-2.5-pro"
     assert payload["reviewer_family"] == "google"
     assert payload["executor_family"] == "anthropic"
-    assert payload["independence_verified"] is True
+    assert payload["family_relation"] == "different"
+    assert payload["independence_verified"] == "unverified"
     assert payload["threadId"] in server._review_threads
 
 
@@ -202,6 +203,7 @@ def test_review_reply_preserves_thread_history_and_model():
     payload = parse_tool_payload(reply)
     assert payload["threadId"] == thread_id
     assert payload["content"] == "Round two"
+    assert payload["independence_verified"] == "unverified"
 
     second_payload = client.post.call_args_list[1].kwargs["json"]
     messages = second_payload["messages"]
@@ -211,6 +213,70 @@ def test_review_reply_preserves_thread_history_and_model():
         {"role": "user", "content": "Re-check the revision."},
     ]
     assert second_payload["model"] == "gemini-2.5-pro"
+
+
+def test_review_reply_rejects_identity_changes():
+    server = load_server()
+    server.REVIEW_FALLBACK_ENABLED = True
+    server.API_KEY = "test-key"
+
+    first = mock_http_response("Round one", "gemini-2.5-pro")
+    client = mock_client_with(first)
+
+    with patch.object(server.httpx, "Client", return_value=client):
+        initial = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 61,
+                "method": "tools/call",
+                "params": {
+                    "name": "review",
+                    "arguments": {
+                        "prompt": "Initial review.",
+                        "executor_model": "claude-opus-4-1",
+                        "model": "gemini-2.5-pro",
+                    },
+                },
+            }
+        )
+        thread_id = parse_tool_payload(initial)["threadId"]
+
+        changed_executor = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 62,
+                "method": "tools/call",
+                "params": {
+                    "name": "review_reply",
+                    "arguments": {
+                        "threadId": thread_id,
+                        "prompt": "Continue.",
+                        "executor_model": "gpt-5.5",
+                    },
+                },
+            }
+        )
+        changed_model = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 63,
+                "method": "tools/call",
+                "params": {
+                    "name": "review_reply",
+                    "arguments": {
+                        "threadId": thread_id,
+                        "prompt": "Continue.",
+                        "model": "gpt-5.5",
+                    },
+                },
+            }
+        )
+
+    assert changed_executor["result"]["isError"] is True
+    assert "executor_model cannot change" in parse_tool_payload(changed_executor)["error"]
+    assert changed_model["result"]["isError"] is True
+    assert "reviewer model cannot change" in parse_tool_payload(changed_model)["error"]
+    assert client.post.call_count == 1
 
 
 def test_review_reports_actual_internal_fallback_model_after_504s():
@@ -245,6 +311,7 @@ def test_review_reports_actual_internal_fallback_model_after_504s():
     payload = parse_tool_payload(resp)
     assert payload["reviewer_model"] == "gemini-2.5-pro"
     assert payload["reviewer_family"] == "google"
+    assert payload["independence_verified"] == "unverified"
     assert "Used fallback model gemini-2.5-pro" in payload["content"]
 
 
