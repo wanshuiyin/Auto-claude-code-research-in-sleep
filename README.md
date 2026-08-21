@@ -90,7 +90,7 @@ This overlay is **not** equivalent to the installed bundle: it cannot restore Co
 
 ## Known limits
 
-- **Tracks one Harness release.** DeepSeek Harness is a developer preview; this bundle is verified against `0.1.0-rc.8`. Every surface it uses survived rc.5 → rc.8 unchanged, but that is not a promise about the next one.
+- **Tracks one Harness release.** DeepSeek Harness is a developer preview; this bundle is verified against `0.1.1-rc.1`. Every surface it uses survived rc.5 → 0.1.1-rc.1 unchanged, but that is not a promise about the next one.
 - **No dsh packages are declared as npm dependencies.** In-box packages are host-provided and resolve from the Harness installation through the profile module fallback. The Harness's own rule keeps `@deepseek-ai/dsh-*` out of `dependencies`, and the packages version in lockstep with the CLI, so any range this bundle pinned would fight the version the user already has installed.
 - **`web_fetch` is off.** Stock dsh ships it disabled and this bundle does not enable it, which would mean depending on a provider package. Skills that reach the web use `web_search`, or `bash` with `curl`.
 - **Reviewer thread continuity is process-local.** A Harness restart, or any MCP reconnect that replaces the Codex child, loses saved `threadId`s. Rounds after that start fresh; `review-stage/REVIEWER_MEMORY.md` remains the durable record either way.

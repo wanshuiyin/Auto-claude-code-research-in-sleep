@@ -79,7 +79,7 @@ ARIS_REPO=/absolute/path/to/aris NODE_USE_ENV_PROXY=1 \
 
 ## 已知限制
 
-- **跟随某一个 Harness 版本。** DeepSeek Harness 处于技术预览；本 bundle 已针对 `0.1.0-rc.8` 验证。它用到的每一个接口面从 rc.5 到 rc.8 都未变，但这不构成对下一个版本的承诺。
+- **跟随某一个 Harness 版本。** DeepSeek Harness 处于技术预览；本 bundle 已针对 `0.1.1-rc.1` 验证。它用到的每一个接口面从 rc.5 到 0.1.1-rc.1 都未变，但这不构成对下一个版本的承诺。
 - **不把任何 dsh 包声明为 npm 依赖。** 内置包由宿主提供，通过 profile 的模块回退从 Harness 安装目录解析。Harness 自己的规约就要求 `@deepseek-ai/dsh-*` 不进 `dependencies`；而且这些子包与 CLI **锁步发版**，本 bundle 无论钉哪个范围，都会和用户已装的版本打架。
 - **`web_fetch` 关闭。** 原版 dsh 默认关闭它，本 bundle 也不打开——打开就意味着依赖一个 provider 包。需要联网的技能改用 `web_search`，或用 `bash` 跑 `curl`。
 - **审稿线程连续性是进程内的。** Harness 重启、或任何一次 MCP 重连替换了 Codex 子进程，已保存的 `threadId` 都会失效，之后的轮次从新线程开始；无论如何 `review-stage/REVIEWER_MEMORY.md` 都是持久记录。
