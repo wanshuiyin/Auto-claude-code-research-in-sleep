@@ -33,6 +33,11 @@ def _validate_limit(limit: int) -> None:
         raise ValueError(f"max results must be between 1 and {MAX_RESULTS}")
 
 
+def _validate_query(query: str) -> None:
+    if not query.strip():
+        raise ValueError("query is required")
+
+
 def _request(query: str, limit: int, query_type: str) -> Request:
     params = urlencode({"q": query, "limit": limit, "queryType": query_type})
     return Request(
@@ -104,6 +109,7 @@ def search(
     opener: Opener = urlopen,
 ) -> dict[str, Any]:
     """Search one page and return stable fields for discovery review."""
+    _validate_query(query)
     _validate_limit(max_results)
     request = _request(query, max_results, query_type)
     try:
@@ -116,7 +122,7 @@ def search(
 
     tweets = [
         _normalize_tweet(tweet)
-        for tweet in payload["tweets"]
+        for tweet in payload["tweets"][:max_results]
         if isinstance(tweet, dict)
     ]
     return {

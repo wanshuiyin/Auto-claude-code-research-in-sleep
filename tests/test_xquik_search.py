@@ -64,6 +64,14 @@ def test_search_rejects_unbounded_limits(monkeypatch, limit):
         xquik.search("query", limit)
 
 
+def test_search_rejects_empty_query(monkeypatch):
+    xquik = load_module()
+    monkeypatch.setenv("XQUIK_API_KEY", "test-secret")
+
+    with pytest.raises(ValueError, match="query is required"):
+        xquik.search("  ")
+
+
 def test_search_requires_api_key(monkeypatch):
     xquik = load_module()
     monkeypatch.delenv("XQUIK_API_KEY", raising=False)
@@ -120,6 +128,21 @@ def test_search_normalizes_public_discussion_fields(monkeypatch):
             }
         ],
     }
+
+
+def test_search_caps_unexpected_extra_results(monkeypatch):
+    xquik = load_module()
+    monkeypatch.setenv("XQUIK_API_KEY", "test-secret")
+    payload = {
+        "tweets": [{"id": str(index), "text": "post"} for index in range(5)],
+        "has_next_page": False,
+        "next_cursor": "",
+    }
+
+    result = xquik.search("query", 2, opener=lambda *_args, **_kwargs: Response(payload))
+
+    assert result["returned"] == 2
+    assert [tweet["id"] for tweet in result["tweets"]] == ["0", "1"]
 
 
 def test_search_rejects_malformed_response(monkeypatch):
