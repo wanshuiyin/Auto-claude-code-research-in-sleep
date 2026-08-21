@@ -154,10 +154,6 @@ def check_inventory() -> list[str]:
     expected_count = len(main)
     count_checks = [
         (CATALOG, catalog_text, r"\*\*(?P<count>\d+) skills\*\*"),
-        (README, readme, r"📊\s+\*\*(?P<count>\d+) composable skills\*\*"),
-        (README, readme, r"ARIS ships \*\*(?P<count>\d+)\+ skills\*\*"),
-        (README_CN, readme_cn, r"📊\s+\*\*(?P<count>\d+) 个可组合 skill\*\*"),
-        (README_CN, readme_cn, r"ARIS 现有 \*\*(?P<count>\d+)\+ 个 skill\*\*"),
         (AGENT_GUIDE, agent_guide, r"Full catalog.*?\*\*(?P<count>\d+) skills\*\*"),
         (ARIS_INTRO, aris_intro, r"collection of \*\*(?P<count>\d+) composable Claude Code skills\*\*"),
         (ARIS_INTRO, aris_intro, r"## The (?P<count>\d+) Skills"),
@@ -179,19 +175,9 @@ def check_inventory() -> list[str]:
             if forbidden in text:
                 failures.append(f"{skill_file.relative_to(REPO_ROOT)} contains forbidden reviewer string: {forbidden}")
 
-    # README parity (EN ↔ CN) — Phase A invariant from #240
-    en_anchors = readme_anchors(readme)
-    cn_anchors = readme_anchors(readme_cn)
-    for required in REQUIRED_README_ANCHORS:
-        if required not in en_anchors:
-            failures.append(f"README.md missing required anchor: <a id=\"{required}\"></a>")
-        if required not in cn_anchors:
-            failures.append(f"README_CN.md missing required anchor: <a id=\"{required}\"></a>")
-
-    en_h2 = numbered_h2_count(readme)
-    cn_h2 = numbered_h2_count(readme_cn)
-    require(en_h2 == 16, f"README.md has {en_h2} numbered H2 sections; expected 16 (Phase A)", failures)
-    require(cn_h2 == 16, f"README_CN.md has {cn_h2} numbered H2 sections; expected 16 (Phase A)", failures)
+    # Root READMEs on this distribution branch are the dsh ones and carry no
+    # skill counts, anchors, or numbered sections; the full-ARIS README checks
+    # live on main.
 
     # Agent-grant hygiene (WB2): `Agent` in allowed-tools is the Tier-2
     # fan-out capability gate. Per shared-references/fan-out-pattern.md it is
