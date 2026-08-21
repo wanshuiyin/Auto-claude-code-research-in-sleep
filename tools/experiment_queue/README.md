@@ -9,7 +9,7 @@ Scheduler and manifest builder for `/experiment-queue` skill.
 
 ## Install on Remote
 
-The `/experiment-queue` skill auto-installs these on the SSH host under `~/.aris_queue/` per invocation (idempotent). The skill resolves the local helpers via a fallback chain (`.aris/tools/experiment_queue/` → `tools/experiment_queue/` → `$ARIS_REPO/tools/experiment_queue/`) so it works from any project layout.
+The `/experiment-queue` skill auto-installs these on the SSH host under `~/.aris_queue/` per invocation (idempotent). The skill resolves the local helpers via a fallback chain (`.aris/tools/experiment_queue/` → `tools/experiment_queue/` → `$ARIS_REPO/tools/experiment_queue/` → same, resolved via the global pointer file `~/.aris/repo`, #366) so it works from any project layout.
 
 For manual install (run from anywhere; `$ARIS_REPO` points at the cloned ARIS repo root):
 

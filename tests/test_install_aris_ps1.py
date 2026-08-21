@@ -138,7 +138,10 @@ def test_install_aris_ps1_codex_apply_reconcile_and_uninstall(tmp_path: Path) ->
     (repo / "skills" / "skills-codex" / "alpha").rmdir()
     make_skill(repo / "skills" / "skills-codex" / "gamma", "# codex gamma\n")
 
-    run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-Reconcile"])
+    # gamma is a brand-new upstream skill; selective-install parity (#366) now
+    # requires an explicit -AddNew (or interactive y/N) to pick it up on
+    # reconcile instead of silently auto-installing every new upstream skill.
+    run_ps([str(project), "-Platform", "codex", "-ArisRepo", str(repo), "-Reconcile", "-AddNew"])
 
     assert not path_item_exists(project / ".agents" / "skills" / "alpha")
     assert junction_target(project / ".agents" / "skills" / "gamma") == repo / "skills" / "skills-codex" / "gamma"

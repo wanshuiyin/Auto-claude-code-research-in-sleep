@@ -144,7 +144,13 @@ Before searching online, check if the user already has relevant papers locally:
 
 5. **Build local knowledge base**: Compile summaries into a "papers you already have" section. This becomes the starting point — external search fills the gaps.
 
-> 📚 If no local papers are found, skip to Step 1. If the user has a comprehensive local collection, the external search can be more targeted (focus on what's missing).
+> 📚 If the user has a comprehensive local collection, the external search can be more targeted (focus on what's missing).
+>
+> ⚠️ **If all three PAPER_LIBRARY paths miss, say so before moving on** — do not skip silently. A user whose PDFs live in a reference manager (Zotero, Mendeley, ...) otherwise assumes `— sources: all` covered them. Emit:
+>
+> `WARN: local contributed nothing — no PDFs found in papers/, literature/, or a configured paper library. To include yours, add a "## Paper Library" heading to AGENTS.md followed by the directory path.`
+>
+> Then continue to Step 1.
 
 ### Step 1: Search (external)
 - Use WebSearch to find recent papers on the topic

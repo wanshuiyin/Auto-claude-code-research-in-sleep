@@ -8,6 +8,7 @@ Covers:
            a different target / as a non-symlink path
   uninstall: removes the managed symlink
   uninstall: preserves non-managed `.aris/tools` (different target / real dir)
+  agent profiles: ownership sidecar removes only links this installer created
   dry-run: prints planned action without writing anything
 """
 import os
@@ -157,6 +158,38 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertTrue(link.is_symlink(), "user-created symlink must be preserved")
         self.assertEqual(os.readlink(link), str(elsewhere))
+
+    def test_uninstall_removes_installer_created_agent_profiles(self):
+        self._run()
+        agent = self.project / ".github" / "agents" / "aris-reviewer-openai.agent.md"
+        ownership = self.project / ".aris" / "installed-agent-profiles.txt"
+        self.assertTrue(agent.is_symlink())
+        self.assertIn(agent.name, ownership.read_text().splitlines())
+
+        result = self._run("--uninstall")
+
+        self.assertEqual(result.returncode, 0, msg=result.stderr)
+        self.assertFalse(agent.exists())
+        self.assertFalse(agent.is_symlink())
+
+    def test_uninstall_preserves_identical_preexisting_agent_symlink(self):
+        agents_dir = self.project / ".github" / "agents"
+        agents_dir.mkdir(parents=True)
+        agent = agents_dir / "aris-reviewer-openai.agent.md"
+        expected = REPO_ROOT / ".github" / "agents" / agent.name
+        os.symlink(str(expected), str(agent))
+
+        install = self._run()
+        self.assertEqual(install.returncode, 0, msg=install.stderr)
+        ownership = self.project / ".aris" / "installed-agent-profiles.txt"
+        if ownership.exists():
+            self.assertNotIn(agent.name, ownership.read_text().splitlines())
+
+        uninstall = self._run("--uninstall")
+
+        self.assertEqual(uninstall.returncode, 0, msg=uninstall.stderr)
+        self.assertTrue(agent.is_symlink(), "pre-existing exact link is user-owned")
+        self.assertEqual(os.readlink(agent), str(expected))
 
 
 if __name__ == "__main__":

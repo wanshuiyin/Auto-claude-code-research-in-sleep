@@ -26,7 +26,7 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 
 | 常量 | 默认值 | 说明 | 透传 |
 |------|--------|------|:---:|
-| `AUTO_PROCEED` | true | 用户不回复时自动带着最优方案继续 | → `idea-discovery` |
+| `AUTO_PROCEED` | true | 每个选择检查点报告最优方案并在同一轮继续；设为 `false` 时请求明确确认 | → `idea-discovery` → `AUTO_WRITE=true` 时的 `paper-writing` |
 | `ARXIV_DOWNLOAD` | false | 搜索后自动下载最相关的 arXiv PDF | → `idea-discovery` → `research-lit` |
 | `HUMAN_CHECKPOINT` | false | 设为 `true` 时每轮 review 后暂停等待确认 | → `auto-review-loop` |
 | `WANDB` | false | 自动给实验脚本加 W&B 日志 | → `experiment-bridge` → `run-experiment` |
@@ -69,10 +69,14 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 | `PILOT_TIMEOUT_HOURS` | 3h | 硬超时——强制终止，收集部分结果 | — |
 | `MAX_PILOT_IDEAS` | 3 | 最多并行 pilot 几个 idea | — |
 | `MAX_TOTAL_GPU_HOURS` | 8h | 所有 pilot 的总 GPU 预算 | — |
-| `AUTO_PROCEED` | true | 用户不回复时自动带着最优方案继续。设 `false` 则每步都等确认 | — |
+| `AUTO_PROCEED` | true | 报告最优方案并在同一轮继续；设为 `false` 时请求明确确认 | — |
 | `ARXIV_DOWNLOAD` | false | 搜索后自动下载最相关的 arXiv PDF | → `research-lit` |
 
 </details>
+
+`AUTO_PROCEED=true` 只作用于它控制的选择检查点。显式的用户门禁（例如
+飞书 interactive 审批、缺少 venue、或必须由用户补充的手动画图）仍会阻塞等待。
+流程不会依赖“静默超时”来在一轮结束后恢复。
 
 ### 实验桥接（`experiment-bridge`）
 
@@ -147,5 +151,4 @@ Skills 就是普通的 Markdown 文件，fork 后随意改：
 | `REVIEWER_MODEL` | `gpt-5.6-sol` | Codex MCP 调用的 OpenAI 模型。其他可选：`gpt-5.3-codex`、`gpt-5.2-codex`、`o3`。完整列表见 [supported models](https://developers.openai.com/codex/models/) |
 
 </details>
-
 

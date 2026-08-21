@@ -3,10 +3,12 @@
 
 A human-in-the-loop reviewer bridge: when the pipeline needs cross-model
 review, this server opens a browser page (or writes a file on headless Linux)
-where the user can copy the prompt to any model and paste the response back.
+where the user can copy the prompt to a different-family model and paste the
+response back.
 
-Zero API cost. Works with any text-capable model (ChatGPT web, DeepSeek,
-Kimi, local models, etc.).
+Zero API cost. The reviewer must be a model this server can classify by family
+(OpenAI, Anthropic, Google, DeepSeek, Moonshot/Kimi, Qwen) — an unclassifiable
+name cannot be shown to differ from the executor's, so it cannot acquit.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from __future__ import annotations
 import http.server
 import json
 import os
+import re
 import socketserver
 import sys
 import threading
@@ -74,6 +77,56 @@ def debug_log(message: str) -> None:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def model_family(model: str) -> str:
+    """Derive a known provider family from a model identity, failing closed."""
+    name = (model or "").strip().lower()
+    families: set[str] = set()
+    if re.search(r"(^|[^a-z0-9])(gpt|chatgpt|codex|oracle|o1|o3|o4)([^a-z0-9]|$)", name):
+        families.add("openai")
+    if re.search(r"(^|[^a-z0-9])(claude|sonnet|opus|haiku|anthropic)([^a-z0-9]|$)", name):
+        families.add("anthropic")
+    if re.search(r"(^|[^a-z0-9])(gemini|google)([^a-z0-9]|$)", name):
+        families.add("google")
+    # The models MANUAL_REVIEW_GUIDE.md actually recommends to non-GPT users.
+    # [0-9.]* so versioned names (qwen3-max, qwen2.5-72b) still match.
+    if re.search(r"(^|[^a-z0-9])(deepseek)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("deepseek")
+    if re.search(r"(^|[^a-z0-9])(kimi|moonshot)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("moonshot")
+    if re.search(r"(^|[^a-z0-9])(qwen|tongyi)[0-9.]*([^a-z0-9]|$)", name):
+        families.add("qwen")
+    return next(iter(families)) if len(families) == 1 else "unknown"
+
+
+def reviewer_model_from_response(response: str) -> str | None:
+    """Read the mandatory first-line identity without trusting prose later on."""
+    first_line = response.splitlines()[0].strip() if response.splitlines() else ""
+    match = re.fullmatch(r"Reviewer-Model:\s*(\S(?:.*\S)?)", first_line, re.IGNORECASE)
+    return match.group(1).strip() if match else None
+
+
+def validate_reviewer_identity(response: str, config: dict) -> str | None:
+    """Return an error when strict cross-family manual review cannot be proven."""
+    if not config.get("require_reviewer_model"):
+        return None
+    executor_model = str(config.get("executor_model") or "").strip()
+    executor_family = model_family(executor_model)
+    if executor_family == "unknown":
+        return "Cannot verify manual review: executor_model is missing or has an unknown family"
+    reviewer_model = reviewer_model_from_response(response)
+    if not reviewer_model:
+        return "Manual response must begin with: Reviewer-Model: <exact-model-id>"
+    reviewer_family = model_family(reviewer_model)
+    if reviewer_family == "unknown":
+        return f"Cannot verify manual reviewer model family: {reviewer_model}"
+    if reviewer_family == executor_family:
+        return (
+            "Manual reviewer must use a different model family: "
+            f"executor={executor_family}, reviewer={reviewer_family}"
+        )
+    return None
 
 
 def load_ui_html() -> str:
@@ -181,10 +234,18 @@ def write_pending_state(url: str | None, thread_id: str, prompt_file: str | None
         )
 
 
-def clear_pending_state(thread_id: str | None = None) -> None:
-    """Idempotent, thread-safe pending state cleanup."""
+def clear_pending_state(thread_id: str | None = None,
+                        keep_thread_dir: bool = False) -> None:
+    """Idempotent, thread-safe pending state cleanup.
+
+    keep_thread_dir preserves the per-thread directory when the round ended on a
+    fixable authoring error: in file mode that directory holds the prompt AND the
+    reviewer response the user just pasted, and deleting it would throw away
+    their work over a wrong first line. It does not make the call resumable — the
+    retry is a new call with a new directory.
+    """
     # Clear per-thread dir
-    if thread_id:
+    if thread_id and not keep_thread_dir:
         pdir = _pending_dir_for(thread_id)
         if pdir.exists():
             import shutil
@@ -328,6 +389,17 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
                 return
             session = _current_session
             if session:
+                identity_error = validate_reviewer_identity(response_text, session.config)
+                if identity_error:
+                    # JSON, not send_error's HTML page: the browser shows this text
+                    # verbatim so a rejected paste is fixable in place.
+                    payload = json.dumps({"error": identity_error}).encode("utf-8")
+                    self.send_response(400)
+                    self.send_header("Content-Type", "application/json; charset=utf-8")
+                    self.send_header("Content-Length", str(len(payload)))
+                    self.end_headers()
+                    self.wfile.write(payload)
+                    return
                 session.response = response_text
                 session.done.set()
             self.send_response(200)
@@ -343,13 +415,24 @@ class _ReviewHandler(http.server.BaseHTTPRequestHandler):
 
 FILE_MODE_WARNING = """# ARIS Manual Review - Cross-Model Warning
 
-If this workflow is running from Claude Code, do NOT paste this prompt into any Claude product (claude.ai, Claude API, Claude App). Using the same model family as executor defeats the purpose of ARIS cross-model review.
+Use a reviewer from a DIFFERENT model family than the executor. A same-family response cannot satisfy an ARIS acceptance gate.
 
-如果此流程由 Claude Code 执行，请勿将此提示词粘贴到任何 Claude 产品。请使用 ChatGPT、DeepSeek、Kimi、Gemini、Qwen、本地模型或其他非 Claude 模型。
+请使用与执行器不同模型家族的评审模型；同家族回复不能通过 ARIS 验收门。
 
 ---
 
 """
+
+
+def file_mode_warning(config: dict) -> str:
+    header = FILE_MODE_WARNING
+    if config.get("require_reviewer_model"):
+        executor_model = str(config.get("executor_model") or "unknown")
+        header += (
+            f"Executor model: `{executor_model}` (derived family: `{model_family(executor_model)}`).\n\n"
+            "The response MUST begin with `Reviewer-Model: <exact-model-id>`.\n\n---\n\n"
+        )
+    return header
 
 
 def wait_for_browser_response(prompt: str, config: dict, thread_id: str,
@@ -450,13 +533,14 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
     pdir.mkdir(parents=True, exist_ok=True)
     prompt_path = pdir / "prompt.md"
     response_path = pdir / "response.md"
+    identity_error = None
 
     # Clean up any stale response file
     if response_path.exists():
         response_path.unlink()
 
     # Write prompt with cross-model warning
-    header = FILE_MODE_WARNING
+    header = file_mode_warning(config)
     header += f"<!-- thread: {thread_id} | config: {json.dumps(config)} -->\n\n"
     if history:
         header += "## Previous Exchanges\n\n"
@@ -505,6 +589,10 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
                 prev_content = None
                 continue
             if content == prev_content:
+                identity_error = validate_reviewer_identity(content, config)
+                if identity_error:
+                    error = identity_error
+                    break
                 response = content
                 break
             prev_content = content
@@ -520,6 +608,10 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
                 prev_content = None
                 continue
             if content2 == content and content2:
+                identity_error = validate_reviewer_identity(content2, config)
+                if identity_error:
+                    error = identity_error
+                    break
                 response = content2
                 break
             prev_content = content2
@@ -527,7 +619,15 @@ def wait_for_file_response(prompt: str, config: dict, thread_id: str,
         if error is None and response is None and not cancel_event.is_set():
             error = f"Timed out after {DEFAULT_TIMEOUT_SEC}s waiting for {response_path}"
     finally:
-        clear_pending_state(thread_id)
+        if identity_error is not None and response_path.exists():
+            # The paste is almost right — only its first line is wrong. Park it under
+            # a name the next round will not clear (a retried review_reply reuses this
+            # same directory and unlinks response.md), so the text survives to be
+            # corrected and re-pasted. A second rejection replaces this file: the
+            # newest attempt is the one worth keeping, and rotating copies would be
+            # scaffolding for a case nobody wants back.
+            response_path.replace(pdir / "response.rejected.md")
+        clear_pending_state(thread_id, keep_thread_dir=identity_error is not None)
 
     return response, error
 

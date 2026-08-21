@@ -4,7 +4,7 @@
 
 ## 概述
 
-手动评审 MCP 服务器是默认 Codex MCP 评审器的人工中转替代方案。无需 GPT Plus/Pro 订阅即可实现跨模型评审——你可以使用**不同**模型家族。如果执行器是 Claude Code，请勿使用 Claude 产品作为评审者。推荐：ChatGPT、DeepSeek、Kimi、Gemini、Qwen 等非 Claude 模型。
+手动评审 MCP 服务器是默认 Codex MCP 评审器的人工中转替代方案。无需 GPT Plus/Pro 订阅即可实现跨模型评审——你可以使用**不同**模型家族。如果执行器是 Claude Code，请勿使用 Claude 产品作为评审者。推荐：ChatGPT、DeepSeek、Kimi、Gemini 或 Qwen。评审模型必须是 ARIS 能够归类的——无法归类的名字也就无法证明它与执行器不同家族，因而不能用于验收。可识别的家族见下方 `Reviewer-Model:` 一节。
 
 代价：失去完全自动化（需要手动复制粘贴），换来模型选择的完全自由和零 API 成本。
 
@@ -44,8 +44,8 @@ claude mcp add manual-review -s user -- python3 /path/to/Auto-claude-code-resear
 1. 流程到达评审步骤
 2. 浏览器自动打开 `http://127.0.0.1:<port>`
 3. **左侧面板**：完整评审提示词（点击"复制提示词"）
-4. **右侧面板**：在此粘贴模型回复
-5. 点击"提交"——流程继续
+4. **右侧面板**：在此粘贴模型回复——**第一行必须是 `Reviewer-Model: <准确模型 ID>`**（见下）
+5. 点击"提交"——流程继续。若缺少该行或评审模型与执行器同家族，页面会直接告诉你原因，可以就地改好那一行。
 
 ### 文件模式（无桌面 Linux / SSH）
 
@@ -55,7 +55,7 @@ claude mcp add manual-review -s user -- python3 /path/to/Auto-claude-code-resear
 2. 查看 `.aris/pending_review/pending_review.json`，获取 `prompt_file` 和 `response_file` 路径。
 3. 打开 `prompt_file` 指向的文件，阅读提示词。
 4. 复制到你的模型，获取回复。
-5. 将回复写入 `response_file` 指向的文件。
+5. 将回复写入 `response_file` 指向的文件，**第一行为 `Reviewer-Model: <准确模型 ID>`**（见下）。
 6. 服务器检测到文件（确认稳定后）继续流程。
 
 **重要**：服务器等待回复文件非空且稳定（两次读取内容不变）后才读取。不要硬编码 `.aris/pending_review/response.md` — 始终使用 `pending_review.json` 中的路径。不要先创建空文件再编辑——直接一次性写入完整内容，或使用临时文件名后重命名。
@@ -66,12 +66,28 @@ claude mcp add manual-review -s user -- python3 /path/to/Auto-claude-code-resear
 
 **建议**：跨轮次保持同一个模型对话窗口，以获得最佳连续性。
 
+## `Reviewer-Model:` 行
+
+需要产出判定的评审，回复必须以一行注明实际撰写它的模型开头：
+
+```
+Reviewer-Model: deepseek-v3
+
+Score: 7/10
+...
+```
+
+ARIS 从这一行推导评审模型的家族，并拒绝与执行器同家族的评审——把评审放到执行器之外,本来就是为了这个。可识别的家族:OpenAI（`gpt*`、`o1/o3/o4`、`codex`）、Anthropic（`claude*`）、Google（`gemini*`）、DeepSeek、Moonshot（`kimi*`）、Qwen（`qwen*`、`tongyi`）。不在此列的模型无法归类，因而不能用于验收——请照厂商的写法准确填写。
+
+这是**自报**的身份，不是证明:ARIS 校验的是你写的这一行，它无法独立得知你实际用了哪个网页。
+
 ## 最佳实践
 
 1. **使用推理能力强的模型**——配置提示显示 `reasoning_effort = xhigh`，意味着提示词为深度推理设计。GPT-4o、DeepSeek-V3、Kimi、Gemini 等效果较好。如果执行器是 Claude Code，请勿使用任何 Claude 家族模型。
-2. **粘贴完整回复**——不要截断或总结。流程会从回复中解析特定字段（分数、判定、行动项）。
-3. **不要修改提示词**——原样粘贴。提示词与 Codex 收到的完全一致。
-4. **多轮评审时**——在模型中保持对话（第 2 轮不要开新对话）。
+2. **保持 `Reviewer-Model:` 在第一行**——不要让模型自己加的空行、标题或开场白排在它前面。
+3. **粘贴完整回复**——不要截断或总结。流程会从回复中解析特定字段（分数、判定、行动项）。
+4. **不要修改提示词**——原样粘贴。提示词与 Codex 收到的完全一致。
+5. **多轮评审时**——在模型中保持对话（第 2 轮不要开新对话）。
 
 ## 恢复
 

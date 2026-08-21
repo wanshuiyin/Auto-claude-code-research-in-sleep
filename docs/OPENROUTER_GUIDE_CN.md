@@ -92,7 +92,7 @@ pip3 install -r mcp-servers/llm-chat/requirements.txt
 bash /path/to/aris_repo/tools/install_aris.sh /path/to/your-project
 ```
 
-不要在 ARIS repo 内部把 `$PWD` 作为目标传入。安装目标应是你的论文或实验项目，而不是 ARIS checkout 本身。安装器会管理 per-skill symlink、installed-skill manifest、`.aris/tools/` helper chain，以及 reconcile / uninstall / migration 路径。
+不要在 ARIS repo 内部把 `$PWD` 作为目标传入。安装目标应是你的论文或实验项目，而不是 ARIS checkout 本身。安装器会管理 per-skill symlink、installed-skill manifest、`.aris/tools/` helper chain（以及全局指针文件 `~/.aris/repo`——即便是没有项目内 manifest 的全局 copy-install，同一条链也能借它解析成功），以及 reconcile / uninstall / migration 路径。
 
 ### Step 4：部署 llm-chat MCP 服务器
 

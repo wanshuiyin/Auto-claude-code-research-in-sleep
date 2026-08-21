@@ -10,7 +10,9 @@ fabricated references propagate through downstream skills.
 Used by `/research-lit` (Step 1.5, mandatory), `/idea-creator`, `/novelty-check`.
 
 Helper resolution chain: `.aris/tools/verify_papers.py` →
-`tools/verify_papers.py` → `$ARIS_REPO/tools/verify_papers.py`. See
+`tools/verify_papers.py` → `$ARIS_REPO/tools/verify_papers.py` →
+`$ARIS_REPO/tools/verify_papers.py` via the global pointer file
+`~/.aris/repo` (#366). See
 `skills/shared-references/wiki-helper-resolution.md` for the canonical pattern.
 
 CLI:
@@ -203,8 +205,8 @@ def load_cache(path: Path, ttl_days: int) -> dict[str, dict[str, Any]]:
     if not path or not path.is_file():
         return {}
     try:
-        raw = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError):
         return {}
     now = time.time()
     cutoff = now - ttl_days * 86400
@@ -215,7 +217,7 @@ def save_cache(path: Path, cache: dict[str, dict[str, Any]]) -> None:
     if not path:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(cache, ensure_ascii=False, indent=2))
+    path.write_text(json.dumps(cache, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -489,14 +491,14 @@ def parse_input(args: argparse.Namespace) -> list[PaperInput]:
         if args.input == "-":
             raw = sys.stdin.read()
         else:
-            raw = Path(args.input).read_text()
+            raw = Path(args.input).read_text(encoding="utf-8")
         data = json.loads(raw)
         return [PaperInput(**d) for d in data]
     if args.arxiv_ids:
         ids = [x.strip() for x in args.arxiv_ids.split(",") if x.strip()]
         return [PaperInput(id=f"arxiv-{i}", arxiv_id=x) for i, x in enumerate(ids)]
     if args.titles_file:
-        path = sys.stdin if args.titles_file == "-" else open(args.titles_file)
+        path = sys.stdin if args.titles_file == "-" else open(args.titles_file, encoding="utf-8")
         try:
             titles = [line.strip() for line in path if line.strip()]
         finally:
@@ -601,7 +603,7 @@ def main() -> int:
 
     payload = json.dumps(output, indent=2, ensure_ascii=False)
     if args.output and args.output != "-":
-        Path(args.output).write_text(payload)
+        Path(args.output).write_text(payload, encoding="utf-8")
     else:
         print(payload)
     return 0

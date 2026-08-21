@@ -15,6 +15,22 @@
 #   --reconcile      explicit reconcile; refuse if no manifest
 #   --uninstall      remove only entries in manifest; delete manifest
 #
+# Selection (catalog: tools/skill-groups.tsv):
+#   --groups A,B           install only these skill groups (see --list-groups)
+#   --skills X,Y           additionally install these skills (clears declined mark)
+#   --exclude X,Y          never install these skills (recorded as declined)
+#   --all                  install every upstream skill (legacy default)
+#   --add-new              reconcile: accept all upstream skills not yet installed
+#   --skip-new             reconcile: skip new upstream skills without prompting
+#   --list-groups          print the group catalog and exit
+#   With no selection flags: fresh install on a TTY opens a full-screen
+#   checkbox picker (Space toggles a skill / a whole group, Enter confirms;
+#   ARIS_NO_PICKER=1 or missing python3/curses falls back to per-group
+#   Y/n/e prompts); fresh install with --quiet/no TTY installs everything (old behavior).
+#   Reconcile keeps exactly what the manifest says is installed; NEW upstream
+#   skills need per-skill confirmation (declined ones are remembered in
+#   .aris/skills-declined.txt and never re-asked).
+#
 # Options:
 #   --aris-repo PATH       override aris-repo discovery
 #   --dry-run              show plan, no writes
@@ -51,6 +67,8 @@
 #       path or differently-targeted symlink at `.aris/tools` is left alone.
 #   S12 Temp files live in the same directory as the destination.
 #   S13 Skill names must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ (slug regex).
+#   S14 Copilot agent links are removed only when listed in the dedicated
+#       installed-agent-profiles.txt ownership sidecar.
 
 set -euo pipefail
 
@@ -58,6 +76,10 @@ set -euo pipefail
 MANIFEST_VERSION="1"
 MANIFEST_NAME="installed-skills.txt"
 MANIFEST_PREV_NAME="installed-skills.txt.prev"
+AGENT_MANIFEST_NAME="installed-agent-profiles.txt"
+DECLINED_NAME="skills-declined.txt"
+CATALOG_REL="tools/skill-groups.tsv"
+GLOBAL_POINTER="$HOME/.aris/repo"
 ARIS_DIR_NAME=".aris"
 LOCK_DIR_NAME=".install.lock.d"
 SKILLS_REL=".claude/skills"
@@ -66,6 +88,7 @@ BLOCK_BEGIN="<!-- ARIS:BEGIN -->"
 BLOCK_END="<!-- ARIS:END -->"
 SAFE_NAME_REGEX='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 SUPPORT_NAMES=("shared-references")
+AGENT_PROFILES_SRC=".github/agents"  # Copilot agent profiles deployed alongside skills (F5)
 EXCLUDE_TOP_NAMES=("skills-codex" "skills-codex.bak")  # not skills, not symlinked
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
@@ -80,8 +103,14 @@ MIGRATE_COPY=""      # "" | keep-user | prefer-upstream
 CLEAR_STALE_LOCK=false
 ADOPT_NAMES=()
 REPLACE_LINK_NAMES=()
+SELECT_GROUPS=""     # comma list from --groups
+SELECT_SKILLS=""     # comma list from --skills
+EXCLUDE_SKILLS=""    # comma list from --exclude
+SELECT_ALL=false
+NEW_POLICY=""        # "" (prompt) | add | skip
+LIST_GROUPS=false
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \?//'; }
+usage() { sed -n '2,69p' "$0" | sed 's/^# \?//'; }
 
 FORWARDED_ARGS=()
 PLATFORM_OVERRIDE=""
@@ -133,6 +162,13 @@ while [[ $# -gt 0 ]]; do
         --clear-stale-lock)  FORWARDED_ARGS+=("$1"); CLEAR_STALE_LOCK=true; shift ;;
         --adopt-existing)    FORWARDED_ARGS+=("$1" "${2:?--adopt-existing requires NAME}"); ADOPT_NAMES+=("$2"); CLAUDE_ONLY_FLAGS_USED+=("--adopt-existing"); shift 2 ;;
         --replace-link)      FORWARDED_ARGS+=("$1" "${2:?--replace-link requires NAME}"); REPLACE_LINK_NAMES+=("$2"); shift 2 ;;
+        --groups)            FORWARDED_ARGS+=("$1" "${2:?--groups requires A,B,...}"); SELECT_GROUPS="${SELECT_GROUPS:+$SELECT_GROUPS,}$2"; shift 2 ;;
+        --skills)            FORWARDED_ARGS+=("$1" "${2:?--skills requires X,Y,...}"); SELECT_SKILLS="${SELECT_SKILLS:+$SELECT_SKILLS,}$2"; shift 2 ;;
+        --exclude)           FORWARDED_ARGS+=("$1" "${2:?--exclude requires X,Y,...}"); EXCLUDE_SKILLS="${EXCLUDE_SKILLS:+$EXCLUDE_SKILLS,}$2"; shift 2 ;;
+        --all)               FORWARDED_ARGS+=("$1"); SELECT_ALL=true; shift ;;
+        --add-new)           FORWARDED_ARGS+=("$1"); NEW_POLICY="add"; shift ;;
+        --skip-new)          FORWARDED_ARGS+=("$1"); NEW_POLICY="skip"; shift ;;
+        --list-groups)       FORWARDED_ARGS+=("$1"); LIST_GROUPS=true; shift ;;
         --platform)
             PLATFORM_OVERRIDE="${2:?--platform requires codex|claude}"; shift 2 ;;
         --force)
@@ -158,6 +194,9 @@ if [[ -n "$MIGRATE_COPY" && "$MIGRATE_COPY" != "keep-user" && "$MIGRATE_COPY" !=
 fi
 if [[ -n "$PLATFORM_OVERRIDE" && "$PLATFORM_OVERRIDE" != "codex" && "$PLATFORM_OVERRIDE" != "claude" ]]; then
     echo "Error: --platform must be codex or claude (got: $PLATFORM_OVERRIDE)" >&2; exit 2
+fi
+if $SELECT_ALL && [[ -n "$SELECT_GROUPS$SELECT_SKILLS" ]]; then
+    echo "Error: --all cannot be combined with --groups/--skills (only --exclude)" >&2; exit 2
 fi
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -254,6 +293,285 @@ build_upstream_inventory() {
     fi
 }
 
+# ─── Selective install (#366) ─────────────────────────────────────────────────
+# Catalog = tools/skill-groups.tsv in the aris-repo. Two record types:
+#   group\t<id>\t<display>\t<description>
+#   skill\t<name>\t<group-id>\t<requires: comma list or "-">
+# Selection state lives in two project files:
+#   .aris/installed-skills.txt  — what IS installed (existing manifest)
+#   .aris/skills-declined.txt   — skills the user explicitly said no to;
+#                                 never re-prompted on reconcile.
+# "Skipped" (via --skip-new / --quiet) is NOT declined — those skills are
+# asked about again on the next interactive reconcile.
+
+catalog_ok() { [[ -n "${CATALOG_PATH:-}" && -f "$CATALOG_PATH" ]]; }
+catalog_groups() { awk -F'\t' '$1=="group"{print $2 "\t" $3 "\t" $4}' "$CATALOG_PATH"; }
+catalog_group_of() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s {print $3; exit}' "$CATALOG_PATH"; }
+catalog_desc_of() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s {print (NF>=5?$5:""); exit}' "$CATALOG_PATH"; }
+catalog_group_display() { awk -F'\t' -v g="$1" '$1=="group" && $2==g {print $3; exit}' "$CATALOG_PATH"; }
+catalog_requires() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s && $4!="-" {print $4; exit}' "$CATALOG_PATH" | tr ',' '\n'; }
+catalog_skills_in_group() { awk -F'\t' -v g="$1" '$1=="skill" && $3==g {print $2}' "$CATALOG_PATH"; }
+catalog_has_skill() { awk -F'\t' -v s="$1" '$1=="skill" && $2==s {found=1; exit} END{exit !found}' "$CATALOG_PATH"; }
+
+in_file() { grep -qxF "$1" "$2" 2>/dev/null; }
+upstream_has_skill() { grep -q "^skill|$1\$" "$2"; }
+
+print_group_catalog() {
+    catalog_ok || die "skill catalog not found: ${CATALOG_PATH:-<unset>}"
+    echo "Skill groups (from $CATALOG_PATH):"
+    local gid display desc n
+    while IFS=$'\t' read -r gid display desc; do
+        n=$(catalog_skills_in_group "$gid" | wc -l | tr -d ' ')
+        printf "\n  %-14s %s — %s  [%s skills]\n" "$gid" "$display" "$desc" "$n"
+        awk -F'\t' -v g="$gid" '$1=="skill" && $3==g {printf "      %-28s %s\n", $2, (NF>=5?$5:"")}' "$CATALOG_PATH"
+    done < <(catalog_groups)
+}
+
+load_declined() {  # $1 = out file
+    : > "$1"
+    [[ -f "$DECLINED_PATH" ]] || return 0
+    grep -v '^[[:space:]]*$' "$DECLINED_PATH" >> "$1" || true
+}
+
+# Final declined set = (old declined ∪ new declines ∪ excludes ∪ fresh
+# unselected) minus everything selected. S5-style atomic write, same dir.
+save_declined() {  # $1 = candidates file, $2 = selected file
+    $DRY_RUN && return 0
+    mkdir -p "$PROJECT_ARIS_DIR"
+    local tmp="$DECLINED_PATH.tmp.$$"
+    sort -u "$1" | grep -v '^$' | grep -vxF -f "$2" > "$tmp" || true
+    if [[ -s "$tmp" || -f "$DECLINED_PATH" ]]; then
+        mv -f "$tmp" "$DECLINED_PATH"
+    else
+        rm -f "$tmp"
+    fi
+}
+
+# Auto-include hard pipeline deps (catalog `requires` column, transitively).
+# A dep excluded via --exclude this run is never auto-added — warn instead.
+expand_deps() {  # $1 = selected file, $2 = excludes file, $3 = upstream file
+    catalog_ok || return 0
+    local changed=1 name dep
+    while (( changed )); do
+        changed=0
+        for name in $(cat "$1"); do
+            for dep in $(catalog_requires "$name"); do
+                in_file "$dep" "$1" && continue
+                if in_file "$dep" "$2"; then
+                    warn "'$name' requires '$dep' but it is excluded — that pipeline phase will break"
+                    continue
+                fi
+                upstream_has_skill "$dep" "$3" || continue
+                echo "$dep" >> "$1"
+                log "  ↳ auto-including '$dep' (required by '$name')"
+                changed=1
+            done
+        done
+    done
+}
+
+# Interactive selection (fresh install on a TTY, no selection flags).
+# Preferred UI: full-screen checkbox picker (tools/skill_picker.py, curses) —
+# Space toggles a skill / a whole group, Enter confirms, q aborts. Falls back
+# to the classic per-group Y/n/e prompts when python3/curses/tty are
+# unavailable or ARIS_NO_PICKER=1 is set.
+interactive_select() {  # $1 = upstream file, $2 = out (selected) file
+    if [[ "${ARIS_NO_PICKER:-0}" != "1" ]] && command -v python3 >/dev/null 2>&1 \
+       && [[ -f "$ARIS_REPO/tools/skill_picker.py" ]]; then
+        local avail_f rc=0
+        avail_f="$(mktemp -t aris-avail.XXXX)"
+        grep '^skill|' "$1" | cut -d'|' -f2 > "$avail_f" || true
+        python3 "$ARIS_REPO/tools/skill_picker.py" \
+            --catalog "$CATALOG_PATH" --available "$avail_f" --out "$2" \
+            </dev/tty >/dev/tty || rc=$?
+        rm -f "$avail_f"
+        if [[ $rc -eq 0 ]]; then return 0
+        elif [[ $rc -eq 1 ]]; then die "interactive selection aborted"
+        fi
+        # rc=2 (or unexpected): picker unusable — fall through to prompts.
+        warn "checkbox picker unavailable — using per-group prompts"
+    fi
+    log ""
+    log "Interactive skill selection — per group: Y=install all, n=skip, e=pick per skill."
+    local gid display desc n reply r2 name glist
+    glist="$(mktemp -t aris-glist.XXXX)"
+    while IFS=$'\t' read -r gid display desc; do
+        catalog_skills_in_group "$gid" | while read -r name; do
+            upstream_has_skill "$name" "$1" && echo "$name"
+        done > "$glist" || true
+        n=$(wc -l < "$glist" | tr -d ' ')
+        (( n == 0 )) && continue
+        printf "\n%s (%s) — %s\n" "$display" "$gid" "$desc" >&2
+        sed 's/^/    /' "$glist" >&2
+        printf "Install group '%s' (%s skills)? [Y/n/e] " "$gid" "$n" >&2
+        read -r reply </dev/tty
+        case "$reply" in
+            [nN]*) : ;;
+            [eE]*)
+                while read -r name; do
+                    printf "  install %-30s [Y/n] " "$name" >&2
+                    read -r r2 </dev/tty
+                    [[ "$r2" =~ ^[nN] ]] || echo "$name" >> "$2"
+                done < "$glist"
+                ;;
+            *) cat "$glist" >> "$2" ;;
+        esac
+    done < <(catalog_groups)
+    # Upstream skills the catalog doesn't know yet (catalog drift): never drop silently.
+    local ungrouped; ungrouped="$(mktemp -t aris-ungrouped.XXXX)"
+    grep '^skill|' "$1" | cut -d'|' -f2 | while read -r name; do
+        catalog_has_skill "$name" || echo "$name"
+    done > "$ungrouped" || true
+    if [[ -s "$ungrouped" ]]; then
+        printf "\nSkills not in the catalog yet:\n" >&2
+        sed 's/^/    /' "$ungrouped" >&2
+        while read -r name; do
+            printf "  install %-30s [Y/n] " "$name" >&2
+            read -r r2 </dev/tty
+            [[ "$r2" =~ ^[nN] ]] || echo "$name" >> "$2"
+        done < "$ungrouped"
+    fi
+    rm -f "$glist" "$ungrouped"
+}
+
+# Validate --groups/--skills names against catalog + upstream.
+validate_selection_flags() {  # $1 = upstream file
+    local g s
+    if [[ -n "$SELECT_GROUPS" ]]; then
+        catalog_ok || die "--groups needs the catalog at $CATALOG_PATH (update your aris-repo clone)"
+        for g in $(echo "$SELECT_GROUPS" | tr ',' ' '); do
+            catalog_groups | cut -f1 | grep -qxF "$g" \
+                || die "unknown group '$g' — run with --list-groups to see valid ids"
+        done
+    fi
+    for s in $(echo "$SELECT_SKILLS" | tr ',' ' '); do
+        upstream_has_skill "$s" "$1" || die "unknown skill '$s' (not an upstream skill)"
+    done
+}
+
+# Build the selected-skill set (one name per line in $3).
+build_selection() {  # $1 = upstream file, $2 = declined-candidates out file, $3 = selected out file
+    local upstream="$1" declined_out="$2" out="$3"
+    : > "$out"
+    load_declined "$declined_out"
+
+    local excl; excl="$(mktemp -t aris-excl.XXXX)"
+    echo "$EXCLUDE_SKILLS" | tr ',' '\n' | grep -v '^$' > "$excl" || true
+    cat "$excl" >> "$declined_out"
+
+    validate_selection_flags "$upstream"
+
+    local has_selection_flags=false
+    [[ -n "$SELECT_GROUPS$SELECT_SKILLS" ]] && has_selection_flags=true
+    local fresh=true
+    [[ -f "$MANIFEST_PATH" ]] && fresh=false
+
+    local name g subset_choice=false
+    if $fresh; then
+        if $SELECT_ALL || { ! $has_selection_flags && { $QUIET || [[ ! -t 0 ]]; }; }; then
+            grep '^skill|' "$upstream" | cut -d'|' -f2 > "$out"
+        elif $has_selection_flags; then
+            subset_choice=true
+            for g in $(echo "$SELECT_GROUPS" | tr ',' ' '); do
+                catalog_skills_in_group "$g" | while read -r name; do
+                    upstream_has_skill "$name" "$upstream" && echo "$name"
+                done >> "$out" || true
+            done
+            echo "$SELECT_SKILLS" | tr ',' '\n' | grep -v '^$' >> "$out" || true
+        elif catalog_ok; then
+            subset_choice=true
+            interactive_select "$upstream" "$out"
+        else
+            warn "catalog missing at $CATALOG_PATH — falling back to full install"
+            grep '^skill|' "$upstream" | cut -d'|' -f2 > "$out"
+        fi
+        # Explicit subset choice ⇒ remember the rest as declined (won't re-ask).
+        if $subset_choice; then
+            grep '^skill|' "$upstream" | cut -d'|' -f2 | grep -vxF -f "$out" >> "$declined_out" 2>/dev/null || true
+        fi
+    else
+        # Reconcile: installed set = manifest ∩ upstream (auto-detected).
+        manifest_names "$MANIFEST_DATA" | while read -r name; do
+            [[ "$(manifest_kind_of "$MANIFEST_DATA" "$name")" == "skill" ]] || continue
+            upstream_has_skill "$name" "$upstream" && echo "$name"
+        done >> "$out" || true
+        # Flag-based additions re-enable previously declined skills.
+        for g in $(echo "$SELECT_GROUPS" | tr ',' ' '); do
+            catalog_skills_in_group "$g" | while read -r name; do
+                upstream_has_skill "$name" "$upstream" && echo "$name"
+            done >> "$out" || true
+        done
+        echo "$SELECT_SKILLS" | tr ',' '\n' | grep -v '^$' >> "$out" || true
+        # NEW upstream skills: not installed, not declined, not just selected.
+        local new_file; new_file="$(mktemp -t aris-new.XXXX)"
+        grep '^skill|' "$upstream" | cut -d'|' -f2 | while read -r name; do
+            in_file "$name" "$out" && continue
+            in_file "$name" "$declined_out" && continue
+            echo "$name"
+        done > "$new_file" || true
+        if [[ -s "$new_file" ]]; then
+            if $SELECT_ALL || [[ "$NEW_POLICY" == "add" ]]; then
+                cat "$new_file" >> "$out"
+                log "→ adding $(wc -l < "$new_file" | tr -d ' ') new upstream skill(s) (--all/--add-new)"
+            elif [[ "$NEW_POLICY" == "skip" ]] || $QUIET || [[ ! -t 0 ]]; then
+                # warn (not log): must stay visible under --quiet — silently
+                # missing new skills is exactly the failure mode #366 fixes.
+                warn "new upstream skills NOT installed: $(paste -sd, - < "$new_file")"
+                warn "  (rerun interactively to be asked, or pass --add-new / --skills NAME)"
+            else
+                log ""
+                log "New skills appeared upstream since your last install:"
+                local reply grp sdesc
+                while read -r name; do
+                    grp="$(catalog_group_of "$name")"
+                    sdesc="$(catalog_desc_of "$name")"
+                    printf "  install new skill %-30s (group: %s)%s [y/N] " "$name" "${grp:-?}" "${sdesc:+ — $sdesc}" >&2
+                    read -r reply </dev/tty
+                    if [[ "$reply" =~ ^[yY] ]]; then echo "$name" >> "$out"
+                    else echo "$name" >> "$declined_out"
+                    fi
+                done < "$new_file"
+            fi
+        fi
+        rm -f "$new_file"
+    fi
+
+    # Excludes beat every other source (manifest, groups, deps, new skills):
+    # prune before dep expansion so an excluded pipeline doesn't drag deps in,
+    # and expand_deps itself refuses to re-add excluded names.
+    local pruned
+    if [[ -s "$excl" ]]; then
+        pruned="$(mktemp -t aris-pruned.XXXX)"
+        grep -vxF -f "$excl" "$out" > "$pruned" || true
+        mv -f "$pruned" "$out"
+    fi
+    expand_deps "$out" "$excl" "$upstream"
+    sort -u -o "$out" "$out"
+    rm -f "$excl"
+    [[ -s "$out" ]] || die "selection is empty — nothing to install (use --all or --groups/--skills)"
+}
+
+# Keep support entries + selected skills only.
+filter_upstream_by_selection() {  # $1 = upstream file, $2 = selected file, $3 = out
+    awk -F'|' -v sel="$2" '
+        BEGIN { while ((getline line < sel) > 0) picked[line]=1 }
+        $1=="support" { print; next }
+        $1=="skill" && picked[$2] { print }
+    ' "$1" > "$3"
+}
+
+# Layer-4 helper resolution (#366): a global pointer file lets globally/copy-
+# installed skills find $ARIS_REPO/tools without a per-project install.
+ensure_global_pointer() {
+    $DRY_RUN && return 0
+    mkdir -p "$(dirname "$GLOBAL_POINTER")" 2>/dev/null || { warn "cannot create $(dirname "$GLOBAL_POINTER") — skipping global pointer"; return 0; }
+    local cur=""
+    [[ -f "$GLOBAL_POINTER" ]] && cur="$(cat "$GLOBAL_POINTER" 2>/dev/null || true)"
+    [[ "$cur" == "$ARIS_REPO" ]] && return 0
+    printf '%s\n' "$ARIS_REPO" > "$GLOBAL_POINTER.tmp.$$" && mv -f "$GLOBAL_POINTER.tmp.$$" "$GLOBAL_POINTER"
+    log "  + global pointer $GLOBAL_POINTER -> $ARIS_REPO"
+}
+
 # Parse manifest into a global associative-style array via temp file lookup
 # We store the parsed content in $MANIFEST_DATA_FILE (one entry per line) for grep lookup
 load_manifest() {
@@ -327,14 +645,22 @@ PROJECT_SKILLS_DIR="$PROJECT_PATH/$SKILLS_REL"
 PROJECT_ARIS_DIR="$PROJECT_PATH/$ARIS_DIR_NAME"
 MANIFEST_PATH="$PROJECT_ARIS_DIR/$MANIFEST_NAME"
 MANIFEST_PREV="$PROJECT_ARIS_DIR/$MANIFEST_PREV_NAME"
+AGENT_MANIFEST_PATH="$PROJECT_ARIS_DIR/$AGENT_MANIFEST_NAME"
 LOCK_DIR="$PROJECT_ARIS_DIR/$LOCK_DIR_NAME"
 DOC_FILE="$PROJECT_PATH/$DOC_FILE_NAME"
+CATALOG_PATH="$ARIS_REPO/$CATALOG_REL"
+DECLINED_PATH="$PROJECT_ARIS_DIR/$DECLINED_NAME"
+
+if $LIST_GROUPS; then
+    print_group_catalog
+    exit 0
+fi
 
 # ─── S9: refuse if .aris / .claude / .claude/skills is itself a symlink ───────
 # (.aris and .claude/skills may not exist yet — only check if present.)
 check_no_symlinked_parents() {
     local p
-    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR"; do
+    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR" "$PROJECT_PATH/.github" "$PROJECT_PATH/.github/agents"; do
         if is_symlink "$p"; then
             die "S9: $p is a symlink — refusing to install (would mutate symlink target)"
         fi
@@ -669,6 +995,116 @@ remove_tools_symlink() {
     fi
 }
 
+# F5: Deploy Copilot agent profiles from <aris-repo>/.github/agents/ to
+# <project>/.github/agents/. Each .agent.md file is symlinked individually;
+# user-created files/dirs/symlinks at the target path are left alone.
+# Pure-additive — existing users who don't rerun the installer never see
+# this. Idempotent across re-runs.
+record_managed_agent_profile() {
+    local name="$1" tmp="$AGENT_MANIFEST_PATH.tmp.$$" unsorted="$AGENT_MANIFEST_PATH.unsorted.$$"
+    mkdir -p "$PROJECT_ARIS_DIR"
+    if [[ -L "$AGENT_MANIFEST_PATH" ]]; then
+        warn "$AGENT_MANIFEST_PATH is a symlink; refusing to record agent ownership"
+        return 1
+    fi
+    if [[ -f "$AGENT_MANIFEST_PATH" ]]; then
+        cp "$AGENT_MANIFEST_PATH" "$unsorted" || { rm -f "$unsorted" "$tmp"; return 1; }
+    else
+        : > "$unsorted" || return 1
+    fi
+    printf '%s\n' "$name" >> "$unsorted" || { rm -f "$unsorted" "$tmp"; return 1; }
+    sort -u "$unsorted" > "$tmp" || { rm -f "$unsorted" "$tmp"; return 1; }
+    rm -f "$unsorted"
+    mv -f "$tmp" "$AGENT_MANIFEST_PATH"
+}
+
+ensure_agent_profiles() {
+    local src_dir="$ARIS_REPO/$AGENT_PROFILES_SRC"
+    [[ -d "$src_dir" ]] || return 0  # no profiles to deploy
+    [[ ! -L "$src_dir" ]] || { warn "skipping symlinked upstream agents directory: $src_dir"; return 0; }
+    local target_dir="$PROJECT_PATH/.github/agents"
+    local deployed=0 name src target
+
+    for src in "$src_dir"/*.agent.md; do
+        [[ -f "$src" ]] || continue
+        # Resolve symlink and verify it's within the expected directory
+        local resolved; resolved="$(canonicalize "$src")"
+        local src_canon; src_canon="$(canonicalize "$src_dir")"
+        [[ "$resolved" == "$src_canon"/* ]] || { warn "skipping external symlink: $src -> $resolved"; continue; }
+        name="$(basename "$src")"
+        target="$target_dir/$name"
+
+        if is_symlink "$target"; then
+            local cur; cur="$(read_link_target "$target")"
+            [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target")/$cur")"
+            if [[ "$cur" == "$src" ]]; then
+                continue  # already correct
+            fi
+            warn ".github/agents/$name already exists with different target ($cur); leaving alone"
+            continue
+        fi
+
+        if [[ -e "$target" ]]; then
+            warn ".github/agents/$name already exists as a non-symlink path; leaving alone"
+            continue
+        fi
+
+        if $DRY_RUN; then
+            log "  (dry-run) ln -s $src $target"
+        else
+            mkdir -p "$target_dir"
+            ln -s "$src" "$target"
+            if ! record_managed_agent_profile "$name"; then
+                rm -f "$target"
+                die "could not record ownership for .github/agents/$name"
+            fi
+            deployed=$((deployed + 1))
+        fi
+    done
+
+    if ! $DRY_RUN && (( deployed > 0 )); then
+        log "  + .github/agents/ ($deployed copilot profile(s) deployed)"
+    fi
+}
+
+# Counterpart for uninstall: only remove agent profile symlinks explicitly
+# recorded when this installer created them. An identical pre-existing link is
+# user-owned and must survive uninstall.
+remove_agent_profiles() {
+    local target_dir="$PROJECT_PATH/.github/agents"
+    [[ -d "$target_dir" || -L "$target_dir" ]] || return 0
+    [[ -f "$AGENT_MANIFEST_PATH" ]] || return 0
+    [[ ! -L "$AGENT_MANIFEST_PATH" ]] || { warn "$AGENT_MANIFEST_PATH is a symlink; refusing agent cleanup"; return 0; }
+    local src_dir="$ARIS_REPO/$AGENT_PROFILES_SRC"
+    local name target removed=0
+
+    while IFS= read -r name; do
+        [[ "$name" =~ $SAFE_NAME_REGEX && "$name" == *.agent.md ]] || { warn "invalid agent manifest entry: $name"; continue; }
+        target="$target_dir/$name"
+        [[ -L "$target" ]] || continue
+        local cur; cur="$(read_link_target "$target")"
+        [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target")/$cur")"
+        # Revalidate the exact source target before mutation.
+        if [[ "$cur" == "$src_dir/$name" ]]; then
+            if $DRY_RUN; then
+                log "  (dry-run) rm $target"
+            else
+                rm -f "$target"
+                removed=$((removed + 1))
+            fi
+        fi
+    done < "$AGENT_MANIFEST_PATH"
+
+    if ! $DRY_RUN && (( removed > 0 )); then
+        log "  - .github/agents/ ($removed copilot profile(s) removed)"
+        # Remove directory if empty after cleanup
+        rmdir "$target_dir" 2>/dev/null || true
+    fi
+    if ! $DRY_RUN; then
+        rm -f "$AGENT_MANIFEST_PATH"
+    fi
+}
+
 commit_manifest() {
     local manifest_tmp="$1"
     if $DRY_RUN; then log "  (dry-run) would commit manifest"; return; fi
@@ -772,6 +1208,8 @@ do_uninstall() {
     # is exactly the managed symlink. Anything else (user-created dir, custom
     # symlink target) is left alone.
     remove_tools_symlink
+    # F5: best-effort cleanup of managed agent profile symlinks.
+    remove_agent_profiles
     if ! $DRY_RUN; then
         # Keep .prev for forensics, remove current manifest
         [[ -f "$MANIFEST_PATH" ]] && mv -f "$MANIFEST_PATH" "$MANIFEST_PREV"
@@ -820,8 +1258,19 @@ build_upstream_inventory "$ARIS_REPO" > "$UPSTREAM_FILE"
 MANIFEST_DATA="$(mktemp -t aris-manifest.XXXX)"
 load_manifest "$MANIFEST_PATH" "$MANIFEST_DATA"
 
+# Selective install (#366): build the selected set, then plan against it.
+SELECTED_FILE="$(mktemp -t aris-selected.XXXX)"
+DECLINED_CANDIDATES="$(mktemp -t aris-declined.XXXX)"
+build_selection "$UPSTREAM_FILE" "$DECLINED_CANDIDATES" "$SELECTED_FILE"
+SELECTED_UPSTREAM="$(mktemp -t aris-upstream-sel.XXXX)"
+filter_upstream_by_selection "$UPSTREAM_FILE" "$SELECTED_FILE" "$SELECTED_UPSTREAM"
+N_SELECTED=$(grep -c '^skill|' "$SELECTED_UPSTREAM" || true)
+N_UPSTREAM=$(grep -c '^skill|' "$UPSTREAM_FILE" || true)
+log ""
+log "Selection: $N_SELECTED of $N_UPSTREAM upstream skills"
+
 PLAN_FILE="$(mktemp -t aris-plan.XXXX)"
-compute_plan "$UPSTREAM_FILE" "$MANIFEST_DATA" "$PLAN_FILE"
+compute_plan "$SELECTED_UPSTREAM" "$MANIFEST_DATA" "$PLAN_FILE"
 print_plan "$PLAN_FILE"
 
 # Conflict resolution
@@ -857,6 +1306,8 @@ if $DRY_RUN; then
     # #174 preview: print the planned `.aris/tools` symlink action (function
     # is idempotent + DRY_RUN-aware, so it just logs in this mode)
     ensure_tools_symlink
+    # F5 preview: print planned agent profile symlinks.
+    ensure_agent_profiles
     log ""
     log "(dry-run) no changes made"
     exit 0
@@ -880,6 +1331,14 @@ commit_manifest "$MANIFEST_TMP"
 # #174 Phase 0: ensure project-local .aris/tools symlink (purely additive).
 # Runs after manifest commit so a failure here doesn't roll back skill links.
 ensure_tools_symlink
+# F5: deploy Copilot agent profiles from <aris-repo>/.github/agents/ (purely additive).
+ensure_agent_profiles
+
+
+# #366: persist declined skills + global repo pointer (both best-effort,
+# after manifest commit for the same reason as above).
+save_declined "$DECLINED_CANDIDATES" "$SELECTED_FILE"
+ensure_global_pointer
 
 # Handle prefer-upstream legacy archive AFTER successful apply
 if [[ "$LEGACY_KIND" == "real_dir" && "$MIGRATE_COPY" == "prefer-upstream" ]]; then
@@ -908,4 +1367,4 @@ if ! $DRY_RUN; then
 fi
 
 # Cleanup
-rm -f "$UPSTREAM_FILE" "$MANIFEST_DATA" "$PLAN_FILE"
+rm -f "$UPSTREAM_FILE" "$MANIFEST_DATA" "$PLAN_FILE" "$SELECTED_FILE" "$SELECTED_UPSTREAM" "$DECLINED_CANDIDATES"

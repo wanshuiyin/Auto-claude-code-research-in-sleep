@@ -53,14 +53,14 @@ footer { padding: 10px 24px; border-top: 1px solid var(--border); background: va
 
 <div class="warning-banner" id="warningBanner">
   <strong id="warningTitle">Cross-Model Review Required</strong>
-  <span id="warningText">If you are running this from Claude Code, do NOT paste the prompt into any Claude product (claude.ai, Claude API, Claude App). Using the same model family as executor defeats the purpose of cross-model review. Use ChatGPT, DeepSeek, Kimi, Gemini, or any non-Claude model.</span>
+  <span id="warningText">Use a reviewer from a DIFFERENT model family than the executor. Same-family review cannot satisfy an ARIS acceptance gate.</span>
 </div>
 
 <details class="tutorial" id="tutorial">
   <summary id="tutorialTitle">How to use</summary>
   <ol>
     <li id="step1">Copy the prompt from the left panel</li>
-    <li id="step2">Paste it into a DIFFERENT model family (ChatGPT, DeepSeek, Kimi, Gemini, etc.)</li>
+    <li id="step2">Paste it into a model from a DIFFERENT family than the executor shown above</li>
     <li id="step3">Copy the model's full response</li>
     <li id="step4">Paste it into the right panel and click Submit</li>
   </ol>
@@ -107,10 +107,11 @@ const i18n = {
   en: {
     title: "Manual Review — ARIS",
     warningTitle: "Cross-Model Review Required",
-    warningText: "If you are running this from Claude Code, do NOT paste the prompt into any Claude product (claude.ai, Claude API, Claude App). Using the same model family as executor defeats the purpose of cross-model review. Use ChatGPT, DeepSeek, Kimi, Gemini, or any non-Claude model.",
+    warningText: "Use a reviewer from a DIFFERENT model family than the executor. Same-family review cannot satisfy an ARIS acceptance gate.",
+    warningStrict: "Executor {model} has family {family}. Use a different family, and begin the response with: Reviewer-Model: <exact-model-id>",
     tutorialTitle: "How to use",
     step1: "Copy the prompt from the left panel",
-    step2: "Paste it into a DIFFERENT model family (ChatGPT, DeepSeek, Kimi, Gemini, etc.)",
+    step2: "Paste it into a model from a DIFFERENT family than the executor shown above",
     step3: "Copy the model's full response",
     step4: "Paste it into the right panel and click Submit",
     promptLabel: "Review Prompt",
@@ -130,10 +131,11 @@ const i18n = {
   zh: {
     title: "手动评审 — ARIS",
     warningTitle: "必须使用不同模型家族",
-    warningText: "如果你从 Claude Code 运行此流程，请勿将提示词粘贴到任何 Claude 产品（claude.ai、Claude API、Claude App）。使用与执行器相同的模型家族会使跨模型评审失去意义。请使用 ChatGPT、DeepSeek、Kimi、Gemini 或其他非 Claude 模型。",
+    warningText: "请使用与执行器不同模型家族的评审模型；同家族评审不能通过 ARIS 验收门。",
+    warningStrict: "执行器 {model} 属于 {family} 家族。请使用其他家族，并让回复第一行为：Reviewer-Model: <准确模型 ID>",
     tutorialTitle: "使用方法",
     step1: "从左侧面板复制提示词",
-    step2: "粘贴到不同模型家族（ChatGPT、DeepSeek、Kimi、Gemini 等）",
+    step2: "粘贴到与上方所示执行器不同家族的模型",
     step3: "复制模型的完整回复",
     step4: "粘贴到右侧面板并点击提交",
     promptLabel: "评审提示词",
@@ -155,6 +157,18 @@ const i18n = {
 let lang = navigator.language.startsWith("zh") ? "zh" : "en";
 let ctx = {};
 let token = new URLSearchParams(window.location.search).get("token") || "";
+
+function modelFamily(model) {
+  const name = String(model || "").toLowerCase();
+  const families = new Set();
+  if (/(^|[^a-z0-9])(gpt|chatgpt|codex|oracle|o1|o3|o4)([^a-z0-9]|$)/.test(name)) families.add("openai");
+  if (/(^|[^a-z0-9])(claude|sonnet|opus|haiku|anthropic)([^a-z0-9]|$)/.test(name)) families.add("anthropic");
+  if (/(^|[^a-z0-9])(gemini|google)([^a-z0-9]|$)/.test(name)) families.add("google");
+  if (/(^|[^a-z0-9])(deepseek)[0-9.]*([^a-z0-9]|$)/.test(name)) families.add("deepseek");
+  if (/(^|[^a-z0-9])(kimi|moonshot)[0-9.]*([^a-z0-9]|$)/.test(name)) families.add("moonshot");
+  if (/(^|[^a-z0-9])(qwen|tongyi)[0-9.]*([^a-z0-9]|$)/.test(name)) families.add("qwen");
+  return families.size === 1 ? Array.from(families)[0] : "unknown";
+}
 
 async function init() {
   const res = await fetch("/api/context?token=" + token);
@@ -199,7 +213,11 @@ function applyLang() {
   const t = i18n[lang];
   document.getElementById("title").textContent = t.title;
   document.getElementById("warningTitle").textContent = t.warningTitle;
-  document.getElementById("warningText").textContent = t.warningText;
+  const cfg = ctx.config || {};
+  const executorModel = cfg.executor_model || "unknown";
+  document.getElementById("warningText").textContent = cfg.require_reviewer_model
+    ? t.warningStrict.replace("{model}", executorModel).replace("{family}", modelFamily(executorModel))
+    : t.warningText;
   document.getElementById("tutorialTitle").textContent = t.tutorialTitle;
   document.getElementById("step1").textContent = t.step1;
   document.getElementById("step2").textContent = t.step2;
@@ -209,7 +227,9 @@ function applyLang() {
   document.getElementById("responseLabel").textContent = t.responseLabel;
   document.getElementById("copyBtn").textContent = t.copyBtn;
   document.getElementById("submitBtn").textContent = t.submitBtn;
-  document.getElementById("responseArea").placeholder = t.placeholder;
+  document.getElementById("responseArea").placeholder = cfg.require_reviewer_model
+    ? "Reviewer-Model: <exact-model-id>\n\n" + t.placeholder
+    : t.placeholder;
   document.getElementById("historyTitle").textContent = t.historyTitle;
   document.getElementById("successMsg").textContent = t.successMsg;
   const effort = (ctx.config || {}).model_reasoning_effort || "xhigh";
@@ -238,7 +258,14 @@ async function submitResponse() {
     body: JSON.stringify({response: text}),
   });
   if (res.ok) document.getElementById("successOverlay").classList.remove("hidden");
-  else { document.getElementById("submitBtn").disabled = false; alert("Submit failed. Please try again."); }
+  else {
+    document.getElementById("submitBtn").disabled = false;
+    // The server explains WHY (e.g. a missing Reviewer-Model: line). Show it —
+    // a generic retry prompt makes an identity rejection undiagnosable.
+    let why = "";
+    try { why = (await res.json()).error || ""; } catch (e) { why = await res.text().catch(() => ""); }
+    alert(why ? "Submit rejected: " + why : "Submit failed. Please try again.");
+  }
 }
 
 document.getElementById("responseArea").addEventListener("input", function() {

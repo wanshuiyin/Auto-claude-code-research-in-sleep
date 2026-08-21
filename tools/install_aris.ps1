@@ -13,6 +13,53 @@
     Managed entries are tracked in .aris manifests. The script never replaces
     real files or user-owned skill directories; conflicts must be resolved
     explicitly.
+
+    Selective install (catalog: tools\skill-groups.tsv in the ARIS repo):
+      -Groups A,B     install only these skill groups (see -ListGroups)
+      -Skills X,Y     additionally install these skills (clears declined mark)
+      -Exclude X,Y    never install these skills (recorded as declined)
+      -All            install every upstream skill (legacy default)
+      -AddNew         reconcile: accept all upstream skills not yet installed
+      -SkipNew        reconcile: skip new upstream skills without prompting
+      -ListGroups     print the group catalog and exit
+      -Quiet          no prompts; non-interactive fallback for every decision
+      With no selection flags: a fresh install on a real console walks an
+      interactive per-group Y/n/e menu; a fresh install under -Quiet or a
+      redirected console installs everything (legacy behavior).
+      Reconcile keeps exactly what the manifest says is installed; NEW
+      upstream skills need per-skill confirmation (declined ones are
+      remembered in .aris\skills-declined.txt and never re-asked).
+
+.PARAMETER Groups
+    Comma-separated catalog group ids to install on a fresh install (or
+    re-enable on reconcile).
+
+.PARAMETER Skills
+    Comma-separated skill names to install on a fresh install, or re-enable
+    (un-decline) on reconcile.
+
+.PARAMETER Exclude
+    Comma-separated skill names to never install; removed and recorded as
+    declined on reconcile.
+
+.PARAMETER All
+    Install every upstream skill. Cannot be combined with -Groups/-Skills
+    (only with -Exclude).
+
+.PARAMETER AddNew
+    On reconcile, silently accept every new upstream skill not yet installed
+    or declined.
+
+.PARAMETER SkipNew
+    On reconcile, leave new upstream skills uninstalled without prompting or
+    recording them as declined (they are asked about again next time).
+
+.PARAMETER ListGroups
+    Print the skill-group catalog (from tools\skill-groups.tsv) and exit.
+
+.PARAMETER Quiet
+    Suppress interactive prompts; every decision that would otherwise prompt
+    falls back to its non-interactive default (see catalog notes above).
 #>
 
 [CmdletBinding()]
@@ -35,6 +82,16 @@ param(
     [string]$MigrateCopy = '',
     [switch]$ClearStaleLock,
 
+    # Selective install (#366 parity with install_aris.sh).
+    [string]$Groups = '',
+    [string]$Skills = '',
+    [string]$Exclude = '',
+    [switch]$All,
+    [switch]$AddNew,
+    [switch]$SkipNew,
+    [switch]$ListGroups,
+    [switch]$Quiet,
+
     # Kept only to preserve CLI recognition. It is intentionally unsafe for
     # this installer and is rejected in favor of per-skill -ReplaceLink.
     [switch]$Force
@@ -45,6 +102,9 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $ManifestVersion = '1'
 $SafeNameRegex = '^[A-Za-z0-9][A-Za-z0-9._-]*$'
 $SupportNames = @('shared-references')
+$CatalogRel = 'tools/skill-groups.tsv'
+$GlobalPointerDir = Join-Path $HOME '.aris'
+$GlobalPointerPath = Join-Path $GlobalPointerDir 'repo'
 $script:LockDir = $null
 $script:LockAcquired = $false
 
@@ -257,6 +317,7 @@ function New-Config {
             LegacyNestedRel = '.claude\skills\aris'
             ManifestName = 'installed-skills.txt'
             ManifestPrevName = 'installed-skills.txt.prev'
+            DeclinedName = 'skills-declined.txt'
             LockName = '.install.lock.d'
             DocName = 'CLAUDE.md'
             BlockBegin = '<!-- ARIS:BEGIN -->'
@@ -274,6 +335,7 @@ function New-Config {
         LegacyNestedRel = '.agents\skills\aris'
         ManifestName = 'installed-skills-codex.txt'
         ManifestPrevName = 'installed-skills-codex.txt.prev'
+        DeclinedName = 'skills-declined-codex.txt'
         LockName = '.install-codex.lock.d'
         DocName = 'AGENTS.md'
         BlockBegin = '<!-- ARIS-CODEX:BEGIN -->'
@@ -285,6 +347,341 @@ function New-Config {
 function Test-SafeName {
     param([string]$Name)
     return $Name -match $SafeNameRegex
+}
+
+# ─── Selective install (#366 parity) ───────────────────────────────────────
+# Catalog = tools/skill-groups.tsv in the ARIS repo, shared across platforms.
+# Two record types (tab-separated):
+#   group\t<id>\t<display>\t<description>
+#   skill\t<name>\t<group-id>\t<requires: comma list or "->
+# Selection state lives in two project files:
+#   .aris/installed-skills[-codex].txt  — what IS installed (manifest)
+#   .aris/skills-declined[-codex].txt   — skills the user explicitly said no
+#                                         to; never re-prompted on reconcile.
+# "Skipped" (via -SkipNew / -Quiet) is NOT declined — those skills are asked
+# about again on the next interactive reconcile.
+
+function Get-CommaList {
+    # Comma-prefixed returns: PowerShell unrolls IEnumerable return values onto
+    # the pipeline, so a 0- or 1-element array collapses to $null or a bare
+    # scalar at the call site unless wrapped as the sole pipeline object.
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return ,@() }
+    return ,@($Value -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+}
+
+function Test-IsInteractive {
+    if ($Quiet) { return $false }
+    try { return -not [Console]::IsInputRedirected } catch { return $false }
+}
+
+function Load-Catalog {
+    param([string]$Path)
+    $catalog = [pscustomobject]@{
+        Path = $Path
+        Exists = (Test-Path -LiteralPath $Path -PathType Leaf)
+        Groups = New-Object System.Collections.Generic.List[object]
+        SkillGroup = @{}
+        SkillRequires = @{}
+        GroupSkills = @{}
+    }
+    if (-not $catalog.Exists) { return $catalog }
+    foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8) {
+        if (-not $line -or $line.StartsWith('#')) { continue }
+        $fields = $line -split "`t"
+        if ($fields.Count -lt 4) { continue }
+        if ($fields[0] -eq 'group') {
+            $gid = $fields[1]
+            $catalog.Groups.Add([pscustomobject]@{ Id = $gid; Display = $fields[2]; Desc = $fields[3] })
+            if (-not $catalog.GroupSkills.ContainsKey($gid)) {
+                $catalog.GroupSkills[$gid] = New-Object System.Collections.Generic.List[string]
+            }
+        } elseif ($fields[0] -eq 'skill') {
+            $name = $fields[1]
+            $gid = $fields[2]
+            $catalog.SkillGroup[$name] = $gid
+            if (-not $catalog.GroupSkills.ContainsKey($gid)) {
+                $catalog.GroupSkills[$gid] = New-Object System.Collections.Generic.List[string]
+            }
+            $catalog.GroupSkills[$gid].Add($name)
+            $requires = $fields[3]
+            if ($requires -and $requires -ne '-') {
+                $catalog.SkillRequires[$name] = Get-CommaList $requires
+            } else {
+                $catalog.SkillRequires[$name] = @()
+            }
+        }
+    }
+    return $catalog
+}
+
+function Get-CatalogGroupIds { param($Catalog) return ,@($Catalog.Groups | ForEach-Object { $_.Id }) }
+
+function Get-CatalogSkillsInGroup {
+    param($Catalog, [string]$GroupId)
+    if ($Catalog.GroupSkills.ContainsKey($GroupId)) { return ,@($Catalog.GroupSkills[$GroupId]) }
+    return ,@()
+}
+
+function Get-CatalogGroupOf {
+    param($Catalog, [string]$Name)
+    if ($Catalog.SkillGroup.ContainsKey($Name)) { return $Catalog.SkillGroup[$Name] }
+    return $null
+}
+
+function Get-CatalogRequires {
+    param($Catalog, [string]$Name)
+    if ($Catalog.SkillRequires.ContainsKey($Name)) { return ,@($Catalog.SkillRequires[$Name]) }
+    return ,@()
+}
+
+function Show-GroupCatalog {
+    param($Catalog)
+    if (-not $Catalog.Exists) { Die "skill catalog not found: $($Catalog.Path)" }
+    Write-Host "Skill groups (from $($Catalog.Path)):"
+    foreach ($g in $Catalog.Groups) {
+        $groupSkills = Get-CatalogSkillsInGroup $Catalog $g.Id
+        Write-Host ''
+        Write-Host ("  {0,-14} {1} - {2}  [{3} skills]" -f $g.Id, $g.Display, $g.Desc, $groupSkills.Count)
+        foreach ($name in $groupSkills) { Write-Host "      $name" }
+    }
+}
+
+function Read-DeclinedSet {
+    param([string]$Path)
+    $set = New-Object System.Collections.Generic.HashSet[string]
+    if (Test-Path -LiteralPath $Path -PathType Leaf) {
+        foreach ($line in Get-Content -LiteralPath $Path -Encoding UTF8) {
+            $trimmed = $line.Trim()
+            if ($trimmed) { $set.Add($trimmed) | Out-Null }
+        }
+    }
+    return ,$set
+}
+
+# Final declined set = (old declined ∪ new declines ∪ excludes ∪ fresh
+# unselected) minus everything selected. Atomic write, same dir as target.
+function Save-DeclinedSet {
+    param(
+        [string]$Path,
+        [System.Collections.Generic.HashSet[string]]$Declined,
+        [System.Collections.Generic.HashSet[string]]$Selected
+    )
+    if ($DryRun) { return }
+    $final = @($Declined | Where-Object { -not $Selected.Contains($_) } | Sort-Object)
+    $existed = Test-Path -LiteralPath $Path -PathType Leaf
+    if ($final.Count -eq 0 -and -not $existed) { return }
+    $dir = Split-Path -Parent $Path
+    New-Item -ItemType Directory -Force -Path $dir | Out-Null
+    $content = if ($final.Count -gt 0) { ($final -join "`n") + "`n" } else { '' }
+    $tmp = "$Path.tmp.$PID"
+    Write-Text $tmp $content
+    Move-Item -LiteralPath $tmp -Destination $Path -Force
+}
+
+# Auto-include hard pipeline deps (catalog `requires` column, transitively).
+# A dep excluded this run is never auto-added — warn instead.
+function Expand-SelectionDeps {
+    param(
+        $Catalog,
+        [System.Collections.Generic.HashSet[string]]$Selected,
+        [System.Collections.Generic.HashSet[string]]$ExcludeSet,
+        [System.Collections.Generic.HashSet[string]]$UpstreamSkillNames
+    )
+    if (-not $Catalog.Exists) { return }
+    $changed = $true
+    while ($changed) {
+        $changed = $false
+        foreach ($name in @($Selected)) {
+            foreach ($dep in (Get-CatalogRequires $Catalog $name)) {
+                if ($Selected.Contains($dep)) { continue }
+                if ($ExcludeSet.Contains($dep)) {
+                    Write-Warning "'$name' requires '$dep' but it is excluded -- that pipeline phase will break"
+                    continue
+                }
+                if (-not $UpstreamSkillNames.Contains($dep)) { continue }
+                $Selected.Add($dep) | Out-Null
+                Write-Host "  -> auto-including '$dep' (required by '$name')"
+                $changed = $true
+            }
+        }
+    }
+}
+
+# Validate -Groups/-Skills names against catalog + upstream.
+function Test-SelectionFlags {
+    param($Catalog, [string[]]$GroupsList, [string[]]$SkillsList, [System.Collections.Generic.HashSet[string]]$UpstreamSkillNames)
+    if ($GroupsList.Count -gt 0) {
+        if (-not $Catalog.Exists) { Die "-Groups needs the catalog at $($Catalog.Path) (update your aris-repo clone)" }
+        # Get-CatalogGroupIds is already comma-protected (see note above); do
+        # not re-wrap with @() here or the result nests into a 1-element array.
+        $validIds = Get-CatalogGroupIds $Catalog
+        foreach ($g in $GroupsList) {
+            if ($validIds -notcontains $g) { Die "unknown group '$g' -- run with -ListGroups to see valid ids" }
+        }
+    }
+    foreach ($s in $SkillsList) {
+        if (-not $UpstreamSkillNames.Contains($s)) { Die "unknown skill '$s' (not an upstream skill)" }
+    }
+}
+
+# Interactive group menu (fresh install on a real console, no selection flags).
+function Read-InteractiveSelection {
+    param($Catalog, [System.Collections.Generic.HashSet[string]]$UpstreamSkillNames, [System.Collections.Generic.HashSet[string]]$Selected)
+    Write-Host ''
+    Write-Host "Interactive skill selection -- per group: Y=install all, n=skip, e=pick per skill."
+    foreach ($g in $Catalog.Groups) {
+        # Capture the (comma-protected) catalog result into a real variable
+        # first, then filter — piping the function call straight into
+        # Where-Object would hand it the whole array as a single item.
+        $groupSkillsInCatalog = Get-CatalogSkillsInGroup $Catalog $g.Id
+        $groupSkills = @($groupSkillsInCatalog | Where-Object { $UpstreamSkillNames.Contains($_) })
+        if ($groupSkills.Count -eq 0) { continue }
+        Write-Host ''
+        Write-Host "$($g.Display) ($($g.Id)) -- $($g.Desc)"
+        foreach ($name in $groupSkills) { Write-Host "    $name" }
+        $reply = Read-Host "Install group '$($g.Id)' ($($groupSkills.Count) skills)? [Y/n/e]"
+        if ($reply -match '^[nN]') {
+            continue
+        } elseif ($reply -match '^[eE]') {
+            foreach ($name in $groupSkills) {
+                $r2 = Read-Host "  install $name [Y/n]"
+                if ($r2 -notmatch '^[nN]') { $Selected.Add($name) | Out-Null }
+            }
+        } else {
+            foreach ($name in $groupSkills) { $Selected.Add($name) | Out-Null }
+        }
+    }
+    # Upstream skills the catalog doesn't know yet (catalog drift): never drop silently.
+    $ungrouped = @($UpstreamSkillNames | Where-Object { -not (Get-CatalogGroupOf $Catalog $_) } | Sort-Object)
+    if ($ungrouped.Count -gt 0) {
+        Write-Host ''
+        Write-Host 'Skills not in the catalog yet:'
+        foreach ($name in $ungrouped) { Write-Host "    $name" }
+        foreach ($name in $ungrouped) {
+            $r2 = Read-Host "  install $name [Y/n]"
+            if ($r2 -notmatch '^[nN]') { $Selected.Add($name) | Out-Null }
+        }
+    }
+}
+
+# Build the selected-skill set for this run.
+function Build-Selection {
+    param($Catalog, $Manifest, [System.Collections.Generic.HashSet[string]]$UpstreamSkillNames, [string]$DeclinedPath, [bool]$IsFresh)
+
+    $declinedCandidates = Read-DeclinedSet $DeclinedPath
+    $excludeList = Get-CommaList $Exclude
+    $excludeSet = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($e in $excludeList) {
+        $excludeSet.Add($e) | Out-Null
+        $declinedCandidates.Add($e) | Out-Null
+    }
+
+    $groupsList = Get-CommaList $Groups
+    $skillsList = Get-CommaList $Skills
+    Test-SelectionFlags $Catalog $groupsList $skillsList $UpstreamSkillNames
+
+    $selected = New-Object System.Collections.Generic.HashSet[string]
+    $hasSelectionFlags = ($groupsList.Count -gt 0 -or $skillsList.Count -gt 0)
+
+    if ($IsFresh) {
+        $subsetChoice = $false
+        if ($All -or (-not $hasSelectionFlags -and -not (Test-IsInteractive))) {
+            foreach ($n in $UpstreamSkillNames) { $selected.Add($n) | Out-Null }
+        } elseif ($hasSelectionFlags) {
+            $subsetChoice = $true
+            foreach ($g in $groupsList) {
+                foreach ($n in (Get-CatalogSkillsInGroup $Catalog $g)) {
+                    if ($UpstreamSkillNames.Contains($n)) { $selected.Add($n) | Out-Null }
+                }
+            }
+            foreach ($n in $skillsList) { $selected.Add($n) | Out-Null }
+        } elseif ($Catalog.Exists) {
+            $subsetChoice = $true
+            Read-InteractiveSelection $Catalog $UpstreamSkillNames $selected
+        } else {
+            Write-Warning "catalog missing at $($Catalog.Path) -- falling back to full install"
+            foreach ($n in $UpstreamSkillNames) { $selected.Add($n) | Out-Null }
+        }
+        # Explicit subset choice ⇒ remember the rest as declined (won't re-ask).
+        if ($subsetChoice) {
+            foreach ($n in $UpstreamSkillNames) {
+                if (-not $selected.Contains($n)) { $declinedCandidates.Add($n) | Out-Null }
+            }
+        }
+    } else {
+        # Reconcile: installed set = manifest ∩ upstream (auto-detected).
+        foreach ($entry in $Manifest.Entries) {
+            if ($entry.Kind -eq 'skill' -and $UpstreamSkillNames.Contains($entry.Name)) {
+                $selected.Add($entry.Name) | Out-Null
+            }
+        }
+        # Flag-based additions re-enable previously declined skills.
+        foreach ($g in $groupsList) {
+            foreach ($n in (Get-CatalogSkillsInGroup $Catalog $g)) {
+                if ($UpstreamSkillNames.Contains($n)) { $selected.Add($n) | Out-Null }
+            }
+        }
+        foreach ($n in $skillsList) { $selected.Add($n) | Out-Null }
+
+        # NEW upstream skills: not installed, not declined, not just selected.
+        $newSkills = @($UpstreamSkillNames | Where-Object { -not $selected.Contains($_) -and -not $declinedCandidates.Contains($_) } | Sort-Object)
+        if ($newSkills.Count -gt 0) {
+            if ($All -or $AddNew) {
+                foreach ($n in $newSkills) { $selected.Add($n) | Out-Null }
+                Write-Host "-> adding $($newSkills.Count) new upstream skill(s) (-All/-AddNew)"
+            } elseif ($SkipNew -or -not (Test-IsInteractive)) {
+                # warn (not Write-Host): must stay visible under -Quiet — silently
+                # missing new skills is exactly the failure mode this feature fixes.
+                Write-Warning "new upstream skills NOT installed: $($newSkills -join ',')"
+                Write-Warning '  (rerun interactively to be asked, or pass -AddNew / -Skills NAME)'
+            } else {
+                Write-Host ''
+                Write-Host 'New skills appeared upstream since your last install:'
+                foreach ($name in $newSkills) {
+                    $grp = Get-CatalogGroupOf $Catalog $name
+                    if (-not $grp) { $grp = '?' }
+                    $reply = Read-Host "  install new skill $name (group: $grp) [y/N]"
+                    if ($reply -match '^[yY]') { $selected.Add($name) | Out-Null }
+                    else { $declinedCandidates.Add($name) | Out-Null }
+                }
+            }
+        }
+    }
+
+    # Excludes beat every other source (manifest, groups, deps, new skills):
+    # prune before dep expansion so an excluded pipeline doesn't drag deps in,
+    # and Expand-SelectionDeps itself refuses to re-add excluded names.
+    foreach ($e in $excludeSet) { $selected.Remove($e) | Out-Null }
+    Expand-SelectionDeps $Catalog $selected $excludeSet $UpstreamSkillNames
+
+    if ($selected.Count -eq 0) {
+        Die 'selection is empty -- nothing to install (use -All or -Groups/-Skills)'
+    }
+
+    return [pscustomobject]@{ Selected = $selected; DeclinedCandidates = $declinedCandidates }
+}
+
+# Layer-4 helper resolution: a global pointer file lets globally/copy-installed
+# skills find $ArisRepo\tools without a per-project install.
+function Ensure-GlobalPointer {
+    param([string]$RepoRoot)
+    if ($DryRun) { return }
+    try {
+        New-Item -ItemType Directory -Force -Path $GlobalPointerDir -ErrorAction Stop | Out-Null
+    } catch {
+        Write-Warning "cannot create $GlobalPointerDir -- skipping global pointer"
+        return
+    }
+    $current = ''
+    if (Test-Path -LiteralPath $GlobalPointerPath -PathType Leaf) {
+        $current = (Read-Text $GlobalPointerPath).Trim()
+    }
+    if ($current -eq $RepoRoot) { return }
+    $tmp = "$GlobalPointerPath.tmp.$PID"
+    Write-Text $tmp ($RepoRoot + "`n")
+    Move-Item -LiteralPath $tmp -Destination $GlobalPointerPath -Force
+    Write-Host "  + global pointer $GlobalPointerPath -> $RepoRoot"
 }
 
 function Build-Inventory {
@@ -859,11 +1256,19 @@ function Invoke-Main {
     if ($Reconcile -and $Uninstall) {
         Die '-Reconcile and -Uninstall are mutually exclusive'
     }
+    if ($All -and (Get-CommaList $Groups).Count + (Get-CommaList $Skills).Count -gt 0) {
+        Die '-All cannot be combined with -Groups/-Skills (only -Exclude)'
+    }
     if (-not (Test-Path -LiteralPath $ProjectPath -PathType Container)) {
         Die "project path does not exist: $ProjectPath"
     }
     $projectRoot = (Resolve-Path -LiteralPath $ProjectPath).ProviderPath
     $repoRoot = Resolve-ArisRepo
+    $catalog = Load-Catalog (Join-RelativePath $repoRoot $CatalogRel)
+    if ($ListGroups) {
+        Show-GroupCatalog $catalog
+        return
+    }
     $selectedPlatform = $Platform
     if ($selectedPlatform -eq 'auto') {
         $selectedPlatform = Detect-Platform $projectRoot
@@ -902,7 +1307,21 @@ function Invoke-Main {
 
     $inventory = Build-Inventory $config
     $manifest = Load-Manifest $manifestPath
-    $plan = Compute-Plan $inventory $manifest $config $projectRoot $manifestPath
+
+    # Selective install (#366 parity): build the selected set, then plan
+    # against that filtered subset (support entries always pass through).
+    $upstreamSkillNames = New-Object System.Collections.Generic.HashSet[string]
+    foreach ($entry in $inventory) {
+        if ($entry.Kind -eq 'skill') { $upstreamSkillNames.Add($entry.Name) | Out-Null }
+    }
+    $isFresh = -not (Test-Path -LiteralPath $manifestPath -PathType Leaf)
+    $declinedPath = Join-Path $arisDir $config.DeclinedName
+    $selection = Build-Selection $catalog $manifest $upstreamSkillNames $declinedPath $isFresh
+    $selectedInventory = @($inventory | Where-Object { $_.Kind -eq 'support' -or $selection.Selected.Contains($_.Name) })
+    Write-Host ''
+    Write-Host "Selection: $($selection.Selected.Count) of $($upstreamSkillNames.Count) upstream skills"
+
+    $plan = Compute-Plan $selectedInventory $manifest $config $projectRoot $manifestPath
     Print-Plan $plan $mode
 
     $conflicts = @($plan | Where-Object { $_.Action -eq 'CONFLICT' })
@@ -929,6 +1348,12 @@ function Invoke-Main {
     Commit-Manifest $manifestPath $manifestPrevPath $manifestContent
     Ensure-ToolsJunction $arisDir $repoRoot
     Archive-LegacyCopy $legacy $arisDir
+
+    # #366: persist declined skills + global repo pointer (both best-effort,
+    # after manifest commit for the same reason as the tools junction above).
+    Save-DeclinedSet $declinedPath $selection.DeclinedCandidates $selection.Selected
+    Ensure-GlobalPointer $repoRoot
+
     $managedCount = @($plan | Where-Object { $_.Action -in @('REUSE', 'ADOPT', 'CREATE', 'UPDATE_TARGET') }).Count
     Update-ManagedDoc $config $docPath $repoRoot $projectRoot $managedCount
     Write-Host ''

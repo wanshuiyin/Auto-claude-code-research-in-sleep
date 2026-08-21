@@ -114,6 +114,9 @@ def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
 
     (repo / "skills" / "skills-codex" / "alpha").rename(repo / "skills" / "skills-codex" / "alpha-removed")
     make_skill(repo / "skills" / "skills-codex" / "gamma", "# gamma\n")
+    # #366 selective install: a plain --quiet reconcile no longer silently adopts
+    # new upstream skills (that would defeat the point of the new-skill
+    # confirmation gate) -- it must be requested explicitly via --add-new.
     run(
         [
             "bash",
@@ -123,6 +126,7 @@ def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
             str(repo),
             "--reconcile",
             "--with-claude-review-overlay",
+            "--add-new",
             "--quiet",
         ]
     )
@@ -213,6 +217,9 @@ def test_install_aris_codex_reconcile_removes_stale_links_from_manifest_repo(tmp
     assert alpha_link.is_symlink()
     assert alpha_link.resolve() == original_repo / "skills" / "skills-codex" / "alpha"
 
+    # #366 selective install: new upstream skills need --add-new (or an
+    # interactive yes) on reconcile -- a plain --quiet reconcile only keeps
+    # what was already installed and drops what upstream removed.
     run(
         [
             "bash",
@@ -221,6 +228,7 @@ def test_install_aris_codex_reconcile_removes_stale_links_from_manifest_repo(tmp
             "--aris-repo",
             str(new_repo),
             "--reconcile",
+            "--add-new",
             "--quiet",
         ]
     )
@@ -317,6 +325,7 @@ def test_smart_update_codex_copy_install_and_symlink_refusal(tmp_path: Path) -> 
             "--local",
             str(local),
             "--apply",
+            "--add-new",  # NEW skills now require confirmation/--add-new (#366-style policy)
         ]
     )
     assert "# alpha-v1" in (local / "alpha" / "SKILL.md").read_text()
@@ -394,6 +403,7 @@ def test_smart_update_codex_ignores_local_only_shared_reference_failures(tmp_pat
             "--local",
             str(local),
             "--apply",
+            "--add-new",  # NEW skills now require confirmation/--add-new (#366-style policy)
         ]
     )
 
@@ -415,6 +425,7 @@ def test_smart_update_codex_local_respects_overlay(tmp_path: Path) -> None:
             "--overlay",
             "claude-review",
             "--apply",
+            "--add-new",  # NEW skills now require confirmation/--add-new (#366-style policy)
         ]
     )
 

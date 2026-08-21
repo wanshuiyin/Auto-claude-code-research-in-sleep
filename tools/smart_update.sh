@@ -21,6 +21,18 @@
 #                               must be a relative path
 #   --upstream <path>: explicit upstream skills directory
 #   --local <path>: explicit local skills directory
+#
+# New-skill policy (--apply only; dry-run always just reports):
+#   default (TTY, no policy flag): each new upstream skill is confirmed one by
+#                                  one [y/N]; a decline is remembered in
+#                                  <local>/.aris-declined.txt and never re-asked
+#   --add-new:  install every new skill (does NOT un-decline previously
+#               declined skills — edit/clear .aris-declined.txt for that)
+#   --skip-new: skip every new skill without recording a decline (same as the
+#               automatic behavior when there is no TTY)
+#
+# On successful --apply, writes $HOME/.aris/repo <- this repo's root (helper
+# resolution chain layer 4, #366) so copy-installed skills can find tools/.
 
 set -euo pipefail
 
@@ -31,11 +43,20 @@ PROJECT_PATH=""
 TARGET_SUBDIR=".claude/skills"
 CUSTOM_UPSTREAM=""
 CUSTOM_LOCAL=""
+NEW_POLICY=""   # "" (prompt) | add | skip
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --apply)
             APPLY=true
+            shift
+            ;;
+        --add-new)
+            NEW_POLICY="add"
+            shift
+            ;;
+        --skip-new)
+            NEW_POLICY="skip"
             shift
             ;;
         --project)
@@ -64,7 +85,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: bash tools/smart_update.sh [--apply] [--project <path> [--target-subdir <rel>]] [--upstream <path> --local <path>]"
+            echo "Usage: bash tools/smart_update.sh [--apply] [--add-new|--skip-new] [--project <path> [--target-subdir <rel>]] [--upstream <path> --local <path>]"
             exit 1
             ;;
     esac
@@ -156,6 +177,21 @@ if [[ -L "$LOCAL_DIR" ]]; then
     exit 2
 fi
 
+# install_aris.sh creates flat PER-SKILL symlinks (the root dir is real), so
+# the root-symlink check above can't see a managed flat install. The manifest
+# is the authoritative marker — refuse project-mode updates when one exists.
+if [[ "$MODE" == "project" && -f "$PROJECT_ROOT/.aris/installed-skills.txt" ]]; then
+    REPO_ROOT_FOR_HINT="$(cd "$(dirname "$0")/.." && pwd)"
+    echo "" >&2
+    echo -e "\033[0;31m✗ Managed symlink install detected (manifest: $PROJECT_ROOT/.aris/installed-skills.txt)\033[0m" >&2
+    echo "" >&2
+    echo "smart_update is for COPIED installs. This project is managed by install_aris.sh:" >&2
+    echo "  cd <aris-repo> && git pull           # updates content of existing skills" >&2
+    echo "  bash $REPO_ROOT_FOR_HINT/tools/install_aris.sh \"$PROJECT_ROOT\"   # reconciles new/removed skills" >&2
+    echo "" >&2
+    exit 2
+fi
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -201,6 +237,31 @@ GIT_HISTORY_OK=false
 if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     GIT_HISTORY_OK=true
 fi
+
+# ─── New-skill confirmation state (declined list + group catalog lookup) ──────
+CATALOG_PATH="$REPO_ROOT/tools/skill-groups.tsv"
+DECLINED_FILE="$LOCAL_DIR/.aris-declined.txt"
+
+is_declined() {  # $1 = skill name
+    [[ -f "$DECLINED_FILE" ]] && grep -qxF "$1" "$DECLINED_FILE"
+}
+
+catalog_group_of() {  # $1 = skill name -> group id, or "?" if unknown
+    local g=""
+    [[ -f "$CATALOG_PATH" ]] && g=$(awk -F'\t' -v s="$1" '$1=="skill" && $2==s {print $3; exit}' "$CATALOG_PATH")
+    echo "${g:-?}"
+}
+
+# Layer-4 helper resolution (#366): a global pointer file lets globally/copy-
+# installed skills find $ARIS_REPO/tools without a per-project install.
+ensure_global_pointer() {
+    local pointer="$HOME/.aris/repo"
+    mkdir -p "$(dirname "$pointer")" 2>/dev/null || return 0
+    local cur=""
+    [[ -f "$pointer" ]] && cur="$(cat "$pointer" 2>/dev/null || true)"
+    [[ "$cur" == "$REPO_ROOT" ]] && return 0
+    printf '%s\n' "$REPO_ROOT" > "$pointer.tmp.$$" && mv -f "$pointer.tmp.$$" "$pointer"
+}
 
 is_pristine_historical_copy() {
     # $1 = local file, $2 = repo-relative path of its upstream counterpart
@@ -345,8 +406,23 @@ echo -e "${GREEN}✅ Identical (no action needed): ${IDENTICAL}${NC}"
 for s in "${IDENTICAL_SKILLS[@]:-}"; do [[ -n "$s" ]] && echo "   $s"; done
 echo ""
 
-echo -e "${GREEN}🆕 New skills (safe to add): ${NEW}${NC}"
-for s in "${NEW_SKILLS[@]:-}"; do [[ -n "$s" ]] && echo "   $s"; done
+# Pre-declined subset of NEW_SKILLS (informational only in dry-run — the
+# decision of what to install/skip/prompt is only made inside the --apply block).
+declare -a NEW_PREDECLINED_SKILLS=()
+for s in "${NEW_SKILLS[@]:-}"; do
+    [[ -n "$s" ]] || continue
+    is_declined "$s" && NEW_PREDECLINED_SKILLS+=("$s")
+done
+
+echo -e "${GREEN}🆕 New skills upstream (confirmed one-by-one on --apply, unless --add-new/--skip-new): ${NEW}${NC}"
+for s in "${NEW_SKILLS[@]:-}"; do
+    [[ -n "$s" ]] || continue
+    if is_declined "$s"; then
+        echo -e "   $s ${YELLOW}(previously declined — stays skipped unless --add-new)${NC}"
+    else
+        echo "   $s"
+    fi
+done
 echo ""
 
 echo -e "${BLUE}🔄 Updated upstream, no personal info (safe to replace): ${SAFE_UPDATE}${NC}"
@@ -396,7 +472,7 @@ TOTAL=$((NEW + IDENTICAL + SAFE_UPDATE + NEEDS_MERGE))
 echo -e "${BLUE}━━━ Summary ━━━${NC}"
 echo -e "Total upstream skills: $TOTAL"
 echo -e "  ${GREEN}Up to date:  $IDENTICAL${NC}"
-echo -e "  ${GREEN}New to add:  $NEW${NC}"
+echo -e "  ${GREEN}New upstream: $NEW${NC} (requires confirmation on --apply; ${#NEW_PREDECLINED_SKILLS[@]} previously declined)"
 echo -e "  ${BLUE}Safe update: $SAFE_UPDATE${NC}"
 echo -e "  ${YELLOW}Need merge:  $NEEDS_MERGE${NC}"
 echo -e "  Local only: $LOCAL_ONLY"
@@ -405,8 +481,51 @@ echo ""
 if $APPLY; then
     echo -e "${BLUE}Applying safe updates...${NC}"
 
-    # Add new skills (no existing dir to clean)
+    # ── New-skill three-state policy: interactive confirm / --add-new / --skip-new ──
+    # A skill already in .aris-declined.txt is never re-asked and never installed —
+    # not even by --add-new (only editing/clearing the declined file restores it).
+    declare -a TO_INSTALL_NEW=()
+    declare -a SKIPPED_NEW=()
+    declare -a JUST_DECLINED=()
+
     for s in "${NEW_SKILLS[@]:-}"; do
+        [[ -n "$s" ]] || continue
+        if is_declined "$s"; then
+            continue
+        fi
+        case "$NEW_POLICY" in
+            add)
+                TO_INSTALL_NEW+=("$s")
+                ;;
+            skip)
+                SKIPPED_NEW+=("$s")
+                ;;
+            *)
+                if [[ -t 0 ]]; then
+                    grp="$(catalog_group_of "$s")"
+                    printf "  install new skill %-30s (group: %s) [y/N] " "$s" "$grp" >&2
+                    read -r reply </dev/tty
+                    if [[ "$reply" =~ ^[yY] ]]; then
+                        TO_INSTALL_NEW+=("$s")
+                    else
+                        JUST_DECLINED+=("$s")
+                    fi
+                else
+                    SKIPPED_NEW+=("$s")
+                fi
+                ;;
+        esac
+    done
+
+    if [[ ${#JUST_DECLINED[@]} -gt 0 ]]; then
+        {
+            [[ -f "$DECLINED_FILE" ]] && cat "$DECLINED_FILE"
+            printf '%s\n' "${JUST_DECLINED[@]}"
+        } | sort -u > "$DECLINED_FILE.tmp.$$" && mv -f "$DECLINED_FILE.tmp.$$" "$DECLINED_FILE"
+    fi
+
+    # Add accepted new skills (no existing dir to clean)
+    for s in "${TO_INSTALL_NEW[@]:-}"; do
         if [[ -n "$s" ]]; then
             cp -r "$UPSTREAM_DIR/$s" "$LOCAL_DIR/"
             echo -e "  ${GREEN}+ Added: $s${NC}"
@@ -431,13 +550,26 @@ if $APPLY; then
     fi
 
     echo ""
-    echo -e "${GREEN}Done! $NEW new + $SAFE_UPDATE updated.${NC}"
+    echo -e "${GREEN}Done! ${#TO_INSTALL_NEW[@]} new + $SAFE_UPDATE updated.${NC}"
+
+    if [[ ${#SKIPPED_NEW[@]} -gt 0 ]]; then
+        echo -e "${YELLOW}⚠️  ${#SKIPPED_NEW[@]} new skill(s) skipped, not declined: ${SKIPPED_NEW[*]}${NC}"
+        echo -e "${YELLOW}   Re-run with --add-new to install them (or re-run interactively on a TTY).${NC}"
+    fi
+    if [[ ${#JUST_DECLINED[@]} -gt 0 ]]; then
+        echo -e "  Declined just now (recorded in $DECLINED_FILE, won't be asked again): ${JUST_DECLINED[*]}"
+    fi
+    if [[ ${#NEW_PREDECLINED_SKILLS[@]} -gt 0 ]]; then
+        echo -e "  Previously declined, still skipped: ${#NEW_PREDECLINED_SKILLS[@]} (edit $DECLINED_FILE to reconsider)"
+    fi
 
     if [[ $NEEDS_MERGE -gt 0 ]]; then
         echo -e "${YELLOW}⚠️  $NEEDS_MERGE skills have personal customizations and were NOT updated.${NC}"
         echo -e "${YELLOW}   Review manually: ${MERGE_SKILLS[*]}${NC}"
         echo -e "${YELLOW}   Tip: diff the local and upstream SKILL.md files to merge changes${NC}"
     fi
+
+    ensure_global_pointer
 else
     case "$MODE" in
         project)

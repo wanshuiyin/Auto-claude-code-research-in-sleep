@@ -274,6 +274,45 @@ def test_browser_mode_http():
 
 
 # ============================================================
+# Strict cross-family identity gate
+# ============================================================
+
+def test_strict_manual_reviewer_identity_gate():
+    strict_openai = {
+        "require_reviewer_model": True,
+        "executor_model": "gpt-5.4",
+    }
+
+    assert srv.validate_reviewer_identity(
+        "Reviewer-Model: claude-sonnet-4.5\n\nScore: 7/10", strict_openai
+    ) is None
+    assert "must begin" in srv.validate_reviewer_identity(
+        "Score: 7/10", strict_openai
+    )
+    assert "different model family" in srv.validate_reviewer_identity(
+        "Reviewer-Model: gpt-5.6-sol\n\nScore: 7/10", strict_openai
+    )
+    assert "model family" in srv.validate_reviewer_identity(
+        "Reviewer-Model: mystery-model\n\nScore: 7/10", strict_openai
+    )
+
+    # Legacy/manual uses that do not request a verdict-bearing identity gate
+    # retain their existing transport behavior.
+    assert srv.validate_reviewer_identity("Score: 7/10", {}) is None
+
+
+def test_file_mode_warning_uses_actual_executor_family():
+    warning = srv.file_mode_warning({
+        "require_reviewer_model": True,
+        "executor_model": "gpt-5.4",
+    })
+    assert "gpt-5.4" in warning
+    assert "openai" in warning
+    assert "Reviewer-Model: <exact-model-id>" in warning
+    assert "non-Claude" not in warning
+
+
+# ============================================================
 # Test 6: File mode — prompt + response + cross-model warning
 # ============================================================
 def test_file_mode():
@@ -323,8 +362,8 @@ def test_file_mode():
 
             content = prompt_path.read_text(encoding="utf-8")
             assert "Cross-Model Warning" in content, "missing cross-model warning"
-            assert "do NOT paste this prompt into any Claude product" in content, \
-                "missing Claude-specific warning"
+            assert "DIFFERENT model family" in content, \
+                "missing executor-agnostic cross-family warning"
             assert "File mode test prompt" in content, f"wrong content: {content[:200]}"
 
             # Simulate user writing response

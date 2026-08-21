@@ -156,6 +156,9 @@ contract is what gets graded.)
    `CONTRACT_ACCEPTED: no` plus numbered revision demands. A reply with a
    missing or malformed verdict line is treated as `no`; request a corrected
    verdict as a follow-up — the correction exchange does not consume a round.
+   Include the scope-limits block from
+   [`review-scope-limits.md`](../shared-references/review-scope-limits.md) in the
+   brief.
 
 3. **Iterate.** On `no`, revise per the demands and resubmit as a follow-up in
    the SAME reviewer thread (the negotiation is one conversation). **Max 3

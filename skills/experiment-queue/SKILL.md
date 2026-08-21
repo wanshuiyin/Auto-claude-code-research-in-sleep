@@ -96,7 +96,7 @@ jobs:
 pending → running → completed
                  ↘ failed_oom → pending (after delay) [retry up to N]
                  ↘ failed_other → stuck (needs manual inspection)
-stale_screen_detected → cleaned → pending
+stale screen (process gone, screen lingering) → failed_other → stuck
 ```
 
 > **Operator note on `stuck` (the agent's move, not the queue's):** the queue
@@ -160,21 +160,24 @@ QUEUE_TOOLS=""
 if [ -n "${CLAUDE_SKILL_DIR:-}" ] && [ -f "$CLAUDE_SKILL_DIR/scripts/queue_manager.py" ]; then
   QUEUE_TOOLS="$CLAUDE_SKILL_DIR/scripts"
 fi
-# Layers 1-3: legacy chain via tools/experiment_queue/ shims.
+# Layers 1-4: legacy chain via tools/experiment_queue/ shims.
 if [ -z "$QUEUE_TOOLS" ]; then
   cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
   if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
       ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+  fi
+  if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+      ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
   fi
   QUEUE_TOOLS=".aris/tools/experiment_queue"
   [ -f "$QUEUE_TOOLS/queue_manager.py" ] || QUEUE_TOOLS="tools/experiment_queue"
   [ -f "$QUEUE_TOOLS/queue_manager.py" ] || { [ -n "${ARIS_REPO:-}" ] && QUEUE_TOOLS="$ARIS_REPO/tools/experiment_queue"; }
   [ -f "$QUEUE_TOOLS/queue_manager.py" ] || QUEUE_TOOLS=""
 fi
-[ -z "$QUEUE_TOOLS" ] && { echo "ERROR: experiment_queue helpers not found (layer 0: \$CLAUDE_SKILL_DIR/scripts/; layers 1-3: .aris/tools/, tools/, \$ARIS_REPO/tools/). Rerun install_aris.sh, set ARIS_REPO, or copy the canonical scripts from \$ARIS_REPO/skills/experiment-queue/scripts/." >&2; exit 1; }
+[ -z "$QUEUE_TOOLS" ] && { echo "ERROR: experiment_queue helpers not found (layer 0: \$CLAUDE_SKILL_DIR/scripts/; layers 1-4: .aris/tools/, tools/, \$ARIS_REPO/tools/, \$ARIS_REPO/tools/ via ~/.aris/repo). Rerun install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), set ARIS_REPO, or copy the canonical scripts from \$ARIS_REPO/skills/experiment-queue/scripts/." >&2; exit 1; }
 ```
 
-The `.aris/tools` symlink is set up by `install_aris.sh` (#174). Older installs without that symlink fall through to `tools/experiment_queue` (works if invoked from inside the ARIS repo) or `$ARIS_REPO/tools/experiment_queue`. After Phase 3.3, each of those legacy paths contains a Python `os.execv` shim that forwards to the canonical `skills/experiment-queue/scripts/` location, so existing users do not need to re-run anything.
+The `.aris/tools` symlink is set up by `install_aris.sh` (#174). Older installs without that symlink fall through to `tools/experiment_queue` (works if invoked from inside the ARIS repo), `$ARIS_REPO/tools/experiment_queue`, or the same path resolved via the global pointer file `~/.aris/repo` (#366, for installs with no project-local manifest). After Phase 3.3, each of those legacy paths contains a Python `os.execv` shim that forwards to the canonical `skills/experiment-queue/scripts/` location, so existing users do not need to re-run anything.
 
 **3b. Compute remote paths.** Use both a remote-relative form (for `scp` destinations — modern `scp` runs in SFTP mode and does NOT reliably expand `$HOME` in destination paths) and a `$HOME`-prefixed form (for `ssh ... command` strings, where remote bash WILL expand `$HOME`):
 
@@ -224,6 +227,11 @@ LOCAL_RUN_DIR="/abs/path/to/project/experiment_queue/<existing-run-ts>"   # the 
 . "$LOCAL_RUN_DIR/run_meta.txt"                                            # reloads PROJECT_DIR / RUN_TS / REMOTE_RUN_REL / REMOTE_RUN_DIR
 # Then re-run Step 3d verbatim. Do NOT re-run Step 3c (would overwrite manifest.json + state.json).
 ```
+
+A `queue_state.json` written before the 2026-08 scheduler fix records jobs the old code
+mis-judged as failed. Resuming it parks those jobs as `stuck` — they are not retried, so a
+state file whose jobs are all `failed_other` finishes with nothing launched. Delete that
+state file and re-run the manifest from Step 3c.
 
 The scheduler:
 - Reads manifest
@@ -280,20 +288,22 @@ phases:
       N: [384, 512]
     template:
       cmd: python run_train.py --direction c --backbone softmax --n_hidden ${N} ...
-      output_check: checkpoints/transformer/teacher_L96_K500_N${N}.pt
+      expected_output: checkpoints/transformer/teacher_L96_K500_N${N}.pt
   
   - name: distill_students
-    depends_on: train_teachers
+    depends_on: [train_teachers]        # must be a LIST, even for a single dependency
     grid:
       N: [384, 512]
       seed: [42, 200, 201]
     template:
       cmd: python run_distill.py --n_hidden ${N} --seed ${seed} ...
-      output_check: figures/distill_sw_N${N}_*_seed${seed}.json
+      expected_output: figures/distill_sw_N${N}_*_seed${seed}.json
 ```
 
-Scheduler enforces `depends_on`: `distill_students` jobs stay `pending` until all
-`train_teachers` jobs are `completed`.
+Scheduler enforces `depends_on`: `distill_students` jobs stay `pending` until every
+`train_teachers` job is terminal — `completed` **or** `stuck`. A failed teacher does not
+hold its students back, so check `queue_state.json` for `stuck` jobs before trusting a
+dependent wave.
 
 ## OOM Handling
 
@@ -376,7 +386,10 @@ If scheduler crashes / is killed:
 - **Idempotent scheduler** — safe to restart; picks up from state file
 - **Expected-output-based completion** — don't trust screen state alone; verify output file exists
 - **Bounded retry** — max N OOM retries, then mark `stuck` and alert
-- **Dependencies enforced at launch** — never launch student before teacher checkpoint exists
+- **Dependencies enforced at launch** — a wave launches only after every job in the phases it
+  depends on has reached a terminal state. Note "terminal" includes `stuck`: if a teacher job
+  fails, the phase still completes and its students launch against a missing checkpoint. Check
+  `queue_state.json` for `stuck` jobs before trusting a dependent wave's results.
 
 ## Known Failure Modes
 

@@ -14,14 +14,22 @@
 
 🤖 **AI agent 兄弟们：** 直接读 [`AGENT_GUIDE.md`](AGENT_GUIDE.md) —— 给 LLM 消费的路由 index，不是给人浏览的。
 
+🧱 **ARIS 的审阅器确实好用 —— 但它也提议过"加个没人读的哈希" → [HERO](https://github.com/wanshuiyin/HERO-Anti-OverDefense) 就是治这个的契约。** **H**ashing(哈希)、**E**dge cases(边界情况)、**R**ubrics(把判断换成机械)、**O**verbuild(过度建设)——agent 过度防御的四种形状,压成一段约 550 token、粘进 `CLAUDE.md` / `AGENTS.md` 的短文本。
+*它约束的是 agent **提议怎么修**,不是它**能找什么**。*
+
 🎬 **ARIS 走向多模态 → [ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)** —— 给它一个粗略的故事,拿回一部按场景检查过的图像电影(参考运行有 19 个场景)。
 长故事最容易坏在两点:模型忘了前面的细节,或者自己给自己打分——所以 ARIS 用 research-wiki 记住上下文,再让别的模型检查每一帧。
+
+<details>
+<summary>🗺️ <b>方法图</b> —— 故事梗概 → 可信源头 → 逐格受审螺旋 → 组装发布,一张图看全</summary>
 
 <p align="center">
   <a href="https://github.com/wanshuiyin/ARIS-Movie-Director">
     <img src="docs/aris-movie-director-method.png" alt="ARIS-Movie-Director 方法图 —— 受审螺旋：可信源头（asset library · outline · storyboard · comic.json）→ 逐格 image_gen + 跨模型 panel_gate（盲 token-diff、单票否决）→ research-wiki 审计留痕 → 组装与发布" width="100%">
   </a>
 </p>
+
+</details>
 
 > 🧭 *同一套流程也能画干净的方法图 / 流程图——上面这张图就是它做出来的。入口在 **[ARIS-Movie-Director](https://github.com/wanshuiyin/ARIS-Movie-Director)**:[`/movie-pipeline`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/movie-pipeline/SKILL.md) 和 [`/method-figure`](https://github.com/wanshuiyin/ARIS-Movie-Director/blob/main/skills/method-figure/SKILL.md),后者就是生成这张图的 skill。*
 
@@ -265,14 +273,24 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 
 ## 2. 📢 最近更新
 
+- **2026-08-21** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🔌 **Codex 审稿人连不上?现在可以配一个 HTTP 兜底**([#413](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/413),closes [#412](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/412);by [@TheFlashForge](https://github.com/TheFlashForge))。可选、默认关:给 `llm-chat` MCP 设 `LLM_REVIEW_FALLBACK_ENABLED=true`,审阅就能退到任意 OpenAI 兼容端点——但**只在能证明 Codex 根本没收到请求时**才启用。超时**不算**:那次审阅可能已经在跑,重发等于花两份钱买两个可能打架的结论。兜底审稿人读的是你的原始文件而不是执行者的转述,必须和执行者不同模型家族,拿到的信任比 Codex 更低——绝不更高。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
+- **2026-08-21** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 🧹 **一天合并四个社区修复**([#406](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/406)、[#408](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/408)、[#409](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/409)、[#410](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/410);by [@ZLZLGe](https://github.com/ZLZLGe) 和 [@JasmineLCY](https://github.com/JasmineLCY))。过夜长跑不会再卡在检查点等一个永远等不来的回答——`AUTO_PROCEED=true` 现在真的自己往下走,`false` 照旧停下来问你([#410](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/410),closes [#30](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/30))。idea-discovery 不能再"号称审过其实没审"——证据门现在要见到审稿模型和会话记录才放行([#409](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/409),closes [#375](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/375))。缓存的 research-wiki 上下文在 `/idea-creator` 读之前先过一遍扫描,网页里埋的提示注入搭不上缓存的便车;扫描跑不了就本轮不带 wiki 上下文继续,不会硬失败([#408](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/408))。选 Claude 当审稿人的 Codex 用户找回 `paper-figure` / `paper-plan` / `paper-write` 三个 skill——一个引号转义 bug 让严格加载器看不见它们([#406](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/406))。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
+- **2026-08-09** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🦆 **Copilot CLI 宿主下,`/auto-review-loop` 默认改用其原生 rubber-duck 审稿 subagent**([#360](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/360),closes [#258](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/258);by [@Functionhx](https://github.com/Functionhx))。不再依赖 Codex MCP、不再固定 GPT 型号:每轮由宿主内置 subagent 审稿,helper 从宿主持久化的会话事件中提取并复验双方真实模型与跨家族关系,同家族/家族不明/证据缺失一律 fail-closed 到已知异族外部后备或 `REVIEW_UNAVAILABLE`。显式指定的外部 reviewer 照旧优先——**标准的 Claude Code + Codex 搭配完全不受影响**:原生路线仅当 ARIS 本身跑在 Copilot CLI 会话里才会启用(一次性宿主探针判定;其他任何环境直接回落 Codex 默认)。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
+- **2026-08-09** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🚧 **`/idea-discovery` 不能再静默跳过阶段**([#383](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/383),closes [#285](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/285);by [@3mom3](https://github.com/3mom3))。确定性证据门逐一检查五个阶段的 run-state 记录与规范报告章节,缺任何一项,最终报告就带上可见的 `BLOCKED: <stage> evidence missing` 段落,而不是产出一份"看起来完整"的 `IDEA_REPORT.md`。该门只证明执行证据;各阶段的验收仍归各自的审查门。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
+- **2026-08-05** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 🈶 **research wiki 的非 ASCII 处理修好了**([#386](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/386)、[#387](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/387);由 [@LIMMIL7](https://github.com/LIMMIL7) 报告)。两个 bug 叠在一起:`research_wiki.py` 大部分文件操作沿用平台默认编码,cp936 环境下写出的 wiki 换台机器就读不了;而 `slugify()` 会剥掉所有非 ASCII 字符,纯中文标题因此塌成 `<年份>_untitled`,同年第二篇这样的论文就被当成重复静默丢弃。两处均已修复;ASCII slug 保持不变,已有的 UTF-8 wiki 继续兼容(老的 cp936 wiki 现在会指名哪个文件需要转码,而不是抛裸 traceback)。另外 `/research-lit` 找不到本地文献库时会明确告警,不再静默跳过。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
+- **2026-08-04** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🖼️ **上游项目动态:[posterly](https://github.com/Chenruishuo/posterly)——`/paper-poster-html` 的引擎——迎来一次大的设计升级。** `/paper-poster-html` 的测量门机制正是改编自 posterly(MIT,by [@Chenruishuo](https://github.com/Chenruishuo))。据其开发者,今年 ICML 会场约 50 张论文海报由它制作;会后更新复盘了业内成熟海报的呈现手法,在"开箱即用"的基线之上大幅提升了设计感与风格多样性。做海报的同学值得一看:[GitHub](https://github.com/Chenruishuo/posterly) · [Blog](https://www.tryposterly.com/blog)。
+- **2026-08-03** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧭 **`/proof-orchestrator` —— 工作流 7,独立理论轨道:带记忆的证明战役**([#381](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/381),社区贡献 by [@shenmuxing](https://github.com/shenmuxing),改编自其本人的 [EtaSkill](https://github.com/shenmuxing/EtaSkill))。硬定理很少一轮对话就倒下——这个 skill 把证明工作跑成有状态的 local-first 流水线:冻结精确目标、本地攻坚与审计、过七行记号记分卡(未定义符号与符号冲突必须为零)和自顶向下推导结构门——名为润色实为纠错,循环论证在自顶向下重写那一刻现形;证明卡住时,产出可直接复制粘贴的 GPT Pro 交接包。run 跨 session 延续:每个新 run 记录此前哪些 claim 已证/猜想/已否决,只有审计通过的 claim 才被复用。可按需请求 DeepSeek 对抗性第二意见。工作流 1–6 不会调用它;`/proof-checker` 仍是投稿门。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
+<details>
+<summary>更早的更新(2026-03-12 — 2026-07-14,72 条)</summary>
+
+- **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🐞 **[`/web-debug-search`](skills/web-debug-search/SKILL.md)**（Issue [#211](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/211)）。新增聚焦调试/发现的检索流程：搜索 GitHub Issues 与 Discussions，支持精确/归一化错误字符串匹配、版本兼容性追踪和明确的失败处理。所有结果都标记为调试用途，不能作为论文引用证据。
+- **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧩 **选择性安装 + 全局脚本指针**([#366](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/366))。81 个 skill 不再"一股脑全装"——四套安装器都支持按组/按 skill 选装(`--list-groups` / `--groups X,Y` / `--skills X` / `--exclude Y`,或 TTY 下的全屏勾选界面),pipeline 硬依赖自动带全。更新时上游**新增**的 skill 会逐个确认(`--add-new` / `--skip-new` 供脚本化;拒绝的记住、不再重复问)。同时修了全局 copy 安装(`~/.claude/skills`)找不到 helper 脚本的问题,新增指针文件 `~/.aris/repo`。⚠️ 向后兼容:`--quiet` 全新安装仍是全装;跑一次任意安装器/更新器即可拿到指针文件。[选择性安装 →](#install-skills)
 - **2026-07-12** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🛡️ **投稿前,你的论文先过一遍审稿人那侧的取证**([#357](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/357))。新 skill `/integrity-forensics`:SHA-pin 薄启动器,把 [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) 那套敌意审稿人能跑的扫描(证据账本、九个审计维度、数值核心、纯规则裁决器)先跑在你自己的论文上。结论进一道 typed gate——flag 能拦下投稿,"没查出问题"只记作"无新阻断"、不算无罪判决;finding 只有带类型、带 hash 的证据、或人签字的 waiver 才能销项(把句子改个措辞不算数,台账会记下来)。`/paper-writing` 在 submission 档默认就跑(`— self_forensics: false` 可关;Codex 镜像是 opt-in,且只能跑上游的确定性切片——能报 flag,永远说不出 CLEAN)。⚠️ 首次运行需要联网克隆并校验上游;跑 `bash tools/smart_update.sh --apply` 拉取更新。
+
 - **2026-07-10** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧠 **Reviewer 默认换成 GPT-5.6-Sol,深度审计用上新的 `ultra` 档**([#354](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/354))。codex-cli 0.144.1 在 `xhigh` 之上加了 `max`、`ultra`;ARIS 审阅默认走 `gpt-5.6-sol`,七个重量级裁决(`/proof-checker`、`/kill-argument`、`/research-review`、`/experiment-audit`、`/paper-claim-audit`、`/result-to-claim`、`/meta-apply`)用 `ultra`,其余保持 `xhigh`。codex-cli 版本旧或没有这个模型会自动降级(5.6-sol → 5.5,均 `xhigh`)——永远不低于 `xhigh`,单纯超时不降级。顺手修了:`/result-to-claim` 审稿模型连不上时诚实停下,不再自判自己的实验。⚠️ 升级 codex-cli 到 ≥ 0.144.1,重启 session,跑 `bash tools/smart_update.sh --apply`。
 - **2026-07-03** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧬 **从 Anthropic 的 Claude Science skills 借来三点小改动**([#339](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/339)、[#340](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/340)、[#341](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/341);Apache-2.0)。ARIS 现在用同一种写法描述 GPU 环境,同一份配置可以用在 SSH 机器、Modal 和集群上,再让一个全新的 agent 按安装说明走一遍来检查。我们也加了一个小工具,用来测试 skill 描述到底能不能让系统选中正确的 skill。最后,图表和写作检查会把"事实是否正确"和"风格是否好看"分开:事实必须过,风格只是建议。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
 - **2026-07-02** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🔁 **把 Karpathy 的 LOOPS.md 思路吸收到 ARIS**([#333](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/333)–[#337](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/337))。Reviewer 现在会先找哪里可能有问题,而不是礼貌地打个分。遇到奇怪的 review 结论时,ARIS 会先让你看保存下来的 reviewer 记录,而不是立刻再问一遍模型。做坏的构建可以按计划重来,不必一直补丁叠补丁;计划、日志和结果会保留。评分可以参考真实的好/坏例子,`/meta-optimize` 会问哪些东西该删,`/paper-writing` 会在动笔前先定清楚"写完"的标准。⚠️ 运行 `bash tools/smart_update.sh --apply` 拉取更新。
 - **2026-06-20** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 📚 **Research wiki 四层节点全部用确定性写入器 —— 修复"重新生成的 idea 没被记录"**([#305](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/305)、[#306](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/306)、[#307](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/307)、[#308](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/308))。一位用户踩到真 bug:首次 `/idea-creator` 记下的 idea,重新生成时不见了 —— 因为 wiki 页面是 **freehand**(LLM 手写)写的,这种 prose 步骤在"再生成一版"时容易被跳过。现在每层都有专属 `research_wiki.py` 写入器,与 `ingest_paper` 并列:**`add_claim`**(claim 出生于 [`/proof-checker`](skills/proof-checker/SKILL.md))、**`upsert_idea`**([`/idea-creator`](skills/idea-creator/SKILL.md))、**`add_experiment`**([`/result-to-claim`](skills/result-to-claim/SKILL.md)),每个都有 drift-check 守护、防止退化成死代码。claim 的 `status` 现在是严格的**证明轴**(`verified`/`refuted`/`unproven`/…),实验支持改由 `supports`/`invalidates` **边**承载(修掉一个共享 validator 会拒绝的潜伏矛盾);**Codex-CLI skill 镜像也已同步**。无 `research-wiki/` 时**零行为变化**。
-<details>
-<summary>更早的更新（2026-03-12 — 2026-06-19，65 条）</summary>
-
 - **2026-06-19** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🛰 **通宵跑的 loop 现在能发现自己死了,或者卡住了**([#300](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/300)、[#301](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/301)、[#302](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/302);运行模式参考了 [Deli Chen 的 AutoResearch](https://victorchen96.github.io/auto_research/framework.html))。新的 [watchdog](tools/watchdog.py) 会看无人值守的 loop 还在不在更新状态文件,安静太久就写告警;它只报问题,绝不重启任何带裁决性质的 run。另一个 [iteration log](tools/iteration_log.py) 会看每轮有没有新发现:连续两轮没新东西就强制换方向,四轮就叫人接手;结果到底够不够好,仍然交给跨模型 jury 判断。
 
 - **2026-06-07** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🖼️ **[`/paper-poster-html`](skills/paper-poster-html/SKILL.md) 成为默认海报流水线;旧的 LaTeX [`/paper-poster`](skills/paper-poster/SKILL.md) 退役。** 它把海报做成一个 HTML/CSS 文件,尺寸就是会议真实印刷尺寸,并且先用测量 gate 检查排版和素材,再让内容 reviewer 看,所以审阅时间不用浪费在列没对齐这类问题上。它还带了模板、可复用海报组件和会议 token 包;核心 gate 机制改造自 [posterly](https://github.com/Chenruishuo/posterly)(MIT,by [@Chenruishuo](https://github.com/Chenruishuo))。⚠️ `/paper-poster` 现在重定向到 `/paper-poster-html`;LaTeX 旧流水线只留在 git history 里。
@@ -365,6 +383,7 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 bash Auto-claude-code-research-in-sleep/tools/install_aris.sh ~/your-project   # 把 ARIS skill symlink 进 <project>/.claude/skills/
 # （想全局安装？cp -r Auto-claude-code-research-in-sleep/skills/* ~/.claude/skills/）
+# （不需要全部 82 个？--list-groups / --groups X,Y / --skills X —— 见下方"选择性安装"）
 
 # 可选：Codex mirror 项目级受管安装
 bash Auto-claude-code-research-in-sleep/tools/install_aris_codex.sh ~/your-codex-project
@@ -395,6 +414,8 @@ claude
 > /research-wiki init                          # 📚 启用持久化研究记忆（一次性）
 > /meta-optimize                               # 元优化：分析使用记录 → 提出技能改进方案
 ```
+
+> 不需要全部 82 个 skill？见下方[选择性安装](#install-skills)按组/按 skill 挑选。
 
 <details>
 <summary><b>📚 Research Wiki（可选）</b> —— 一行 init 启用跨 session 持久记忆；完整说明见 <a href="#-research-wiki--persistent-research-memory">§ Research Wiki</a></summary>
@@ -536,14 +557,14 @@ Codex 基础镜像默认由新的 Codex `spawn_agent` 自审：流程可以继�
 
 ## 4. ✨ 功能亮点
 
-ARIS 用 **80 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
+ARIS 用 **82 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
 
 🔥 *而且这套"广度 / 审 / 记忆"三角能适配任何 agent 的 **ultracode 式深度模式**：广度 pass 适配运行时暴露的能力（Claude Code 原生 ultracode / workflows + Opus 4.8、Codex `spawn_agent`，或纯顺序执行），并按层级干净降级（fan-out → agent spawn → 顺序）。三件事分得很清楚：**广度 · 跨模型对抗审 → 准确性 · research wiki → 记忆性**。无论循环由谁推进，最后都回到同一套跨模型对抗审 + research wiki：**能推进，不能定案**。*
 
 <details>
 <summary><b>完整功能清单</b></summary>
 
-- 📊 **80 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
+- 📊 **82 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
 - 🔍 **文献 & 查新** — 多源论文搜索（**[Zotero](docs/integrations/ZOTERO_CN.md)** + **[Obsidian](docs/integrations/OBSIDIAN_CN.md)** + **本地 PDF** + arXiv/Scholar）+ 跨模型查新验证
 - 💡 **Idea 发现** — 文献调研 → 头脑风暴 8-12 个 idea → 查新 → GPU pilot 实验 → 排名报告
 - 🔄 **自动 review 循环** — 4 轮自主审稿，一夜从 5/10 提升到 7.5/10，自动跑 20+ 组 GPU 实验
@@ -576,7 +597,7 @@ ARIS 用 **80 个可组合 skill** 覆盖科研全生命周期——文献查新
 <a id="skills-catalog"></a>
 <a id="-skills-catalog"></a>
 
-ARIS 现有 **80+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、演讲、专利、meta 工具等——完整目录（每个 skill 含 role / category / 依赖）在 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)**，独立成文以保持 README 可扫读。
+ARIS 现有 **82+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、演讲、专利、meta 工具等——完整目录（每个 skill 含 role / category / 依赖）在 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)**，独立成文以保持 README 可扫读。
 
 <details>
 <summary><b>常用入口</b> —— 场景 → 入口 skill</summary>
@@ -597,7 +618,7 @@ ARIS 现有 **80+ 个 skill**，覆盖文献调研、idea 生成、实验、审�
 
 </details>
 
-→ **[按 category 浏览全部 80 个 skill →](docs/SKILLS_CATALOG.md)**
+→ **[按 category 浏览全部 82 个 skill →](docs/SKILLS_CATALOG.md)**
 
 ---
 
@@ -710,6 +731,7 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**所列分数
 - **已有结果，需要迭代改进？** 工作流 2 → `/auto-review-loop`
 - **准备写论文了？** 工作流 3 → `/paper-writing`（或分步：`/paper-plan` → `/paper-figure` → `/paper-write` → `/paper-compile` → `/auto-paper-improvement-loop`）
 - **全流程？** 工作流 1 → 1.5 → 2 → 3 → `/research-pipeline`，从文献调研一路到投稿
+- **要打一场跨 session 的证明攻坚战？** 工作流 7 → `/proof-orchestrator` — run 目录制证明战役、GPT Pro 交接包、跨 run 接续
 - **想让 ARIS 记住并学习？** 📚 `/research-wiki init` — 跨会话持久记忆，论文、idea、失败实验复合积累
 - **想让 ARIS 优化自己？** 工作流 M → `/meta-optimize` — 分析使用日志，提出技能改进，reviewer 审核
 
@@ -1064,6 +1086,69 @@ NARRATIVE_REPORT.md ──► /paper-plan ──► /paper-figure ──► /pap
 
 `/paper-talk` 把录用论文做成报告:提纲 → `/paper-slides`(Beamer + PPTX + 备注 + Q&A)→ `/slides-polish`(逐页 Codex 视觉审)→ 可选 conference-ready 审计门。是 `/paper-writing` / `/paper-poster-html` 的姊妹流程。**完整流程 → [docs/RESUBMIT_AND_TALK_CN.md](docs/RESUBMIT_AND_TALK_CN.md)**
 
+### 工作流 7:Proof Orchestrator 🧭(独立理论轨道——攻坚一个定理,以天为单位而不是以轮为单位)
+
+> **"这个证明要花一周、用三个工具。让每次尝试、每次审计、每次升级都留在案卷上。"**
+
+硬定理是战役,不是一轮对话。`/proof-orchestrator` 把证明工作跑成有状态的 local-first 流水线——每次 run 有自己的目录,完成的 run 成为 append-only 证据,每个新 run 记录此前哪些 claim 已证/猜想/已否决:
+
+1. 🎯 **冻结目标** — 精确的定理、假设、量词、允许引用的来源;新开 run 或接续旧 run
+2. 🧱 **维护本地证据** — run 目录:`task.md` / `materials.md` / 稳定的来源快照
+3. 🧠 **本地攻坚** — 完整的证明、反证、反例或诊断;卡住时收窄到最小的那条硬 obligation
+4. 🔍 **正确性审计** — 每条引理、界、量词逐一对假设核验;claim 标注 已证/引用/猜想/修补/无支撑
+5. ✒️ **表达润色** — 两道门:七行记号记分卡(核心对象保留率 100%、未定义符号为零、符号冲突为零)+ 自顶向下推导结构门(依赖图无环、子目标不得暗中假设结论——名为润色实为纠错:一个抗拒干净自顶向下重写的证明往往藏着 gap,循环论证在重排那一刻就会现形)
+6. 📦 **GPT Pro 交接** — 卡住的证明打成交接包:`browser-prompt.md`(可直接复制)、`source-manifest.md`(来源角色)、`handoff.md`(上传顺序 + 回贴指引)
+7. 🧾 **回贴复审** — 只做格式修复,然后走完整正确性审计与润色,产出 `final.md`
+
+<details>
+<summary><b>展开工作流 7 流程图</b> —— 冻结目标 → 本地攻坚 → 审计 → 记号/结构门 → (卡住时)GPT Pro 交接 → 回贴复审 → final.md,外加可选 DeepSeek 分支</summary>
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              Workflow 7: Proof Orchestrator                     │
+│                                                                 │
+│   定理到达(新开 run,或接续旧 run)                             │
+│         │                                                       │
+│         ▼                                                       │
+│   ┌──────────┐     ┌──────────┐     ┌──────────┐               │
+│   │ 冻结目标 │────▶│ 本地证明 │────▶│ 正确性   │               │
+│   │ + 本地   │     │ 攻坚     │     │ 审计     │               │
+│   │ 证据     │     │          │     │          │               │
+│   └──────────┘     └──────────┘     └──────────┘               │
+│                         │                │                      │
+│                  LOCAL_BLOCKED     ┌──────────┐                │
+│                         │          │ 记号门 + │                │
+│                         │          │ 结构门   │──▶ final.md    │
+│                         │          │          │                │
+│                         │          └──────────┘                │
+│                         ▼                                       │
+│   ┌───────────────────────────────────────────┐                │
+│   │ GPT Pro 交接包                            │                │
+│   │ browser-prompt.md · source-manifest.md ·  │                │
+│   │ handoff.md —— 浏览器由你来开              │                │
+│   └───────────────────────────────────────────┘                │
+│                         │                                       │
+│                         ▼                                       │
+│   gpt-pro-output.md → 格式修复 → 复审 → 两道门 → final.md      │
+│                                                                 │
+│   可选(按需):DeepSeek 对抗审 via llm-chat                    │
+│   → 本地核验 → run 内 provisional 证据                         │
+│                                                                 │
+│   状态:prompts/<run-id>/ —— 完成的 run 只增不改;              │
+│   新 run 只复用审计通过的 claim                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+</details>
+
+**涉及 Skills:** `proof-orchestrator`(+ 可选 DeepSeek 分支用 `llm-chat` MCP)
+
+> ⚖️ **可选 DeepSeek 第二意见:** 在审计阶段按需请求,得到一次验证过模型的跨家族对抗审——发现先经本地核验,再记为 run 内的 provisional 证据。装了 `call-gpt-pro` skill 后,也可以在某次 run 上让它代跑 GPT Pro 调用。
+
+> 🧭 **设计上就是独立的。** 工作流 7 是理论工作自己的轨道——工作流 1–6 的任何环节都不会调用它,工作流 3 里的投稿门仍归 `/proof-checker`。当一个定理超出 `/proof-writer` 单次起草的量级——多天攻坚、跨 run 接续、或最强的证明器在浏览器标签页里——就用它。
+
+> 💡 **接续:** 指向旧 run(`next.md` / `redo.md`)——它读取 `final.md` / `audit.md`,只复用审计通过的 claim,并带着完整出处新开一个 run 目录。
+
 <a id="-research-wiki--persistent-research-memory"></a>
 
 ### 📚 Research Wiki — 持久化研究记忆
@@ -1236,6 +1321,12 @@ claude   # hooks 立即生效
    # 验证
    latexmk --version && pdfinfo -v
    ```
+   > **Windows（PowerShell）：** 先安装 [MiKTeX Basic Installer](https://miktex.org/howto/install-miktex) 或 [Windows 版 TeX Live](https://tug.org/texlive/windows.html)，再单独安装 [Windows 版 Poppler](https://github.com/oschwartz10612/poppler-windows/releases)。将包含 `pdfinfo.exe` 的目录加入 `PATH`，重新打开 PowerShell，然后验证：
+   > ```powershell
+   > latexmk --version
+   > pdfinfo -v
+   > ```
+   > 如果命令找不到，请刷新 TeX 发行版的包/路径设置，并确认包含 `pdfinfo.exe` 的 Poppler 目录已加入 `PATH`。
    > 如果只用工作流 1 和 2（找 idea + 自动 review），不需要安装 LaTeX。
 
 <a id="install-skills"></a>
@@ -1263,6 +1354,13 @@ cd ~/aris_repo && git pull
 
 # 3a. 上游新增 / 删除 skill 时，重跑安装器（一次的事）：
 bash ~/aris_repo/tools/install_aris.sh ~/your-paper-project
+
+# 只装需要的 skill（#366 选择性安装；不带参数在 TTY 上进全屏勾选菜单）：
+bash ~/aris_repo/tools/install_aris.sh --list-groups                  # 看 10 个分组
+bash ~/aris_repo/tools/install_aris.sh --groups paper-core,lit-search # 按组装
+bash ~/aris_repo/tools/install_aris.sh --skills paper-writing         # 指定 skill，pipeline 依赖自动带上
+bash ~/aris_repo/tools/install_aris.sh --exclude patent-pipeline      # 反选（记入 declined，更新时不再问）
+# 更新时上游新增的 skill 会逐个二次确认；--add-new 全收 / --skip-new 全跳过
 
 # 其他常用：
 bash ~/aris_repo/tools/install_aris.sh --dry-run        # 看计划，不写盘

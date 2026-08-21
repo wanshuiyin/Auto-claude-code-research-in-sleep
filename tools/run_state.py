@@ -59,6 +59,7 @@ except ImportError:  # pragma: no cover - Windows
     fcntl = None  # type: ignore
 
 EXECUTOR_STATUSES = {"pending", "running", "done", "failed", "skipped"}
+GATE_VERDICTS = {"PASS", "BLOCKED"}
 # Statuses resume ALWAYS skips. `provisional` is deliberately NOT here: whether a
 # same-family provisional verdict may advance a run is a PER-RUN POLICY
 # (`policy.provisional_advances`, default False). The Codex-native mirror sets it
@@ -155,6 +156,7 @@ def start_run(root: str, run_id: str, phases: list[str], executor: Optional[str]
             "policy": {"provisional_advances": bool(provisional_advances)},
             "created": _now(),
             "updated": _now(),
+            "gates": {},
             "phases": [{"phase": ph, "status": "pending", "artifact": None,
                         "verdict_id": None, "reviewer": None,
                         "reviewer_family": None, "review_independence": None,
@@ -164,6 +166,40 @@ def start_run(root: str, run_id: str, phases: list[str], executor: Optional[str]
         }
         _save(root, run_id, state)
         return state
+
+
+def record_gate_result(
+    root: str,
+    run_id: str,
+    gate: str,
+    verdict: str,
+    reasons: list[str],
+) -> dict:
+    """Persist a deterministic gate result alongside phase state.
+
+    Gates do not replace per-phase acceptance. They make workflow-level checks
+    auditable, including a visible BLOCKED result when required evidence is
+    missing.
+    """
+    if not gate:
+        raise ValueError("gate name must be non-empty")
+    if verdict not in GATE_VERDICTS:
+        raise ValueError(f"gate verdict must be one of {sorted(GATE_VERDICTS)}")
+    with _lock(root, run_id):
+        state = _load(root, run_id)
+        gates = state.setdefault("gates", {})
+        gates[gate] = {
+            "verdict": verdict,
+            "reasons": list(reasons),
+            "updated": _now(),
+        }
+        _save(root, run_id, state)
+        return state
+
+
+def load_run(root: str, run_id: str) -> dict:
+    """Return the persisted state for a run without mutating it."""
+    return _load(root, run_id)
 
 
 def _find_phase(state: dict, phase: str) -> dict:

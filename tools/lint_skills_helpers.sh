@@ -4,6 +4,7 @@
 # Per shared-references/integration-contract.md §2, SKILL.md files must
 # resolve helpers via the canonical strict-safe chain
 #   .aris/tools/<helper>  →  tools/<helper>  →  $ARIS_REPO/tools/<helper>
+#   →  $ARIS_REPO/tools/<helper> via the global pointer file ~/.aris/repo (#366)
 # (Codex mirror uses the mirror-side chain), NOT hardcode `python3 tools/foo.py`
 # or `bash tools/foo.sh` directly.
 #
@@ -69,7 +70,7 @@ if [ "$violation_count" -gt 0 ]; then
   echo "  Migrate each violating SKILL.md to the canonical strict-safe resolver"
   echo "  per shared-references/integration-contract.md §2 (assign a semantic"
   echo "  variable like \$AUDIT_VERIFIER / \$TRACE_HELPER / \$<NAME>_FETCHER from"
-  echo "  the three-layer chain, then invoke as \`python3 \"\$VAR\" ...\` or"
+  echo "  the four-layer chain, then invoke as \`python3 \"\$VAR\" ...\` or"
   echo "  \`bash \"\$VAR\" ...\`)."
   echo ""
   echo "  Per-helper policy (Policy A gate / B side-effect / C forensic /"
