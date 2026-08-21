@@ -47,3 +47,8 @@ patent/
 
 # ARIS runtime state (per-project traces, caches, installed-skills manifest)
 .aris/
+
+# Node (dsh bundle packaging)
+node_modules/
+package-lock.json
+pnpm-lock.yaml

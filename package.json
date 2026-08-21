@@ -1,0 +1,55 @@
+{
+  "name": "dsh-aris",
+  "version": "0.4.25",
+  "description": "ARIS research-workflow skills as a DeepSeek Harness bundle: 82 skills plus cross-model adversarial review through Codex.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git"
+  },
+  "homepage": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep#readme",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "aris",
+    "research",
+    "agent"
+  ],
+  "exports": {
+    ".": "./dsh/index.mjs",
+    "./client": "./dsh/client.js",
+    "./scope-limits": "./dsh/scope-limits.mjs",
+    "./cordis.patch.yml": "./dsh/cordis.patch.yml",
+    "./checkout.patch.yml": "./dsh/checkout.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dsh",
+    "skills",
+    "tools",
+    "templates",
+    "mcp-servers",
+    "README.md",
+    "README_CN.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./dsh/cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-connection"
+      ]
+    }
+  }
+}

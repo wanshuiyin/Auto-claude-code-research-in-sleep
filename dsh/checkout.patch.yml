@@ -1,0 +1,38 @@
+# ARIS development overlay — for a git checkout, not an installed package.
+#
+# This is NOT equivalent to the published bundle. It mounts the skill corpus and
+# the Codex reviewer from a clone, which is enough for skill, resource, and
+# reviewer-prompt work. It cannot restore Codex's threadId (multi-round
+# codex-reply, and therefore the hard-tier Debate Protocol) and does not add the
+# HTTP fetch provider, because both need the package's code.
+#
+#   ARIS_REPO=/absolute/path/to/aris NODE_USE_ENV_PROXY=1 \
+#     dsh --profile web --patch /absolute/path/to/aris/dsh/checkout.patch.yml
+
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-pro
+
+- insert:
+    - id: aris-checkout-skills
+      name: '@deepseek-ai/dsh-skill-filesystem'
+      config:
+        providerName: aris
+        includeDefaultRoots: false
+        # Editing a skill in the clone takes effect without a restart.
+        watch: true
+        # Unset ARIS_REPO would otherwise mount "undefined/skills" and quietly
+        # publish an empty catalog.
+        bundledSkillDir: !!js "process.env.ARIS_REPO ? process.env.ARIS_REPO + '/skills' : (() => { throw new Error('ARIS checkout patch requires ARIS_REPO to point at the ARIS clone') })()"
+
+    - id: aris-codex
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: codex
+        command: codex
+        args: [mcp-server]
+        cwd: !!js process.env.HOME
+        toolCallTimeoutMs: 1200000
+        failOnStartupError: true

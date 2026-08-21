@@ -1,0 +1,44 @@
+# ARIS bundle layer for DeepSeek Harness.
+#
+# Applied after the profile's surface bundle. Patch config replacement is
+# whole-value, so rows that adjust shipped configuration restate every field
+# they need.
+
+# ARIS review runs on the stronger executor.
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-pro
+
+- insert:
+    # Skill corpus, ARIS_REPO, and the Codex threadId projection.
+    - id: aris-skills
+      name: 'dsh-aris'
+
+    # Optional: apply ARIS's scope limits to the executor as well as the
+    # reviewer. Off by default — it spends tokens on every request, and the
+    # reviewer side is already covered by the skills. Flip to enable.
+    - id: aris-scope-limits
+      name: 'dsh-aris/scope-limits'
+      disabled: true
+
+    # The independent reviewer. Model and reasoning effort come from the host
+    # Codex installation (~/.codex/config.toml) — that file is the reviewer
+    # posture contract, and dsh deliberately does not override it.
+    - id: aris-codex
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        transport: stdio
+        serverName: codex
+        command: codex
+        args: [mcp-server]
+        # Pinned to a directory that outlives the run. Inheriting the Harness's
+        # launch directory makes every review depend on it still existing:
+        # remove or rename it and Codex fails to load its own configuration,
+        # which ARIS survives by degrading to a transport that cannot attest
+        # reviewer identity. Review prompts address artifacts absolutely.
+        cwd: !!js process.env.HOME
+        # dsh defaults to 60s and Codex's progress notifications do not extend it.
+        # 20 minutes is ARIS's own threshold for calling a review hung.
+        toolCallTimeoutMs: 1200000
+        failOnStartupError: true
