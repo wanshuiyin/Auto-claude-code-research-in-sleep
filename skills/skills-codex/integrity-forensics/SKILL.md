@@ -24,14 +24,16 @@ Audit target: **$ARGUMENTS**
 - **ANTI_AR_REPO = `https://github.com/wanshuiyin/Anti-Autoresearch.git`**
 - **ANTI_AR_COMMIT = `b47af6f983b38347b6d2110379e266400597cf66`** — never
   tracks HEAD; bumping is a reviewed change (mainline Pin-bump checklist).
-- **CLONE_DIR = `~/.claude/anti-autoresearch`**
+- **CLONE_DIR = `~/.aris/anti-autoresearch`** — host-neutral. An older clone at
+  `~/.claude/anti-autoresearch` is unused; delete it whenever convenient.
 - **NO REVIEWER KNOBS** — and no `— effort:` mapping onto upstream settings.
 
 ## Step 0 — Bootstrap the pin (identical to mainline)
 
 ```bash
-CLONE_DIR="$HOME/.claude/anti-autoresearch"
+CLONE_DIR="$HOME/.aris/anti-autoresearch"
 ANTI_AR_COMMIT="b47af6f983b38347b6d2110379e266400597cf66"
+mkdir -p "$HOME/.aris"
 if [ ! -d "$CLONE_DIR/.git" ]; then
     git clone --no-checkout https://github.com/wanshuiyin/Anti-Autoresearch.git "$CLONE_DIR"
 fi

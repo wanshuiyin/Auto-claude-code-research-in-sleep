@@ -28,7 +28,12 @@ Audit target: **$ARGUMENTS**
 - **ANTI_AR_COMMIT = `b47af6f983b38347b6d2110379e266400597cf66`** — the SHA-pin.
   The launcher NEVER tracks upstream HEAD; bumping this constant is a reviewed
   change (see Pin-bump checklist).
-- **CLONE_DIR = `~/.claude/anti-autoresearch`** — the pinned working copy.
+- **CLONE_DIR = `~/.aris/anti-autoresearch`** — the pinned working copy. Host-neutral
+  on purpose: ARIS also runs on DeepSeek Harness, Codex CLI, Cursor, Trae,
+  Antigravity and Copilot CLI, where `~/.claude/` would name an installation the
+  user does not have. An older clone at `~/.claude/anti-autoresearch` is unused;
+  move it and its `.aris_eval_ok_*` receipt only to keep an offline
+  deterministic-only run working, otherwise delete it whenever convenient.
 - **NO REVIEWER KNOBS.** This launcher exposes no reviewer model/effort
   parameters and never maps ARIS `— effort:` onto upstream settings. The
   pinned upstream runs exactly what it pins (`gpt-5.6-sol` + `xhigh`, its own
@@ -43,9 +48,10 @@ Audit target: **$ARGUMENTS**
 ## Step 0 — Bootstrap the pin (idempotent)
 
 ```bash
-CLONE_DIR="$HOME/.claude/anti-autoresearch"
+CLONE_DIR="$HOME/.aris/anti-autoresearch"
 ANTI_AR_COMMIT="b47af6f983b38347b6d2110379e266400597cf66"
 
+mkdir -p "$HOME/.aris"
 if [ ! -d "$CLONE_DIR/.git" ]; then
     git clone --no-checkout https://github.com/wanshuiyin/Anti-Autoresearch.git "$CLONE_DIR"
 fi
@@ -262,7 +268,9 @@ Upstream ships no Codex-native pack; its auditor skills are Claude-Code
 contracts. A Codex-native session may run upstream's **deterministic-only
 mode** (numeric core + adjudicator with an all-`review_unavailable` coverage
 map — honestly scoped: it can flag, it can never say CLEAN). The full
-nine-dimension sweep requires a Claude Code session. Translating upstream's
+nine-dimension sweep requires a host that can execute upstream's Claude-Code
+contracts unchanged — Claude Code and the `dsh-aris` bundle on DeepSeek Harness
+are the known ones. Translating upstream's
 reviewer calls into `spawn_agent` on the fly is REWRITING an upstream
 contract — forbidden.
 
