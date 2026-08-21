@@ -112,7 +112,10 @@ def _call_llm_detailed(messages, model=None):
         "Authorization": f"Bearer {API_KEY}"
     }
 
-    # Try: original model → retry same model → fallback model
+    # Try: original model → retry same model → fallback model.
+    # This retrying behavior is intentionally legacy-chat-only. Verdict-bearing
+    # review/review_reply calls use _call_llm_review_once below so ambiguous
+    # failures can never duplicate a paid review or produce conflicting verdicts.
     for attempt in range(3):
         current_model = use_model if attempt < 2 else FALLBACK_MODEL
         payload = {
@@ -169,6 +172,64 @@ def call_llm(messages, model=None):
     return content, error
 
 
+def _call_llm_review_once(messages, model=None):
+    """Single-attempt, fail-closed call for verdict-bearing reviewer tools.
+
+    Once the HTTP request is dispatched, a timeout, 504, malformed response, or
+    transport exception is ambiguous: the remote reviewer may already have run.
+    Never retry or switch to FALLBACK_MODEL here. Surface the error so the
+    orchestrator/gate records REVIEW_UNAVAILABLE instead of issuing a duplicate
+    paid review with a potentially conflicting verdict.
+    """
+    if not API_KEY:
+        return None, "LLM_API_KEY environment variable not set", None
+
+    use_model = model or DEFAULT_MODEL
+    url = f"{BASE_URL.rstrip('/')}/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {API_KEY}"
+    }
+    payload = {
+        "model": use_model,
+        "messages": messages,
+        "max_tokens": 4096
+    }
+
+    debug_log(f"Calling verdict-bearing LLM review once: model={use_model}")
+    try:
+        with httpx.Client(timeout=300.0) as client:
+            response = client.post(url, headers=headers, json=payload)
+            if response.status_code != 200:
+                error_msg = f"API error {response.status_code}: {response.text[:500]}"
+                debug_log(f"Review API error (no retry): {error_msg}")
+                return None, error_msg, None
+
+            try:
+                data = response.json()
+            except Exception as exc:
+                error_msg = f"Invalid API JSON response: {exc}"
+                debug_log(f"Review API parse error (no retry): {error_msg}")
+                return None, error_msg, None
+
+            try:
+                content = data["choices"][0]["message"]["content"]
+            except (KeyError, IndexError, TypeError) as exc:
+                error_msg = f"Unexpected API response structure: {exc}"
+                debug_log(f"Review API structure error (no retry): {error_msg}")
+                return None, error_msg, None
+
+            actual_model = str(data.get("model") or use_model).strip()
+            debug_log(
+                f"Verdict-bearing API success: model={actual_model}, "
+                f"response length={len(content)}"
+            )
+            return content, None, actual_model
+    except Exception as exc:
+        debug_log(f"Review API exception (no retry): {str(exc)}")
+        return None, str(exc), None
+
+
 # Coarse model families used only by the opt-in verdict-bearing review tools.
 _FAMILY = [
     ("anthropic", ("claude", "opus", "sonnet", "haiku", "anthropic")),
@@ -188,14 +249,21 @@ _FAMILY = [
 _SHORT = {"o1", "o3", "o4"}
 
 def model_family(name):
-    """Map a model id to a coarse family; collisions fail closed."""
+    """Map a model id to a coarse family; collisions fail closed.
+
+    Match family needles at token boundaries, mirroring review_gate.py, so a
+    provider prefix such as ``ollama/deepseek-r1`` does not accidentally match
+    the ``llama`` model family inside ``ollama``.
+    """
     n = str(name or "").strip().lower()
-    tokens = set(re.split(r"[^a-z0-9.]+", n))
     matched = set()
     for family, needles in _FAMILY:
-        if any((needle in tokens) if needle in _SHORT else (needle in n)
-               for needle in needles):
-            matched.add(family)
+        for needle in needles:
+            suffix = "" if needle in _SHORT else r"[0-9.]*"
+            pattern = rf"(^|[^a-z0-9]){re.escape(needle)}{suffix}([^a-z0-9]|$)"
+            if re.search(pattern, n):
+                matched.add(family)
+                break
     return next(iter(matched)) if len(matched) == 1 else "unknown"
 
 def _cross_family_error(executor_model, reviewer_model):
@@ -281,7 +349,7 @@ def _handle_review(arguments, request_id):
     except ValueError as exc:
         return _tool_error(request_id, str(exc))
 
-    content, error, actual_model = _call_llm_detailed(
+    content, error, actual_model = _call_llm_review_once(
         _review_messages([], user_content, system), model
     )
     if error:
@@ -338,7 +406,7 @@ def _handle_review_reply(arguments, request_id):
         return _tool_error(request_id, str(exc))
 
     history = list(thread["messages"])
-    content, error, actual_model = _call_llm_detailed(
+    content, error, actual_model = _call_llm_review_once(
         _review_messages(history, user_content, system), model
     )
     if error:
