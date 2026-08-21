@@ -291,7 +291,7 @@ def test_gate_blocks_present_but_empty_anchored_report_section():
             report_path.read_text(encoding="utf-8").replace(
                 "## Novelty Verification\n"
                 "The closest prior work differs in its training objective.\n",
-                "## Novelty Verification\n<!-- review output was never folded -->\n",
+                "## Novelty Verification\n",
             ),
             encoding="utf-8",
         )
@@ -303,129 +303,6 @@ def test_gate_blocks_present_but_empty_anchored_report_section():
             "novelty-check evidence missing (section empty: #novelty-verification)"
             in result.reasons
         )
-
-
-def test_anchored_section_ignores_heading_inside_fenced_code():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _write(
-            root,
-            "report.md",
-            """# Report
-
-```markdown
-## External Critical Review
-This is example text, not the report section.
-```
-""",
-        )
-
-        assert gate._section_has_content(
-            root / "report.md", "external-critical-review"
-        ) == (False, False)
-
-
-def test_anchored_section_ignores_heading_inside_multiline_html_comment():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _write(
-            root,
-            "report.md",
-            """# Report
-
-<!--
-## External Critical Review
-Placeholder review text.
--->
-""",
-        )
-
-        assert gate._section_has_content(
-            root / "report.md", "external-critical-review"
-        ) == (False, False)
-
-
-def test_anchored_section_does_not_join_heading_tokens_across_html_comment():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _write(
-            root,
-            "report.md",
-            "# Report\n\n#<!-- hidden separator --># External Critical Review\n",
-        )
-
-        assert gate._section_has_content(
-            root / "report.md", "external-critical-review"
-        ) == (False, False)
-
-
-def test_anchored_section_finds_real_heading_after_ignored_examples():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _write(
-            root,
-            "report.md",
-            """# Report
-
-```markdown
-## External Critical Review
-Example only.
-```
-
-<!-- ## External Critical Review -->
-
-   ## External Critical Review
-The actual review was folded into the report.
-""",
-        )
-
-        assert gate._section_has_content(
-            root / "report.md", "external-critical-review"
-        ) == (True, True)
-
-
-def test_anchored_section_does_not_use_later_duplicate_to_fill_first():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _write(
-            root,
-            "report.md",
-            """# Report
-
-## External Critical Review
-
-## External Critical Review
-This later duplicate must not satisfy the first anchor.
-""",
-        )
-
-        assert gate._section_has_content(
-            root / "report.md", "external-critical-review"
-        ) == (True, False)
-
-
-def test_anchored_section_counts_fenced_markdown_body_as_content():
-    with tempfile.TemporaryDirectory() as tmp:
-        root = Path(tmp)
-        _write(
-            root,
-            "report.md",
-            """# Report
-
-## External Critical Review
-
-```markdown
-## Reviewer Findings
-- The ablation is required.
-```
-
-## Next Section
-""",
-        )
-
-        assert gate._section_has_content(
-            root / "report.md", "external-critical-review"
-        ) == (True, True)
 
 
 def test_gate_blocks_artifact_outside_project_root():

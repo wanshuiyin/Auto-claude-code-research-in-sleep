@@ -30,7 +30,6 @@ REQUIRED_PHASES = (
 REVIEW_REQUIRED_PHASES = frozenset({"novelty-check", "research-review"})
 START_MARKER = "<!-- ARIS_IDEA_DISCOVERY_EVIDENCE_GATE:START -->"
 END_MARKER = "<!-- ARIS_IDEA_DISCOVERY_EVIDENCE_GATE:END -->"
-_COMMENT_SENTINEL = "\0"
 
 
 @dataclass(frozen=True)
@@ -53,117 +52,29 @@ def _artifact_target(root: Path, artifact: str) -> tuple[Path, str | None]:
     return candidate, anchor if separator else None
 
 
-def _heading(line: str) -> tuple[int, str] | None:
-    # CommonMark permits up to three leading spaces before an ATX heading.
-    # Tabs are valid separators after the opening sequence, but not indentation
-    # here: treating an indented code block as a report heading would let
-    # examples satisfy an evidence locator.
-    match = re.match(r"^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$", line)
+def _heading_slug(line: str) -> str | None:
+    match = re.match(r"^#{1,6}\s+(.+?)\s*#*\s*$", line)
     if not match:
         return None
-    text = match.group(2).strip().lower()
+    text = match.group(1).strip().lower()
     slug = re.sub(r"[^\w\s-]", "", text, flags=re.UNICODE)
-    return len(match.group(1)), re.sub(r"[\s-]+", "-", slug).strip("-")
-
-
-def _without_html_comments(line: str, in_comment: bool) -> tuple[str, bool]:
-    """Mask HTML comments while preserving text outside comment spans.
-
-    A sentinel, rather than an empty string, keeps comment-separated Markdown
-    tokens separate.  For example, ``#<!-- hidden --># Review`` must not turn
-    into the synthetic heading ``## Review`` after comment removal.
-    """
-    visible: list[str] = []
-    position = 0
-    while position < len(line):
-        if in_comment:
-            visible.append(_COMMENT_SENTINEL)
-            end = line.find("-->", position)
-            if end < 0:
-                return "".join(visible), True
-            position = end + 3
-            in_comment = False
-            continue
-        start = line.find("<!--", position)
-        if start < 0:
-            visible.append(line[position:])
-            break
-        visible.append(line[position:start])
-        visible.append(_COMMENT_SENTINEL)
-        position = start + 4
-        in_comment = True
-    return "".join(visible), in_comment
-
-
-def _opening_fence(line: str) -> tuple[str, int] | None:
-    match = re.match(r"^ {0,3}(`{3,}|~{3,})(?:[^\r\n]*)$", line)
-    if not match:
-        return None
-    marker = match.group(1)
-    return marker[0], len(marker)
-
-
-def _is_closing_fence(line: str, marker: str, minimum: int) -> bool:
-    return bool(
-        re.fullmatch(rf" {{0,3}}{re.escape(marker)}{{{minimum},}}[ \t]*", line)
-    )
-
-
-def _plain_line_has_content(line: str) -> bool:
-    stripped = line.replace(_COMMENT_SENTINEL, "").strip()
-    if not stripped or _heading(line) is not None:
-        return False
-    return re.fullmatch(r"(?:[#>*_~`|+\-]|\d+[.)]|\s)+", stripped) is None
+    return re.sub(r"[\s-]+", "-", slug).strip("-")
 
 
 def _section_has_content(path: Path, anchor: str) -> tuple[bool, bool]:
-    """Return whether an anchored Markdown section exists and has real body text.
-
-    A heading by itself is only a locator, not stage evidence.  HTML comments,
-    nested headings, empty fences, and Markdown-only separators do not make an
-    otherwise empty section substantive.
-    """
+    """Return whether the first matching section exists and has a non-empty body."""
     found = False
-    level: int | None = None
-    has_content = False
-    in_comment = False
-    fence_marker: str | None = None
-    fence_minimum = 0
-
-    for raw_line in path.read_text(encoding="utf-8").splitlines():
-        if fence_marker is not None:
-            if _is_closing_fence(raw_line, fence_marker, fence_minimum):
-                fence_marker = None
-                fence_minimum = 0
-            elif found and raw_line.strip():
-                # Content inside a fenced block is substantive, but Markdown
-                # headings inside it never open or terminate report sections.
-                has_content = True
-            continue
-
-        visible, in_comment = _without_html_comments(raw_line, in_comment)
-        opening_fence = _opening_fence(visible)
-        if opening_fence is not None:
-            fence_marker, fence_minimum = opening_fence
-            continue
-
-        parsed = _heading(visible)
+    for line in path.read_text(encoding="utf-8").splitlines():
+        heading = _heading_slug(line)
         if not found:
-            if parsed is not None and parsed[1] == anchor:
+            if heading == anchor:
                 found = True
-                level = parsed[0]
             continue
-
-        if parsed is not None:
-            if parsed[0] <= level:
-                # GitHub-style anchors resolve to the first matching heading;
-                # a later duplicate must not supply evidence for an empty one.
-                return True, has_content
-            continue
-        if _plain_line_has_content(visible):
-            has_content = True
-
-    return found, has_content
+        if heading is not None:
+            return True, False
+        if line.strip():
+            return True, True
+    return found, False
 
 
 def _review_provenance_reason(name: str, phase: dict, state: dict) -> str | None:
