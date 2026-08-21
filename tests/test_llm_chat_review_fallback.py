@@ -279,17 +279,15 @@ def test_review_reply_rejects_identity_changes():
     assert client.post.call_count == 1
 
 
-def test_review_reports_actual_internal_fallback_model_after_504s():
+def test_review_504_is_single_attempt_fail_closed():
     server = load_server()
     server.REVIEW_FALLBACK_ENABLED = True
     server.API_KEY = "test-key"
     server.DEFAULT_MODEL = "gpt-5.5"
     server.FALLBACK_MODEL = "gemini-2.5-pro"
 
-    timeout_1 = MagicMock(status_code=504)
-    timeout_2 = MagicMock(status_code=504)
-    success = mock_http_response("Fallback review", "gemini-2.5-pro")
-    client = mock_client_with(timeout_1, timeout_2, success)
+    timeout = MagicMock(status_code=504, text="Gateway Timeout")
+    client = mock_client_with(timeout)
 
     with patch.object(server.httpx, "Client", return_value=client):
         resp = server.handle_request(
@@ -307,12 +305,129 @@ def test_review_reports_actual_internal_fallback_model_after_504s():
             }
         )
 
+    assert resp["result"]["isError"] is True
+    assert "API error 504" in parse_tool_payload(resp)["error"]
+    assert client.post.call_count == 1
+    assert server._review_threads == {}
+    assert client.post.call_args.kwargs["json"]["model"] == "gpt-5.5"
+
+
+def test_review_timeout_is_single_attempt_fail_closed():
+    server = load_server()
+    server.REVIEW_FALLBACK_ENABLED = True
+    server.API_KEY = "test-key"
+
+    client = MagicMock()
+    client.__enter__ = MagicMock(return_value=client)
+    client.__exit__ = MagicMock(return_value=False)
+    client.post.side_effect = server.httpx.ReadTimeout("ambiguous timeout")
+
+    with patch.object(server.httpx, "Client", return_value=client):
+        resp = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 71,
+                "method": "tools/call",
+                "params": {
+                    "name": "review",
+                    "arguments": {
+                        "prompt": "Review.",
+                        "executor_model": "claude-sonnet-4-5",
+                        "model": "gemini-2.5-pro",
+                    },
+                },
+            }
+        )
+
+    assert resp["result"]["isError"] is True
+    assert "ambiguous timeout" in parse_tool_payload(resp)["error"]
+    assert client.post.call_count == 1
+    assert server._review_threads == {}
+
+
+def test_review_reply_failure_does_not_mutate_thread_history():
+    server = load_server()
+    server.REVIEW_FALLBACK_ENABLED = True
+    server.API_KEY = "test-key"
+
+    first = mock_http_response("Round one", "gemini-2.5-pro")
+    timeout = MagicMock(status_code=504, text="Gateway Timeout")
+    client = mock_client_with(first, timeout)
+
+    with patch.object(server.httpx, "Client", return_value=client):
+        initial = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 72,
+                "method": "tools/call",
+                "params": {
+                    "name": "review",
+                    "arguments": {
+                        "prompt": "Initial review.",
+                        "executor_model": "claude-opus-4-1",
+                        "model": "gemini-2.5-pro",
+                    },
+                },
+            }
+        )
+        thread_id = parse_tool_payload(initial)["threadId"]
+        before = list(server._review_threads[thread_id]["messages"])
+        reply = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 73,
+                "method": "tools/call",
+                "params": {
+                    "name": "review_reply",
+                    "arguments": {
+                        "threadId": thread_id,
+                        "prompt": "Re-check.",
+                    },
+                },
+            }
+        )
+
+    assert reply["result"]["isError"] is True
+    assert client.post.call_count == 2
+    assert server._review_threads[thread_id]["messages"] == before
+
+
+def test_legacy_chat_keeps_retry_and_fallback_behavior():
+    server = load_server()
+    server.API_KEY = "test-key"
+    server.FALLBACK_MODEL = "gemini-2.5-pro"
+
+    timeout_1 = MagicMock(status_code=504)
+    timeout_2 = MagicMock(status_code=504)
+    success = mock_http_response("Fallback chat", "gemini-2.5-pro")
+    client = mock_client_with(timeout_1, timeout_2, success)
+
+    with patch.object(server.httpx, "Client", return_value=client):
+        resp = server.handle_request(
+            {
+                "jsonrpc": "2.0",
+                "id": 74,
+                "method": "tools/call",
+                "params": {
+                    "name": "chat",
+                    "arguments": {
+                        "prompt": "Chat.",
+                        "model": "gpt-5.5",
+                    },
+                },
+            }
+        )
+
     assert not resp["result"].get("isError", False)
-    payload = parse_tool_payload(resp)
-    assert payload["reviewer_model"] == "gemini-2.5-pro"
-    assert payload["reviewer_family"] == "google"
-    assert payload["independence_verified"] == "unverified"
-    assert "Used fallback model gemini-2.5-pro" in payload["content"]
+    assert client.post.call_count == 3
+    assert "Used fallback model gemini-2.5-pro" in resp["result"]["content"][0]["text"]
+
+
+def test_model_family_uses_boundaries_for_ollama_wrapper():
+    server = load_server()
+    assert server.model_family("ollama/deepseek-r1") == "deepseek"
+    assert server.model_family("meta/llama-3.3") == "meta"
+    assert server.model_family("claude-gpt-4") == "unknown"
 
 
 def test_review_rejects_provider_reported_same_family_alias():
@@ -320,8 +435,6 @@ def test_review_rejects_provider_reported_same_family_alias():
     server.REVIEW_FALLBACK_ENABLED = True
     server.API_KEY = "test-key"
 
-    # The request asks for a Gemini alias, but the endpoint reports that the
-    # actual model serving the request was Claude. The actual identity wins.
     response = mock_http_response("Review", "claude-sonnet-4-5")
     client = mock_client_with(response)
 
