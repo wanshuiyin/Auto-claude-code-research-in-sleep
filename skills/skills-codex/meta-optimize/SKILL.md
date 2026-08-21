@@ -222,8 +222,12 @@ spawn_agent:
        machine — a malicious local user is NOT in the threat model.
     2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
        Reporting a real defect in hashing code that already exists is fine.
-    3. NO defensive scaffolding: no feature flags, migration frameworks, compat
-       layers, or wrappers added for cases that do not occur in practice.
+    3. NO speculative machinery: do not add feature flags, migration frameworks,
+       compat layers, wrappers, pins, or similar mechanisms unless evidence shows
+       a current repo defect they fix or an explicit existing invariant they must
+       preserve. "Load-bearing", "compatibility", and "not scaffolding" are labels,
+       not evidence. Point to the failing path/artifact or invariant, and check the
+       proposal's factual premises, such as whether a named package version exists.
     4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
        millisecond races are out of scope unless you can show the case arises here.
     5. Where a rubric or checklist is genuinely needed, do not over-mechanize
