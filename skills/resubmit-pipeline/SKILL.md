@@ -2,8 +2,12 @@
 name: resubmit-pipeline
 description: "Workflow 5: orchestrate a text-only resubmit of a polished paper to a different venue under hard constraints (no new experiments, no bib edits, no framework changes, never overwrite prior submissions). Use when user says \"resubmit pipeline\", \"重投流程\", \"port paper to <new venue>\", \"resubmit to <venue>\", \"tighten paper for resubmission\", or has a rejected/withdrawn paper to move to a different top venue under tight time budget."
 argument-hint: "[paper-base-dir] [— target-venue: <name>] [— review-corpus: <path>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Resubmit Pipeline: Text-Only Microedit Mode
 
@@ -11,12 +15,12 @@ Compose a polished paper into a new venue under text-only constraints: **$ARGUME
 
 ## Why This Exists
 
-Most ARIS writing workflows assume the input is either a narrative report (Workflow 3) or an in-progress paper that may still need experiments / bib changes / structural edits. Resubmit is a fundamentally different scope:
+Most ARIS writing workflows assume the input is either a narrative report (Workflow 3) or an in-progress paper that may still need experiments, bibliography additions, or major structural rewrites. Resubmission has a focused, text-only scope:
 
-- The paper is **already polished** — proofs are done, experiments are done, bibliography is curated.
-- The user wants to absorb prior reviewer concerns from a previous venue and re-submit, **without** introducing new experiments, new citations, or framework changes (LLM hallucination paranoia + tight resubmit timing + closed compute budget).
-- The base submission directory is **read-only** — the new submission must compose into a sibling directory, never mutate prior state.
-- Page limit may shrink between source and target venue (e.g., workshop camera-ready → 9-page main).
+- The paper is **already polished** — proofs are complete, experiments are executed, and the bibliography is curated.
+- The pipeline applies text-only refinements to prepare the paper for a new venue. It strictly preserves existing experiments, proofs, and citations without introducing unverified new claims.
+- The base submission directory is **read-only** — the new submission is created in an isolated sibling directory to preserve prior submission records.
+- Page limits may differ between source and target venues (e.g., conference page constraints).
 
 Existing skills cover adjacent territory but none of this exact composition: `/rebuttal` builds the OpenReview-style response document, not in-paper microedits; `/auto-paper-improvement-loop` is the per-round engine but presupposes someone has already chosen the base manuscript, migrated venue format, set the edit whitelist, queued the reviewer feedback, and decided what NOT to change. `/resubmit-pipeline` fills that orchestration gap.
 
@@ -35,7 +39,7 @@ Existing skills cover adjacent territory but none of this exact composition: `/r
 
 ## Constants
 
-- **REVIEWER_MODEL** = inherits from `/auto-paper-improvement-loop`'s default (`gpt-5.6-sol` via Codex MCP) unless the user passes `— reviewer-model: gpt-5.4` (legacy) or another OpenAI model. Codex reasoning effort is fixed at `xhigh` for all reviewer calls per the existing skill convention.
+- **REVIEWER_MODEL** = inherits from `/auto-paper-improvement-loop`'s default (cross-family Cursor built-in model per reviewer-routing.md) unless the user passes `— reviewer-model: <slug>`.
 - **ROUNDS** = 2 (default; matches `/auto-paper-improvement-loop`'s diminishing-returns line). A 3rd round only fires if Phase 2 reports non-convergence AND the user explicitly approves at the round-2 checkpoint.
 - **EFFORT** = `max` (default for resubmit; resubmit is high-stakes). The user can override with `— effort: balanced` if time is extremely tight.
 - **EDIT_WHITELIST_PATH** = `<paper-base-dir>/../<NewVenue>/.aris/edit_whitelist.yaml` (auto-generated in Phase 0; user can override with a custom path).
@@ -52,7 +56,7 @@ Three mandatory inputs:
 
 Optional:
 
-- **`— reviewer-model: gpt-5.4`** — override the default reviewer (`gpt-5.6-sol`); use this for legacy reproducibility or to consume the older quota tier.
+- **`— reviewer-model: <slug>`** — override the default reviewer model (must remain cross-family).
 - **`— rounds: <int>`** — override default 2.
 - **`— assurance: draft`** — relax MANDATORY gates (default `submission`).
 - **`— effort: balanced`** — relax `max` if time is critical.
@@ -69,14 +73,11 @@ Resubmit's hardest invariant: **never overwrite any prior submission directory**
 # Resolve target-venue → new sibling dir name (capitalized)
 NEW_VENUE_DIR="$(dirname "$PAPER_BASE_DIR")/$(echo "$TARGET_VENUE" | sed 's/.*/\u&/')"
 
-# Atomic dir create — `mkdir` (not `mkdir -p`) fails fast if the dir exists,
-# avoiding the TOCTOU race window of `[ -e ] && exit; mkdir -p`. The mkdir
-# itself must succeed exactly once; if a concurrent run gets there first,
-# this errors out per resubmit-pipeline's never-overwrite invariant.
-mkdir "$NEW_VENUE_DIR" 2>/dev/null || {
-    echo "ERROR: $NEW_VENUE_DIR already exists; resubmit-pipeline never overwrites prior submissions. Pick a different target-venue or rename the existing dir." >&2
+# Create the target directory safely without overwriting existing files
+if ! mkdir "$NEW_VENUE_DIR" 2>/dev/null; then
+    echo "ERROR: Directory $NEW_VENUE_DIR already exists. Please choose a different target venue name or back up the existing directory." >&2
     exit 1
-}
+fi
 mkdir -p "$NEW_VENUE_DIR/.aris"
 ```
 
@@ -203,7 +204,7 @@ The load-bearing phase. `/auto-paper-improvement-loop` is invoked with **two saf
    rationale: "Resubmit mode: text-only microedits, paper structure frozen by user constraint."
    ```
 
-2. **Per-round diff gate via auto-loop's HUMAN_CHECKPOINT** — `/auto-paper-improvement-loop` does not accept `--rounds`, `--reviewer-model`, or `--resume-after-round-checkpoint` flags (those are not in its CLI). It uses the `MAX_ROUNDS = 2` constant and `REVIEWER_MODEL = gpt-5.6-sol` defaults, with an existing `HUMAN_CHECKPOINT` mechanism for round gating. Resubmit-pipeline therefore invokes the loop **once** with `HUMAN_CHECKPOINT = true` so each round pauses for the orchestrator to inspect the diff:
+2. **Per-round diff gate via auto-loop's HUMAN_CHECKPOINT** — `/auto-paper-improvement-loop` does not accept `--rounds`, `--reviewer-model`, or `--resume-after-round-checkpoint` flags (those are not in its CLI). It uses the `MAX_ROUNDS = 2` constant and the default REVIEWER_MODEL, with an existing `HUMAN_CHECKPOINT` mechanism for round gating. Resubmit-pipeline therefore invokes the loop **once** with `HUMAN_CHECKPOINT = true` so each round pauses for the orchestrator to inspect the diff:
 
    ```bash
    # Snapshot the new venue dir BEFORE auto-loop runs (for diff baseline,
@@ -268,7 +269,7 @@ The load-bearing phase. `/auto-paper-improvement-loop` is invoked with **two saf
 
 `/kill-argument $NEW_VENUE_DIR/`
 
-**No `--difficulty` parameter exists** in `/kill-argument` — earlier proposal drafts referenced a non-existent flag. The skill always uses Codex `gpt-5.6-sol` + `ultra` (deep-audit tier) and runs the standard 2-thread Attack-Adjudication protocol; the `assurance` level (set to `submission` for resubmit) determines whether `FAIL` blocks the final report.
+**No `--difficulty` parameter exists** in `/kill-argument` — earlier proposal drafts referenced a non-existent flag. The skill always uses the cross-family max-tier reviewer (deep-audit tier) and runs the standard 2-thread Attack-Adjudication protocol; the `assurance` level (set to `submission` for resubmit) determines whether `FAIL` blocks the final report.
 
 The kill-argument output is **residual-risk reporting**, not auto-rewrite directives. A hostile reviewer may demand framework changes the user banned; the adjudication step exists to **triage** which findings are text-fixable vs need user escalation.
 
@@ -437,7 +438,7 @@ The new venue dir is **the** deliverable; the prior venue dir is untouched.
 
 ## Review Tracing
 
-Every Codex MCP reviewer call across all phases saves traces per `shared-references/review-tracing.md` to `<NEW_VENUE_DIR>/.aris/traces/<phase-name>/<date>_run<NN>/`. Both threads of `/kill-argument` are preserved separately. The master `RESUBMIT_REPORT.json` `trace_path` field points to the top-level traces directory.
+Every cross-model reviewer call across all phases saves traces per `shared-references/review-tracing.md` to `<NEW_VENUE_DIR>/.aris/traces/<phase-name>/<date>_run<NN>/`. Both threads of `/kill-argument` are preserved separately. The master `RESUBMIT_REPORT.json` `trace_path` field points to the top-level traces directory.
 
 ## Notes
 

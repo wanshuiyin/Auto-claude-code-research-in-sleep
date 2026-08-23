@@ -2,8 +2,12 @@
 name: paper-writing
 description: "Workflow 3: Full paper writing pipeline that goes from a narrative report to a polished, submission-ready PDF. Use when user says \"写论文全流程\", \"write paper pipeline\", \"从报告到PDF\", \"paper writing\", or wants the complete paper generation workflow."
 argument-hint: "[narrative-report-path-or-topic] [— style-ref: <source>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Workflow 3: Paper Writing Pipeline
 
@@ -26,7 +30,7 @@ In this hybrid pack, the pipeline itself is unchanged, but `paper-plan` and `pap
 
 - **VENUE = `ICLR`** — Target venue. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_JOURNAL` (IEEE Transactions / Letters), `IEEE_CONF` (IEEE conferences). Affects style file, page limit, citation format.
 - **MAX_IMPROVEMENT_ROUNDS = 2** — Number of review→fix→recompile rounds in the improvement loop.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP for plan review, figure review, writing review, and improvement loop.
+- **REVIEWER_MODEL** — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (reviewer runs as a Task subagent; executor Claude → `gpt-5.6-sol-max-fast` default).
 - **AUTO_PROCEED = true** — Auto-continue between phases. Set `false` to pause and wait for user approval after each phase.
 - **HUMAN_CHECKPOINT = false** — When `true`, the improvement loop (Phase 5) pauses after each round's review to let you see the score and provide custom modification instructions. When `false` (default), the loop runs fully autonomously. Passed through to `/auto-paper-improvement-loop`.
 - **ILLUSTRATION = `figurespec`** — Architecture/illustration generator for Phase 2b: `figurespec` (default, deterministic JSON→SVG via `/figure-spec`, best for architecture/workflow/topology), `gemini` (AI-generated via `/paper-illustration`, best for qualitative method illustrations; needs `GEMINI_API_KEY`), `codex-image2` (AI-generated via `/paper-illustration-image2` through the local Codex native image bridge — no external API key, uses your ChatGPT Plus/Pro quota; experimental), `mermaid` (Mermaid syntax via `/mermaid-diagram`, free, best for flowcharts), or `false` (skip Phase 2b, manual only).
@@ -133,11 +137,11 @@ can pass `— effort: beast, assurance: draft` explicitly. Legal but
 discouraged for actual submissions. See
 `shared-references/assurance-contract.md` for the full contract.
 
-**Announce the resolved level in-line before Phase 1:**
+**Announce the audit mode to the user:**
 
 ```
-📋 Assurance: <level> (derived from effort: <effort>)
-   <either "current behavior, no audit gate" OR "mandatory audits gated by verify_paper_audits.sh (resolved per integration-contract §2)">
+📋 Mode: <level> (Audit strictness: <Draft / Submission-Ready>)
+   Validation: <Advisory checks only / Mandatory blocker gates enabled>
 ```
 
 ### Phase 1: Paper Plan
@@ -156,7 +160,7 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 - Design section structure (5-8 sections depending on paper type)
 - Plan figure/table placement with data sources
 - Scaffold citation structure
-- GPT-5.6-Sol reviews the plan for completeness
+- The cross-family reviewer subagent reviews the plan for completeness
 
 **Output:** `PAPER_PLAN.md` with section plan, figure plan, citation scaffolding.
 
@@ -177,10 +181,7 @@ Shall I proceed with figure generation?
 
 ### Phase 1.5: Negotiated Acceptance Contract (before any writing)
 
-The plan says what the paper will contain; the CONTRACT says what "done" means
-— a checklist of testable assertions, negotiated ADVERSARIALLY before the first
-section is written, and graded at the end. (The plan is the boundary; the
-contract is what gets graded.)
+Before writing begins, create a concrete acceptance checklist based on `PAPER_PLAN.md` and `NARRATIVE_REPORT.md`. This checklist defines testable criteria (such as evidence tracing and page limits) used to evaluate the completed draft.
 
 1. **Executor proposes.** From `PAPER_PLAN.md` + `NARRATIVE_REPORT.md`, draft
    `PAPER_ACCEPTANCE_CONTRACT.md`: **10–20 testable assertions** covering —
@@ -197,9 +198,10 @@ contract is what gets graded.)
 2. **Reviewer pushes back** (fresh thread — the negotiation is adversarial):
 
    ```
-   mcp__codex__codex:
-     model: gpt-5.6-sol
-     config: {"model_reasoning_effort": "xhigh"}
+   Task(
+     subagent_type: "generalPurpose",
+     description: "paper contract negotiation (cross-family)",
+     model: REVIEWER_MODEL,   # cross-family per reviewer-routing.md
      prompt: |
        You are negotiating the acceptance contract for a paper BEFORE it is
        written. Read these files directly:
@@ -218,11 +220,11 @@ contract is what gets graded.)
    ```
 
    A reply with a missing or malformed `CONTRACT_ACCEPTED:` line is treated as
-   `no`; request a corrected verdict via `codex-reply` — that correction
+   `no`; request a corrected verdict via `Task(resume: ...)` — that correction
    exchange does not consume a negotiation round.
 
 3. **Iterate.** On `no`, revise the contract per the demands and resubmit via
-   `mcp__codex__codex-reply` (same thread — the negotiation is one
+   `Task(resume: <agent id>)` (same thread — the negotiation is one
    conversation). **Max 3 rounds.**
 
 4. **Fallback — never stall the pipeline.** If round 3 still ends in `no`:
@@ -260,7 +262,7 @@ Invoke `/paper-figure` to generate data-driven plots and tables:
 - Generate matplotlib/seaborn plots from JSON/CSV data
 - Generate LaTeX comparison tables
 - Create `figures/latex_includes.tex` for easy insertion
-- GPT-5.6-Sol reviews figure quality and captions
+- The cross-family reviewer subagent reviews figure quality and captions
 
 **Output:** `figures/` directory with PDFs, generation scripts, and LaTeX snippets.
 
@@ -352,7 +354,7 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 - Clean stale files from previous section structures
 - Automated bib cleaning (remove uncited entries)
 - De-AI polish (remove "delve", "pivotal", "landscape"...)
-- GPT-5.6-Sol reviews each section for quality
+- The cross-family reviewer subagent reviews each section for quality
 
 **Output:** `paper/` directory with `main.tex`, `sections/*.tex`, `references.bib`, `math_commands.tex`.
 
@@ -405,7 +407,7 @@ Shall I proceed with the improvement loop?
 ```
 if paper contains \begin{theorem} or \begin{lemma} or \begin{proof}:
     Run /proof-checker "paper/"
-    This invokes GPT-5.6-Sol xhigh to:
+    This invokes the cross-family reviewer subagent to:
     - Verify all proof steps (hypothesis discharge, interchange justification, etc.)
     - Check for logic gaps, quantifier errors, missing domination conditions
     - Attempt counterexamples on key lemmas
@@ -450,15 +452,15 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 
 **What this does (2 rounds):**
 
-**Round 1:** GPT-5.6-Sol xhigh reviews the full paper → identifies CRITICAL/MAJOR/MINOR issues → Claude Code implements fixes → recompile → save `main_round1.pdf`
+**Round 1:** the cross-family reviewer subagent reviews the full paper → identifies CRITICAL/MAJOR/MINOR issues → Claude Code implements fixes → recompile → save `main_round1.pdf`
 
-**Round 2:** GPT-5.6-Sol xhigh re-reviews with conversation context → identifies remaining issues → Claude Code implements fixes → recompile → save `main_round2.pdf`
+**Round 2:** a fresh cross-family reviewer subagent re-reviews → identifies remaining issues → Claude Code implements fixes → recompile → save `main_round2.pdf`
 
 **Typical improvements:**
 - Fix assumption-model mismatches
-- Soften overclaims to match evidence
+- Align claim strength to evidence (narrow scope where overclaimed, state at full strength where underclaimed — not one-way softening)
 - Add missing interpretations and notation
-- Strengthen limitations section
+- Consolidate limitations as bounded-scope statements (the ≥2-real-limitations requirement stands; no gratuitous new confessions)
 - Add theory-aligned experiments if needed
 
 **Output:** Three PDFs for comparison + `PAPER_IMPROVEMENT_LOG.md`.
@@ -531,7 +533,7 @@ After the final paper-claim-audit passes, run `/citation-audit` to verify every 
 ```
 if paper/references.bib (or paper.bib) exists and contains entries cited from sec/*.tex:
     Run /citation-audit "paper/"
-    Fresh cross-family reviewer (gpt-5.6-sol via Codex MCP) with web/DBLP/arXiv lookup
+    Fresh cross-family reviewer subagent with web/DBLP/arXiv lookup
     verifies each entry:
       (i)   EXISTENCE — paper resolves at claimed arXiv ID / DOI / venue
       (ii)  METADATA — author names, year, venue, title match canonical sources
@@ -558,12 +560,9 @@ else:
 
 ### Phase 5.9: Integrity Forensics (submission self-audit — default ON)
 
-Run the [`/integrity-forensics`](../integrity-forensics/SKILL.md) launcher on
-`paper/` (ABSOLUTE path): the SHA-pinned Anti-Autoresearch sweep — evidence
-ledger, nine auditor dimensions, deterministic adjudication — followed by the
-typed policy gate and the append-only obligations ledger. Self-auditing runs
-at whatever observability the artifacts allow (with `code/` + `results/`
-present that is L2 — stricter than anything an external reviewer can run).
+Run the [`/integrity-forensics`](../integrity-forensics/SKILL.md) audit on
+`paper/` to check for numerical inconsistencies, unsupported claims, and
+formatting errors before final report generation.
 
 **When it runs** (re-derive here — do NOT trust `.aris/assurance.txt` alone;
 a resumed run whose Phase 0 never executed, or whose file went stale, must
@@ -647,38 +646,21 @@ skipping audits while claiming to have run them.
 
 ```
 📋 Submission audits required before Final Report:
-   [ ] 0. PAPER_ACCEPTANCE_CONTRACT.md (Phase 1.5): re-read every assertion
-          against the final PDF + results files; each → satisfied / violated /
-          disputed-at-negotiation. ANY violated undisputed assertion blocks the
-          Final Report until fixed or the human explicitly waives it (waivers
-          recorded in the contract file). Contract absent (pre-1.5 run) → mark
-          "no contract" and continue.
-   [ ] 1. /proof-checker        → paper/PROOF_AUDIT.json
-   [ ] 2. /paper-claim-audit    → paper/PAPER_CLAIM_AUDIT.json
-   [ ] 3. /citation-audit       → paper/CITATION_AUDIT.json
-   [ ] 4. Resolve $AUDIT_VERIFIER per integration-contract.md §2 (Policy A),
-          then: bash "$AUDIT_VERIFIER" paper/ --assurance submission
-   [ ] 5. Integrity forensics (Phase 5.9, default ON at submission). FIRST
-          re-parse the CURRENT $ARGUMENTS — an opt_out.txt receipt left by a
-          PREVIOUS run never carries over; it is a record for the report line,
-          not an authorization.
-          - current $ARGUMENTS has `— self_forensics: false` → skipping is
-            legal; write/refresh paper/.aris/forensics/opt_out.txt.
-          - otherwise the whole check is ONE command:
-            `python3 "$GATE_HELPER" fresh --paper-dir paper/ --anti-ar-commit
-            "$ANTI_AR_COMMIT"` (the pin constant from /integrity-forensics;
-            an old-pin gate must be re-audited) — exit 0 ⟺ a
-            gate exists ∧ no paper file changed after it ∧ it matches the
-            current obligations ledger ∧ its decision is pass-capable (an
-            ALLOWLIST: WARN / NO_NEW_BLOCKER — an unknown or missing token
-            never passes). Exit 1 → the sweep never saw this text (or the
-            gate is BLOCK): run Phase 5.9 NOW, before the Final Report —
-            BLOCK is blocked, same as a verifier FAIL.
-   [ ] 6. Block Final Report iff verifier exit code != 0 OR row 0 found a
-          violated undisputed assertion OR row 5 is red. (THREE separate
-          gates: row 0 is graded by instruction against the contract; the
-          verifier checks audit JSONs only — verify_paper_audits.sh does NOT
-          read the contract; row 5 reads the forensics gate artifact.)
+   [ ] 0. PAPER_ACCEPTANCE_CONTRACT.md (Phase 1.5): Verify every assertion against
+          the final PDF and results files. Any violated undisputed assertion
+          blocks the Final Report until fixed or explicitly waived by the user.
+          If no contract exists (pre-1.5 run), mark "no contract" and proceed.
+   [ ] 1. Proof audit: Run /proof-checker → paper/PROOF_AUDIT.json
+   [ ] 2. Claim audit: Run /paper-claim-audit → paper/PAPER_CLAIM_AUDIT.json
+   [ ] 3. Citation audit: Run /citation-audit → paper/CITATION_AUDIT.json
+   [ ] 4. Audit verification: Run the audit verification script to ensure all audit
+          JSON reports are present, fresh, and passing.
+   [ ] 5. Integrity forensics check: Verify that anti-autoresearch scan passed on the
+          latest paper files with no unresolved critical issues. If paper files
+          changed since the last scan, re-run Phase 5.9.
+   [ ] 6. Final Report Gate: Block the Final Report if audit verification fails,
+          undisputed contract assertions are violated, or critical integrity issues
+          remain unresolved.
 ```
 
 > The resolver in "Running the verifier" below tries
@@ -693,7 +675,7 @@ skipping audits while claiming to have run them.
 
 #### Invoking the four audits
 
-Each sub-audit runs in a **fresh Codex thread** (never `codex-reply`,
+Each sub-audit runs in a **fresh reviewer subagent** (never resume,
 never pass prior audit output as context — this preserves reviewer
 independence per `shared-references/reviewer-independence.md`).
 
@@ -794,7 +776,7 @@ or directly if `assurance=draft`)
 **Venue**: [ICLR/NeurIPS/ICML/CVPR/ACL/AAAI/ACM/IEEE_JOURNAL/IEEE_CONF]
 **Assurance**: [draft | submission]
 **Submission-ready**: [yes | provisional | no]   <!-- yes iff assurance=submission AND verifier exit 0 AND overall_assurance=accepted; provisional iff exit 0 with overall_assurance=provisional (same-family/legacy review — do NOT present as independently accepted); no otherwise -->
-**Forensics**: [NO_NEW_BLOCKER | WARN: <n> open obligations | BLOCK | skipped (opted out) | skipped (draft)]   <!-- from .aris/forensics/gate.json — upstream verdict verbatim in parentheses; NO_NEW_BLOCKER means "no flag found", never an acquittal -->
+**Forensics**: [NO_NEW_BLOCKER | WARN: <n> open obligations | BLOCK | skipped (opted out) | skipped (draft)]   <!-- from .aris/forensics/gate.json — NO_NEW_BLOCKER means no anomalies detected in audited files -->
 **Date**: [today]
 
 ## Pipeline Summary

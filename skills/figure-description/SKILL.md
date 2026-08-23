@@ -4,6 +4,10 @@ description: "Process user-provided patent figures and generate formal drawing d
 argument-hint: "[figure-directory-or-figure-list]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Figure Description for Patents
 

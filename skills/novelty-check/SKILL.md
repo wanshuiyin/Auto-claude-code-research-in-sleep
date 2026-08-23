@@ -4,6 +4,10 @@ description: Verify research idea novelty against recent literature. Use when us
 argument-hint: "[method-or-idea-description]"
 allowed-tools: WebSearch, WebFetch, Grep, Read, Glob, mcp__codex__codex
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Novelty Check Skill
 
@@ -11,7 +15,7 @@ Check whether a proposed method/idea has already been done in the literature: **
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-5.6-sol` — Model used via Codex MCP. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`)
+- REVIEWER_MODEL — a Cursor built-in model from a **different family than the executor**, per the model table in `shared-references/reviewer-routing.md` (executor Claude → `gpt-5.6-sol-max-fast` default). Override with `— reviewer-model: <slug>`.
 
 ## Instructions
 
@@ -41,19 +45,21 @@ For EACH core claim, search using ALL available sources:
 3. **Read abstracts**: For each potentially overlapping paper, WebFetch its abstract and related work section
 
 ### Phase C: Cross-Model Verification
-Call REVIEWER_MODEL via Codex MCP (`mcp__codex__codex`) with xhigh reasoning.
+Launch a **fresh reviewer Task subagent** on REVIEWER_MODEL (cross-family).
 When the method description plus the Phase-B paper list is more than a short
-note, avoid pasting it inline into the MCP prompt. Write a dossier file such as
+note, avoid pasting it inline into the prompt. Write a dossier file such as
 `NOVELTY_DOSSIER.md` (or a project-local equivalent) containing the method
 description, core claims, candidate papers, and the exact questions below, then
 send only the file path:
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
-  prompt: |
-    Read the novelty dossier at <absolute path to NOVELTY_DOSSIER.md> and
-    follow all instructions in it.
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS novelty verifier (cross-family)",
+  model: REVIEWER_MODEL,
+  prompt: "Read the novelty dossier at <absolute path to NOVELTY_DOSSIER.md>
+           and follow all instructions in it. You may run additional web
+           searches yourself to verify or refute the novelty claims."
+)
 ```
 Dossier contents should include:
 - The proposed method description
@@ -94,8 +100,8 @@ Output a structured report:
 - Check both the method AND the experimental setting for novelty
 - If the method is not novel but the FINDING would be, say so explicitly
 - Always check the most recent 6 months of arXiv — the field moves fast
-- **Anti-hallucination for Closest Prior Work.** Every paper in the prior-work table must pass pre-search verification via `verify_papers.py` (canonical name resolved per [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2; 3-layer arXiv / CrossRef / Semantic Scholar fallback inside the helper itself). Policy D1 (primary + degraded-output fallback): if the helper is unresolved **or** its invocation fails, tag candidate entries `[UNVERIFIED]` and surface the uncertainty rather than dropping them. Never fabricate arXiv IDs, DOIs, or titles from memory. Full protocol in [`shared-references/citation-discipline.md`](../shared-references/citation-discipline.md) § Pre-Search Verification Protocol.
+- **Anti-hallucination for Closest Prior Work.** Every paper in the prior-work table must pass pre-search verification via `verify_papers.py` (canonical name resolved per [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2; 3-layer arXiv / CrossRef / Semantic Scholar fallback inside the helper itself). Primary Helper with Fallback Protocol (Policy D1): if the helper is unresolved **or** its invocation fails, tag candidate entries `[UNVERIFIED]` and surface the uncertainty rather than dropping them. Never fabricate arXiv IDs, DOIs, or titles from memory. Full protocol in [`shared-references/citation-discipline.md`](../shared-references/citation-discipline.md) § Pre-Search Verification Protocol.
 
 ## Review Tracing
 
-After each `mcp__codex__codex` or `mcp__codex__codex-reply` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer subagent call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).

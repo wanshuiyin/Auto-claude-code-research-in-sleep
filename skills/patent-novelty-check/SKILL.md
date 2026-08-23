@@ -2,8 +2,12 @@
 name: patent-novelty-check
 description: "Assess patent novelty and non-obviousness against prior art. Use when user says \"专利查新\", \"patent novelty\", \"可专利性评估\", \"patentability check\", or wants to evaluate if an invention is patentable."
 argument-hint: "[invention-description-or-brief-path]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Patent Novelty and Non-Obviousness Check
 
@@ -13,7 +17,7 @@ Adapted from `/novelty-check` for patent legal standards. Research novelty is NO
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.6-sol` — Model used via Codex MCP for cross-model examiner verification
+- `REVIEWER_MODEL` — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (Task subagent)
 - `NOVELTY_STANDARD = patent` — Always use legal patentability standard, not research contribution standard
 
 ## Inputs
@@ -36,7 +40,7 @@ From the invention description, extract the key claim elements that would define
 2. Identify which features are known from prior art vs. inventive
 3. Draft preliminary claim language for 2-3 independent claims (method + system)
 
-### Step 2: Anticipation Analysis (Novelty)
+### Step 2: Anticipation Analysis (Novelty / 新颖性)
 
 For each preliminary claim, test against EACH prior art reference in `PRIOR_ART_REPORT.md`:
 
@@ -49,11 +53,11 @@ For each preliminary claim, test against EACH prior art reference in `PRIOR_ART_
 | Feature C | Yes/No + evidence | | | |
 | Feature D | Yes/No + evidence | | | |
 
-**Verdict per reference**:
-- ANTICIPATED: One reference discloses every element → claim is not novel
-- NOT ANTICIPATED: At least one element missing from every single reference → claim is novel
+**Verdict per reference (Novelty / 35 USC § 102 / CN Article 22)**:
+- **ANTICIPATED (已公开 / 无新颖性)**: A single prior publication reveals all claimed features → claim is not novel.
+- **NOT ANTICIPATED (具备新颖性)**: At least one claimed feature is missing from every single reference → claim is novel.
 
-### Step 3: Obviousness Analysis (Inventive Step)
+### Step 3: Obviousness Analysis (Inventive Step / 创造性)
 
 If the invention is novel (passes Step 2), test for obviousness:
 
@@ -62,7 +66,7 @@ If the invention is novel (passes Step 2), test for obviousness:
 For each combination of the top references:
 1. **Primary reference**: Which reference is closest to the claimed invention?
 2. **Secondary reference(s)**: Which reference(s) teach the missing element(s)?
-3. **Motivation to combine**: Would a POSITA have reason to combine these references?
+3. **Motivation to combine**: Would a Person Having Ordinary Skill in the Art (POSITA, 本领域技术人员) find it natural or obvious to combine these references?
    - Explicit suggestion in the references themselves?
    - Same field, same problem?
    - Common design incentive?
@@ -70,18 +74,19 @@ For each combination of the top references:
 
 Format as a matrix:
 
-| Combination | Primary | Secondary | Missing Elements | Motivation to Combine | Obvious? |
-|-------------|---------|-----------|-----------------|----------------------|----------|
+| Combination | Primary | Secondary | Missing Elements | Motivation to Combine | Obvious? (显而易见性) |
+|-------------|---------|-----------|-----------------|----------------------|-----------------------|
 | Ref1 + Ref2 | Ref1 | Ref2 | Feature D | Same field, similar problem | Yes/No |
 
 ### Step 4: Cross-Model Examiner Verification
 
-Call `REVIEWER_MODEL` via `mcp__codex__codex` with xhigh reasoning:
+Launch a fresh reviewer Task subagent (`model: REVIEWER_MODEL`, cross-family):
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS reviewer (cross-family)",
+  model: REVIEWER_MODEL,   # cross-family max tier per reviewer-routing.md
   prompt: |
     You are a senior patent examiner at the [USPTO/CNIPA/EPO].
     Examine the following invention for patentability.
@@ -91,8 +96,8 @@ mcp__codex__codex:
     PRIOR ART: [prior art references with key teachings]
 
     Please analyze:
-    1. Anticipation (novelty): Does any single reference anticipate any claim?
-    2. Obviousness: Can any combination of references render claims obvious?
+    1. Anticipation (novelty / 35 USC § 102): Does any single reference anticipate any claim?
+    2. Obviousness (inventive step / 35 USC § 103): Can any combination of references render claims obvious to a POSITA?
     3. Claim scope: Are the claims broad enough to be valuable?
     4. Recommended amendments if any claim is rejected.
     Be rigorous and cite specific references.
@@ -100,19 +105,19 @@ mcp__codex__codex:
 
 ### Step 5: Jurisdiction-Specific Assessment
 
-For each target jurisdiction, provide a patentability assessment:
+For each target jurisdiction, provide a patentability assessment with clear plain-language summaries:
 
-**Under 35 USC 102/103 (US)**:
-- Novelty: PASS / FAIL (cite specific reference if fail)
-- Non-obviousness: PASS / FAIL (cite combination if fail)
+**Under US Patent Law (35 USC § 102 Novelty / § 103 Non-Obviousness)**:
+- Novelty (§ 102): PASS / FAIL (cite specific reference if fail; explain why no single reference discloses all elements)
+- Non-obviousness (§ 103): PASS / FAIL (cite combination if fail; explain why a POSITA would not find the combination obvious)
 
-**Under Article 22 CN Patent Law (CN)**:
-- 新颖性 (Novelty): 通过 / 未通过
-- 创造性 (Inventive Step): 通过 / 未通过
+**Under Chinese Patent Law (Article 22 CNIPA / 中国专利法第二十二条)**:
+- 新颖性 (Novelty): 通过 (PASS) / 未通过 (FAIL) — 现有技术中未公开全部技术特征
+- 创造性 (Inventive Step): 通过 (PASS) / 未通过 (FAIL) — 具备突出的实质性特点和显著的进步
 
-**Under Article 54/56 EPC (EP)**:
-- Novelty: PASS / FAIL
-- Inventive step: PASS / FAIL (problem-solution approach)
+**Under European Patent Law (Article 54/56 EPC)**:
+- Novelty (Art 54 EPC): PASS / FAIL
+- Inventive step (Art 56 EPC): PASS / FAIL (using the Problem-Solution Approach)
 
 ### Step 6: Output
 
@@ -134,7 +139,7 @@ Write `patent/NOVELTY_ASSESSMENT.md`:
 [combination analysis with motivation to combine]
 
 ### Cross-Model Examiner Review
-[summary of GPT-5.6-Sol examiner feedback]
+[summary of the cross-family examiner feedback]
 
 ### Recommended Claim Amendments
 [If claims need modification to overcome prior art, suggest specific amendments]
@@ -150,4 +155,4 @@ Write `patent/NOVELTY_ASSESSMENT.md`:
 - Obviousness requires BOTH: (1) a combination of references AND (2) a motivation to combine them.
 - Never assume the invention is patentable just because no identical patent exists.
 - The assessment is advisory only -- actual prosecution may reveal different prior art.
-- If `mcp__codex__codex` is not available, skip cross-model examiner review and note it in the output.
+- If the Task tool is unavailable (rare), skip cross-model review and note it in the output.

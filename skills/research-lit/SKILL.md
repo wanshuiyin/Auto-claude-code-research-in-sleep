@@ -4,6 +4,10 @@ description: Search and analyze research papers, find related work, summarize ke
 argument-hint: "[paper-topic-or-url]"
 allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write, Agent, mcp__zotero__*, mcp__obsidian-vault__*
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Research Literature Review
 
@@ -77,6 +81,16 @@ Examples:
 
 > **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
 
+> **Cursor pack source overrides** (this pack, zero-API):
+> - `exa` source → do NOT require `exa_search.py`/`EXA_API_KEY`. Run the rewritten
+>   [`skills/exa-search/SKILL.md`](../exa-search/SKILL.md) procedure (native WebSearch +
+>   WebFetch with `category: research paper`). Count its contribution as `exa` in the source aggregate.
+> - `gemini` source → do NOT require the Gemini MCP/CLI. Run the rewritten
+>   [`skills/gemini-search/SKILL.md`](../gemini-search/SKILL.md) multi-angle scout procedure.
+>   Count its contribution as `gemini` in the source aggregate.
+> - The upstream helper/MCP paths below remain valid **only if** the user actually has them
+>   configured; otherwise use the overrides above instead of skipping these sources.
+
 ## Workflow
 
 ### Step 0a: Search Zotero Library (if available)
@@ -145,25 +159,17 @@ Before searching online, check if the user already has relevant papers locally:
 
 **arXiv API search** (runs when `— sources:` is unset, contains `web` or `all`; no download by default — arXiv API is part of the Priority-4 Web tier, see Source Table above):
 
-**Policy D2 tracking discipline (orchestrator-managed)**: the
-executor (you, the LLM) maintains an in-context list of contributing
-sources. For **helper-backed bash sources** (arxiv, semantic-scholar,
-deepxiv, exa, openalex), a source contributes iff its bash block
-ran its helper successfully (helper resolved AND invocation exited 0;
-note: the helper exiting 0 with an empty result list still counts as
-"ran" — downstream relevance ranking is what decides whether the user
-actually sees content). For **non-helper sources** (zotero / obsidian /
-local PDF / WebSearch / Gemini), the contribution rule is stated in
-the Step-1 finalization block below — these are tracked separately
-because they don't emit `D2 contribution:` log lines from bash. Sources
-that were not requested via `— sources:` do not count. At the end of
-Step 1 (before "Optional PDF download"), if zero sources contributed,
-surface a D2 empty-aggregate error and stop. (See
-integration-contract.md §2 Policy D2 — the in-context tracking
-replaces a shared bash accumulator because SKILL bash blocks are
-executed as separate shells; state does not survive.)
+**Source tracking discipline (Multi-Source Aggregation Protocol with graceful degradation / Policy D2)**: the executor (you, the LLM)
+maintains an in-context list of contributing sources. For **helper-backed bash sources**
+(arxiv, semantic-scholar, deepxiv, exa, openalex), a source contributes if its bash block
+ran its helper successfully (helper resolved AND invocation exited 0; note: the helper exiting 0
+with an empty result list still counts as having run — downstream relevance ranking decides whether
+the user sees content). For **non-helper sources** (zotero / obsidian / local PDF / WebSearch / Gemini),
+the contribution rule is stated in the Step-1 finalization block below. Sources that were not requested
+via `— sources:` do not count. At the end of Step 1 (before "Optional PDF download"), if zero sources
+contributed, surface a clear no-sources-found error and stop. (Internal reference: integration-contract.md §2 Policy D2.)
 
-Resolve `$ARXIV_FETCHER` via the canonical chain (Policy D2 — this
+Resolve `$ARXIV_FETCHER` via the canonical chain (Multi-Source Aggregation Protocol / Policy D2 — this
 source contributes to the multi-source aggregate; warn-and-continue
 on failure, never abort the whole aggregate):
 
@@ -458,13 +464,13 @@ lines emitted by each source's bash block above, plus:
 
 If the resulting contributing-source list has zero entries, surface:
 
-> **ERROR**: D2 aggregate empty — every requested source either was
-> unresolved, not invoked, failed, or (for MCP / local PDF / Gemini
+> **ERROR**: No literature sources returned results. Every requested source was
+> either unresolved, not invoked, failed, or (for MCP / local PDF / Gemini
 > sources) returned no usable result. (Note: WebSearch contributes
 > when requested and invoked, even if the result set is empty.) The
-> multi-source aggregate cannot proceed. Suggest the user retry with
-> a wider `— sources:` list (e.g. `web, local`) or check helper
-> resolution and SDK installation.
+> literature review cannot proceed without usable sources.
+> Please check network connectivity, retry with a wider `— sources:` list
+> (e.g. `web, local`), or verify helper script resolution and SDK installation.
 
 Then stop before Step 1.5. Otherwise log the contributing-source
 list to the user (e.g. "Sources contributed: arxiv, semantic_scholar,
@@ -501,7 +507,7 @@ Before analysis, run pre-search verification on **all** candidate papers
 collected from Steps 0a-1 to filter out LLM-fabricated arXiv IDs / DOIs /
 titles. Helper: `verify_papers.py` (canonical name; resolved per
 [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2,
-Policy D1 — primary helper with degraded-output fallback). If the
+Primary Helper with Fallback Protocol / Policy D1). If the
 helper is unresolved on this machine, the SKILL emits a fallback
 `verified_papers.json` tagging every candidate `[UNVERIFIED]` so
 downstream analysis proceeds with audit-visible degraded output
@@ -608,14 +614,14 @@ CrossRef rate limits to the polite pool.
 > arXiv-id / DOI / title-hash, already assigned upstream in Step 1.5>",
 > problem, method, results, relevance, source, verification_status}]}`.
 >
-> The "jury" here is **not a model** — it is the **deterministic**
+> The "independent verification gate" here is **not a model** — it is the **deterministic**
 > `verify_papers.py` gate already run in Step 1.5 (3-layer arXiv / CrossRef /
 > Semantic Scholar cross-check). Because the acceptance gate is a deterministic
 > verifier, not a model verdict, the cross-model-family rule is automatically
 > satisfied (a process is not a model family — see
 > [`acceptance-gate.md`](../shared-references/acceptance-gate.md)), so this is
 > the **near-zero-risk** corner of the fan-out design space. The per-paper work
-> is **extraction, not adjudication**: shards report what each paper says and
+> is **extraction, not adjudication**: workers report what each paper says and
 > its verification status verbatim; they do **not** decide which papers
 > "count" (Step 1.5 already did, mechanically) and they do **not** drop a paper
 > for any status other than `verified`. Synthesis (Step 3) is *interpretive*
@@ -623,7 +629,7 @@ CrossRef rate limits to the polite pool.
 > already-admitted set; it is the executor's normal job, NOT an accept/reject
 > verdict on whether a paper *counts*. The cross-model-family rule governs
 > admission verdicts, and here admission is the deterministic Step-1.5 gate, so
-> the invariant is satisfied without a model jury.
+> the invariant is satisfied without a model reviewer.
 
 For **every** paper in `.aris/verify-papers/verified_papers.json`
 (verified, unverified, `verify_pending`, and `error` alike — see

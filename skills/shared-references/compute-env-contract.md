@@ -49,10 +49,10 @@ smoke:                                    # probes that run INSIDE the env on ev
   cli_checks:   [nvidia-smi]
 ```
 
-- **`pip_phases` ordering IS the fix** for every "package A drags B to the
-  wrong version" problem: each phase is its own pip invocation, and pip leaves
-  an already-satisfied requirement alone unless asked to upgrade. Pin the
-  fought-over package in an EARLIER phase than the fighter.
+- **`pip_phases` ordering resolves dependency conflicts** where package A pulls
+  package B to an incompatible version: each phase is its own pip invocation, and pip
+  leaves an already-satisfied requirement alone unless asked to upgrade. Pin the
+  base package in an earlier phase than dependent packages.
 - A clean spec renders unchanged through every renderer. If you find yourself
   adding a field only one backend understands, that field belongs in the
   provider's ledger entry, not the spec.
@@ -120,8 +120,9 @@ the block format is the contract, not the path.
    `--ligand_description`, or the weights path exists but lacks the completion
    marker the tool checks. The author agent cannot self-certify its own doc
    (it walks through on hidden knowledge the doc never wrote down — same
-   principle as `acceptance-gate.md`: the writer never acquits its own
-   artifact); the fresh agent's stuck-point IS the doc's lie. Expensive —
+   principle as `acceptance-gate.md`: the writer never accepts its own
+   artifact); any failure point shows where the documentation and runtime
+   environment disagree. Expensive —
    reserve for the two moments doc and env can drift: **after any env rebuild
    or doc edit, and before declaring an env ready**.
 

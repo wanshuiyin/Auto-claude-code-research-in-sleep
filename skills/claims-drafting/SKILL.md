@@ -2,8 +2,12 @@
 name: claims-drafting
 description: "Draft patent claims for an invention. Use when user says \"撰写权利要求\", \"draft claims\", \"写权利要求书\", \"claim drafting\", or wants to create patent claims. The core skill of the patent pipeline."
 argument-hint: "[invention-disclosure-path]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Claims Drafting: The Core Patent Skill
 
@@ -13,7 +17,7 @@ This is the most critical skill in the patent pipeline. Claims define the legal 
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.6-sol` — External examiner for claim quality review
+- `REVIEWER_MODEL` — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (Task subagent)
 - `MAX_CLAIM_REVISION_ROUNDS = 3` — Maximum revision iterations
 - `CLAIM_STYLE = "auto"` — `US` (Jepson or open), `EP` (two-part mandatory), `CN` (two-part), `auto` (detect from jurisdiction)
 - `MIN_INDEPENDENT_CLAIMS = 2` — Typically method + system. For utility model (实用新型): apparatus/device only, NO method claims.
@@ -57,20 +61,15 @@ Based on target jurisdiction:
 
 ### Step 2: Draft Independent Claims
 
-**CRITICAL — Claims numbering (CN format):**
-- Claims must be numbered 1, 2, 3, ... continuously without gaps
-- Independent and dependent claims are INTERMIXED in final numbering
-- Do NOT group independent claims separately from dependent claims
-- Example correct: Claim 1 (independent, product), Claim 2 (depends on 1), Claim 3 (depends on 1), Claim 4 (independent, method), Claim 5 (depends on 4)...
-- Example WRONG: Claim 1 (independent), Claim 5 (independent), Claim 8 (independent), then Claim 2, 3, 4, 6, 7, 9, 10 as dependents
+**Claims numbering format (Continuous sequential numbering)**:
+- Claims must be numbered 1, 2, 3, ... continuously without gaps.
+- Independent and dependent claims are intermixed in logical hierarchical order (e.g., Claim 1 independent apparatus, Claims 2–3 dependent on 1, Claim 4 independent method, Claims 5–6 dependent on 4). Do not group independent claims in an arbitrary separate block.
 
-**CRITICAL — No empirical content in claims:**
-- Claims describe ONLY structural features or method steps
-- Do NOT include signal characteristics, detection principles, measurement results
-- WRONG: "产生负脉冲信号" / "谐振频率下降" — these are results, not features
-- RIGHT: "所述开口谐振环的开口处形成用于检测通过流体中颗粒物的间隙传感区域"
+**Rule on Claim Language: Describe physical structures and procedural steps, not experimental results.**
+- Avoid outcome-based descriptions or empirical observations (e.g., do not write "decreases resonant frequency", "produces negative pulse", or "achieves 99% accuracy" — these are performance results, not structural limitations).
+- Use structural definitions and physical/procedural constraints (e.g., write "a resonant loop having an open gap defining a fluid-sensing channel" / "所述开口谐振环的开口处形成用于检测通过流体中颗粒物的间隙传感区域").
 
-For each claim category identified in INVENTION_DISCLOSURE.md:
+For each claim category identified in `INVENTION_DISCLOSURE.md`:
 
 **Method Claim (broadest)**:
 1. Start with preamble identifying the category and purpose
@@ -79,9 +78,9 @@ For each claim category identified in INVENTION_DISCLOSURE.md:
 4. Use open transition ("comprising" / "包括")
 5. Each element should be separated by semicolons or on separate lines
 6. Apply jurisdiction-specific format:
-   - CN: 前序部分 + "其特征在于" + 特征部分
-   - US: Preamble + "comprising:" + elements
-   - EP: Preamble + known features + "characterised in that" + inventive features
+   - CN: 前序部分 + "其特征在于" + 特征部分 (Two-part form)
+   - US: Preamble + "comprising:" + elements (Open form)
+   - EP: Preamble + known features + "characterised in that" + inventive features (Two-part form)
 
 **System/Apparatus Claim**:
 1. Mirror the method claim in structural form
@@ -90,10 +89,10 @@ For each claim category identified in INVENTION_DISCLOSURE.md:
 
 **Quality checks for each independent claim**:
 - [ ] Single sentence (US/EP) or properly structured (CN)
-- [ ] Antecedent basis: "a" first, "the" thereafter for each element
-- [ ] No relative terms without definition
-- [ ] No result-to-be-achieved limitations
-- [ ] Transitional phrase is appropriate (open preferred)
+- [ ] Antecedent basis (先行基础): "a" upon first introduction, "the/said (所述)" thereafter for each element
+- [ ] No vague relative terms without quantitative baseline (e.g., "rapid", "thin", "strong")
+- [ ] No result-to-be-achieved limitations (纯功能性描述/以结果为特征)
+- [ ] Transitional phrase is appropriate (open transition "comprising / 包括" preferred over closed "consisting of / 由...组成")
 - [ ] Preamble does not import unnecessary limitations
 - [ ] Each element is necessary for patentability
 - [ ] Claim scope is broadest defensible over prior art
@@ -132,12 +131,13 @@ If any element lacks specification support, add it to the specification requirem
 
 ### Step 5: Cross-Model Examiner Review
 
-Call `REVIEWER_MODEL` via `mcp__codex__codex` with xhigh reasoning:
+Launch a fresh reviewer Task subagent (`model: REVIEWER_MODEL`, cross-family):
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS reviewer (cross-family)",
+  model: REVIEWER_MODEL,   # cross-family max tier per reviewer-routing.md
   prompt: |
     You are a senior patent examiner at the [USPTO/CNIPA/EPO].
     Review the following patent claims for quality and patentability.
@@ -149,14 +149,14 @@ mcp__codex__codex:
     INVENTION: [summary from INVENTION_DISCLOSURE.md]
 
     Analyze each claim for:
-    1. Clarity (35 USC 112(b) / Art 84 EPC): Are terms definite?
-    2. Written description support: Does the spec support all claim scope?
-    3. Anticipation (102/Art 54): Would any single reference anticipate?
-    4. Obviousness (103/Art 56): Would any combination render obvious?
-    5. Claim scope: Are independent claims broad enough to be valuable?
+    1. Clarity & Definiteness (35 USC 112(b) / Art 84 EPC / CN Art 26): Are all terms clear and unambiguous?
+    2. Written description support: Does the specification support all claimed subject matter?
+    3. Anticipation (Novelty / 102 / Art 54 EPC / CN Art 22): Would any single reference anticipate any claim?
+    4. Obviousness (Inventive Step / 103 / Art 56 EPC / CN Art 22): Would any combination render claims obvious to a POSITA?
+    5. Claim scope: Are independent claims broad enough to be commercially valuable?
     6. Dependent claims: Do they provide meaningful fallback positions?
-    7. Antecedent basis: Any issues with "a"/"the" usage?
-    8. Indefinite terms: Any functional/result language issues?
+    7. Antecedent basis: Any issues with missing antecedents ("a" vs "the" / "所述")?
+    8. Indefinite / Functional language: Any improper result-to-be-achieved phrasing?
 
     For each issue found, provide:
     - The specific claim number and element
@@ -173,7 +173,7 @@ If the examiner review identifies issues:
 1. Address all CRITICAL issues (anticipation, obviousness, indefiniteness)
 2. Address MAJOR issues (scope too narrow, missing support, weak fallbacks)
 3. Consider MINOR issues (antecedent basis, formatting)
-4. Re-submit to examiner for round 2 (use `mcp__codex__codex` with threadId)
+4. Re-submit to examiner for round 2 (`Task(resume: <examiner agent id>)`)
 5. Repeat up to `MAX_CLAIM_REVISION_ROUNDS` times
 
 ### Step 7: Output
@@ -224,4 +224,4 @@ Write `patent/CLAIMS.md`:
 - Never include result-to-be-achieved language in claims ("configured to achieve high accuracy").
 - Never fabricate claim language -- every element must come from the actual invention.
 - If drafting for ALL jurisdictions, produce separate claim sets for CN, US, and EP.
-- If `mcp__codex__codex` is not available, skip cross-model examiner review and note it in the output.
+- If the Task tool is unavailable (rare), skip cross-model review and note it in the output.

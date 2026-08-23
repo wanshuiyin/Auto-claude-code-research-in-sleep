@@ -4,6 +4,10 @@ description: Deploy and run ML experiments on local, remote, Vast.ai, or Modal s
 argument-hint: "[experiment-description]"
 allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Skill(serverless-modal)
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Run Experiment
 

@@ -2,8 +2,12 @@
 name: paper-write
 description: "Draft LaTeX paper section by section from an outline. Use when user says \"写论文\", \"write paper\", \"draft LaTeX\", \"开始写\", or wants to generate LaTeX content from a paper plan."
 argument-hint: "[venue-or-section] [— style-ref: <source>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Paper Write: Section-by-Section LaTeX Generation
 
@@ -11,7 +15,7 @@ Draft a LaTeX paper based on: **$ARGUMENTS**
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP for section review. Must be an OpenAI model.
+- **REVIEWER_MODEL** — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (reviewer runs as a Task subagent; executor Claude → `gpt-5.6-sol-max-fast` default).
 - **TARGET_VENUE = `ICLR`** — Default venue. Supported: `ICLR`, `NeurIPS`, `ICML`, `CVPR` (also ICCV/ECCV), `ACL` (also EMNLP/NAACL), `AAAI`, `ACM` (ACM MM, SIGIR, KDD, CHI, etc.), `IEEE_JOURNAL` (IEEE Transactions / Letters, e.g., T-PAMI, JSAC, TWC, TCOM, TSP, TIP), `IEEE_CONF` (IEEE conferences, e.g., ICC, GLOBECOM, INFOCOM, ICASSP). Determines style file and formatting.
 - **ANONYMOUS = true** — If true, use anonymous author block. Set `false` for camera-ready. Note: most IEEE venues do NOT use anonymous submission — set `false` for IEEE.
 - **MAX_PAGES = 9** — Main body page limit. For ML conferences: counts from first page to end of Conclusion section, references and appendix NOT counted. **For IEEE venues: references ARE counted toward the page limit.** Typical limits: IEEE journal = no strict limit (but 12-14 pages typical for Transactions, 4-5 for Letters), IEEE conference = 5-8 pages including references.
@@ -32,6 +36,7 @@ If no PAPER_PLAN.md exists, ask the user to run `/paper-plan` first or provide a
 Keep the existing `insleep` workflow, file layout, and defaults. Use the shared references below only when they improve writing quality:
 
 - Read `../shared-references/writing-principles.md` before drafting the Abstract, Introduction, Related Work, or when prose feels generic.
+- Read `../shared-references/press-release-principle.md` before drafting body prose and whenever deciding claim strength or limitation phrasing — writer-side claim posture only; never pass it (or mention of it) to reviewer/auditor sub-agents.
 - Read `../shared-references/venue-checklists.md` during the final write-up and submission-readiness pass.
 - Read `../shared-references/citation-discipline.md` only when the built-in DBLP/CrossRef workflow is insufficient.
 
@@ -261,7 +266,8 @@ Before drafting the front matter, re-read the one-sentence contribution from `PA
 
 **§5 Conclusion:**
 - Summarize contributions (NOT copy-paste from intro — rephrase)
-- Limitations (be honest — reviewers appreciate this)
+- Limitations (be honest — reviewers appreciate this; write them as bounded scope, not apology — see `../shared-references/press-release-principle.md`)
+- **No first-appearance self-negation in the final conclusion paragraph** — every caveat there must already exist in the Limitations block or an inline claim qualifier; the closing paragraph reinforces the takeaway, it does not introduce new weaknesses
 - Future work (1-2 concrete directions)
 - Ethics statement and reproducibility statement (if venue requires)
 - Target: 0.5 pages
@@ -519,12 +525,13 @@ Passive voice IS acceptable for: established facts, methods where agent is irrel
 
 ### Step 6: Cross-Review with REVIEWER_MODEL
 
-Send the complete draft to GPT-5.6-Sol xhigh:
+Send the complete draft to the cross-family reviewer subagent:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS reviewer (cross-family)",
+  model: REVIEWER_MODEL,   # cross-family max tier per reviewer-routing.md
   prompt: |
     Review this [VENUE] paper draft (main body, excluding appendix).
 
@@ -577,23 +584,24 @@ Before declaring done:
 
 ## Key Rules
 
-- **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
-- **Do NOT generate author names, emails, or affiliations** — use anonymous block or placeholder
-- **Write complete sections, not outlines** — the output should be compilable LaTeX
-- **One file per section** — modular structure for easy editing
-- **Every claim must cite evidence** — cross-reference the Claims-Evidence Matrix
-- **Compile-ready** — the output should compile with `latexmk` without errors (modulo missing figures)
-- **No over-claiming** — use hedging language ("suggests", "indicates") for weak evidence
-- **Venue style matters** — ML conferences (ICLR/NeurIPS/ICML) use `natbib` (`\citep`/`\citet`); **IEEE venues use `cite` package (`\cite{}`, numeric)**. Never mix.
-- **Page limit rules differ by venue** — ML conferences: main body to Conclusion, references/appendix NOT counted. **IEEE: references ARE counted toward the page limit.**
-- **Clean bib** — references.bib must only contain entries that are actually `\cite`d
-- **Section count is flexible** — match PAPER_PLAN structure, don't force into 5 sections
-- **Backup before overwrite** — never destroy existing `paper/` directory without backing up
-- **Front-load the contribution** — do not hide the payoff until the experiments or appendix
+- **Large file handling** — if the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write the file in chunks; do not ask the user for permission, just do it silently.
+- **No author information** — never generate author names, emails, or affiliations; use the anonymous block or a placeholder.
+- **Complete sections, not outlines** — every section file must be fully written, compilable LaTeX.
+- **One file per section** — keep the structure modular for easy editing.
+- **Every claim cites evidence** — map each claim to experimental evidence or formal proofs, cross-referencing the Claims-Evidence Matrix.
+- **Compile-ready** — the output must compile with `latexmk` without errors (modulo missing figures).
+- **No over-claiming** — prefer **narrowing the claim** to what the evidence supports (scope, dataset, regime); use hedging language ("suggests", "indicates") only for uncertainty that remains after narrowing. See `../shared-references/press-release-principle.md` (writer-side only).
+- **Venue citation style** — ML conferences (ICLR/NeurIPS/ICML) use `natbib` (`\citep`/`\citet`); **IEEE venues use the `cite` package (`\cite{}`, numeric)**. Never mix them.
+- **Page limits differ by venue** — ML conferences count the main body to the end of the Conclusion (references/appendix excluded); **IEEE counts references toward the page limit**.
+- **Clean bib** — `references.bib` must contain only entries that are actually `\cite`d.
+- **Flexible section count** — match the PAPER_PLAN structure; do not force the paper into five sections.
+- **Backup before overwrite** — never destroy an existing `paper/` directory without backing it up.
+- **Front-load the contribution** — do not hide the payoff until the experiments or appendix.
 
 ## Writing Quality Reference
 
 - `../shared-references/writing-principles.md` — story framing, abstract/introduction patterns, sentence-level clarity, reviewer reading order
+- `../shared-references/press-release-principle.md` — writer-side claim posture: bidirectional claim/evidence alignment, bounded-scope limitations, allowed operations on disclosure spans (never passed to reviewer/auditor sub-agents)
 - `../shared-references/venue-checklists.md` — ICLR/NeurIPS/ICML/IEEE submission requirements to check before declaring done
 - `../shared-references/citation-discipline.md` — stricter fallback for ambiguous citations
 

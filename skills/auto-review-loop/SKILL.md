@@ -2,8 +2,12 @@
 name: auto-review-loop
 description: Autonomous multi-round research review loop. Repeatedly reviews via external reviewer backend (Codex or manual), implements fixes, and re-reviews until positive assessment or max rounds reached. Use when user says "auto review loop", "review until it passes", or wants autonomous iterative improvement.
 argument-hint: "[topic-or-scope]"
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Skill, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Auto Review Loop: Autonomous Research Improvement
 
@@ -23,44 +27,50 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 ## Constants
 
 - MAX_ROUNDS = 4
-- POSITIVE_THRESHOLD: score >= 6/10 **AND** verdict ∈ {"ready", "almost"} — **both** must hold. This matches the operative Phase-E STOP CONDITION exactly; the verdict vocabulary is {"ready", "almost", "not ready"} (a high score with a "not ready" verdict does NOT stop the loop). Earlier wording here used `or` and a stale verdict set ("accept"/"sufficient"/"ready for submission") — that was an internal inconsistency; the `AND` form is authoritative.
+- POSITIVE_THRESHOLD: score >= 6/10 **AND** verdict ∈ {"ready", "almost"} — **both** conditions must be met to stop the loop. The recognized verdict vocabulary is {"ready", "almost", "not ready"}. A high score with a "not ready" verdict does not satisfy the stop condition.
 - REVIEW_DOC: `review-stage/AUTO_REVIEW.md` (cumulative log) *(fall back to `./AUTO_REVIEW.md` for legacy projects)*
-- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`). Manual backend uses whatever model the user chooses.
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+- REVIEWER_MODEL — a Cursor built-in model from a **different family than the executor**, per the model table in `shared-references/reviewer-routing.md` (executor Claude → `gpt-5.6-sol-max-fast` default). Override with `— reviewer-model: <slug>`.
+- **REVIEWER_BACKEND = `cursor-subagent`** — Default: Cursor Task subagent (zero API). Legacy `— reviewer: codex | oracle-pro | manual` only on explicit user request with the matching MCP installed. See `shared-references/reviewer-routing.md`.
 - **OUTPUT_DIR = `review-stage/`** — All review-stage outputs go here. Create the directory if it doesn't exist.
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review (Phase B) and present the score + weaknesses to the user. Wait for user input before proceeding to Phase C. The user can: approve the suggested fixes, provide custom modification instructions, skip specific fixes, or stop the loop early. When `false` (default), the loop runs fully autonomously.
 - **COMPACT = false** — When `true`, (1) read `EXPERIMENT_LOG.md` and `findings.md` instead of parsing full logs on session recovery, (2) append key findings to `findings.md` after each round.
 - **REVIEWER_DIFFICULTY = medium** — Controls how adversarial the reviewer is. Three levels:
-  - `medium` (default): Current behavior — MCP-based review, the executor controls what context the reviewer sees.
+  - `medium` (default): reviewer subagent reads the file paths the executor lists (plus anything else it chooses — the subagent always has repo access).
   - `hard`: Adds **Reviewer Memory** (the reviewer tracks its own suspicions across rounds) + **Debate Protocol** (the executor can rebut, the reviewer rules).
-  - `nightmare`: Everything in `hard` + **Codex exec reviewer reads the repo directly** via `codex exec` (the executor cannot filter what the reviewer sees) + **Adversarial Verification** (the reviewer independently checks if code matches claims).
+  - `nightmare`: Everything in `hard` + the reviewer is explicitly instructed to **explore the repository freely and independently verify code matches claims** (repo-direct access is native to the subagent backend).
 - **RENDER_HTML = true** — When `true` (default), auto-render `review-stage/AUTO_REVIEW.md` to HTML on loop termination via `/render-html`. Uses `--no-review` (the loop itself IS the cross-model review; the HTML is a structural conversion). Set `false` to skip, or pass `— render html: false`.
-
-> ⚠️ **Nightmare + Manual incompatibility**: If `REVIEWER_BACKEND = manual` and `REVIEWER_DIFFICULTY = nightmare`, STOP with:
-> "difficulty: nightmare requires Codex CLI / codex exec and is not compatible with --reviewer: manual. Use difficulty: hard, or switch reviewer to codex."
 
 > 💡 Override: `/auto-review-loop "topic" — compact: true, human checkpoint: true, difficulty: hard`
 
-## Reviewer Calling Convention
+## Reviewer Calling Convention (Cursor edition)
 
-When calling the reviewer, branch on REVIEWER_BACKEND:
+**New review thread** (round 1):
 
-**If REVIEWER_BACKEND = `codex`:**
-  Use `mcp__codex__codex` for new review threads.
-  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+```
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS review loop R1",
+  model: REVIEWER_MODEL,          # cross-family, per reviewer-routing.md
+  prompt: "<the exact review prompt this skill specifies below>"
+)
+```
 
-**If REVIEWER_BACKEND = `manual`:**
-  Use `mcp__manual_review__review` for new review threads with:
-    prompt: [exact same prompt that would go to Codex]
-    config: {"model_reasoning_effort": "xhigh"}
-  Save the returned `threadId`.
-  Use `mcp__manual_review__review_reply` for follow-up rounds with:
-    threadId: [saved manual-review threadId]
-    prompt: [follow-up prompt]
-    config: {"model_reasoning_effort": "xhigh"}
+Save the returned subagent id — it is the `threadId`. Persist it as
+`reviewer_agent_id` in `review-stage/REVIEW_STATE.json`.
 
-Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
-Review tracing applies equally to both backends.
+**Follow-up rounds (round 2+)**:
+
+```
+Task(resume: <reviewer_agent_id>, prompt: "<the round-N update prompt>")
+```
+
+If a resume fails (thread expired), launch a **fresh** reviewer subagent and
+prepend the full `REVIEWER_MEMORY.md` (hard/nightmare) or the prior rounds'
+score history (medium) to the prompt; record `fallback_reason:
+"resume_unavailable"` in the trace.
+
+Prompt fidelity: use the exact prompt text this skill specifies — do not
+paraphrase. Review tracing applies (`review-tracing.md`).
 
 ## State Persistence (Compact Recovery)
 
@@ -116,16 +126,15 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 **Route by REVIEWER_DIFFICULTY:**
 
-##### Medium (default) — MCP Review
+##### Medium (default) — Subagent Review
 
-Send comprehensive context to the external reviewer using the selected backend.
-
-*For codex backend:*
+Send the review task to the cross-family reviewer subagent:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS review loop R<N>",
+  model: REVIEWER_MODEL,
   prompt: |
     [Round N/MAX_ROUNDS of autonomous review loop]
 
@@ -136,34 +145,32 @@ mcp__codex__codex:
     - Raw results (verbatim files, not a summary): <path(s)>
     - Changed since last round: <changed-file paths> — read the diff, not my description
 
-    Please act as a senior ML reviewer (NeurIPS/ICML level). Start from the
-    assumption that the work is broken somewhere — your job is to find where.
-    Be adversarial. Trust nothing the author tells you — verify everything
-    yourself.
+    Please act as a senior ML reviewer (NeurIPS/ICML level). Evaluate methodology,
+    evidence, and claims rigorously. Verify reported numbers and figures against
+    the raw result files yourself rather than relying on the author's summary.
 
     1. Score this work 1-10 for a top venue
     2. List remaining critical weaknesses (ranked by severity)
     3. For each weakness, specify the MINIMUM fix (experiment, analysis, or reframing)
     4. State clearly: is this READY for submission? Yes/No/Almost
 
-    Be brutally honest. If, after genuinely trying to break it, the work holds
+    Be direct and rigorous. If, after genuinely trying to break it, the work holds
     up and is ready, say so clearly.
+)
 ```
 
-*For manual backend:* use `mcp__manual_review__review` with the `prompt` text above and `config: {"model_reasoning_effort": "xhigh"}`. Save the returned `threadId`.
+Save the returned subagent id as `reviewer_agent_id`. If this is round 2+, use
+`Task(resume: <reviewer_agent_id>, ...)` instead.
 
-If this is round 2+, use `mcp__codex__codex-reply` (codex) or `mcp__manual_review__review_reply` (manual) with the saved threadId.
+##### Hard — Subagent Review + Reviewer Memory
 
-##### Hard — MCP Review + Reviewer Memory
-
-Same as medium, but **prepend Reviewer Memory** to the prompt. Use the selected backend.
-
-*For codex backend:*
+Same as medium, but **prepend Reviewer Memory** to the prompt:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS review loop R<N> (hard)",
+  model: REVIEWER_MODEL,
   prompt: |
     [Round N/MAX_ROUNDS of autonomous review loop]
 
@@ -188,15 +195,22 @@ mcp__codex__codex:
     5. **Memory update**: List any new suspicions, unresolved concerns,
        or patterns you want to track in future rounds.
 
-    Be brutally honest. Actively look for things the author might be hiding.
+    Be direct and rigorous. Actively look for gaps the author may have overlooked.
+)
 ```
 
-##### Nightmare — Codex Exec (GPT reads repo directly)
+##### Nightmare — Free repo exploration + adversarial verification
 
-**Do NOT use MCP.** Instead, let GPT access the repo autonomously via `codex exec`:
+Launch the reviewer subagent with explicit instructions to explore the repo
+autonomously (repo access is native to the subagent — the executor cannot
+filter what it sees):
 
-```bash
-codex exec "$(cat <<'PROMPT'
+```
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS review loop R<N> (nightmare)",
+  model: REVIEWER_MODEL,
+  prompt: |
 You are an adversarial senior ML reviewer (NeurIPS/ICML level).
 This is Round N/MAX_ROUNDS of an autonomous review loop.
 
@@ -204,9 +218,10 @@ This is Round N/MAX_ROUNDS of an autonomous review loop.
 [Paste full contents of REVIEWER_MEMORY.md]
 
 ## Instructions
-You have FULL READ ACCESS to this repository. The author (Claude) does NOT
-control what you see — explore freely. Your job is to find problems the
-author might hide or downplay.
+You have FULL READ ACCESS to this repository (working directory: <project
+root>). The author (the executor model) does NOT control what you see —
+explore freely with your own Read/Grep/Shell tools. Your job is to find
+problems the author might hide or downplay.
 
 DO THE FOLLOWING:
 1. Read the experiment code, results files (JSON/CSV), and logs YOURSELF
@@ -223,12 +238,11 @@ OUTPUT FORMAT:
 - Weaknesses (ranked): [with MINIMUM fix for each]
 - Memory update: [new suspicions and patterns to track next round]
 
-Be adversarial. Trust nothing the author tells you — verify everything yourself.
-PROMPT
-)" --skip-git-repo-check 2>&1
+Be direct and rigorous. Verify claims against the code and result files yourself.
+)
 ```
 
-**Key difference**: In nightmare mode, GPT independently reads code, result files, and logs. Claude cannot filter or curate what GPT sees. This is the closest analog to a real hostile reviewer who reads your actual paper + supplementary materials.
+**Key difference**: In nightmare mode, the reviewer is explicitly tasked with independently reading code, result files, and logs, and cross-checking every claim. The executor cannot filter or curate what it sees. This is the closest analog to a real hostile reviewer who reads your actual paper + supplementary materials.
 
 #### Phase B: Parse Assessment
 
@@ -297,18 +311,15 @@ Rules for the executor's rebuttal:
 
 Send the executor's rebuttal back to the reviewer for a ruling:
 
-*Hard mode — use the selected backend for the rebuttal step:*
+*Hard mode — send the rebuttal in the same reviewer thread:*
 
-*For codex:*
 ```
-mcp__codex__codex-reply:
-  threadId: [saved]
-  # inherits the thread's model/effort — do not re-send
+Task(
+  resume: [reviewer_agent_id saved from Phase A],
   prompt: |
     The author rebuts your review:
+)
 ```
-
-*For manual:* use `mcp__manual_review__review_reply` with the same `threadId` and prompt.
 
 The prompt content:
 
@@ -325,15 +336,17 @@ The prompt content:
     Then update your score if any weaknesses were withdrawn.
 ```
 
-*Nightmare mode (codex exec):*
-```bash
-codex exec "$(cat <<'PROMPT'
+*Nightmare mode (same thread, verification demanded):*
+```
+Task(
+  resume: [reviewer_agent_id],
+  prompt: |
 You are the same adversarial reviewer. The author rebuts your review:
 
 [paste executor's rebuttal]
 
-VERIFY the author's evidence claims yourself — read the files they reference.
-Do NOT take their word for it.
+VERIFY the author's evidence claims yourself — read the files they reference
+with your own tools. Do NOT take their word for it.
 
 For each rebuttal, rule:
 - SUSTAINED (verified and valid)
@@ -341,8 +354,7 @@ For each rebuttal, rule:
 - PARTIALLY SUSTAINED (partially valid, narrow the weakness)
 
 Update your score. Update your memory.
-PROMPT
-)" --skip-git-repo-check 2>&1
+)
 ```
 
 **Step 3 — Update score and action items** based on the ruling:
@@ -496,8 +508,8 @@ When loop ends (positive assessment or max rounds):
 
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
-- ALWAYS use `config: {"model_reasoning_effort": "xhigh"}` for maximum reasoning depth
-- Save threadId from first call; use the appropriate reply tool (`mcp__codex__codex-reply` or `mcp__manual_review__review_reply`) for subsequent rounds per the Reviewer Calling Convention
+- ALWAYS use a max-tier cross-family model for the reviewer (see reviewer-routing.md) — never a non-max slug, never same-family
+- Save the reviewer subagent id from the first call; use `Task(resume: ...)` for subsequent rounds per the Reviewer Calling Convention
 - **Anti-hallucination citations**: When adding references during fixes, NEVER fabricate BibTeX. Use the same DBLP → CrossRef → `[VERIFY]` chain as `/paper-write`: (1) `curl -s "https://dblp.org/search/publ/api?q=TITLE&format=json"` → get key → `curl -s "https://dblp.org/rec/{key}.bib"`, (2) if not found, `curl -sLH "Accept: application/x-bibtex" "https://doi.org/{doi}"`, (3) if both fail, mark with `% [VERIFY]`. Do NOT generate BibTeX from memory.
 - Be honest — include negative results and failed experiments
 - Do NOT hide weaknesses to game a positive score
@@ -509,12 +521,12 @@ When loop ends (positive assessment or max rounds):
 
 ## Prompt Template for Round 2+
 
-Use the selected backend. *For codex:* `mcp__codex__codex-reply` with the saved threadId. *For manual:* `mcp__manual_review__review_reply` with the saved threadId.
+Use `Task(resume: ...)` with the saved reviewer agent id:
 
 ```
-[For codex:] mcp__codex__codex-reply:
-  threadId: [saved from round 1]
-  # inherits the thread's model/effort — do not re-send
+Task(
+  resume: [reviewer_agent_id saved from round 1],
+  # thread keeps its original model — do not re-send
   prompt: |
     [Round N update]
 
@@ -530,4 +542,4 @@ Use the selected backend. *For codex:* `mcp__codex__codex-reply` with the saved 
 
 ## Review Tracing
 
-After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer subagent call (fresh `Task(...)` or `Task(resume: ...)`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).

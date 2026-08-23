@@ -110,7 +110,7 @@ fabricated arXiv IDs / DOIs / titles propagate into idea-creator, novelty-check,
 landscape surveys, or downstream writing.
 
 The protocol is implemented by `verify_papers.py` (canonical name; helper
-path resolved per `integration-contract.md` §2, Policy D1). The script is
+path resolved per `integration-contract.md` §2, Primary Helper with Fallback Protocol / Policy D1). The script is
 called by `/research-lit` (Step 1.5, mandatory), and is referenced by
 `/idea-creator` and `/novelty-check` as a required filter on cited papers.
 
@@ -175,7 +175,7 @@ before submission.
 **Invocation contract** (callers — `/research-lit`, `/idea-creator`,
 `/novelty-check` — must follow). Resolve `$VERIFY_PAPERS` via the
 canonical chain in `integration-contract.md` §2, then invoke under
-the Policy D1 fallback. The full copy-safe snippet:
+the Primary Helper with Fallback Protocol (Policy D1). The full copy-safe snippet:
 
 ```bash
 # 1. Resolve $VERIFY_PAPERS via the canonical strict-safe chain (§2).
@@ -191,7 +191,7 @@ VERIFY_PAPERS=".aris/tools/verify_papers.py"
 [ -f "$VERIFY_PAPERS" ] || { [ -n "${ARIS_REPO:-}" ] && VERIFY_PAPERS="$ARIS_REPO/tools/verify_papers.py"; }
 [ -f "$VERIFY_PAPERS" ] || VERIFY_PAPERS=""
 
-# 2. Invoke (Policy D1 fallback wraps invocation failure too).
+# 2. Invoke (Primary Helper with Fallback Protocol / Policy D1 wraps invocation failure too).
 verify_ok=false
 if [ -n "$VERIFY_PAPERS" ]; then
   if python3 "$VERIFY_PAPERS" --input candidate_papers.json --output verified_papers.json; then

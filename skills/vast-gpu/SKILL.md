@@ -4,6 +4,10 @@ description: "Rent, manage, and destroy GPU instances on vast.ai. Use when user 
 argument-hint: "[task-description or action]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Vast.ai GPU Management
 
@@ -164,7 +168,7 @@ vastai create instance <OFFER_ID> \
   --onstart-cmd "apt-get update && apt-get install -y git screen rsync"
 ```
 
-Default Docker image: `pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel` (override via `CLAUDE.md` `image:` field if set).
+Default Docker image: `pytorch/pytorch:2.1.0-cuda12.1-cudnn8-devel` (override via `AGENTS.md` or project config if set).
 
 The output looks like:
 ```
@@ -237,27 +241,20 @@ To destroy when done: /vast-gpu destroy <ID>
 
 Set up the rented instance for a specific experiment. Called automatically by `/run-experiment` when targeting a vast.ai instance.
 
-> Follow `../shared-references/compute-env-contract.md`: write/reuse the
-> declarative env spec (ordered `pip_phases`, not one big install), record the
-> `env:<name>@<specHash>` block in `.aris/compute/vast.md`, and run the seeded
-> kernel witness before launching the real experiment — a fresh instance whose
-> `import torch` succeeds can still have the wrong-SM wheel.
+Install dependencies in ordered phases (e.g., base PyTorch/CUDA wheels first, then application packages) and verify GPU execution before launching training.
 
-**Step 1: Install Dependencies (render the env spec, phase by phase)**
+**Step 1: Install Dependencies**
 
-Render the project's env spec as ORDERED phases — one `pip install` per phase,
-so an earlier phase's pin can't be dragged by a later package:
+Install core dependencies first, followed by application packages:
 
 ```bash
-# phase 1: the fought-over pins first (torch/cuda wheel)
-ssh -p <PORT> root@<HOST> "pip install -q torch==<pinned>"
-# phase 2+: everything that must respect those pins
+# Phase 1: Core framework / CUDA wheel
+ssh -p <PORT> root@<HOST> "pip install -q torch torchvision torchaudio"
+# Phase 2: Application packages
 ssh -p <PORT> root@<HOST> "pip install -q wandb tensorboard scipy scikit-learn pandas"
 ```
 
-Legacy fallback — if the project only has a `requirements.txt` and no env spec,
-install it as a single phase, then treat any version fight it causes as the
-signal to convert it into ordered phases:
+Fallback for standard `requirements.txt`:
 ```bash
 scp -P <PORT> requirements.txt root@<HOST>:/workspace/
 ssh -p <PORT> root@<HOST> "pip install -q -r /workspace/requirements.txt"
@@ -364,7 +361,7 @@ Tear down all active instances (use after all experiments complete):
 - **Show estimated total cost, not just $/hr** — a $0.90/hr GPU that finishes in 2h ($1.80) beats a $0.30/hr GPU that takes 8h ($2.40)
 - **`vastai` CLI requires Python ≥ 3.10** — if system Python is older, use a conda env
 
-## CLAUDE.md Example
+## Configuration Example
 
 Users only need to set `gpu: vast` — no hardware preferences required:
 

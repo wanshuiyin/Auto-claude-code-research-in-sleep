@@ -1,103 +1,62 @@
 # Fan-Out Pattern
 
-When a skill needs **breadth** — many candidate ideas, many sources, many
-attack angles, many proof obligations, many draft sections — it may fan
-the generation step out across same-family subagents. This document is
-the canonical convention for doing that **without** weakening the
-cross-model jury that the entire ARIS design rests on.
+> **Cursor mapping**: "Agent tool" below = Cursor's `Task` tool (supports true
+> parallel spawn — launch multiple Task calls in one message). Fan-out subagents use `model: "inherit"` (same family);
+> the independent reviewer always uses a cross-family model per `reviewer-routing.md`.
 
-Rule of thumb: **Fan-out is 火力 (firepower); the jury is 裁判席 (the
-bench). Subagents GENERATE candidates; they NEVER score them.** Fan-out
-multiplies how much breadth you can cover per unit time. It does not, and
-must not, change *who renders the verdict*. The verdict stays a single,
-heterogeneous, cross-model step — identical whether you fanned out across
-8 parallel workers or ran one shard at a time on a slow night.
+When a skill needs **breadth** — many candidate ideas, many sources, many attack angles, many proof obligations, or many draft sections — it may fan out the generation step across same-family worker subagents. This document defines the canonical convention for parallel generation **without** compromising independent cross-model review.
 
-## Core principle: decouple FAN-OUT from JURY
+**Rule:** Parallel subagents only generate candidates (ideas, drafts, citations). Scoring, ranking, and final approval must always be handled by an independent cross-family reviewer model.
 
-These are two different operations and they are governed by two different
-rules:
+Fan-out accelerates coverage across candidate space. It does not alter how quality is evaluated: evaluation remains an independent, cross-family step regardless of whether generation ran across 8 parallel workers or sequentially in a single pass.
 
-| | FAN-OUT (breadth) | JURY (verdict) |
+## Core Principle: Decouple Generation Fan-Out from Quality Evaluation
+
+Generation and quality evaluation are distinct operations governed by different rules:
+
+| | Fan-Out (Breadth) | Quality Evaluation (Verdict) |
 |---|---|---|
-| What it does | Generates N candidate items | Renders the STOP/ACCEPT decision |
-| Who runs it | Same-family subagents (Claude clones, or codex shards) | A **different** model family (`reviewer-routing.md`) |
-| Allowed to judge quality? | **No.** Generate only. | **Yes.** That is its only job. |
-| Failure if violated | None (it's just more candidates) | Invariant breach: model judges its own family's output |
-| Analogy | 火力 — fire more shots | 裁判席 — the bench that rules |
+| **Purpose** | Generates N candidate items | Renders the stop/acceptance decision |
+| **Execution** | Same-family subagents (e.g. parallel worker agents) | Independent, **different** model family (`reviewer-routing.md`) |
+| **Allowed to judge quality?** | **No.** Generation only. | **Yes.** Evaluates quality and correctness. |
+| **Failure if violated** | None (produces candidate pool) | Evaluation bias: model assesses its own family's output |
+| **System Role** | Candidate generation — broad search coverage | Independent evaluation — objective quality verification |
 
-The decoupling is the whole point. A subagent that both generates a
-candidate *and* decides whether it is good has collapsed the two
-operations and re-introduced exactly the correlated blind spot that
-heterogeneous review exists to remove. A Claude subagent generating an
-idea, then a Claude orchestrator declaring that idea "novel" or
-"publishable," is a Claude judging Claude — the invariant is dead, no
-matter how many subagents were involved.
+Decoupling generation from evaluation prevents correlated blind spots. A worker subagent that both generates a candidate and declares it high quality reintroduces self-evaluation bias. If a worker generates an idea and the same-family orchestrator declares that idea "novel" or "publishable", the review lacks independence regardless of how many subagents participated.
 
-So the contract on every shard is narrow and absolute:
+The operational contract for every worker shard is explicit:
 
-- ✅ A shard MAY: enumerate, draft, propose, retrieve, hypothesize,
-  decompose, attack — i.e., emit candidate items.
-- ❌ A shard MUST NOT: rank candidates against each other, declare one
-  "best," assert novelty/soundness/publishability, decide the loop is
-  done, or otherwise render the acceptance verdict.
+- ✅ A shard **may**: enumerate, draft, propose, retrieve, hypothesize, decompose, and identify attack vectors (emit candidate items).
+- ❌ A shard **must not**: rank candidates against each other, declare one "best", assert novelty/soundness/publishability, decide the loop is complete, or render an acceptance verdict.
 
-Mechanical operations on the merged candidate set (deduplication,
-clustering, schema validation, sorting by a declared field) are **not**
-judgment and are explicitly allowed on the executor — see
-§ Structured-output contract.
+Mechanical operations on the merged candidate set (deduplication, clustering, schema validation, sorting by a declared field) are execution bookkeeping and are handled directly by the executor (see § Structured-output contract).
 
-## The 3-tier degradation ladder
+## The 3-Tier Degradation Ladder
 
-Fan-out is a **skill-prompt pattern, not a harness capability.** ARIS
-already fans out today on runtimes that have no parallel-orchestration
-primitive at all (`/kill-argument` runs two sequential fresh codex
-threads with **no Agent tool**; `/citation-audit` verifies per-entry;
-`/proof-checker` re-derives per-round). A richer runtime (ultracode /
-Workflow true parallelism) merely *accelerates* the same pattern.
-
-Therefore fan-out must degrade gracefully across runtimes. The three
-tiers below differ **only** in how the candidate-generation step is
-dispatched. They terminate in the **identical** cross-model jury step.
+Fan-out is a **prompt pattern, not a hard runtime dependency.** Workflows degrade gracefully across environments. The three tiers below differ **only** in how candidate generation is dispatched; all three terminate in the **identical** independent cross-model review step.
 
 | Tier | Dispatch mechanism | When available |
 |---|---|---|
-| **Tier 1** | ultracode / Workflow true parallel — N shards run concurrently with dynamic orchestration | Runtime exposes a parallel-spawn primitive |
-| **Tier 2** | Plain `Agent`-tool spawn — N subagents launched, no dynamic orchestration (static fan, collect, merge) | Host has the `Agent` tool but no Workflow engine |
-| **Tier 3** | Sequential fallback — the same N shards run one-by-one, each in a **fresh context** (context reset between shards) | Any runtime, including codex CLI / bare Claude Code with no Agent tool |
+| **Tier 1** | Workflow true parallel — N shards run concurrently with dynamic orchestration | Runtime exposes a parallel-spawn primitive |
+| **Tier 2** | Standard `Task`/`Agent` tool spawn — N subagents launched, static fan-in collection | Host supports subagent spawning without workflow engine |
+| **Tier 3** | Sequential fallback — N passes run sequentially, each with a **fresh context** | Any runtime, including single-agent CLI environments |
 
 ```
                  ┌─────────────────────────────────────────┐
   Tier 1  ──┐    │                                          │
-  Tier 2  ──┼──► │  merged union → mechanical dedup (SAFE)  │ ──► CROSS-MODEL JURY
+  Tier 2  ──┼──► │  Merged union → mechanical dedup (SAFE)  │ ──► CROSS-MODEL REVIEW
   Tier 3  ──┘    │     (executor-side, NOT judgment)        │      (identical step)
                  └─────────────────────────────────────────┘
        (dispatch differs)         (same)                          (same — invariant)
 ```
 
-**The jury invariant is strictly orthogonal to whether subagents
-exist.** Tier 3 with zero subagents (one fresh-context pass per shard,
-in series) must produce a verdict from the *same* cross-model jury as
-Tier 1 with eight parallel workers. If a skill cannot run Tier 1, it
-drops to Tier 2; if it cannot run Tier 2, it drops to Tier 3. It never
-drops the jury. Degrading the dispatch is free; degrading the verdict is
-a breach.
+**Independent evaluation is orthogonal to whether subagents exist.** Tier 3 with sequential passes must produce a verdict from the *same* cross-model reviewer as Tier 1 with parallel workers. If an environment cannot run Tier 1, it falls back to Tier 2; if it cannot run Tier 2, it falls back to Tier 3. Independent evaluation is never dropped.
 
-Known failure mode: a skill author "optimizes" Tier 3 by letting the
-single sequential pass *also* pick the winner, because there is no
-orchestrator to do it. That is self-acquittal smuggled in through the
-fallback path. Tier 3 still ends at the cross-model jury; the sequential
-pass only generates.
+## Structured-Output Contract for Shards
 
-## Structured-output contract for shards
+Every shard returns a **structured result set**, not freeform prose, enabling mechanical merging and deduplication before review. Both envelope shapes include `shard_id`, a keyed list, and a `dedup_key` per item:
 
-Every shard returns a **structured result set**, not prose, so the merge +
-dedup + jury steps can operate mechanically. There are two envelope shapes,
-chosen by what the shard does — but they share one invariant: `shard_id` + a
-keyed list + a `dedup_key` per item.
-
-**Generation fan-out** — the shard *produces* new candidates (idea lenses,
-attack axes, draft variants). Returns `candidates[]`:
+**Generation fan-out** — the shard *produces* new candidates (idea lenses, attack axes, draft variants). Returns `candidates[]`:
 
 ```json
 {
@@ -113,11 +72,7 @@ attack axes, draft variants). Returns `candidates[]`:
 }
 ```
 
-**Extraction fan-out** — the shard *reads* a fixed input set and reports the
-units it finds (papers in a verified set, obligations in a proof). Returns
-`entries[]` with the same per-item keys, except `dedup_key` is the unit's
-**pre-existing canonical id** (assigned upstream), not a freshly normalized
-string:
+**Extraction fan-out** — the shard *reads* fixed input and extracts specific units (verified papers, proof obligations). Returns `entries[]` using existing canonical IDs:
 
 ```json
 {
@@ -126,241 +81,98 @@ string:
     {
       "kind": "source | proof_obligation",
       "payload": "<the extracted record — domain fields may be inlined>",
-      "dedup_key": "<canonical id already assigned upstream: arXiv id / DOI / MC-17>"
+      "dedup_key": "<canonical id assigned upstream: arXiv id / DOI / MC-17>"
     }
   ]
 }
 ```
 
-The `dedup_key` is what makes mechanical clustering possible without judgment:
-for generation, normalize titles / claim-stems / obligation-statements to a
-canonical string and cluster on string match / near-match; for extraction, the
-canonical id already identifies the unit. No model decides "are these the
-same?" by *taste* — the key decides by *normalization rule*. Domain-specific
-fields (an idea's hypothesis, a paper's method) may be inlined alongside these
-keys rather than buried in an opaque `payload`.
+The `dedup_key` allows mechanical clustering without subjective judgment:
+- For generation: normalize titles, claims, or statements to a canonical string and cluster by exact or near-match.
+- For extraction: use upstream canonical IDs (arXiv ID, DOI, theorem identifier).
 
-### Dedup discipline
+### Deduplication Discipline
 
-Deduplication runs on the merged union, **on the executor (Claude),
-BEFORE the jury**, and is **SAFE** because it is mechanical, not
-judgment:
+Deduplication runs on the merged candidate pool, **on the executor model, BEFORE the reviewer evaluation**. This is safe because it is mechanical:
 
-- ✅ Cluster candidates by `dedup_key` (exact + near-match on a declared
-  metric).
-- ✅ Drop exact duplicates; collapse near-duplicates into one
-  representative + a count.
-- ✅ Sort/limit by a *declared field* (e.g. keep top-K by retrieval
-  score the source already returned).
-- ❌ Drop a candidate because the executor *thinks* it's weak — that is
-  quality judgment and belongs to the jury.
-- ❌ Re-rank candidates by the executor's own quality opinion before the
-  jury sees them — that pre-filters the jury's input with same-family
-  judgment.
+- ✅ Cluster candidates by `dedup_key` (exact and near-match on a declared metric).
+- ✅ Drop exact duplicates; collapse near-duplicates into one representative item with an occurrence count.
+- ✅ Sort or truncate by a *declared objective field* (e.g., top-K by retrieval score emitted by search index).
+- ❌ Do not drop a candidate based on the executor's subjective opinion of quality.
+- ❌ Do not re-rank candidates based on the executor's quality assessment before sending to the reviewer.
 
-Required ordering: **dedup BEFORE jury, on the merged union.** This is
-not just hygiene — it is a cost-control invariant. The jury backend
-(codex GPT-5.6-Sol / Gemini / oracle-pro) is the rate-limited,
-token-expensive resource. Sending it 40 candidates of which 25 are
-near-duplicate is a waste of the scarce cross-model budget and invites
-rate-limit failure mid-verdict. Mechanical dedup on the cheap
-same-family side, first, keeps the expensive heterogeneous step lean.
+Ordering requirement: **Deduplicate BEFORE the cross-model review step.**
+The cross-model reviewer is token-intensive and rate-limited. Passing 40 candidates where 25 are near-duplicates wastes evaluation budget. Mechanical deduplication keeps reviewer input concise and focused.
 
 ```
-fan-out (N shards) → merge union → mechanical dedup (Claude, SAFE) → CROSS-MODEL JURY
-                                   └ cheap, judgment-free,            └ expensive, rate-limited,
-                                     shrinks the jury's input set       sees a deduped set only
+fan-out (N shards) → merge union → mechanical dedup (executor, SAFE) → CROSS-MODEL REVIEW
+                                   └ cheap, judgment-free,             └ thorough, independent,
+                                     shrinks input set                   evaluates deduped pool
 ```
 
-## When to fan out — and when NOT to
+## When to Fan Out — and When NOT to
 
-Fan out when the task is **breadth-bound**: its quality scales with how
-much of the candidate space you cover, and coverage is the bottleneck.
+Fan out when a task is **breadth-bound**: output quality scales with the breadth of candidate space covered.
 
-| Fan out (breadth-bound) | Do NOT fan out (value IS the single jury) |
+| Fan Out (Breadth-Bound) | Do NOT Fan Out (Value is Independent Review) |
 |---|---|
-| Idea generation across lenses | `/novelty-check` — the verdict IS the product |
-| Literature retrieval across sources | `/research-review` — single heterogeneous critique |
-| Attack-angle enumeration | `/experiment-audit` — one cross-model integrity ruling |
-| Proof-obligation extraction | `/peer-review` meta-review — one external verdict |
-| Draft-section first passes | Any skill whose output *is* the acceptance decision |
+| Idea generation across diverse analytic lenses | `/novelty-check` — the verdict itself is the deliverable |
+| Literature retrieval across multiple databases | `/research-review` — single independent critique |
+| Attack-angle and counterargument enumeration | `/experiment-audit` — single cross-model integrity check |
+| Proof obligation and assumption extraction | `/peer-review` meta-review — single external evaluation |
+| First-pass section drafting | Any skill whose primary output is an acceptance decision |
 
-Known failure mode (the one to refuse in review): fanning out a
-**judgment** skill across Claude clones. `/novelty-check`,
-`/research-review`, `/experiment-audit`, and the `/peer-review`
-meta-review do not have a breadth bottleneck — their entire value is the
-*single heterogeneous jury verdict*. Spawning eight Claude subagents to
-each "assess novelty" and then aggregating their opinions does not give
-you eight independent reviews; it gives you eight **correlated** Claude
-opinions (same family, same blind spots) dressed up as a panel. Worse,
-it dilutes the invariant: the aggregate now *looks* like a review but
-was never adjudicated by a different model family. If a skill's deliverable
-is a verdict, you may fan out the *evidence-gathering* that feeds the
-verdict, but the verdict itself stays a single cross-model call.
+**Anti-pattern to reject:** Fanning out a quality evaluation across same-family subagents. Spawning multiple subagents from the same model family to "assess novelty" or "evaluate paper quality" does not produce independent reviews; it produces correlated opinions with identical training biases. If a skill's objective is a quality verdict, fan out the *evidence gathering*, but keep the quality evaluation unified and cross-model.
 
-One-liner to apply at review time: **fan out the search for candidates;
-never fan out the bench.**
+**Rule:** Fan out candidate generation; keep quality evaluation unified and independent.
 
-## Worked examples (real ARIS skills)
+## Worked Examples
 
-### `/kill-argument` — Tier 3 sequential fan-out, NO Agent tool
+### `/kill-argument` — Tier-3 Sequential Generation, No Subagent Tool
 
-`/kill-argument` is the canonical proof that fan-out is a prompt pattern,
-not a harness feature. It runs **two** fresh `mcp__codex__codex` threads
-in series — Thread 1 writes the strongest 200-word rejection memo; Thread
-2 (independent, no `codex-reply`) decomposes that memo into 3-7 atomic
-rejection points and adjudicates each. There is **no `Agent` tool** in
-its `allowed-tools`; the "fan" is the decomposition into per-point
-obligations, run sequentially with context reset between threads. The
-jury here is cross-model by construction — both threads are GPT-5.6-Sol
-adjudicating a Claude-executor's paper, and **the skill code computes the
-final verdict from per-point counts; the codex thread is forbidden from
-emitting the top-level verdict** (`Verdict is computed by the skill, not
-by the adjudicator`). Generation (the attack, the per-point
-classification) fans out; the ACCEPT/FAIL mapping is mechanical and
-lives in the skill, not the model.
+`/kill-argument` executes two sequential reviewer threads in series:
+1. Thread 1 drafts the strongest 200-word rejection critique.
+2. Thread 2 decomposes that critique into 3–7 atomic rejection points and evaluates each against the paper.
 
-### `/idea-creator` — Tier-1 parallel lens fan-out → dedup → existing cross-model jury
+The skill computes the final verdict mechanically from per-point evaluation counts. Generation fans out across argument points, while the final PASS/FAIL mapping is deterministic and handled in skill logic.
 
-`/idea-creator` fans out idea generation across analytic *lenses*
-(structural gaps: method-in-A-not-B, contradictory findings, untested
-assumptions, unexplored scaling regimes — Phase 1). On a Tier-1 runtime
-these lenses run as parallel shards; on Tier 3 they are enumerated in one
-pass. After fan-out the merged set should be **mechanically deduped only**
-(cluster near-identical ideas; never drop one for being "weak"). The
-**jury** is the already-existing Phase-4 cross-model devil's-advocate
-pass: GPT-5.6-Sol via Codex MCP surfaces the strongest reviewer objection per
-idea and ranks for a top venue. `/idea-creator` declares the `Agent` tool — re-granted (per the re-grant
-rule in **Allowed-tools hygiene**) when the lens fan-out was wired, after
-the WB2 sweep had stripped the earlier vestigial grant. On a Tier-1 runtime
-the lenses run as Workflow shards; on Tier 3 they fall back to sequential
-enumeration with no grant needed.
+### `/idea-creator` — Tier-1 Parallel Lens Generation → Dedup → Cross-Model Review
 
-> ⚠️ **Known gap — idea-creator is an *aspirational* example here, not yet a clean one.**
-> Today `/idea-creator` Phase 3 (`skills/idea-creator/SKILL.md:159,175`)
-> does same-family *quick novelty check + feasibility gating* and
-> **eliminates ideas** before the Phase-4 cross-model jury ever sees them.
-> That is exactly the ❌ "executor pre-filters the jury's input with
-> same-family quality judgment" this doc forbids above — a Type-B
-> novelty/quality verdict made same-family (see
-> [`acceptance-gate.md`](acceptance-gate.md)). The fan-out refactor must
-> push all novelty/quality elimination INTO (or after) the Phase-4
-> cross-model jury; Phase 3 keeps only mechanical dedup + *objective*
-> feasibility (compute/time budget), and every non-duplicate idea reaches
-> the jury. Fixing this is part of fanning the skill out, not a separate
-> chore.
+`/idea-creator` fans out idea generation across analytic lenses (structural gaps, contradictory findings, untested assumptions, unexplored scaling regimes).
+1. Lenses run as parallel worker tasks (Tier 1/2) or sequential passes (Tier 3).
+2. The executor merges and mechanically deduplicates candidates.
+3. The cross-model reviewer evaluates surviving distinct ideas to surface reviewer objections and rank candidates.
 
-### `/research-lit` — per-source fan-out, deterministic gate as "jury"
+### `/research-lit` — Source Fan-Out with Deterministic Verification Gate
 
-`/research-lit` fans out retrieval across sources (arXiv, Semantic
-Scholar, OpenAlex, Exa, DeepXiv, Zotero, web) under integration-contract
-**Policy D2** (multi-source aggregate: invoke every resolved source,
-warn-and-continue on per-source failure, proceed if ≥1 contributed).
-Here the "jury" is **not** an LLM at all — it is the **deterministic**
-`verify_papers.py` gate (Policy D1: 3-layer arXiv / CrossRef / S2
-cross-check), which decides KEEP / `[UNVERIFIED]` by mechanical
-cross-reference, not by taste. This is the **near-zero-risk** corner of
-the design space: the candidate generators are same-family (or just API
-fetchers), but the acceptance gate is a deterministic external verifier,
-so there is no same-family-self-judgment risk to begin with. When the
-"jury" is a deterministic check rather than a model verdict, the
-cross-model-family rule is automatically satisfied (a process is not a
-model family). Fan out freely.
+`/research-lit` fans out queries across multiple academic sources (arXiv, Semantic Scholar, OpenAlex, Exa, DeepXiv). Candidate papers are verified by `verify_papers.py` against arXiv/CrossRef/S2 metadata. Because verification is a deterministic external check against authoritative registries, same-family retrieval poses no evaluation risk.
 
-## Shard safety invariants
+## Shard Safety Invariants
 
-Two invariants keep a fan-out from manufacturing or laundering errors:
+1. **Shards are read-only on shared artifacts.** A worker shard may read workspace files and emit candidate data; it must not modify shared state or mutate files other shards are accessing. Only the executor writes merged output after deduplication.
+2. **Verify upstream dependencies.** When reviewing work that depends on an upstream artifact (a cited paper, a numerical claim, a prior theorem), provide the reviewer with the path to that upstream source rather than an unverified intermediate summary.
 
-- **Shards are read-only on shared artifacts.** A shard may read the repo/workspace and
-  return its findings; it must NOT write shared state, mutate files the executor or other
-  shards also touch, or rank/drop another shard's output. The *only* write is the
-  post-merge executor write, after dedup. This forecloses silent world-model divergence
-  (parallel agents mutating a shared workspace and integrating into conflicts only
-  discovered at composition time).
-- **Don't inherit the upstream premise unchecked.** When a phase's jury reviews work built
-  on a load-bearing upstream artifact (a prior phase's claim, a cited number, an earlier
-  agent's conclusion), give the jury the *path to that upstream artifact* and ask it to
-  check the dependency, not just the local step. Otherwise one plausible-but-wrong upstream
-  assertion is treated as ground truth and amplified down the chain — a cascading
-  hallucination that compounds instead of self-correcting.
+## Cross-References
 
-## Cross-references
+- **`reviewer-routing.md`** — Reviewer backend selection. Cross-model review routes to independent model families.
+- **`reviewer-independence.md`** — Reviewers receive direct file paths in fresh contexts without author editorializing.
+- **`acceptance-gate.md`** — Objective execution completion (exit codes, completed shards) can be verified by the executor; quality and correctness verdicts require independent cross-model review.
+- **`integration-contract.md`** — Multi-source retrieval policies and durable JSON artifact specifications.
 
-- **`reviewer-routing.md`** — jury backend selection. The cross-model
-  jury step routes through Codex MCP (`gpt-5.6-sol`, at the call's tier — deep-audit `ultra` / regular `xhigh`) by default, or
-  Oracle MCP (`gpt-5.5-pro`) under `— reviewer: oracle-pro`. Fan-out
-  tier never changes the jury backend.
-- **`reviewer-independence.md`** — the jury call receives **file paths
-  only**, in a **fresh thread**, with no executor summary/interpretation.
-  This applies to the post-fan-out jury exactly as to any other review:
-  the deduped candidate set is handed over as artifacts the reviewer
-  reads itself, not as the executor's pre-digested ranking.
-- **`acceptance-gate.md`** — when self-judgment is allowed. Self-judging
-  EXECUTION-completeness (exit code, files exist, N shards returned, PDF
-  compiled) is SAFE same-model; self-judging QUALITY/CORRECTNESS (idea
-  novel, proof valid, claim supported, review satisfied) MUST be
-  cross-model. A fan-out loop may self-verify *that all N shards ran*; it
-  may not self-verify *that the candidates are good*. The loop can DRIVE;
-  it cannot ACQUIT.
-- **`integration-contract.md`** — fan-out across sources/helpers uses the
-  §2 resolver chain and the Policy D1/D2 failure policies; the jury step,
-  when load-bearing, needs an artifact + verdict schema like any audit.
+## Required Components for a Fan-Out Skill
 
-## Required components for a fan-out skill
+A skill using the fan-out pattern must specify:
 
-A SKILL that fans out must specify all of:
+1. **Portable dispatch:** Define the parallel execution path (Tier 1/2) and sequential fallback (Tier 3).
+2. **Structured shard output:** Return structured JSON keyed by `shard_id` with `dedup_key` fields, not unstructured prose.
+3. **Mechanical deduplication:** Execute deduplication on merged results before invoking reviewer models.
+4. **Independent quality evaluation:** Route final quality assessment to an independent cross-model reviewer or deterministic verification script.
+5. **Breadth-bound justification:** Explain why parallel candidate generation improves output quality for this specific task.
 
-1. **Tier-portable dispatch.** State the Tier-1 parallel form AND the
-   Tier-3 sequential fallback. Never assume `Agent` or Workflow exists.
-2. **Per-shard structured output.** Each shard returns a structured object
-   keyed by `shard_id`, never prose. A *generation* fan-out (e.g.
-   idea-creator's lenses) returns `candidates[]`, each item carrying a
-   `dedup_key`. An *extraction* fan-out over a fixed input set (e.g.
-   research-lit per-paper, proof-checker per-section) returns `entries[]`,
-   each item carrying its canonical id as the `dedup_key`. Either shape:
-   `shard_id` + a keyed list + a dedup/identity key per item.
-3. **Mechanical dedup before the jury.** On the merged union, on the
-   executor, judgment-free, declared metric — to control jury cost and
-   rate-limit exposure.
-4. **A single cross-model jury step** (per `reviewer-routing.md` +
-   `reviewer-independence.md`) — OR a deterministic verifier gate — that
-   is **identical** across all three tiers.
-5. **A breadth-bound justification.** State why this task benefits from
-   breadth. If the deliverable IS a verdict, do not fan out the verdict;
-   fan out only the evidence that feeds it.
+## Subagent Tool Grant Policy (`Task` / `Agent`)
 
-## Allowed-tools hygiene — the `Agent` grant policy
+Granting subagent spawning capabilities in a skill's frontmatter is restricted to skills whose body actively fans out across parallel workers. It is not boilerplate.
 
-`Agent` in a skill's `allowed-tools` frontmatter is the capability gate for
-**Tier-2** dispatch (spawning Claude subagents via the Agent tool). It is
-**granted only to skills whose body actually fans out** — i.e. whose prose
-instructs the model to spawn parallel Claude subagents. It is **not**
-boilerplate to be copied across skills.
-
-This matters because the other two tiers need no per-skill grant:
-
-- **Tier-1** (ultracode / Workflow) is a *harness* capability, not a tool a
-  skill lists. A skill cannot "grant itself" Workflow; the runtime provides
-  it. So fanning out at Tier-1 requires no `Agent` in `allowed-tools`.
-- **Tier-3** (sequential fallback) spawns nothing — e.g. `/kill-argument`
-  runs its two passes as fresh `mcp__codex__codex` threads, no Agent tool.
-  Correctly, `kill-argument` does **not** grant `Agent`.
-
-So `Agent` is needed *only* for the Tier-2 form, *only* in skills that
-genuinely fan out. The WB2 least-privilege sweep removed 48 vestigial grants
-(pure copied boilerplate, never invoked); since then **only skills that
-genuinely fan out at Tier-2 re-grant `Agent`, and each must cite this doc in
-its body** (enforced by `check_skills_inventory.py`). As of writing those are
-`idea-creator`, `proof-checker`, and `research-lit`. Note that "reviewer
-**sub-agent**" in several skills refers to the cross-model *codex/GPT
-reviewer*, not the Agent tool, and never implied a real grant need.
-
-**Re-granting rule.** A skill that adds genuine fan-out re-introduces
-`Agent` to its `allowed-tools` **in the same change that adds the fan-out
-prose**, and that prose must cite this document (`fan-out-pattern.md`) so
-the grant is self-justifying. Grant tracks usage; never the reverse.
-
-**Enforcement.** `tools/check_skills_inventory.py` fails the drift check if
-any mainline skill grants `Agent` without citing `fan-out-pattern.md` in its
-body. This keeps vestigial grants from creeping back and guarantees every
-real grant is traceable to the convention it follows.
+- Tier-1 and Tier-3 execution require no special tool grants for sequential passes or external runtime dispatch.
+- Tier-2 in-process subagent spawning requires the tool grant and must cite `fan-out-pattern.md` in the skill body.
+- Tool grants track actual implementation; unused grants must be omitted.

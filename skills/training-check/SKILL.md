@@ -4,6 +4,10 @@ description: Periodically check WandB metrics during training to catch problems 
 argument-hint: "[wandb-run-path]"
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__codex__codex-reply
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Training Check
 
@@ -23,7 +27,7 @@ Periodically read WandB metrics during training to catch problems early. Do not 
 
 - WANDB_ENTITY and WANDB_PROJECT: read from CLAUDE.md or passed as argument (format: `entity/project/run_id`)
 - CHECK_INTERVAL: starts at 10 minutes, then gradually increases if consistently healthy: 10 min → 20 min → 30 min → 60 min (cap)
-- REVIEWER_MODEL = `gpt-5.6-sol` — used via Codex MCP for ambiguous cases only
+- REVIEWER_MODEL — cross-family Cursor built-in model per reviewer-routing.md, used via Task subagent for ambiguous cases only
 
 ## When to Use
 
@@ -69,12 +73,13 @@ Check these signals:
 
 ### Step 3: Codex Judgment (only when unsure)
 
-Only escalate to Codex when the signal is ambiguous. For clearly good or clearly bad signals, act directly.
+Only escalate to the cross-family reviewer when the signal is ambiguous. For clearly good or clearly bad signals, act directly.
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "training health judgment (cross-family)",
+  model: REVIEWER_MODEL,
   prompt: |
     TRAINING HEALTH CHECK — need your judgment on ambiguous metrics.
 

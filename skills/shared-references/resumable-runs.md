@@ -26,12 +26,13 @@ lives. The phase-status enum splits execution from acceptance:
 the first non-`done`. So a phase the executor self-considered "done" but that
 crashed *before its cross-model audit* is **re-validated** on resume, never
 silently skipped. This is `acceptance-gate.md` made operational: **a loop can
-DRIVE resume, it cannot ACQUIT a phase past itself.**
+resume work, but it cannot mark a phase accepted without an independent reviewer
+or deterministic verifier.**
 
 The split is enforced in code, not just docs: `set_status()` may only write
 `running/done/failed`; only `accept()` writes `accepted`, and it **requires** a
 non-empty `verdict_id` + `reviewer` — you cannot mark a phase accepted without
-recording who acquitted it. (A `done`-but-never-`accepted` phase is therefore
+recording who approved it. (A `done`-but-never-`accepted` phase is therefore
 *structurally* visible as an unmet acceptance obligation.)
 
 ## Who may call `accept`
@@ -43,12 +44,12 @@ Only:
   compile that exits 0, a file-exists check for a purely mechanical phase.
   Record it as `reviewer="deterministic:verify_papers.py"` so the audit trail
   shows acceptance was not a model self-report (per `fan-out-pattern.md`: a
-  deterministic verifier is a valid jury; a process is not a model family).
+  deterministic verifier is a valid reviewer; a process is not a model family).
 
-The **executor (Claude) must never call `accept` on its own self-report.** Marking
-your own phase done is fine (`set done`); acquitting it is not. `accept` records
-the `reviewer` and warns loudly if it looks like the executor's own family
-(a `claude*` reviewer ≈ self-acquittal). Record `verdict_id` as a **durable
+The **executor must never call `accept` on its own self-report.** Marking your own
+phase done is fine (`set done`); accepting it is not. `accept` records the
+`reviewer` and warns loudly if it looks like the executor's own model family
+(same-family review is not valid acceptance). Record `verdict_id` as a **durable
 handle** — the reviewer thread/trace id, or the path/sha of the verifier's report
 (e.g. `.aris/audit-verifier-report.json`) — not just a label, so the acceptance
 is auditable later.
@@ -82,7 +83,7 @@ python3 tools/run_state.py status <root> <run_id>
 1. **At run start** (or `— resume <run_id>`): if resuming, `resume_point` gives
    the phase to start at; else `start_run` with the phase list.
 2. **Per phase:** `set running` → do the work → `set done --artifact <path>`.
-3. **At the phase's gate:** run the phase's existing cross-model audit / jury (or
+3. **At the phase's gate:** run the phase's existing cross-model audit / review (or
    deterministic verifier). **Only on a positive verdict** call
    `accept --verdict-id <id> --reviewer <name>`. A failed/ambiguous verdict leaves
    the phase `done` (unaccepted) → it will be re-validated on the next resume.

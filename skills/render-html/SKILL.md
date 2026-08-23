@@ -2,8 +2,12 @@
 name: render-html
 description: "Render an ARIS Markdown / JSON artifact (IDEA_REPORT, AUTO_REVIEW, KILL_ARGUMENT, PAPER_PLAN, research-wiki state, etc.) into a single-file HTML view designed for human reading. Use when the user says \"渲染 HTML\", \"出一份 HTML 报告\", \"render html\", \"make this readable\", \"export to html\", or wants a polished web-rendered view of a Markdown artifact."
 argument-hint: <input.md> [--template academic|dashboard] [--out <path>] [--title ...] [--state <state.json>] [--json <sidecar.json>] [--offline] [--review|--no-review]
-allowed-tools: Bash(*), Read, Write, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # /render-html: Markdown → single-file HTML for human reading
 
@@ -103,7 +107,7 @@ python3 "$RENDER_HTML" docs/SKILLS_CATALOG.md --lang en
 
 # Skip review (academic template otherwise reviews by default)
 python3 "$RENDER_HTML" idea-stage/IDEA_REPORT.md
-# … then the skill skips the mcp__codex__codex review step if --no-review
+# … then the skill skips the reviewer Task subagent step if --no-review
 # was on the command line. Pass --review to a dashboard render to force it.
 ```
 
@@ -147,7 +151,7 @@ So:
 - `--template dashboard` → no review by default. Force with `--review`.
 - Phase 2 workflow auto-emit (activated 2026-05) selects per-skill via the RENDER_HTML hooks documented below — interim views default to `--no-review`, final / audit-class deliverables default to full gate.
 
-**If `should_review` is true**, fire a fresh `mcp__codex__codex` thread (NEVER `codex-reply`; pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "xhigh"}` per `../shared-references/reviewer-routing.md`) with the prompt below. The reviewer reads the source MD + generated HTML directly; it does **not** see this skill's intermediate state.
+**If `should_review` is true**, launch a fresh reviewer Task subagent (NEVER resume; `model: REVIEWER_MODEL` — cross-family max tier per `../shared-references/reviewer-routing.md`) with the prompt below. The reviewer reads the source MD + generated HTML directly; it does **not** see this skill's intermediate state.
 
 **Scope of review (narrow on purpose).** The HTML reviewer audits **render fidelity / safety / structure only** — not claim truthfulness. Claim audit belongs upstream (`/paper-claim-audit`, `/research-review`, `/result-to-claim`). Specifically the reviewer checks:
 
@@ -157,7 +161,7 @@ So:
 4. **Safety / escaping** — no raw `<script>` / `onclick=` / `javascript:` / unreplaced placeholders / template-leak survives
 5. **Expected-difference allowance** — frontmatter strip, generated header/footer/meta, TOC insert, sanitized unsafe HTML are all expected, not flagged
 
-**Codex prompt (mandatory shape).** Send this as a fresh thread (`mcp__codex__codex`, NOT `codex-reply`):
+**Reviewer prompt (mandatory shape).** Send this to a fresh reviewer Task subagent:
 
 ```
 You are an independent ARIS HTML render auditor. This is a fresh review thread.
@@ -232,7 +236,7 @@ Verdict rules:
 
 **If `verdict == WARN`**: deliver the HTML but surface the warning list. User decides whether to fix or accept.
 
-**If `mcp__codex__codex` is not available** (e.g., user runs `/render-html` on a Codex-CLI-only setup where Codex MCP isn't wired): emit `verdict: REVIEW_UNAVAILABLE` to the sidecar, do not fabricate `PASS`, and tell the user the HTML was generated but **not** independently reviewed. The user can manually invoke `/research-review` on the source MD or re-run with Codex MCP available.
+**If the Task tool is unavailable** (rare): emit `verdict: REVIEW_UNAVAILABLE` to the sidecar, do not fabricate `PASS`, and tell the user the HTML was generated but **not** independently reviewed. The user can manually invoke `/research-review` on the source MD later.
 
 ### Step 5: (Optional) Verify in browser
 

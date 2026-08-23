@@ -2,20 +2,18 @@
 name: integrity-forensics
 description: "Run the Anti-Autoresearch integrity-forensics sweep (span-anchored evidence ledger → GPT auditors propose findings → deterministic rules-only adjudicator) against a paper via a SHA-pinned thin launcher — then convert the verdict into a typed policy gate (BLOCK/WARN/NO_NEW_BLOCKER) and an append-only obligations ledger. Use when user says \"integrity forensics\", \"forensic audit this paper\", \"投稿前自查诚信\", \"审这篇论文的诚信\", or says \"anti-autoresearch\" when the upstream repo's own skills are not installed. Also invoked by /paper-writing (submission self-forensics, default ON), /peer-review (forensic appendix), /resubmit-pipeline."
 argument-hint: "[paper-dir | pdf | arxiv-id]"
-allowed-tools: Bash(*), Read, Write, Grep, Glob, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, Grep, Glob, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Integrity Forensics — thin launcher for Anti-Autoresearch
 
 Audit target: **$ARGUMENTS**
 
-> **What this is.** ARIS generates papers; [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch)
-> is its outward-pointed dual — reviewer-side integrity forensics (46 patterns
-> across 8 families, deterministic GRIM/GRIMMER/statcheck core, span-anchored
-> claims, a rules-only adjudicator that owns the verdict). This skill is a
-> **thin launcher**: it pins an upstream commit, validates the pin with the
-> upstream eval gate, delegates execution unchanged, and post-processes the
-> verdict into ARIS's policy vocabulary. It vendors nothing and forks nothing.
+> **What this is.** This skill runs integrity checks on generated papers using [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch). It checks 46 integrity patterns across 8 categories (including GRIM/GRIMMER consistency and statcheck checks) and converts findings into actionable review gates.
 
 > 🔁 **Cadence fence** (`shared-references/external-cadence.md`): this skill is
 > verdict-bearing decision support. Do not wrap it in `/loop` / `/schedule` —
@@ -31,7 +29,7 @@ Audit target: **$ARGUMENTS**
 - **CLONE_DIR = `~/.claude/anti-autoresearch`** — the pinned working copy.
 - **NO REVIEWER KNOBS.** This launcher exposes no reviewer model/effort
   parameters and never maps ARIS `— effort:` onto upstream settings. The
-  pinned upstream runs exactly what it pins (`gpt-5.6-sol` + `xhigh`, its own
+  pinned upstream runs exactly what it pins (the cross-family reviewer, its own
   design decision). Overriding upstream review policy from a launcher would
   create a second, unauditable configuration surface.
 - **GATE_HELPER = `forensics_gate.py`** — resolved via the canonical chain
@@ -113,30 +111,31 @@ python3 "$GATE_HELPER" evaluate --report "$PAPER_DIR/report.json" --paper-dir "$
 # exit 0 = WARN / NO_NEW_BLOCKER · exit 1 = BLOCK
 ```
 
-The gate translates the verdict into policy WITHOUT re-labeling it:
+The gate translates the verdict into policy:
 
-| upstream verdict | policy |
-|---|---|
-| `HARD_FLAGS` | **BLOCK** |
-| `REVIEW_UNAVAILABLE` | **BLOCK** — an incomplete sweep cannot wave a paper through |
-| `SOFT_FLAGS` | **WARN** — human disposition |
-| `CLEAN_GIVEN_EVIDENCE` | **NO_NEW_BLOCKER** — *never* called PASS or accepted: it means "no flag found in the evidence at hand", not an acquittal |
-| anything else | **BLOCK** (fail closed) |
+| Result | Action | User Message |
+|---|---|---|
+| `HARD_FLAGS` | **BLOCK** | Critical issues found; must be resolved before submission. |
+| `REVIEW_UNAVAILABLE` | **BLOCK** | Incomplete sweep; review unavailable. Cannot verify paper integrity. |
+| `SOFT_FLAGS` | **WARN** | Potential issues detected; please review the flagged items. |
+| `CLEAN_GIVEN_EVIDENCE` | **NO_NEW_BLOCKER** | Pass: No anomalies detected in audited files. |
+| anything else | **BLOCK** | Unrecognized status; fails closed. |
 
 plus: any OPEN critical obligation → BLOCK; any OPEN obligation → at least
 WARN; a closed-without-receipt or unknown-status ledger entry → BLOCK (a
 hand-edited `"status": "RESOLVED"` does not open the gate).
 
 `gate.json` also records a `paper_fingerprint` (sha over the paper's compile
-inputs AND deliverables — `.tex`/`.bib`/`.sty`/`.cls`/figures/PDF). The
-downstream preflight is ONE command:
-`python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR" --anti-ar-commit "$ANTI_AR_COMMIT"`
-— exit 0 ⟺ the gate was produced at the CURRENT pin ∧ a gate
-exists ∧ nothing in the paper changed after it ∧ the gate matches the current
-obligations ledger ∧ the decision — **re-computed from the sha-verified
-archived report (`last_report.json`) + the live ledger, never read from the
-gate's stored token** — is pass-capable (`WARN` / `NO_NEW_BLOCKER`). Anything
-else — missing gate, post-gate edit or recompile, unbound ledger or archive,
+inputs AND deliverables — `.tex`/`.bib`/`.sty`/`.cls`/figures/PDF).
+
+The downstream preflight runs `python3 "$GATE_HELPER" fresh --paper-dir "$PAPER_DIR" --anti-ar-commit "$ANTI_AR_COMMIT"`.
+It succeeds (exit 0) only if all of the following hold:
+1. The gate was generated with the current commit pin.
+2. The paper files have not been modified since the scan.
+3. The gate matches the current issue ledger.
+4. The recomputed verdict is `WARN` or `NO_NEW_BLOCKER`.
+
+Anything else — missing gate, post-gate edit or recompile, unbound ledger or archive,
 recompute mismatch, `BLOCK`, unknown token — exits 1: re-run the sweep +
 `evaluate`. Every ledger mutation (`update`/`resolve`/`waive`) deletes the
 standing `gate.json`, so an interrupted run can never leave a stale pass; and
@@ -146,7 +145,7 @@ sweep, before touching any paper file.
 
 The gate artifact also records honest provenance: upstream's auditors are
 GPT-family, so for a **Claude executor** the findings carry `cross-family`
-proposal provenance; for a **Codex executor** they are `same-family`. Either
+proposal provenance; for a same-family executor they are `same-family`. Either
 way this gate only raises flags — it has no acceptance to grant, so the
 distinction is informational, not a loophole.
 
@@ -196,12 +195,8 @@ Rules the ledger enforces mechanically (`tests/test_forensics_gate.py`):
 
 ### The One Forbidden Loop
 
-**Never run "edit → re-sweep → repeat until CLEAN".** That objective function
-teaches the editor to defeat the detector — deleting an anchored span kills a
-flag faster than fixing the number, and the result is a paper laundered
-against its own audit. The re-run after fixes exists to confirm the
-DISCREPANCY is gone (and to catch new ones); the obligations ledger — not the
-verdict — decides whether the gate opens.
+**Rule: Do not repeatedly edit and re-scan just to clear warning flags.**
+Deleting or rephrasing flagged text without checking the underlying data can hide real errors. Discrepancies must be resolved by verifying numbers against raw result files, not by rewording sentences to bypass detection.
 
 ## Trust boundary (what is computed vs what is protocol)
 

@@ -1,22 +1,18 @@
 ---
 name: auto-paper-improvement-loop
-description: "Autonomously improve a generated paper via GPT-5.6-Sol xhigh review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
+description: "Autonomously improve a generated paper via cross-family reviewer subagent review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
 argument-hint: "[paper-directory] [— style-ref: <source>] [— edit-whitelist <path>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
 
-> 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It
-> already loops internally (review → fix → recompile) with its own round
-> structure and a deliberate fresh-reviewer bias guard each round (no
-> `codex-reply`). Re-asking it to "improve the paper" on a
-> wall-clock timer produces no new signal — quality changes when the *review*
-> changes, not when the clock ticks — and a timed re-run that also accepts its
-> own output to decide when to stop crosses into self-acquittal
-> (`acceptance-gate.md`). Schedule the *external wait that precedes it*, not the
-> improvement loop. See
-> [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
+> 🔒 **Do not run this skill on a scheduled timer (`/loop` or `/schedule`).**
+> This skill already performs internal iterations (review → fix → recompile). Trigger it only after the paper draft or preceding tasks have finished. See [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
 Autonomously improve the paper at: **$ARGUMENTS**
 
@@ -24,13 +20,13 @@ Autonomously improve the paper at: **$ARGUMENTS**
 
 This skill is designed to run **after** Workflow 3 (`/paper-plan` → `/paper-figure` → `/paper-write` → `/paper-compile`). It takes a compiled paper and iteratively improves it through external LLM review.
 
-Unlike `/auto-review-loop` (which iterates on **research** — running experiments, collecting data, rewriting narrative), this skill iterates on **paper writing quality** — fixing theoretical inconsistencies, softening overclaims, adding missing content, and improving presentation.
+Unlike `/auto-review-loop` (which iterates on **research** — running experiments, collecting data, rewriting narrative), this skill iterates on **paper writing quality** — fixing theoretical inconsistencies, aligning claim strength to evidence, adding missing content, and improving presentation.
 
 ## Constants
 
 - **MAX_ROUNDS = 2** — Two rounds of review→fix→recompile. Empirically, Round 1 catches structural issues (4→6/10), Round 2 catches remaining presentation issues (6→7/10). Diminishing returns beyond 2 rounds for writing-only improvements.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP for paper review.
-- **REVIEWER_BIAS_GUARD = true** — When `true`, every review round uses a fresh `mcp__codex__codex` thread with no prior review context. Never use `mcp__codex__codex-reply` for review rounds. Set to `false` only for deliberate debugging of the legacy behavior. **Empirical evidence:** running the same paper with `codex-reply` + "since last round we did X" prompts inflated scores from real 3/10 → fake 8/10 across multiple rounds; switching to fresh threads recovered the true 3/10 assessment.
+- **REVIEWER_MODEL** — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (reviewer runs as a Task subagent; executor Claude → `gpt-5.6-sol-max-fast` default).
+- **REVIEWER_BIAS_GUARD = true** — When `true`, every review round uses a **fresh reviewer Task subagent** with no prior review context. Never use `Task(resume: ...)` for review rounds. Set to `false` only for deliberate debugging of the legacy behavior. **Empirical evidence:** running the same paper with same-thread replies + "since last round we did X" prompts inflated scores from real 3/10 → fake 8/10 across multiple rounds; switching to fresh threads recovered the true 3/10 assessment.
 - **REVIEW_LOG = `PAPER_IMPROVEMENT_LOG.md`** — Cumulative log of all rounds, stored in paper directory.
 - **HUMAN_CHECKPOINT = false** — When `true`, pause after each round's review and present score + weaknesses to the user. The user can approve fixes, provide custom modification instructions, skip specific fixes, or stop early. When `false` (default), runs fully autonomously.
 - **EDIT_WHITELIST = `null`** — Optional path to a YAML/JSON whitelist file constraining which paths and operations the fix-implementation step may touch. When `null` (default), all edits proceed unconstrained. When set via `— edit-whitelist <path>` (also accepts `— edit_whitelist <path>`), the loop loads the file at startup and consults it before each edit; rejected edits are logged to `PAPER_IMPROVEMENT_LOG.md` rather than silently dropped. See "Optional: Edit Whitelist" below.
@@ -79,7 +75,7 @@ Sources accepted: local TeX dir / file, local PDF, arXiv id, http(s) URL. Overle
 
 - Use `style_profile.md` only during the **fix-implementation** phase, to nudge structural choices when applying reviewer feedback. Reviewer feedback always takes precedence; style ref is tie-breaker for *how* to apply a fix, not *whether* to apply it.
 - **Never copy prose, claims, examples, or terminology** from anything reachable through the cache when implementing fixes.
-- **Never pass `— style-ref` (or the cache contents) to the GPT-5.6-Sol reviewer sub-agent.** The Reviewer Independence Protocol below requires reviewers see only the artifact and the user's prompt — leaking the style ref would contaminate the review with author-side context. **This is the most critical invariant in this skill.**
+- **Never pass `— style-ref` (or the cache contents) to the reviewer subagent.** The Reviewer Independence Protocol below requires reviewers see only the artifact and the user's prompt — leaking the style ref would contaminate the review with author-side context. **This is the most critical invariant in this skill.**
 
 ## Optional: Edit Whitelist (`— edit-whitelist <path>`, opt-in)
 
@@ -215,7 +211,7 @@ If the context window fills up mid-loop, Claude Code auto-compacts. To recover, 
 The reviewer must be context-naive on every round. Prior-round summaries, fix lists, and executor explanations are not evidence; they are a source of confirmation bias. If the reviewer is told what changed, scores tend to drift upward even when the manuscript itself has not materially improved.
 
 Rules:
-- Every round starts with `mcp__codex__codex`, not `mcp__codex__codex-reply`.
+- Every round starts with a fresh Task subagent, never a resume.
 - Never pass a prior threadId into the next review prompt.
 - Never include "since last round", "we fixed", "after applying", or any fix summary in the reviewer prompt.
 - The only acceptable evidence of improvement is the current `.tex` source and compiled PDF.
@@ -246,12 +242,13 @@ done > /tmp/paper_full_text.txt
 
 ### Step 2: Round 1 Review
 
-Send the full paper text AND compiled PDF to GPT-5.6-Sol xhigh:
+Send the full paper (paths to .tex sources AND compiled PDF) to the cross-family reviewer subagent:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS reviewer (cross-family)",
+  model: REVIEWER_MODEL,   # cross-family max tier per reviewer-routing.md
   prompt: |
     You are reviewing a [VENUE] paper. Please provide a detailed, structured review.
 
@@ -313,6 +310,8 @@ Parse the review and implement fixes by severity:
 2. MAJOR fixes (overclaims, missing content, notation issues)
 3. MINOR fixes (if time permits)
 
+**Writer-side claim posture:** Before implementing fixes (this step and Step 6), read [`../shared-references/press-release-principle.md`](../shared-references/press-release-principle.md) — bidirectional claim/evidence alignment, bounded-scope limitations, allowed operations on disclosure spans. Writer-side ONLY: never feed that file, its lexicon, or the fact it was applied into any reviewer prompt (same isolation as `— style-ref`).
+
 **Edit-whitelist gate (if set):** If `EDIT_WHITELIST` is set, before applying each proposed edit, check the target path against `allowed_paths` / `forbidden_paths` and the new-lines diff against `forbidden_operations` per the "Optional: Edit Whitelist" section. Rejections are logged to `PAPER_IMPROVEMENT_LOG.md` under `## Rejected by edit_whitelist (Round 1)` with file, reason (`path` or `operation`), the offending pattern, and the original reviewer concern. The loop continues with remaining edits — a rejection never aborts the round. Surface a rejection summary at the end of the round.
 
 **Common fix patterns:**
@@ -320,7 +319,7 @@ Parse the review and implement fixes by severity:
 | Issue | Fix Pattern |
 |-------|-------------|
 | Assumption-model mismatch | Rewrite assumption to match the model, add formal proposition bridging the gap |
-| Overclaims | Soften language: "validate" → "demonstrate practical relevance", "comparable" → "qualitatively competitive" |
+| Overclaims | Prefer **narrowing the claim scope to match the evidence** ("improves accuracy" → "improves top-1 accuracy on X under Y"); soften wording ("validate" → "demonstrate practical relevance") only for uncertainty that remains after narrowing |
 | Missing metrics | Add quantitative table with honest parameter counts and caveats |
 | Theorem not self-contained | Add "Interpretation" paragraph listing all dependencies |
 | Notation confusion | Rename conflicting symbols globally, add Notation paragraph |
@@ -385,12 +384,13 @@ This is advisory only — the inline Step 4.5 check remains the default and cont
 
 ### Step 5: Round 2 Review
 
-If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__codex__codex` thread for Round 2. Do not reuse the Round 1 threadId for prompting. Save the returned threadId only for recovery bookkeeping.
+If `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** reviewer Task subagent for Round 2. Do not resume the Round 1 thread for prompting. Save the returned agent id only for recovery bookkeeping.
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS reviewer (cross-family)",
+  model: REVIEWER_MODEL,   # cross-family max tier per reviewer-routing.md
   prompt: |
     You are reviewing a [VENUE] paper. This is a fresh, zero-context review.
     Ignore any prior review rounds, prior fix lists, or executor explanations.
@@ -423,7 +423,7 @@ mcp__codex__codex:
     self-containedness, notation consistency, and visual presentation quality.
 ```
 
-If `REVIEWER_BIAS_GUARD = false` (legacy debugging only), use `mcp__codex__codex-reply` with the saved threadId; this is **not** the recommended path.
+If `REVIEWER_BIAS_GUARD = false` (legacy debugging only), use `Task(resume: <saved agent id>)`; this is **not** the recommended path.
 
 ### Step 5.5: Kill Argument Exercise (theory / scope-heavy papers only)
 
@@ -433,7 +433,7 @@ Run this only if the paper is theory-heavy (≥5 `\begin{theorem}|\begin{lemma}|
 
 ```bash
 # Invoke the canonical adversarial-review primitive on the current paper.
-# /kill-argument runs two fresh-thread codex gpt-5.6-sol ultra calls and writes
+# /kill-argument runs two fresh cross-family reviewer subagents and writes
 # KILL_ARGUMENT.{md,json} into the paper directory. It is detect-only —
 # it never edits the paper itself.
 /kill-argument "$PAPER_DIR"
@@ -465,11 +465,11 @@ If `/kill-argument` returns `verdict: NOT_APPLICABLE` (paper isn't theory- or sc
 
 ### Step 6: Implement Round 2 Fixes
 
-Same process as Step 3. Typical Round 2 fixes:
+Same process as Step 3 (including the writer-side claim-posture read). Typical Round 2 fixes:
 - Add controlled synthetic experiments validating theory
-- Further soften any remaining overclaims
+- Align remaining claim strength to the evidence (narrow scope where overclaimed, state at full strength where underclaimed — not one-way softening)
 - Formalize informal arguments (e.g., truncation → formal proposition)
-- Strengthen limitations section
+- Consolidate the limitations section as bounded-scope statements (the venue/contract minimum of ≥2 real limitations stands; no gratuitous new confessions)
 
 **Edit-whitelist gate (if set):** Same as Step 3 — if `EDIT_WHITELIST` is set, run the path + forbidden-operation checks before applying each proposed edit. Rejections are logged to `PAPER_IMPROVEMENT_LOG.md` under `## Rejected by edit_whitelist (Round 2)` and the loop continues. Surface a rejection summary at the end of the round.
 
@@ -563,7 +563,7 @@ Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
 ## Round 1 Review & Fixes
 
 <details>
-<summary>GPT-5.6-Sol xhigh Review (Round 1)</summary>
+<summary>Cross-family Reviewer Response (Round 1)</summary>
 
 [Full raw review text, verbatim]
 
@@ -577,7 +577,7 @@ Create `PAPER_IMPROVEMENT_LOG.md` in the paper directory:
 ## Round 2 Review & Fixes
 
 <details>
-<summary>GPT-5.6-Sol xhigh Review (Round 2)</summary>
+<summary>Cross-family Reviewer Response (Round 2)</summary>
 
 [Full raw review text, verbatim]
 
@@ -625,12 +625,13 @@ paper/
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - **Preserve all PDF versions** — user needs to compare progression
-- **Save FULL raw review text** — do not summarize or truncate GPT-5.6-Sol responses
-- **Reviewer independence (Round 2+)**: when `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** `mcp__codex__codex` thread for every review round; never use `mcp__codex__codex-reply` and never include "since last round" / fix summaries in the prompt. See the Reviewer Independence Protocol section above.
+- **Save FULL raw review text** — do not summarize or truncate reviewer responses
+- **Reviewer independence (Round 2+)**: when `REVIEWER_BIAS_GUARD = true` (default), use a **fresh** reviewer Task subagent for every review round; never resume and never include "since last round" / fix summaries in the prompt. See the Reviewer Independence Protocol section above.
 - **Always recompile after fixes** — verify 0 errors before proceeding
 - **Do not fabricate experimental results** — synthetic validation must describe methodology, not invent numbers
-- **Respect the paper's claims** — soften overclaims rather than adding unsupported new claims
-- **Global consistency** — when renaming notation or softening claims, check ALL files (abstract, intro, method, experiments, theory sections, conclusion, tables, figure captions)
+- **Align claims to evidence, both directions** — narrow an overclaim's scope to match the evidence (preferred over blanket softening), state well-evidenced results at full strength, and never add unsupported new claims. Claim-posture rules: `../shared-references/press-release-principle.md` (writer-side only — never in reviewer prompts).
+- **Disclosures may relocate or narrow, never silently disappear** — a limitation, caveat, or threat-to-validity span may be relocated (e.g. conclusion → Limitations block) or made unnecessary by narrowing the claim, with the change recorded in `PAPER_IMPROVEMENT_LOG.md`; a bare delete of a disclosure span is forbidden (that is an `UNRESOLVED_DISAPPEARANCE`, per integrity-forensics).
+- **Global consistency** — when renaming notation or adjusting claim strength, check ALL files (abstract, intro, method, experiments, theory sections, conclusion, tables, figure captions)
 - **Edit-whitelist rejections are LOGGED, not silently dropped** — when `EDIT_WHITELIST` is set and an edit is rejected for a path or forbidden-operation violation, the rejection MUST be appended to `PAPER_IMPROVEMENT_LOG.md` with file, reason, offending pattern, and the original reviewer concern. The loop reports a rejection summary at the end of every round (and in the checkpoint, if `HUMAN_CHECKPOINT = true`). Never silently swallow a whitelist rejection — the audit trail is the whole point of the parameter.
 
 ## Typical Score Progression
@@ -640,12 +641,12 @@ Based on end-to-end testing on a real theory-paper run:
 | Round | Score | Key Improvements |
 |-------|-------|-----------------|
 | Round 0 | 4/10 (content) | Baseline: assumption-model mismatch, overclaims, notation issues |
-| Round 1 | 6/10 (content) | Fixed assumptions, softened claims, added interpretation, renamed notation |
-| Round 2 | 7/10 (content) | Added synthetic validation, formal truncation proposition, stronger limitations |
+| Round 1 | 6/10 (content) | Fixed assumptions, narrowed claims to evidence, added interpretation, renamed notation |
+| Round 2 | 7/10 (content) | Added synthetic validation, formal truncation proposition, consolidated bounded-scope limitations |
 | Round 3 | 5→8.5/10 (format) | Removed hero fig, appendix, compressed conclusion, fixed overfull hbox |
 
 **+4.5 points across 3 rounds** (2 content + 1 format) is typical for a well-structured but rough first draft. Final state at submission: clean overfull-hbox count and venue-format-compliant length.
 
 ## Review Tracing
 
-After each `mcp__codex__codex` or `mcp__codex__codex-reply` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer subagent call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).

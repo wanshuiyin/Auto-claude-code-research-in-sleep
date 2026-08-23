@@ -4,10 +4,14 @@ description: "Use when main results pass result-to-claim (claim_supported=yes or
 argument-hint: "[method-description-or-claim]"
 allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__codex__codex-reply
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Ablation Planner
 
-Systematically design ablation studies that answer the questions reviewers will ask. Codex leads the design (reviewer perspective), CC reviews feasibility and implements.
+Systematically design ablation studies that answer the questions reviewers will ask. The cross-family reviewer subagent leads the design (reviewer perspective); the executor reviews feasibility and implements.
 
 ## Context: $ARGUMENTS
 
@@ -27,12 +31,13 @@ CC reads available project files to build the full picture:
 - Confirmed and intended claims (from result-to-claim output or project notes)
 - Available compute resources (from CLAUDE.md server config, if present)
 
-### Step 2: Codex Designs Ablations
+### Step 2: The Cross-Family Reviewer Designs Ablations
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "ablation design (cross-family)",
+  model: REVIEWER_MODEL,   # cross-family per reviewer-routing.md
   prompt: |
     You are a rigorous ML reviewer planning ablation studies.
     Given this method and results, design ablations that:
@@ -62,7 +67,7 @@ mcp__codex__codex:
 
 ### Step 3: Parse Ablation Plan
 
-Normalize Codex response into structured format:
+Normalize the reviewer's response into structured format:
 
 ```markdown
 ## Ablation Plan
@@ -102,7 +107,7 @@ Before running anything, CC checks:
 - Compute budget: can we afford all ablations with available GPUs?
 - Code changes: which ablations need code modifications vs config-only changes?
 - Dependencies: which ablations can run in parallel?
-- Cuts: if budget is tight, propose removing lower-priority ablations and ask Codex to confirm
+- Cuts: if budget is tight, propose removing lower-priority ablations and ask the reviewer (Task resume) to confirm
 
 ### Step 5: Implement and Run
 
@@ -114,10 +119,10 @@ Before running anything, CC checks:
 
 ## Rules
 
-- **Codex leads the design. CC does not pre-filter or bias the ablation list** before Codex sees it. Codex thinks like a reviewer; CC thinks like an engineer.
+- **The reviewer leads the design. The executor does not pre-filter or bias the ablation list** before the reviewer sees it. The reviewer thinks like a reviewer; the executor thinks like an engineer.
 - Every ablation must have a clear `what_it_tests` and `expected_if_component_matters`. No "just try it" experiments.
 - Config-only ablations take priority over those needing code changes (faster, less error-prone).
-- If total compute exceeds budget, CC proposes cuts and asks Codex to re-prioritize — don't silently drop ablations.
+- If total compute exceeds budget, the executor proposes cuts and asks the reviewer to re-prioritize — don't silently drop ablations.
 - Component ablations (remove/replace) take priority over hyperparameter sweeps.
 - Do not generate ablations for components identical to the baseline (no-op ablations).
 - Record all ablation results in EXPERIMENT_LOG.md, including negative results (component removal had no effect = important finding).

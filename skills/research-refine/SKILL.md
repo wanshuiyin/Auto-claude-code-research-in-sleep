@@ -1,8 +1,12 @@
 ---
 name: research-refine
-description: 'Turn a vague research direction into a problem-anchored, elegant, frontier-aware, implementation-oriented method plan via iterative GPT-5.6-Sol review. Use when the user says "refine my approach", "帮我细化方案", "decompose this problem", "打磨idea", "refine research plan", "细化研究方案", or wants a concrete research method that stays simple, focused, and top-venue ready instead of a vague or overbuilt idea.'
+description: 'Turn a vague research direction into a problem-anchored, elegant, frontier-aware, implementation-oriented method plan via iterative cross-family review. Use when the user says "refine my approach", "帮我细化方案", "decompose this problem", "打磨idea", "refine research plan", "细化研究方案", or wants a concrete research method that stays simple, focused, and top-venue ready instead of a vague or overbuilt idea.'
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Research Refine: Problem-Anchored, Elegant, Frontier-Aware Plan Refinement
 
@@ -23,7 +27,7 @@ Four principles dominate this skill:
 User input (PROBLEM + vague APPROACH)
   -> Phase 0 (Claude): Freeze Problem Anchor
   -> Phase 1 (Claude): Scan grounding papers -> identify technical gap -> choose the sharpest route -> write focused proposal
-  -> Phase 2 (Codex/GPT-5.6-Sol): Review for fidelity, specificity, contribution quality, and frontier leverage
+  -> Phase 2 (cross-family reviewer subagent): Review for fidelity, specificity, contribution quality, and frontier leverage
   -> Phase 3 (Claude): Anchor check + simplicity check -> revise method -> rewrite full proposal
   -> Phase 4 (Codex, same thread): Re-evaluate revised proposal
   -> Repeat Phase 3-4 until OVERALL SCORE >= 9 or MAX_ROUNDS reached
@@ -33,7 +37,7 @@ User input (PROBLEM + vague APPROACH)
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Reviewer model used via Codex MCP.
+- **REVIEWER_MODEL** — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (executor Claude → `gpt-5.6-sol-max-fast` default). Reviewer runs as a Task subagent.
 - **MAX_ROUNDS = 5** — Maximum review-revise rounds.
 - **SCORE_THRESHOLD = 9** — Minimum overall score to stop.
 - **OUTPUT_DIR = `refine-logs/`** — Directory for round files and final report.
@@ -66,7 +70,7 @@ Long-running refinement sessions may fail mid-way (e.g., API timeout, context co
 |-------|--------|---------|
 | `phase` | `"anchor"` / `"proposal"` / `"review"` / `"refine"` / `"done"` | Last **completed** phase |
 | `round` | 0–MAX_ROUNDS | Current round number |
-| `threadId` | string or null | Reviewer thread ID for `codex-reply` continuity |
+| `threadId` | string or null | Reviewer subagent id for `Task(resume:)` continuity |
 | `last_score` | number or null | Most recent overall score from reviewer |
 | `last_verdict` | string or null | Most recent verdict (READY / REVISE / RETHINK) |
 | `status` | `"in_progress"` / `"completed"` | Loop status |
@@ -160,7 +164,7 @@ Do not stop at generic research questions. Make the gap operational:
 1. **Current pipeline failure point**: where does the baseline break?
 2. **Why naive fixes are insufficient**: larger context, more data, prompting, memory bank, or stacking more modules.
 3. **Smallest adequate intervention**: what is the least additional mechanism that could plausibly fix the bottleneck?
-4. **Frontier-native alternative**: is there a more current route using foundation-model-era primitives that better matches the bottleneck?
+4. **Frontier-native alternative**: evaluate whether modern foundation model or generative techniques naturally address the bottleneck, or if classical/standard methods remain more parsimonious.
 5. **Core technical claim**: what exact mechanism claim could survive top-venue scrutiny?
 6. **Required evidence**: what minimum proof is needed to defend that claim?
 
@@ -315,22 +319,24 @@ Use this structure:
 
 ### Phase 2: External Method Review (Round 1)
 
-Send the proposal to GPT-5.6-Sol for an **elegance-first, frontier-aware,
+Send the proposal to the cross-family reviewer subagent for an **elegance-first, frontier-aware,
 method-first** review. The reviewer should spend most of the critique budget
-on the method itself, not on expanding the experiment menu. For Codex MCP, do
-not inline the whole rubric + proposal once the prompt becomes large. Instead,
+on the method itself, not on expanding the experiment menu. For the cross-model
+reviewer subagent, do not inline the whole rubric + proposal once the prompt
+becomes large. Instead,
 write `refine-logs/codex_round_1_review_bundle.md` containing the instructions
 below plus the absolute path to `refine-logs/round-0-initial-proposal.md`, then
 keep the MCP prompt short:
 
 ```
-mcp__codex__codex:
-  model: REVIEWER_MODEL
-  config: {"model_reasoning_effort": "xhigh"}
-  prompt: |
-    Read the review bundle at <absolute path to
-    refine-logs/codex_round_1_review_bundle.md> and follow all instructions in
-    it.
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS refine reviewer R1",
+  model: REVIEWER_MODEL,
+  prompt: "Read the review bundle at <absolute path to
+           refine-logs/round_1_review_bundle.md> and follow all instructions
+           in it."
+)
 ```
 
 Bundle contents:
@@ -367,7 +373,7 @@ Bundle contents:
 
     3. **Contribution Quality**: Is there one dominant mechanism-level contribution with real novelty, good parsimony, and no obvious contribution sprawl?
 
-    4. **Frontier Leverage**: Does the proposal use current foundation-model-era primitives appropriately when they are the right tool, instead of defaulting to old-school module stacking?
+    4. **Frontier Leverage**: Does the proposal use modern foundation-model techniques appropriately when suitable for the bottleneck, without forcing unnecessary primitives or defaulting to rigid module stacking?
 
     5. **Feasibility**: Can this method be trained and integrated with the stated resources and data assumptions?
 
@@ -512,20 +518,20 @@ Save to `refine-logs/round-N-refinement.md`:
 
 ### Phase 4: Re-evaluation (Round 2+)
 
-Send the revised proposal back to GPT-5.6-Sol in the **same thread**. Again, keep
+Send the revised proposal back to the reviewer in the **same thread** (`Task(resume:)`). Again, keep
 the MCP payload short: write `refine-logs/codex_round_N_review_bundle.md`
 containing the re-evaluation instructions below, the key changes, and the
 absolute path to `refine-logs/round-N-refinement.md`, then ask Codex to read
 that bundle file.
 
 ```
-mcp__codex__codex-reply:
-  threadId: [saved from Phase 2]
-  # inherits the thread's model/effort — do not re-send
-  prompt: |
-    Read the re-evaluation bundle at <absolute path to
-    refine-logs/codex_round_N_review_bundle.md> and follow all instructions in
-    it.
+Task(
+  resume: [reviewer agent id saved from Phase 2],
+  # thread keeps its original model — do not re-send
+  prompt: "Read the re-evaluation bundle at <absolute path to
+           refine-logs/round_N_review_bundle.md> and follow all instructions
+           in it."
+)
 ```
 
 Bundle contents:
@@ -550,7 +556,7 @@ Bundle contents:
     - State whether the Problem Anchor is preserved or drifted
     - State whether the dominant contribution is now sharper or still too broad
     - State whether the method is simpler or still overbuilt
-    - State whether the frontier leverage is now appropriate or still old-school / forced
+    - State whether the technical choices and primitives are now appropriate or still overbuilt / forced
     - Focus new critiques on missing mechanism, weak training signal, weak integration point, pseudo-novelty, or unnecessary complexity
     - Use the same verdict rule: READY only if overall score >= 9 and no blocking issue remains
 
@@ -602,7 +608,7 @@ This file is the high-level round-by-round review record. It should answer: each
 ## Final Status
 - Anchor status: [preserved / corrected / unresolved]
 - Focus status: [tight / slightly broad / still diffuse]
-- Modernity status: [appropriately frontier-aware / intentionally conservative / still old-school]
+- Foundation model techniques used: [concrete techniques (e.g., LLM planning, diffusion prior) or 'None — standard architecture preferred for simplicity']
 - Strongest parts of final method:
 - Remaining weaknesses:
 ```
@@ -673,7 +679,7 @@ If the final verdict is not READY, still write the best current final version he
 <details>
 <summary>Round 1 Review</summary>
 
-[Full verbatim response from GPT-5.6-Sol]
+[Full verbatim response from the reviewer]
 
 </details>
 
@@ -702,8 +708,8 @@ Anchor status:
 Focus status:
 - [tight / slightly broad / still diffuse]
 
-Modernity status:
-- [appropriately frontier-aware / intentionally conservative / still old-school]
+Foundation model techniques used:
+- [List concrete techniques (e.g., LLM planning, diffusion prior) or 'None — standard architecture preferred for simplicity']
 
 Key method upgrades:
 - [method change 1]
@@ -739,8 +745,8 @@ Suggested next step: /experiment-plan
 - **Minimal experiments.** Inside this skill, experiments only need to prove the core claims.
 - **Review the mechanism, not the parts count.** A long module list is not novelty.
 - **Pushback is encouraged.** If reviewer feedback causes drift or unnecessary complexity, argue back with evidence.
-- **ALWAYS use `config: {"model_reasoning_effort": "xhigh"}`** for all Codex review calls.
-- **Save `threadId` from Phase 2** and use `mcp__codex__codex-reply` for later rounds.
+- **Always use a max-tier cross-family model** for review subagents (see reviewer-routing.md).
+- **Save the reviewer agent id from Phase 2** (as `threadId` in REFINE_STATE.json) and use `Task(resume: ...)` for later rounds.
 - **Do not fabricate results.** Only describe expected evidence and planned experiments.
 - **Be specific about compute and data assumptions.** Vague "we'll train a model" is not enough.
 - **Document everything.** Save every raw review, every anchor check, every simplicity check, and every major method change.

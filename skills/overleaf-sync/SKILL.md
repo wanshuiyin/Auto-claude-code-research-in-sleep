@@ -4,6 +4,10 @@ description: "Two-way sync between a local paper directory and an Overleaf proje
 argument-hint: "[setup <project-id> | pull | push | status]"
 allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Overleaf Sync
 

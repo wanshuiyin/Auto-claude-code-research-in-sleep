@@ -4,6 +4,10 @@ description: SSH job queue for multi-seed/multi-config ML experiments with OOM-a
 argument-hint: "[manifest-or-grid-spec]"
 allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Skill(run-experiment), Skill(monitor-experiment)
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Experiment Queue
 
@@ -35,23 +39,19 @@ Do NOT use for:
 
 ## Why This Exists
 
-Based on session audit (2026-04-16), the major wall-clock sinks in multi-seed grid experiments are:
+Common engineering bottlenecks in multi-seed grid experiments include:
 
-1. **Stale screens** — python finishes, wandb uploads, screen hangs, next wave blocked
-2. **OOM on shared GPU** — previous job's memory not yet released
-3. **Wave race** — new wave launches before previous wave fully settles
-4. **Missing checkpoints** — student launches before teacher saved
-5. **Parser duplication** — rewriting multi-seed analysis python every batch
+1. **Lingering / hanging processes** — training script finishes but background processes (such as metric uploaders) prevent release of compute resources.
+2. **GPU memory contention** — previous job's CUDA memory not yet freed before the next job starts.
+3. **Execution order races** — a new batch wave starts before prior dependent checkpoints are finalized.
+4. **Missing upstream artifacts** — downstream evaluation/distillation starts before upstream training checkpoints are written.
+5. **Redundant analysis scripts** — rewriting grid aggregation logic manually for each sweep.
 
-All of these are pure engineering friction that can be orchestrated.
+The experiment queue automates these state checks and lifecycle transitions.
 
 ## Core Concepts
 
-> **Environment contract**: queue jobs assume the target env is already built
-> and validated per `../shared-references/compute-env-contract.md` (spec-hash
-> ledger + kernel witness). A wave of jobs dying at import time = the env
-> contract was skipped, not a queue bug; check the provider's
-> `.aris/compute/<provider>.md` ledger before re-queueing.
+Jobs in the queue run in the remote environment with GPU memory monitoring, automatic retry on CUDA OOM, and sequential batch progression.
 
 ### Job Manifest
 
@@ -95,19 +95,12 @@ jobs:
 ```
 pending → running → completed
                  ↘ failed_oom → pending (after delay) [retry up to N]
-                 ↘ failed_other → stuck (needs manual inspection)
-stale_screen_detected → cleaned → pending
+                 ↘ failed_other → stuck (requires investigation)
+stale_process_detected → cleaned → pending
 ```
 
-> **Operator note on `stuck` (the agent's move, not the queue's):** the queue
-> deterministically parks `failed_other` jobs as `stuck` — that part is code and
-> unchanged. Before handing a `stuck` batch to the human, the OPERATING AGENT
-> should check: if the same failure repeats across jobs, try ONE clean
-> reimplement of the **agent-generated wrapper/attempt script only** — never
-> user/project source (`run_*.py` you didn't write), the manifest, queue state,
-> logs, or results (see `shared-references/external-cadence.md` § *Let a broken
-> attempt restart, not just patch*). Reserve the human handoff for
-> contract/environment doubts, not merely broken attempt code.
+> **Handling Stuck / Failed Jobs:**
+> When a batch job encounters an unrecoverable non-OOM error, the queue marks its status as `stuck`. Before alerting the user, verify if all jobs failed with the identical script error; if so, inspect and fix the launcher script before requesting user intervention.
 
 ### Wave Orchestration
 
@@ -150,12 +143,12 @@ If any precondition fails, show user which jobs are blocked and why.
 
 ### Step 3: Launch Scheduler
 
-The canonical scheduler implementation lives in `skills/experiment-queue/scripts/queue_manager.py` (Phase 3.3 move, Arch C). `tools/experiment_queue/queue_manager.py` is now a Python `os.execv` shim retained for legacy resolver-chain compatibility. Three preliminaries before launch.
+The canonical scheduler implementation lives in `skills/experiment-queue/scripts/queue_manager.py`. `tools/experiment_queue/queue_manager.py` is now a Python `os.execv` shim retained for legacy resolver-chain compatibility. Three preliminaries before launch.
 
 **3a. Resolve the local helper directory.** The two helpers (`queue_manager.py`, `build_manifest.py`) now sit under `skills/experiment-queue/scripts/` in the ARIS repo, with shims at `tools/experiment_queue/` for legacy resolver layers. Use this hybrid chain so the skill works from any project layout:
 
 ```bash
-# Layer 0: self-contained (CC 1.0+ exposes $CLAUDE_SKILL_DIR).
+# Layer 0: self-contained (Cursor/Skill directory resolution).
 QUEUE_TOOLS=""
 if [ -n "${CLAUDE_SKILL_DIR:-}" ] && [ -f "$CLAUDE_SKILL_DIR/scripts/queue_manager.py" ]; then
   QUEUE_TOOLS="$CLAUDE_SKILL_DIR/scripts"
@@ -405,13 +398,12 @@ Then user can check anytime or wait for summary report.
 - `/run-experiment` — single experiment deployment
 - `/monitor-experiment` — check progress (now reads from queue_state.json)
 - `/analyze-results` — post-hoc analysis
-- `skills/experiment-queue/scripts/queue_manager.py` (canonical, Phase 3.3 move) — the scheduler implementation; resolved at runtime via the fallback chain in Step 3a. Legacy entry at `tools/experiment_queue/queue_manager.py` is an `os.execv` shim.
-- `skills/experiment-queue/scripts/build_manifest.py` (canonical, Phase 3.3 move) — build manifest from grid spec; same resolution chain. Legacy entry at `tools/experiment_queue/build_manifest.py` is an `os.execv` shim.
+- `skills/experiment-queue/scripts/queue_manager.py` (canonical) — the scheduler implementation; resolved at runtime via the fallback chain in Step 3a. Legacy entry at `tools/experiment_queue/queue_manager.py` is an `os.execv` shim.
+- `skills/experiment-queue/scripts/build_manifest.py` (canonical) — build manifest from grid spec; same resolution chain. Legacy entry at `tools/experiment_queue/build_manifest.py` is an `os.execv` shim.
 
 ## Rationale / Source
 
-Identified via 2026-04-16 post-mortem analysis (Codex GPT-5.5 xhigh) of a 1.5-day
-multi-seed paper experiment session:
+Identified via post-mortem analysis of multi-seed distributed experiment runs:
 
 - Wall-clock sink: stale screens, OOM, wave transitions, manual parser
 - Token sink: re-writing orchestration code each session

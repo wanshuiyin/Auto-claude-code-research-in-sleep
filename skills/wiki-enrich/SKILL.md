@@ -4,20 +4,20 @@ description: "Fill in the per-paper TODO sections of research-wiki/papers/<slug>
 argument-hint: "[target: slug|missing|all] [--source alphaxiv|deepxiv|arxiv|auto] [--force] [--max N]"
 allowed-tools: Bash(*), Read, Write, Edit, Glob, Grep, WebFetch
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Wiki Enrich: Fill Paper TODO Sections (Karpathy LLM-Wiki)
 
 Target: **$ARGUMENTS**
 
-## Why this skill exists
+## Overview
 
-`ingest_paper` (called by `/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) only renders the per-paper scaffold — frontmatter + abstract + **10 fillable** `_TODO._` placeholder sections (plus two protected sections: `## Connections` is graph-summary and `## Abstract (original)` is auto-populated when `--arxiv-id` is given). No downstream skill in ARIS fills those 10 sections; the wiki sits as TODO until someone reads each paper.
+Paper ingest skills (`/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) generate structured paper scaffolds in `research-wiki/papers/<slug>.md`. These scaffolds contain frontmatter, abstracts, placeholder sections (`_TODO._`), and auto-generated sections (`## Connections` and `## Abstract (original)`).
 
-This contradicts the Karpathy LLM-wiki design (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
-
-> "You never (or rarely) write the wiki yourself — the LLM writes and maintains all of it. … The tedious part of maintaining a knowledge base is not the reading or the thinking — it's the bookkeeping. … LLMs don't get bored, don't forget to update a cross-reference, and can touch 15 files in one pass."
-
-`/wiki-enrich` is the missing back half of `ingest_paper`: it reads each scaffolded paper page, fetches paper content from external sources via a graceful fallback chain (see Phase 2.3 for the full 5-source chain), and rewrites the 10 fillable TODO sections into 1-3 sentence prose summaries.
+`/wiki-enrich` inspects paper pages in `research-wiki/papers/`, fetches content from external sources via a fallback chain (Phase 2.3), and populates any fillable section containing `_TODO._` placeholder markers with 1-3 sentence summaries.
 
 ## Constants
 
@@ -25,8 +25,8 @@ This contradicts the Karpathy LLM-wiki design (https://gist.github.com/karpathy/
 - **TARGET_DEFAULT = `missing`** — When no target is given, enrich only papers with ≥1 TODO section. Other targets: `<slug>` (one paper) or `all` (every paper, even ones already enriched — usually combined with `--force` to overwrite).
 - **SOURCE_DEFAULT = `auto`** — Fetch order: alphaxiv overview → alphaxiv abs → deepxiv brief → arXiv API abstract → page abstract fallback. First non-empty wins (full chain documented in Phase 2.3 table). Override with `--source` to pin one source.
 - **MAX_PAPERS = 20** — Hard cap per invocation; LLMs touch many files but token budgets are real. Override with `--max N`.
-- **FORCE = false** — When `false` (default), skip sections that already have non-TODO content. When `true`, overwrite every fillable section, but **never** touch the two protected sections: `## Connections` (auto-generated from `edges.jsonl`) and `## Abstract (original)` (immutable arXiv-fetched source data).
-- **SECTIONS_TO_FILL** — 10 fillable sections + 2 protected. `ingest_paper` (`research_wiki.py:436-473`) scaffolds 11 section headers unconditionally and a 12th — `## Abstract (original)` — only when arXiv returns an abstract for the given `--arxiv-id` (`research_wiki.py:469-473`). Of these, 10 carry a `_TODO._` (or `_TODO: fill in after reading._`) marker and need filling. The other 2 — `## Connections` (position 10 in the enumeration below) and `## Abstract (original)` (position 12, conditional) — are protected by construction: `Connections` is auto-generated from `graph/edges.jsonl`, `Abstract (original)` is immutable source data from the arXiv API. This skill writes to the 10, never the 2.
+- **FORCE = false** — When `false` (default), skip sections that already have non-TODO content. When `true`, overwrite every fillable section, but **never** touch protected sections (`## Connections` and `## Abstract (original)`).
+- **SECTIONS_TO_FILL** — 10 fillable sections + 2 protected sections. The 10 fillable sections carry a `_TODO._` (or `_TODO: fill in after reading._`) marker and need filling. The other 2 (`## Connections`, auto-generated from `graph/edges.jsonl`; and `## Abstract (original)`, source data from arXiv) are protected and must never be modified by this skill.
   1. `One-line thesis` (marker: `_TODO: fill in after reading._`)
   2. `Problem / Gap` (marker: `_TODO._`)
   3. `Method` (marker: `_TODO._`)

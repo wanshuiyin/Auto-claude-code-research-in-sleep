@@ -4,6 +4,10 @@ description: "Run GPU workloads on Modal — training, fine-tuning, inference, b
 argument-hint: "[task-description]"
 allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Modal Cloud GPU — Training & Inference
 
@@ -11,19 +15,15 @@ Task: $ARGUMENTS
 
 ## Overview
 
-**Modal** is a serverless GPU cloud. Key advantages over SSH-based platforms (vast.ai, remote servers):
-- **Zero config**: no SSH, no Docker, no port forwarding. Write Python → `modal run` → done.
-- **Auto scale-to-zero**: billing stops the instant your code finishes. No idle instances.
-- **Local-first**: run `modal run` from your laptop. Code, data, and results stay local; only the GPU function runs remotely.
-- **Reproducible environments**: dependencies declared in code via `modal.Image`, not system-level packages.
-  Treat the `modal.Image` chain as the RENDERED form of the declarative env spec in
-  `../shared-references/compute-env-contract.md` — same spec fields (base, ordered
-  pip phases, env vars, smoke probes), same `env:<name>@<specHash>` ledger entry in
-  `.aris/compute/modal.md`, same three-tier validation before a long run.
+**Modal** is a serverless GPU cloud platform. Key advantages over SSH-based platforms:
+- **Zero config**: no SSH keys, no Docker setup, no port forwarding. Write Python → `modal run` → done.
+- **Auto scale-to-zero**: billing stops the instant your code finishes. No idle instance costs.
+- **Local-first execution**: invoke `modal run` from your local environment. Code and results stay synchronized; only the GPU function executes remotely.
+- **Reproducible container environments**: Remote environments are defined in code using `modal.Image.debian_slim()` with explicit, ordered `pip_install` layers (e.g., core ML frameworks like PyTorch first, followed by application libraries).
 
-**Best for**: Users without a local GPU who need to debug CUDA code, run small-scale tests, or iterate quickly on experiments. The $5 free tier (no card) is enough for code debugging; $30 (with card) covers most small-scale experiment runs.
+**Best for**: Workloads needing on-demand GPUs for testing CUDA code, small-scale fine-tuning, or rapid experiment iteration without managing persistent infrastructure.
 
-**Trade-off**: Modal costs more per GPU-hour than vast.ai or Lightning for some GPU tiers, but eliminates setup time and idle billing, often making it cheaper for short/medium workloads. For long training runs (>4 hours), consider vast.ai for lower $/hr.
+**Trade-off**: Modal costs more per GPU-hour than unmanaged spot marketplaces for certain hardware tiers, but eliminates idle billing and instance provisioning time. For very long training runs (>12 hours), dedicated GPU instances may offer lower total cost.
 
 ## Authentication
 
@@ -42,7 +42,7 @@ modal run -q 'print("ok")'
 
 > **Recommended setup**: Bind a card to unlock $30/month, then immediately set a spending limit (e.g., $30) so you never exceed the free tier. Modal will pause your workloads when the limit is hit.
 >
-> **SECURITY WARNING**: Always bind your card and set spending limits directly on https://modal.com/settings in your browser. NEVER enter payment information, card numbers, or billing details through Claude Code or any CLI tool. Only the official Modal website is safe for payment operations.
+> **SECURITY WARNING**: Always configure payment methods and spending limits directly on https://modal.com/settings in your web browser. NEVER enter payment information or card numbers through CLI tools or conversation.
 
 ## Pricing (source: modal.com/pricing, per-second billing)
 
@@ -114,13 +114,11 @@ The most common pattern for `run-experiment` integration. Wraps an existing trai
 import modal
 
 app = modal.App("experiment-name")
-# One .pip_install() call per SPEC PHASE (chained calls install in order, so a
-# pinned torch in the first call can't be dragged by packages in the second —
-# the rendered form of compute-env-contract.md's ordered pip_phases):
+# Build remote environment with ordered installation layers:
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("torch")                                        # phase 1: pins
-    .pip_install("transformers", "accelerate", "datasets", "wandb")  # phase 2
+    .pip_install("torch")                                        # Phase 1: Core frameworks
+    .pip_install("transformers", "accelerate", "datasets", "wandb")  # Phase 2: Application packages
 )
 
 # Mount local project code into the container
@@ -161,8 +159,8 @@ import modal
 app = modal.App("inference-api")
 image = (
     modal.Image.debian_slim(python_version="3.11")
-    .pip_install("torch")                          # phase 1: pins
-    .pip_install("transformers", "accelerate")     # phase 2
+    .pip_install("torch")                          # Phase 1: Core frameworks
+    .pip_install("transformers", "accelerate")     # Phase 2: Application packages
 )
 
 @app.cls(image=image, gpu="L40S")
@@ -313,7 +311,7 @@ modal secret create NAME KEY=VALUE       # Create secret
 /serverless-modal "deploy vLLM"     <- inference service deployment
 ```
 
-## CLAUDE.md Example
+## Configuration Example
 
 ```markdown
 ## Modal

@@ -5,7 +5,7 @@ an auto-curated research-wiki node, a machine-proposed reviewer prompt — two
 questions must have a recorded, checkable answer *before* that artifact is allowed
 to influence future runs:
 
-1. **Who authored it, and who acquitted it?** (and were they different model families?)
+1. **Who authored it, and who approved it?** (and were they different model families?)
 2. **Is auto-curation even allowed to touch this file?** (or is it a hand-written
    canonical skill / a user's own note, which automation must never rewrite?)
 
@@ -27,17 +27,17 @@ it *is* the authorization to auto-curate.
   the reviewer are the same model family — e.g. `claude`+`sonnet`, or `gpt-5.6-sol`+`codex`,
   or the trap `gpt-5.6-sol`+`oracle-pro` (oracle routes to a GPT-Pro tier, so it is the
   **openai** family, not a separate one). You therefore *cannot produce* a valid
-  authorization for a self-acquitted artifact. This is the structural form of the
-  cross-model invariant from [`reviewer-independence.md`](reviewer-independence.md)
+  authorization for a same-family self-approved artifact. This is the structural
+  form of the cross-model invariant from [`reviewer-independence.md`](reviewer-independence.md)
   and the acceptance boundary from [`acceptance-gate.md`](acceptance-gate.md):
-  **a loop can DRIVE, it cannot ACQUIT itself.**
+  **a loop may iterate, but it cannot accept its own output as final.**
 
 - **A deterministic verifier is a valid reviewer.** A reviewer named
   `deterministic:<verifier>` (e.g. `deterministic:evidence_check`,
   `deterministic:pytest`) passes the gate regardless of the author — a process is
   not a model family. This is the same Type-A escape hatch as in
   [`acceptance-gate.md`](acceptance-gate.md): an execution-completeness / mechanical
-  check is safe same-model. Use it when the acquittal is a passing test or a
+  check is safe same-model. Use it when verification is a passing test or a
   deterministic pre-check (see [`evidence-precheck.md`](evidence-precheck.md)), not a
   semantic judgement.
 
@@ -62,7 +62,7 @@ it *is* the authorization to auto-curate.
 }
 ```
 
-- `verdict_id` is the **traceable** acquittal — the codex thread id, the oracle
+- `verdict_id` is the **traceable** approval record — the codex thread id, the oracle
   session id, or for a deterministic reviewer the verifier report path / sha. It is
   required (empty → refused), so every authorization points back to an auditable
   review.
@@ -82,7 +82,7 @@ it *is* the authorization to auto-curate.
   provenance stamp; user-written and import-from-paper nodes do not, so a future
   auto-curator can tell which nodes it is allowed to rewrite.
 - **acceptance-gate** — the cross-family assertion here is the *enforcement* of the
-  Type-B (quality/correctness) rule: a quality acquittal of an auto-authored
+  Type-B (quality/correctness) rule: a quality approval of an auto-authored
   artifact must be cross-model, and the provenance record is the proof that it was.
 
 ## Why (the Hermes contrast)

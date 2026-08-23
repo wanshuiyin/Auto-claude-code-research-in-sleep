@@ -2,8 +2,12 @@
 name: grant-proposal
 description: "Draft a structured grant proposal from research ideas and literature. Supports KAKENHI (Japan), NSF (US), NSFC (China, including 面上/青年/优青/杰青/海外优青/重点), ERC (EU), DFG (Germany), SNSF (Switzerland), ARC (Australia), NWO (Netherlands), and generic formats. Use when user says \"write grant\", \"grant proposal\", \"申請書\", \"write KAKENHI\", \"科研費\", \"基金申请\", \"写基金\", \"NSF proposal\", or wants to turn research ideas into a funding application."
 argument-hint: "[research-direction — grant-type] [— style-ref: <source>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skill, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skill, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Grant Proposal: From Research Ideas to Fundable Application
 
@@ -34,7 +38,7 @@ Grant proposals argue for **future work** (feasibility + potential), not complet
 
 - **GRANT_TYPE = `KAKENHI`** — Default grant type. Supported: `KAKENHI`, `NSF`, `NSFC`, `ERC`, `DFG`, `SNSF`, `ARC`, `NWO`, `GENERIC`. Override via argument (e.g., `/grant-proposal "topic — NSF"`).
 - **GRANT_SUBTYPE = `auto`** — Sub-type within the grant agency. Examples: KAKENHI `Start-up`/`Wakate`/`Kiban-B`; NSFC `Youth`/`Excellent-Youth`/`Distinguished`/`Overseas`/`Key`; NSF `CAREER`/`CRII`/`Standard`. Auto-detected from argument or defaults to the most common sub-type.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP for proposal review. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`).
+- **REVIEWER_MODEL** — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (Task subagent).
 - **OUTPUT_FORMAT = `markdown`** — Output format. Supported: `markdown`, `latex`. LaTeX uses grant-specific templates when available.
 - **MAX_REVIEW_ROUNDS = 2** — Maximum external review-revise cycles before finalizing.
 - **OUTPUT_DIR = `grant-proposal/`** — Directory for generated proposal files.
@@ -85,7 +89,7 @@ Sources accepted: local TeX dir / file, local PDF, arXiv id, http(s) URL. Overle
 
 - Use `style_profile.md` to align paragraph length tendency, figure budget, and citation density. Grant-type-mandated section order (KAKENHI 研究目的 → 研究計画・方法 → 準備状況, NSF Intellectual Merit → Broader Impacts, etc.) **always takes precedence** — the agency template wins, the style ref only refines secondary structure.
 - **Never copy proposal prose, claims, vision statements, or budget items** from anything reachable through the cache. The reference might be someone else's funded proposal; reproducing language risks plagiarism.
-- **Never pass `— style-ref` (or the cache contents) to the GPT-5.6-Sol reviewer sub-agent** when it scores the draft — the proposal must be judged on its own merits.
+- **Never pass `— style-ref` (or the cache contents) to the reviewer subagent** when it scores the draft — the proposal must be judged on its own merits.
 
 ## Grant Type Specifications
 
@@ -179,7 +183,7 @@ Grant proposal drafting is a long task that may trigger context compaction. Pers
   "grant_type": "KAKENHI",
   "grant_subtype": "Start-up",
   "language": "Japanese",
-  "codex_thread_id": "019cfcf4-...",
+  "reviewer_subagent_id": "019cfcf4-...",
   "gap_statement": "...",
   "aims_count": 3,
   "status": "in_progress",
@@ -334,7 +338,7 @@ Timeline: [timeline]
 ```
 
 **What this does:**
-- GPT-5.6-Sol xhigh acts as a grant review panelist (not a paper reviewer)
+- The cross-family reviewer subagent acts as a grant review panelist (not a paper reviewer)
 - Evaluates aims independence, narrative arc, risk identification, timeline realism
 - Identifies the single biggest reviewer concern
 - Provides actionable fixes ranked by severity
@@ -350,7 +354,7 @@ Apply structural feedback before proceeding to drafting.
 - Aim 2: [title] — Risk: MEDIUM
 - Aim 3: [title] — Risk: LOW
 - Timeline: [summary]
-- Reviewer feedback: [key points from GPT-5.6-Sol]
+- Reviewer feedback: [key points from the reviewer]
 
 Proceed to section drafting? Or adjust the structure?
 ```
@@ -363,7 +367,7 @@ Options for the user:
 - Reply **"back"** → return to Phase 1 to adjust the gap/positioning
 - Reply **"stop"** → save current structure to `grant-proposal/DRAFT_NOTES.md`
 
-**State**: Write `GRANT_STATE.json` with `phase: 2`, aims summary, and Codex threadId.
+**State**: Write `GRANT_STATE.json` with `phase: 2`, aims summary, and `reviewer_subagent_id`.
 
 ### Phase 3: Section Drafting
 
@@ -459,34 +463,36 @@ Which should I generate? (e.g., "1 and 3", "all", "skip")
 Invoke `/research-review` on the complete draft for grant-type-specific evaluation:
 
 ```
-/research-review "Read the grant review bundle at grant-proposal/codex_panel_review_bundle_round_1.md and evaluate it as a [GRANT_TYPE] [GRANT_SUBTYPE] review panelist using the official criteria."
+/research-review "Read the grant review bundle at grant-proposal/review_bundle_round_1.md and evaluate it as a [GRANT_TYPE] [GRANT_SUBTYPE] review panelist using the official criteria."
 ```
 
 **What this does:**
-- GPT-5.6-Sol xhigh acts as a grant review panelist
+- The cross-family reviewer subagent acts as a grant review panelist
 - Scores each section 1-5 using agency-specific criteria
 - Identifies fatal flaws and recommends funding/revisions/rejection
 - Provides ranked action items for improvement
 - All feedback saved to `grant-proposal/GRANT_REVIEW.md`
 
-> ⚠️ **Codex MCP fallback**: If `mcp__codex__codex` is not available (no OpenAI API key), skip external review. Note "External review skipped — no Codex MCP available. Consider running `/auto-review-loop-llm` separately." in GRANT_REVIEW.md. The proposal is still usable without external review.
+> ⚠️ **Panel Review Fallback**: If the cross-model reviewer subagent cannot be spawned, skip external panel review. Record "Panel review skipped — cross-model reviewer unavailable. Consider running review separately." in `GRANT_REVIEW.md`. The proposal is still usable without external review.
 
-If `/research-review` is invoked (preferred), it handles the Codex call internally. If calling Codex directly (e.g., to maintain thread context from Phase 2):
+If `/research-review` is invoked (preferred), it handles the reviewer subagent call internally. If calling the reviewer Task subagent directly (e.g., to maintain thread context from Phase 2):
 
 #### Round 1 (full draft review):
 
-Write `grant-proposal/codex_panel_review_bundle_round_1.md` containing the
+Write `grant-proposal/review_bundle_round_1.md` containing the
 criteria below plus the absolute path to `grant-proposal/GRANT_PROPOSAL.md`,
-then keep the Codex MCP prompt short:
+then keep the subagent prompt short:
 
 ```
-mcp__codex__codex-reply:
-  threadId: [from Phase 2]
-  # inherits the thread's model/effort — do not re-send
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS grant review R1",
+  model: REVIEWER_MODEL,
   prompt: |
     Read the grant review bundle at <absolute path to
-    grant-proposal/codex_panel_review_bundle_round_1.md> and follow all
+    grant-proposal/review_bundle_round_1.md> and follow all
     instructions in it.
+)
 ```
 
 Bundle contents:
@@ -517,19 +523,19 @@ Bundle contents:
 
 If MAX_REVIEW_ROUNDS > 1 and revisions were applied:
 
-Write `grant-proposal/codex_panel_review_bundle_round_N.md` containing the
+Write `grant-proposal/review_bundle_round_N.md` containing the
 change log, any raw diff / changed-file paths worth inspecting, and the
 absolute path to the current `grant-proposal/GRANT_PROPOSAL.md`, then reuse the
-same short MCP prompt pattern:
+same short prompt pattern:
 
 ```
-mcp__codex__codex-reply:
-  threadId: [saved from Round 1]
-  # inherits the thread's model/effort — do not re-send
+Task(
+  resume: [saved from Round 1]
   prompt: |
     Read the grant review bundle at <absolute path to
-    grant-proposal/codex_panel_review_bundle_round_N.md> and follow all
+    grant-proposal/review_bundle_round_N.md> and follow all
     instructions in it.
+)
 ```
 
 Bundle contents:
@@ -558,7 +564,7 @@ Parse reviewer feedback into severity levels:
 - **MAJOR** — significant weaknesses. Fix before submission.
 - **MINOR** — suggestions for improvement. Fix if time allows.
 
-Implement CRITICAL and MAJOR fixes. If MAX_REVIEW_ROUNDS > 1, re-submit for another round via `mcp__codex__codex-reply`.
+Implement CRITICAL and MAJOR fixes. If MAX_REVIEW_ROUNDS > 1, re-submit for another round via `Task(resume: <reviewer agent id>)`.
 
 #### 5.2 Generate Output
 
@@ -612,7 +618,7 @@ Before declaring done:
 - Language: [language]
 - Aims: [N] aims covering [summary]
 - Timeline: [N] years
-- Review score: [summary from GPT-5.6-Sol]
+- Review score: [summary from the reviewer]
 - Output: grant-proposal/GRANT_PROPOSAL.md
 
 Files saved to grant-proposal/. Please review and customize:
@@ -639,7 +645,7 @@ What would you like to do next?
 - **Preliminary data de-risks.** Include any pilot results, existing datasets, or prior publications that demonstrate feasibility.
 - **Reviewer-facing structure.** Bold key sentences. Use numbered lists for clarity. Make the reviewer's job easy.
 - **Cultural norms matter.** KAKENHI expects 社会的意義; NSF expects Broader Impacts; NSFC expects 国际前沿 positioning. Missing these is a red flag for reviewers.
-- **Feishu notifications are optional.** If `~/.claude/feishu.json` exists, send `checkpoint` at each phase transition and `pipeline_done` at final output. If absent, skip silently.
+- **Feishu notifications are optional.** If `.cursor/feishu.json` (or `~/.cursor/feishu.json`) exists, send `checkpoint` at each phase transition and `pipeline_done` at final output. If absent, skip silently.
 
 ## Parameter Pass-Through
 
@@ -658,7 +664,7 @@ Parameters can be passed inline with `—` separator. They flow to sub-skills wh
 | `max review rounds` | 2 | External review cycles | — |
 | `sources` | all | Literature sources | → `/research-lit` |
 | `arxiv download` | false | Download arXiv PDFs | → `/research-lit` |
-| `reviewer model` | gpt-5.6-sol | Codex review model | → Codex MCP |
+| `reviewer model` | gpt-5.6-sol | Reviewer model pin | → Task subagent |
 | `auto proceed` | false | Skip checkpoints | — |
 
 ## Composing with Other Skills

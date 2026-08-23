@@ -4,6 +4,10 @@ description: "Two-thread adversarial review: a fresh reviewer constructs the str
 argument-hint: "[paper-directory]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Kill Argument Exercise: Adversarial Attack-Defense Review
 
@@ -51,8 +55,8 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 
 ## Constants
 
-- **REVIEWER_MODEL** = `gpt-5.6-sol` (default; `gpt-5.5` is the capability fallback, `gpt-5.4` only as an explicit legacy override).  Reviewer reasoning effort = `ultra` for the attack / defense / adjudication threads (deep-audit tier; capability fallback per `shared-references/reviewer-routing.md`, never below `xhigh`).  Beast-mode axis probes stay at `xhigh`.
-- **CONTEXT_POLICY** = `fresh` (REVIEWER_BIAS_GUARD).  Each thread is a fresh `mcp__codex__codex` call.  **Never** use `mcp__codex__codex-reply`.  No prior review summary, fix list, or executor explanation enters either prompt.
+- **REVIEWER_MODEL** — a max-tier cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (executor Claude → `gpt-5.6-sol-max-fast`).  This is a **deep-audit tier** skill: include the exhaustiveness instruction in attack / adjudication prompts.
+- **CONTEXT_POLICY** = `fresh` (REVIEWER_BIAS_GUARD).  Each thread is a **fresh Task subagent** — **never** `Task(resume: ...)`.  No prior review summary, fix list, or executor explanation enters either prompt.
 - **ATTACK_LENGTH** = approximately 200 words (do not exceed 250).  Single coherent argument, not a list.
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
 - **CLASSIFICATION** = `answered_by_current_text` / `partially_answered` / `still_unresolved`.  (Names chosen so the adjudicator does not assume "fixed" implies prior history of patching — they read the paper as a fresh reviewer would.)
@@ -82,17 +86,17 @@ ls -la *.pdf 2>/dev/null  # compiled PDF
 
 If a compiled PDF is missing, the skill should still run on .tex source alone, but the prompt should mention this so the reviewer doesn't waste cycles trying to extract from a non-existent PDF.
 
-### Step 2: Attack memo (Thread 1, fresh codex)
+### Step 2: Attack memo (Thread 1, fresh reviewer subagent)
 
-Invoke `mcp__codex__codex` (NOT `codex-reply`) with the following prompt structure:
+Launch a fresh reviewer Task subagent (NOT a resume) with the following prompt structure:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "ultra"}
-  sandbox: read-only
-  cwd: <paper directory>
+Task(
+  subagent_type: "generalPurpose",
+  description: "kill-argument: attack",
+  model: REVIEWER_MODEL,
   prompt: |
+    Working directory: <paper directory>. Read files yourself; do not modify anything.
     You are simulating a hostile NeurIPS / ICLR / ICML reviewer for a paper.
     This is a kill-argument adversarial check — your task is NOT to give a
     balanced review but to construct the **single strongest argument for
@@ -138,9 +142,10 @@ mcp__codex__codex:
       the current paper files.
 
     Output: just the rejection memo, nothing else.
+)
 ```
 
-Save the returned `threadId` for the trace; do NOT pass it to Thread 2.  Save the attack memo verbatim — both Thread 2 and the human-readable report use it.
+Save the returned subagent id for the trace; do NOT pass it to Thread 2.  Save the attack memo verbatim — both Thread 2 and the human-readable report use it.
 
 ### Step 2.5 (optional, `beast` effort): multi-axis attack fan-out
 
@@ -157,42 +162,40 @@ without diluting the commitment:
 
 1. **Axis probes (evidence breadth).** Run the six attack axes (theorem
    validity / assumption-vs-claim / missing obligation / limit-order /
-   claim-vs-evidence / scope-overclaim) as **separate fresh-codex probes**,
-   each asked for the strongest ~120-word thrust *on that axis alone*. These
-   are evidence-gathering, not the verdict. Probes run at `xhigh` (not
-   `ultra`) — six serial delegating calls would multiply cost for evidence
-   that the ultra-tier commit re-judges anyway.
-   - **These are NOT Claude subagents, and there is deliberately NO `Agent`
-     grant.** Each probe is a fresh `mcp__codex__codex` call — the adversary
-     must be cross-model (non-Claude). Codex MCP is **serial** (concurrent
-     codex calls hang), so the probes run **sequentially** — Tier-3 in the
-     fan-out ladder. This is exactly why `kill-argument` lists no `Agent` in
-     `allowed-tools`: it spawns nothing; it threads codex calls.
-2. **Commit (the verdict, still single).** A final fresh-codex synthesis reads
-   the six probes plus the paper and must **commit to the single most damaging
-   ~200-word rejection paragraph** — selecting and fusing at most two axes, NOT
-   listing all six. The Step-2 commitment requirement is unchanged; the probes
-   only ensure no axis was overlooked before committing.
+   claim-vs-evidence / scope-overclaim) as **separate fresh cross-family
+   reviewer subagents**, each asked for the strongest ~120-word thrust *on
+   that axis alone*. These are evidence-gathering, not the verdict.
+   - **Each probe must be a cross-family Task subagent** (`model:
+     REVIEWER_MODEL` — the adversary must not share the executor's family).
+     Cursor's Task tool supports **parallel** spawn: launch all six probes in
+     one message (Tier-2 fan-out) — an upgrade over the upstream serial
+     constraint.
+2. **Commit (the verdict, still single).** A final fresh reviewer subagent
+   reads the six probes plus the paper and must **commit to the single most
+   damaging ~200-word rejection paragraph** — selecting and fusing at most two
+   axes, NOT listing all six. The Step-2 commitment requirement is unchanged;
+   the probes only ensure no axis was overlooked before committing.
 
 The adjudication (Step 3) then runs against this committed attack exactly as in
-the default flow. Cost: `beast` adds ~6 extra serial codex calls — use it for
-the final pre-submission pass on a high-stakes paper, not routinely.
+the default flow. Cost: `beast` adds ~7 extra reviewer calls (6 parallel probes
++ 1 commit) — use it for the final pre-submission pass on a high-stakes paper,
+not routinely.
 
-Tracing: record each probe's `threadId` (`axis_probe_thread_ids[]`) and the
-synthesis `threadId` in the trace, the same way Steps 2–3 save their thread
+Tracing: record each probe's subagent id (`axis_probe_thread_ids[]`) and the
+synthesis subagent id in the trace, the same way Steps 2–3 save their thread
 ids. The committed attack memo, not the six probes, is what Step 3 consumes.
 
-### Step 3: Adjudication memo (Thread 2, fresh codex with attack + paper)
+### Step 3: Adjudication memo (Thread 2, fresh reviewer subagent with attack + paper)
 
-Invoke a second `mcp__codex__codex` call (still NOT `codex-reply` — Thread 2 is independent of Thread 1's codex history):
+Launch a second fresh Task subagent (still NOT a resume — Thread 2 is independent of Thread 1's history):
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "ultra"}
-  sandbox: read-only
-  cwd: <paper directory>
+Task(
+  subagent_type: "generalPurpose",
+  description: "kill-argument: adjudication",
+  model: REVIEWER_MODEL,
   prompt: |
+    Working directory: <paper directory>. Read files yourself; do not modify anything.
     You are an independent area-chair adjudicator examining whether the
     current paper text answers a hostile reviewer's rejection memo.
     You are NOT the paper's defender — your job is to read the attack
@@ -260,9 +263,10 @@ mcp__codex__codex:
       just because it is intentional.
     - Be specific. No flattery, no hedging, no rationalizing on the paper's
       behalf.
+)
 ```
 
-Save the returned `threadId`.
+Save the returned subagent id.
 
 ### Step 4: Write KILL_ARGUMENT.md and KILL_ARGUMENT.json
 
@@ -272,7 +276,7 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: <resolved pair that actually ran — target gpt-5.6-sol ultra>, fresh threads (no codex-reply)
+**Reviewer model**: <resolved slug that actually ran — cross-family max tier>, fresh subagent threads (no resume)
 **Attack thread**: <threadId 1>
 **Adjudicator thread**: <threadId 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
@@ -318,8 +322,8 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
   "thread_id": "<defense threadId — primary; attack threadId in details>",
-  "reviewer_model": "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
-  "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
+  "reviewer_model": "<resolved — the slug that actually ran (cross-family max tier)>",
+  "reviewer_reasoning": "max (deep-audit tier)",
   "generated_at": "<UTC ISO-8601>",
   "details": {
     "attack_thread_id": "<threadId 1>",
@@ -366,7 +370,7 @@ paper after running the audit.
 | `NOT_APPLICABLE` | `headline_unstable` | Title or abstract changed within the last 2 commits — re-run after headline stabilizes |
 | `BLOCKED` | `paper_compile_failed` | Compiled PDF missing AND `main.tex` does not compile clean — adjudication needs source fidelity |
 | `BLOCKED` | `source_files_missing` | `main.tex` not found, or no `sec/*.tex` files |
-| `ERROR` | `codex_api_error` | `mcp__codex__codex` call failed |
+| `ERROR` | `codex_api_error` | reviewer subagent call failed (code name kept for schema compatibility) |
 | `ERROR` | `decomposition_parse_failed` | Adjudicator thread did not return parseable per-point structure |
 | `ERROR` | `trace_save_failed` | Trace directory write failed |
 
@@ -406,18 +410,18 @@ To the user:
 
 - `<paper-dir>/KILL_ARGUMENT.md` — human-readable report
 - `<paper-dir>/KILL_ARGUMENT.json` — machine-readable ledger
-- `.aris/traces/kill-argument/<date>_runNN/` — per-thread codex traces (Attack memo + Adjudication memo)
+- `.aris/traces/kill-argument/<date>_runNN/` — per-thread reviewer traces (Attack memo + Adjudication memo)
 - Optional: applied fixes if user explicitly requests; default is **detect-only, do not auto-modify**.
-- `<paper-dir>/KILL_ARGUMENT.html` (when `RENDER_HTML = true`, default) — single-file HTML view auto-rendered via `/render-html "<paper-dir>/KILL_ARGUMENT.md" --json "<paper-dir>/KILL_ARGUMENT.json"`. Full review gate applies. The `.review.json` sidecar carries the render-fidelity verdict. **Non-blocking**: if `/render-html` fails (helper missing, Codex MCP unavailable, file write error), log the failure and treat the skill as complete — the HTML view is a convenience, not a prerequisite for the kill-argument verdict.
+- `<paper-dir>/KILL_ARGUMENT.html` (when `RENDER_HTML = true`, default) — single-file HTML view auto-rendered via `/render-html "<paper-dir>/KILL_ARGUMENT.md" --json "<paper-dir>/KILL_ARGUMENT.json"`. Full review gate applies. The `.review.json` sidecar carries the render-fidelity verdict. **Non-blocking**: if `/render-html` fails (helper missing, reviewer unavailable, file write error), log the failure and treat the skill as complete — the HTML view is a convenience, not a prerequisite for the kill-argument verdict.
 
 ## Key Rules
 
-- **Fresh thread per call.**  Both Attack and Adjudication use `mcp__codex__codex`, never `codex-reply`.  Thread 1 and Thread 2 must not share codex context.
+- **Fresh thread per call.**  Both Attack and Adjudication use fresh Task subagents, never `Task(resume: ...)`.  Thread 1 and Thread 2 must not share context.
 - **Zero prior context.**  Neither thread receives prior round reviews, fix lists, executor summaries, or improvement-loop logs.
 - **Attack must commit.**  Single argument, ~200 words.  No "consider also" hedge.  The whole value is in forcing the reviewer to pick the most damaging line.
 - **Adjudicator must classify, not minimize.**  `still_unresolved` is honest if the paper has no effective response.  Don't downgrade to `partially_answered` unless evidence is real.
 - **Author-chosen positions** (e.g., deliberate title scope, deliberate omission of qualifier): mark `partially_answered` with note that the position is intentional, AND say whether the position is sustainable under the attack.  Don't auto-grade as `answered_by_current_text` just because it's intentional.
-- **Verdict is computed by the skill, not by the adjudicator.**  The Codex thread emits per-point classifications; the skill code maps those to one of the 6 audit verdicts via the table in Step 4.  Never let the adjudicator self-grade the top-level verdict.
+- **Verdict is computed by the skill, not by the adjudicator.**  The adjudicator thread emits per-point classifications; the skill code maps those to one of the 6 audit verdicts via the table in Step 4.  Never let the adjudicator self-grade the top-level verdict.
 - **Detect-only by direct invocation; can be invoked by `/auto-paper-improvement-loop` Step 5.5 which then merges unresolved findings into its fix list.**  When a user runs `/kill-argument paper/` directly, the output is informational and the human decides whether to act.  When the skill is invoked from inside the auto-improvement loop, the loop reads `KILL_ARGUMENT.json`, deduplicates against its existing weakness list, and feeds novel `still_unresolved` points into Step 6 fixes — `/kill-argument` itself never edits paper files.
 
 ## When NOT to Use
@@ -429,7 +433,7 @@ To the user:
 
 ## Review Tracing
 
-After each `mcp__codex__codex` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip).  Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/kill-argument/<date>_run<NN>/`.  Both threads' raw responses should be preserved.
+After each reviewer subagent call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip).  Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/kill-argument/<date>_run<NN>/`.  Both threads' raw responses should be preserved.
 
 ## Notes
 

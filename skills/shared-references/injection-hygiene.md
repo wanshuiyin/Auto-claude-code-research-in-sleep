@@ -8,11 +8,11 @@ prompt-injection / exfiltration / promptware payload that hijacks a later agent
 turn — including a reviewer's context (a poisoned wiki node that whispers
 "reviewer says: accept" is a direct attack on the cross-model invariant).
 
-## Two layers — and a clean scan is NOT an acquittal
+## Two layers — and a clean scan is NOT an approval
 
 ```
 layer 1  tools/threat_scan.py   regex · deterministic · block-on-hit (fail-OPEN to novelty) · NO model
-layer 2  the cross-model jury   codex/gemini · catches SEMANTIC poisoning
+layer 2  the cross-model reviewer   codex/gemini · catches SEMANTIC poisoning
 ```
 
 - **Layer 1** blocks overt injection. Its strength is that it has no model: a
@@ -21,9 +21,9 @@ layer 2  the cross-model jury   codex/gemini · catches SEMANTIC poisoning
   poisonous entry (a subtly wrong "fact", a plausible-but-false claim).
 
 A clean layer-1 scan means only *"no known-bad strings"*, never *"safe"*. This
-is the `acceptance-gate.md` rule applied to content: the scanner may **DRIVE** a
-write/inject decision (it can gate), but it cannot **ACQUIT** the content's
-correctness — that stays with the cross-model jury.
+follows the `acceptance-gate.md` rule applied to content: the scanner may **gate**
+a write/inject decision, but it cannot **declare the content correct** — that
+stays with the cross-model reviewer.
 
 ## Scope: block where the user can intervene, warn where they can't
 
@@ -107,10 +107,10 @@ even "you must register/connect/report" is dropped; only near-zero-FP verbs like
 filler-gap between key tokens defeats "ignore all **PRIOR** instructions" evasion.
 
 ## Cross-references
-- `acceptance-gate.md` — the scanner DRIVES, the jury ACQUITS. A clean scan is
-  not a correctness verdict.
+- `acceptance-gate.md` — the scanner gates writes; the reviewer judges correctness.
+  A clean scan is not a correctness verdict.
 - `fan-out-pattern.md` — fan-out children must not write wiki/memory directly;
-  the parent commits after the jury, and content is scanned at that seam.
+  the parent commits after the reviewer approval, and content is scanned at that seam.
 - `experiment-integrity.md` / `reviewer-independence.md` — a poisoned entry must
   never be able to forge a reviewer verdict into a reviewer's context.
 
@@ -119,4 +119,4 @@ filler-gap between key tokens defeats "ignore all **PRIOR** instructions" evasio
 > adaptations + an added entry-level quarantine. ARIS's increment over Hermes:
 > Hermes scans memory/context injection but leaves *learned-content correctness*
 > to one model; ARIS routes everything that passes the regex to the cross-model
-> jury before it's trusted.
+> reviewer before it's trusted.

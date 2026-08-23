@@ -4,6 +4,10 @@ description: "Send notifications to Feishu/Lark. Internal utility used by other 
 argument-hint: "[message-text]"
 allowed-tools: Bash(curl *), Bash(cat *), Read, Glob
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Feishu/Lark Notification
 
@@ -13,11 +17,16 @@ Send a notification: **$ARGUMENTS**
 
 This skill provides Feishu/Lark integration for ARIS. It is designed as an **internal utility** — other skills call it at key events (experiment done, review scored, checkpoint waiting). It can also be invoked manually.
 
-**Zero-impact guarantee**: If no `feishu.json` config exists, this skill does nothing and returns silently. All existing workflows are completely unaffected.
+**Zero-impact guarantee**: If no `feishu.json` config exists (or if `FEISHU_WEBHOOK_URL` is unset), this skill does nothing and returns silently. All existing workflows are completely unaffected.
 
 ## Configuration
 
-The skill reads `~/.claude/feishu.json`. If this file does not exist, **all Feishu functionality is disabled** — skills behave exactly as before.
+The skill looks for configuration in the following order:
+1. Environment variable: `FEISHU_WEBHOOK_URL` (direct webhook URL)
+2. Project-level config: `.cursor/feishu.json` or `.aris/feishu.json`
+3. User-level config: `~/.cursor/feishu.json` (fallback: `~/.claude/feishu.json` for legacy setups)
+
+If none of these configuration sources exist, **all Feishu functionality is disabled** — skills behave normally.
 
 ### Config Format
 
@@ -36,19 +45,17 @@ The skill reads `~/.claude/feishu.json`. If this file does not exist, **all Feis
 
 | Mode | `"mode"` value | What it does | Requires |
 |------|----------------|--------------|----------|
-| **Off** | `"off"` or file absent | Nothing. Pure CLI as-is | Nothing |
+| **Off** | `"off"` or config absent | Nothing. Regular workflow as-is | Nothing |
 | **Push only** | `"push"` | Send webhook notifications at key events. Mobile push, no reply | Feishu bot webhook URL |
-| **Interactive** | `"interactive"` | Full bidirectional. Approve/reject from Feishu, reply to checkpoints | [feishu-claude-code](https://github.com/joewongjc/feishu-claude-code) running |
+| **Interactive** | `"interactive"` | Full bidirectional. Approve/reject from Feishu, reply to checkpoints | Feishu notification bridge running |
 
 ## Workflow
 
 ### Step 1: Read Config
 
-```bash
-cat ~/.claude/feishu.json 2>/dev/null
-```
+Check environment variable `FEISHU_WEBHOOK_URL` or load the first available config file (`.cursor/feishu.json`, `.aris/feishu.json`, `~/.cursor/feishu.json`, or `~/.claude/feishu.json`).
 
-- **File not found** → return silently, do nothing
+- **Config not found / Unset** → return silently, do nothing
 - **`"mode": "off"`** → return silently, do nothing
 - **`"mode": "push"`** → proceed to Step 2 (push)
 - **`"mode": "interactive"`** → proceed to Step 3 (interactive)
@@ -89,7 +96,7 @@ curl -s -X POST "$WEBHOOK_URL" \
 
 ### Step 3: Interactive Notification (bidirectional)
 
-Interactive mode uses [feishu-claude-code](https://github.com/joewongjc/feishu-claude-code) as a bridge:
+Interactive mode connects to a local/remote notification bridge service:
 
 1. **Send message** to the bridge:
    ```bash
@@ -113,20 +120,20 @@ Interactive mode uses [feishu-claude-code](https://github.com/joewongjc/feishu-c
 - **Push mode**: Check curl exit code. If non-zero, log warning but do NOT block the workflow.
 - **Interactive mode**: If bridge is unreachable, fall back to push mode (if webhook configured) or skip silently.
 
-## Helper Function (for other skills)
+## Helper Pattern (for other skills)
 
 Other skills should use this pattern to send notifications:
 
 ```markdown
 ### Feishu Notification (if configured)
 
-Check if `~/.claude/feishu.json` exists and mode is not "off":
+Check if Feishu notification is configured (`FEISHU_WEBHOOK_URL` or `.cursor/feishu.json` / `.aris/feishu.json` / `~/.cursor/feishu.json`):
 - If **push** mode: send webhook notification with event summary
 - If **interactive** mode: send notification and wait for user reply
-- If **off** or file absent: skip entirely (no-op)
+- If **off** or config absent: skip entirely (no-op)
 ```
 
-**This check is always guarded.** If the config file doesn't exist, the skill skips the notification block entirely — zero overhead, zero side effects.
+**This check is always guarded.** If the config file or webhook is absent, the skill skips the notification block entirely — zero overhead, zero side effects.
 
 ## Event Catalog
 

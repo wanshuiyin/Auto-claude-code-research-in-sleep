@@ -4,6 +4,10 @@ description: Generate pixel art SVG illustrations for READMEs, docs, or slides. 
 argument-hint: "[description of what to draw]"
 allowed-tools: Write, Edit, Read, Bash(open *)
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Pixel Art SVG Generator
 

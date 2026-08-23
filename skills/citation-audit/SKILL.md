@@ -2,8 +2,12 @@
 name: citation-audit
 description: "Zero-context verification that every bibliographic entry in the paper is real, correctly attributed, and used in a context the cited paper actually supports — catching hallucinated authors, wrong years, fabricated venues, version mismatches, and wrong-context citations. Use when user says \"审查引用\", \"check citations\", \"citation audit\", \"verify references\", \"引用核对\", or before submission to ensure bibliography integrity."
 argument-hint: "[paper-directory-or-bib-file] [--uncited] [— soft-only]"
-allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, mcp__codex__codex, WebSearch, WebFetch
+allowed-tools: Bash(*), Read, Grep, Glob, Edit, Write, Task, WebSearch, WebFetch
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Citation Audit
 
@@ -45,8 +49,8 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Used via Codex MCP. Default for cross-model review with web access.
-- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Never `codex-reply`.
+- **REVIEWER_MODEL** — cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (reviewer runs as a Task subagent; executor Claude → `gpt-5.6-sol-max-fast` default).
+- **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer Task subagent (REVIEWER_BIAS_GUARD). Never resume across runs.
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
 - **STATE = `CITATION_AUDIT.json`** — Machine-readable verdict ledger consumable by downstream tools.
@@ -74,23 +78,25 @@ Output a flat list of `(key, file, line, surrounding_sentence)` tuples.
 
 Also build the inverse: for each bib entry, the list of all places it is cited.
 
-Define two protocol sets used throughout the rest of the workflow: `cited_keys` is the set of unique cite keys appearing in any `\cite{...}` invocation across the audited `*.tex` files (de-duplicated), and `bib_keys` is the set of keys parsed from the audited bib file(s). `cited_keys` drives Step 3 (audit only cited entries); `bib_keys \ cited_keys` is the uncited residual surfaced by the `--uncited` opt-in.
+Define two protocol sets used throughout the rest of the workflow: `cited_keys` is the set of unique cite keys appearing in any `\cite{...}` invocation across the audited `*.tex` files (de-duplicated), and `bib_keys` is the set of keys parsed from the audited bib file(s). `cited_keys` drives Step 3 (audit only cited entries). If the `--uncited` option is enabled, unused bibliography entries (`bib_keys` minus `cited_keys`) are also surfaced.
 
-If the user passed `--uncited`, also compute the set difference `bib_keys \ cited_keys` here and stash it for use in Steps 5 and the JSON aggregation; see "Uncited Entry Detection (opt-in)" below for the protocol. The set-diff is a string operation only and does not consume reviewer budget.
+If the user passed `--uncited`, also compute the unused keys (`bib_keys` minus `cited_keys`) here and stash them for use in Steps 5 and the JSON aggregation; see "Uncited Entry Detection (opt-in)" below for the protocol. This difference is a string operation only and does not consume reviewer budget.
 
 Save the extracted contexts to `paper/.aris/citation-audit/contexts.txt` so the reviewer can read it directly. Use the paper-dir-relative path `.aris/citation-audit/contexts.txt` when recording the file in `audited_input_hashes`; do not stage under `/tmp` or other transient locations that the verifier cannot rehash later.
 
 ### Step 3: Send each entry to fresh cross-model reviewer
 
-For each **cited** bib entry — i.e., each key in `cited_keys` with at least one extracted citation context — invoke `mcp__codex__codex` (NOT `codex-reply` — fresh thread per entry, or batch with explicit per-entry isolation). Do **not** send entries in `bib_keys \ cited_keys` to the reviewer; those are detect-only and surface only when `--uncited` is explicitly enabled (see "Uncited Entry Detection" below).
+For each **cited** bib entry — i.e., each key in `cited_keys` with at least one extracted citation context — launch a fresh reviewer Task subagent (fresh thread per entry, or batch with explicit per-entry isolation). Do **not** send uncited entries (`bib_keys` minus `cited_keys`) to the reviewer; those are detect-only and surface only when `--uncited` is explicitly enabled (see "Uncited Entry Detection" below).
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "xhigh"}
-  sandbox: read-only
+Task(
+  subagent_type: "generalPurpose",
+  description: "citation-audit entry review (cross-family)",
+  model: REVIEWER_MODEL,   # cross-family per reviewer-routing.md
   prompt: |
-    You are auditing a bibliographic entry. Use web/DBLP/arXiv search.
+    You are auditing a bibliographic entry. Use web/DBLP/arXiv search
+    (WebSearch/WebFetch and curl are available to you). Read-only — do not
+    modify any file.
 
     ## Bib entry
     @article{key2024example,
@@ -306,7 +312,7 @@ Together: code → result → numerical claim → cited claim. Each layer has cr
 
 ## Review Tracing
 
-After each `mcp__codex__codex` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/citation-audit/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer subagent call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/citation-audit/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
 
 ## Output Contract
 
@@ -315,7 +321,7 @@ After each `mcp__codex__codex` reviewer call, save the trace following `shared-r
 - `.aris/traces/citation-audit/<date>_runNN/` (per-entry review traces)
 - Optional: applied fixes to `references.bib` + `sec/*.tex` (with `--apply` flag)
 - Optional: `details.uncited_entries` field in JSON + `## Uncited Entries (opt-in)` MD section (with `--uncited` flag; field absent and section omitted when flag is unset)
-- `CITATION_AUDIT.html` (when `RENDER_HTML = true`, default) — auto-rendered single-file HTML view via `/render-html "CITATION_AUDIT.md" --json "CITATION_AUDIT.json"`. Full review gate. Sidecar `.review.json` carries render-fidelity verdict. **Non-blocking**: if `/render-html` fails (helper missing, Codex MCP unavailable, file write error), log the failure and treat the audit as complete — the JSON + MD ledger are the canonical outputs.
+- `CITATION_AUDIT.html` (when `RENDER_HTML = true`, default) — auto-rendered single-file HTML view via `/render-html "CITATION_AUDIT.md" --json "CITATION_AUDIT.json"`. Full review gate. Sidecar `.review.json` carries render-fidelity verdict. **Non-blocking**: if `/render-html` fails (helper missing, reviewer subagent unavailable, file write error), log the failure and treat the audit as complete — the JSON + MD ledger are the canonical outputs.
 
 ## Optional: Soft-Only Mode (— soft-only)
 
@@ -422,7 +428,7 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/citation-audit/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_model":   "<resolved — the cross-family slug that actually ran>",
   "reviewer_reasoning": "<resolved — the effort that actually ran (target: xhigh)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {
@@ -484,8 +490,8 @@ The `--uncited` flag does **not** appear in this table: uncited entries are advi
 
 ### Thread independence
 
-Every invocation uses a fresh `mcp__codex__codex` thread. Never
-`codex-reply`. Do not accept prior audit outputs (PROOF_AUDIT,
+Every invocation uses a fresh reviewer Task subagent. Never
+resume. Do not accept prior audit outputs (PROOF_AUDIT,
 PAPER_CLAIM_AUDIT, EXPERIMENT_LOG) as input — the fresh thread preserves
 reviewer independence per `shared-references/reviewer-independence.md`.
 

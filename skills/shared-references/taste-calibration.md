@@ -1,85 +1,49 @@
 # Taste Calibration Protocol
 
-> Subjective quality is gradable **if you write the taste down and anchor the
-> scale**. The model will not invent taste; it will only converge toward the
-> taste you described — so the whole game is (1) a weighted rubric worth
-> converging to, and (2) reference anchors that pin what "good" and "slop"
-> actually look like. (After Karpathy's LOOPS.md VI, "score the subjective".)
+Subjective quality can be evaluated consistently when evaluation criteria are explicitly documented with anchored scales. Models converge toward specified criteria when provided with:
+1. A weighted rubric with explicit evaluation axes.
+2. Reference anchor examples illustrating high-quality vs. low-quality implementations.
 
-Use this protocol whenever a skill grades an artifact on axes that are matters
-of judgment — visual design, writing elegance, proposal quality — rather than
-machine-checkable facts. It layers ON TOP of any deterministic gates the skill
-already has (hard caps, measurement gates); it never replaces them.
+Use this protocol when evaluating artifacts on subjective axes — such as visual design, writing style, or proposal structure — rather than deterministic rules. This protocol complements deterministic checks (e.g., hard layout constraints, size caps) without replacing them.
 
-## 1. Named axes with explicit numeric weights
+## 1. Named Axes with Explicit Numeric Weights
 
-Define 2–7 named axes and give each an explicit weight; weights sum to 1.0.
-Model the table on `research-refine`'s working precedent (its Phase 2 uses
-15/25/25/15/10/5/5% across seven axes):
+Define 2–7 named axes with assigned weights summing to 1.0. For example:
 
 ```markdown
-| Axis          | Weight | What it measures                                  |
+| Axis          | Weight | Description                                       |
 |---------------|:------:|---------------------------------------------------|
-| Design        |  0.35  | hierarchy, spacing, restraint, gestalt            |
-| Originality   |  0.15  | distinct voice vs template sameness               |
-| Craft         |  0.30  | detail quality: typography, alignment, math, figs |
-| Functionality |  0.20  | does it do its job (readable at distance, ...)    |
+| Design        |  0.35  | Visual hierarchy, whitespace, balance, structure  |
+| Originality   |  0.15  | Distinctive framing vs. generic boilerplate       |
+| Craft         |  0.30  | Detail execution: typography, math, figure layout |
+| Functionality |  0.20  | Core effectiveness (readability, clarity)         |
 ```
 
-Score each axis 0–1 (or 1–10 rescaled). Composite = Σ weightᵢ · axisᵢ. A single
-holistic number without named weighted axes is not this protocol.
+Score each axis from 0.0 to 1.0 (or 1 to 10 rescaled).
+Composite Score = $\sum (\text{weight}_i \times \text{axis}_i)$.
 
-## 2. Calibrate on reference anchors BEFORE scoring the target
+## 2. Calibrate on Reference Anchors Before Scoring
 
-The grader first scores **3 known-good and 3 known-bad reference exemplars** on
-the same axes, so the scale is anchored to concrete artifacts instead of the
-grader's free-floating prior.
+The evaluator first scores curated reference examples (e.g., 3 high-quality and 3 low-quality exemplars) on the same axes to anchor the scoring scale:
 
-- References are **pre-existing, human-curated files** — the executor never
-  selects, generates, or searches for anchors itself (an executor-picked anchor
-  set just smuggles the free-floating prior back in). The invoking skill
-  supplies the paths — convention: `<skill-dir>/references/good/` and
-  `<skill-dir>/references/bad/` (images, PDFs, or text artifacts of the same
-  kind as the target). Project-local references may override the skill-local
-  set.
-- The grader is TOLD which set is which ("these three are good, these three are
-  slop") — calibration is about anchoring the scale, not blind classification.
-- Sanity check: if the calibrated scores don't separate the sets (a "bad"
-  exemplar scores at or above a "good" one on the composite), the rubric is
-  broken — fix the rubric before trusting any target score.
+- **Curated Reference Files:** Anchors are pre-existing, human-curated files provided at `<skill-dir>/references/good/` and `<skill-dir>/references/bad/`. Evaluators do not generate or select their own anchors.
+- **Labeled Sets:** The evaluator is informed of exemplar classifications to establish baseline reference points across the rubric.
+- **Validation Check:** If calibrated scores fail to separate known good from known poor exemplars (e.g., a poor exemplar scores equal to or higher than a good exemplar on the composite score), the rubric requires adjustment before evaluating target artifacts.
 
-**Graceful degradation:** if no reference sets exist, proceed with the weighted
-rubric alone, but the output MUST carry `calibration: none` so a downstream
-reader never mistakes an unanchored score for an anchored one. Do not fabricate
-or hallucinate reference scores.
+**Fallback:** If no curated reference files exist, proceed with the weighted rubric directly and set `CALIBRATION: none` in the output. Do not fabricate anchor scores.
 
-## 3. Output contract
+## 3. Output Contract
 
-```
-COMPOSITE: 0.xx            (weighted; also give per-axis scores)
+```markdown
+COMPOSITE: 0.xx            (Weighted score; include individual axis breakdown)
 CALIBRATION: anchored | none
-GAP: <one mandatory paragraph naming WHICH reference exemplar(s) the target
-     falls short of or exceeds, on WHICH axes, and why — "0.71 because the
-     figure hierarchy matches good/poster_B but the typography is closer to
-     bad/poster_A's crowding" — never just a number>
+GAP: <A concrete paragraph identifying specific axes where the target deviates from reference anchors, citing concrete examples: e.g., "The section structure matches the clarity of good/paper_A, but paragraph transitions in Section 3 are verbose and resemble bad/paper_B's repetitive phrasing. Action: tighten topic sentences in Section 3.2.">
 ```
 
-The GAP paragraph is what makes the score actionable: converging toward the
-described taste requires knowing where the artifact sits relative to the
-anchors, not just its scalar.
+The `GAP` paragraph must provide concrete, actionable critique referencing specific weaknesses and corresponding anchor comparisons rather than generic ratings.
 
-## 4. Interaction with existing gates and the jury
+## 4. Interaction with Deterministic Gates and Independent Review
 
-- **Deterministic caps stay hard floors.** A calibrated composite never
-  overrides a measurement gate or critical cap (e.g. paper-poster-html's
-  "< 2 real figures → ≤ 3"). Compute caps first; the composite lives under
-  them.
-- **Calibration ≠ acquittal.** A taste score produced by the executor's own
-  model family may DRIVE the fix loop (rank issues, decide what to patch next)
-  but can never acquit: wherever a skill's acceptance requires a cross-model
-  verdict, that requirement is unchanged. (Per `acceptance-gate.md`'s taxonomy
-  a model-assigned score is a semantic judgment — calibration narrows its
-  variance; it does not make it machine-checkable.)
-- **Rubric drift is meta-optimize's job.** If users repeatedly override
-  calibrated scores, the rubric or the anchors are wrong — that's an event-log
-  signal for `/meta-optimize`, not a reason to hand-tweak scores per run.
+- **Deterministic Hard Caps Apply First:** Subjective composite scores never override hard constraints or measurement failures (e.g., missing required figures, font size violations). Hard caps are evaluated first.
+- **Calibration Does Not Replace Cross-Model Review:** Calibrated scores generated during drafting help prioritize revisions, but they do not replace required independent cross-model reviews (`acceptance-gate.md`).
+- **Rubric Maintenance:** If evaluation scores consistently diverge from expert human judgment, the rubric definitions or anchor exemplars should be updated via `/meta-optimize`.

@@ -2,33 +2,23 @@
 name: paper-poster-html
 description: "DEFAULT poster pipeline — build an academic conference poster (ICML/NeurIPS/ICLR/CVPR/...) as a single HTML/CSS file with measurement-driven hard gates, real paper figures, a two-hue design-token system, and print-ready PDF via headless Chromium. Use when the user says \"做海报\", \"poster\", \"conference poster\", \"paper poster\", or asks to design/redo a research poster. Supersedes the retired LaTeX /paper-poster."
 argument-hint: "[paper-dir-or-pdf] [— venue: ICLR, canvas: 185x90cm landscape, venue-colors: true]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebFetch, WebSearch, AskUserQuestion, mcp__codex__codex
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebFetch, WebSearch, AskUserQuestion, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Paper Poster (HTML): measurement-gated poster generation
 
-One HTML file styled for an exact print canvas (`@page { size: W H }`), rendered to PDF
-via Playwright print emulation. **Iterate by measuring, not eyeballing** — the screen
-preview lies; only print emulation at the correct viewport tells the truth. Core gate
-machinery is adapted from [posterly](https://github.com/Chenruishuo/posterly) (MIT, ©
-2026 Ruishuo Chen — see `NOTICE.md` and `LICENSES/posterly-MIT.txt`); ARIS adds style
-discipline gates, figure-provenance gates, the cross-model review loop, and the
-anti-patch-loop fix vocabulary.
+Generates a print-ready academic poster in HTML/CSS and exports it to PDF using Playwright print emulation. Layout dimensions, typography, and color tokens are validated with automated checks to match the target venue's specifications. Core gate machinery is adapted from [posterly](https://github.com/Chenruishuo/posterly) (MIT, © 2026 Ruishuo Chen — see `NOTICE.md` and `LICENSES/posterly-MIT.txt`).
 
-## Why this skill exists (the failure it prevents)
+## Design Principles
 
-A predecessor pipeline produced a poster with **30+ colors, zero real paper figures, a
-screen-pixel canvas, and tiny formulas floating in oversized boxes**, then spent 12+
-review rounds making it *worse* — each round added a new badge color or bespoke SVG
-patch. The cure is structural, not exhortative:
-
-1. **Hard gates run before any aesthetic opinion** (alignment, style, assets must PASS
-   first — a reviewer never sees an unmeasured poster).
-2. **A closed fix vocabulary** — visual-review fixes can only touch design tokens,
-   whole catalogued components, content rebalance, assets, or canvas choice. New inline
-   styles / new hex values / bespoke decorations are structurally forbidden.
-3. **Two-hue discipline as a machine check**, not a style suggestion.
-4. **Real paper figures with provenance manifest**, or the gate fails.
+1. **Measure First:** Run automated layout, alignment, and asset checks before visual review.
+2. **Strict Design Tokens:** Restrict visual modifications to defined CSS tokens, palette colors, and standard components rather than ad-hoc inline styles.
+3. **Restrained Palette:** Use a disciplined two-hue color system (accent + highlight + neutral tones) enforced by style checks.
+4. **Authentic Figures:** Extract and include authentic figures directly from the paper with provenance tracking.
 
 ## Mental model
 
@@ -57,7 +47,7 @@ paper (.tex / PDF) ──► content plan + claim→evidence audit (codex, fresh
   abort and tell the user to re-install the skill (Policy A — the gates ARE the skill;
   never improvise replacements).
 - **REVIEWER_MODEL** = `gpt-5.6-sol`, reasoning `xhigh`, **fresh thread per review call**
-  (`mcp__codex__codex`, never `codex-reply` across review boundaries).
+  (fresh reviewer Task subagents, never resume across review boundaries).
 - **CANVAS** — from the venue's official spec, looked up live in Phase 0. Never assume.
   (Known anchor: ICLR 2026 main = 185×90 cm landscape per its official printing
   service; ICML/NeurIPS commonly 60×36 in landscape; workshop posters often 61×91 cm
@@ -289,8 +279,7 @@ phase; enables compact-recovery resume.
   dashboard, not a poster.
 - **Fix vocabulary is closed.** If a fix isn't expressible as token / component /
   rebalance / asset / canvas, it's the wrong fix.
-- **Cross-model verdicts.** Claude drives the loop and scores visuals; acceptance of
-  content fidelity comes from the fresh codex thread (a loop can drive, never acquit).
+- **Cross-model review.** The executor iterates on layout and visual presentation; acceptance of content fidelity and technical accuracy requires an independent cross-model review (`acceptance-gate.md`).
 - **Preserve user decisions.** Re-read `design_decisions` before "improving" anything.
 - **Vendor boundary.** `poster_check.py`, `render_preview.py`, `_posterly/` are
   vendored from posterly — keep diffs minimal; ARIS-side logic goes in the new

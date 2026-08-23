@@ -9,9 +9,9 @@ Save full prompt/response pairs for every cross-model reviewer call, enabling:
 
 ## When to Trace
 
-After **every** `mcp__codex__codex` or `mcp__codex__codex-reply` call that serves a reviewer/critique function. This includes review scoring, experiment auditing, claim verification, idea critique, and patch gating.
+After **every** reviewer Task-subagent call (fresh or `resume` — see `reviewer-routing.md`) that serves a reviewer/critique function. This includes review scoring, experiment auditing, claim verification, idea critique, and patch gating.
 
-Do NOT trace: purely informational LLM calls (e.g., `codex exec` for code generation that is not a review).
+Do NOT trace: purely informational subagent calls (e.g., an explore subagent used for code search that is not a review).
 
 ## Trace Directory
 
@@ -31,7 +31,7 @@ Do NOT trace: purely informational LLM calls (e.g., `codex exec` for code genera
 
 ## How to Trace
 
-After each reviewer MCP call — including every FAILED attempt in a capability-fallback chain (one trace entry per attempt: `--status error` + `--fallback-reason`; the successful entry records the RESOLVED pair) — save the trace using `save_trace.sh`,
+After each reviewer subagent call — including every FAILED attempt in a capability-fallback chain (one trace entry per attempt: `--status error` + `--fallback-reason`; the successful entry records the RESOLVED pair) — save the trace using `save_trace.sh`,
 resolved through the canonical helper chain (see
 `integration-contract.md` §2 — failure policy C, "forensic helper").
 The full invocation:
@@ -103,9 +103,8 @@ when the helper is unreachable — the trace is forensic evidence, so
   "call_number": 1,
   "purpose": "round-1-review",
   "timestamp": "2026-04-15T14:31:00+08:00",
-  "tool": "mcp__codex__codex",
-  "model": "gpt-5.6-sol",
-  "config": {"model_reasoning_effort": "xhigh"},
+  "tool": "cursor-task-subagent",
+  "model": "gpt-5.6-sol-max-fast",
   "files_referenced": ["paper/sections/3_method.tex", "results/table1.csv"],
   "prompt": "<full prompt text>"
 }
@@ -120,8 +119,8 @@ The reviewer's full response, verbatim. No truncation, no summarization.
   "call_number": 1,
   "purpose": "round-1-review",
   "timestamp": "2026-04-15T14:33:00+08:00",
-  "thread_id": "019d8fe0-b25d-...",
-  "model": "gpt-5.6-sol",
+  "thread_id": "<reviewer subagent agent id>",
+  "model": "gpt-5.6-sol-max-fast",
   "duration_ms": 142000,
   "status": "ok"
 }

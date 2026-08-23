@@ -504,7 +504,7 @@ Do:
 - [ ] The Introduction stays within about 1-1.5 pages.
 - [ ] The method starts by page 2-3.
 - [ ] There are 2-4 concrete contribution bullets.
-- [ ] Limitations are clearly stated.
+- [ ] Limitations are clearly stated — as bounded scope, not apology, and no weakness first appears in the final conclusion paragraph (see `press-release-principle.md`, writer-side only).
 
 ### Writing
 

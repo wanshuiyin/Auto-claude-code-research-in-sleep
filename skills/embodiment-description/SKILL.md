@@ -4,6 +4,10 @@ description: "Write detailed embodiment descriptions for patent specifications. 
 argument-hint: "[claims-path-or-embodiment-details]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Embodiment Description
 
@@ -117,13 +121,11 @@ Each embodiment section should be self-contained but cross-reference other embod
 - Include at least one "best mode" embodiment (US requirement).
 - Multiple embodiments strengthen the specification against enablement challenges.
 - Describe the invention, do NOT evaluate it empirically ("The embodiment achieves 95% accuracy" is wrong; "The processor classifies the input data" is correct).
-- **CRITICAL — NO experimental data, test results, accuracy percentages, detection rates, precision values, or comparative performance data.** These belong in papers, not patents. The embodiment teaches HOW to make and use, not HOW WELL it performs.
-- WRONG: "传感器对直径超过150μm的金属颗粒实现了100%的检测精度，即使在检测限处仍保持94%的高精度。"
-- RIGHT: "当不锈钢颗粒通过间隙传感区域时，谐振频率下降。颗粒直径越大，频率偏移幅度越大。"
-- Do NOT include tables of experimental results, graphs of measurement data, or comparisons with prior art performance.
-- **CRITICAL — An embodiment is NOT an experiment.** Do NOT describe "repeated experiments", "accuracy evaluation", "precision testing", "calibration experiments", or "comparison with reference methods". An embodiment describes ONE way to make and use the invention — it is a recipe, not a test report.
-- Do NOT copy experimental sections from source papers verbatim. Transform the experimental setup into a manufacturing/operation description.
-- If the source material is a paper, extract ONLY: (1) what was built, (2) what materials/parameters were used, (3) how it operates. Ignore all test methodology, results, and performance metrics.
+- **Guidelines on Embodiment vs. Experimental Data:**
+  - Embodiments teach *how to make and practice* the invention (structural recipe and operational flow), not *how well it scores in laboratory benchmarks*.
+  - Avoid framing embodiments as empirical evaluations (e.g., do not include accuracy percentages, detection rates, benchmark tables, or comparative performance metrics against prior art).
+  - Describe physical mechanisms and qualitative technical interactions (e.g., instead of "achieved 98% detection rate at 150μm", describe "when metallic particles traverse the gap sensing region, the resonant frequency shifts inversely with particle dimension").
+  - Do not copy paper experiment sections directly; convert research apparatus into manufacturing/structural embodiment descriptions.
 - Include specific parameters where possible, but frame them as exemplary, not limiting.
 - Reference numerals must be consistent with the figures.
 - Do NOT use subjective language ("excellent", "surprising", "superior").

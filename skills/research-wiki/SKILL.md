@@ -2,8 +2,12 @@
 name: research-wiki
 description: "Persistent research knowledge base that accumulates papers, ideas, experiments, claims, and their relationships across the entire research lifecycle. Inspired by Karpathy's LLM Wiki pattern. Use when user says \"知识库\", \"research wiki\", \"add paper\", \"wiki query\", \"查知识库\", or wants to build/query a persistent field map."
 argument-hint: "[subcommand: init|ingest|sync|query|update|lint|stats]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Research Wiki: Persistent Research Knowledge Base
 
@@ -24,7 +28,7 @@ Inspired by [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6
 | **Paper** | `papers/` | `paper:<slug>` | A published or preprint research paper |
 | **Idea** | `ideas/` | `idea:<id>` | A research idea (proposed, tested, or failed) |
 | **Experiment** | `experiments/` | `exp:<id>` | A concrete experiment run with results |
-| **Claim** | `claims/` | `claim:<id>` | A theorem/headline with an honest PROOF status — born via `/proof-checker` (see Hook 4) |
+| **Claim** | `claims/` | `claim:<id>` | A theorem/headline with an honest PROOF status — created via `/proof-checker` (see Hook 4) |
 
 ### Typed Relationships (`graph/edges.jsonl`)
 
@@ -383,9 +387,9 @@ log "idea-creator wrote N ideas to wiki"
 
 ```
 # Create/refresh the experiment node FIRST via the deterministic helper (verdict owner
-# → --update-on-exist). This is the experiment BIRTH point. add_edge does NOT verify
+# → --update-on-exist). This is the experiment CREATION point. add_edge does NOT verify
 # node existence, so GATE the supports/invalidates edges below on the node having been
-# born (EXP_NODE_OK) — else they'd dangle off a missing exp node.
+# created (EXP_NODE_OK) — else they'd dangle off a missing exp node.
 EXP_NODE_OK = (python3 "$WIKI_SCRIPT" add_experiment research-wiki/ --slug <exp_id> \
   --idea idea:<active_idea> --verdict <yes|partial|no> --confidence <high|medium|low> \
   --metrics <...> --reasoning <...> --provenance <run dir> --update-on-exist) succeeded
@@ -393,7 +397,7 @@ EXP_NODE_OK = (python3 "$WIKI_SCRIPT" add_experiment research-wiki/ --slug <exp_
 
 # Record empirical support as EDGES ONLY, and ONLY if EXP_NODE_OK — never overwrite the
 # claim's `status`. A claim's `status` is the PROOF axis (verified / sound-modulo-imports
-# / refuted / unproven / drafted / retracted), owned by /proof-checker (the claim birth
+# / refuted / unproven / drafted / retracted), owned by /proof-checker (the claim creation
 # point). Experiment support is a SEPARATE axis carried entirely by supports/invalidates
 # edges; writing "supported"/"invalidated" into status is rejected by the validator.
 if EXP_NODE_OK:
@@ -416,13 +420,13 @@ rebuild query_pack
 log "result-to-claim: exp_id updated, verdict=..."
 ```
 
-### Hook 4: Claim birth — from `/proof-checker` (the ONLY birth point)
+### Hook 4: Claim node creation — from `/proof-checker` (the ONLY creation point)
 
-Wiki **claim nodes are born here.** `/proof-checker` Phase 5.5 calls `add_claim`
+Wiki **claim nodes are created here.** `/proof-checker` Phase 5.5 calls `add_claim`
 for each top-level theorem/headline after writing `PROOF_AUDIT.json`, stamping an
 honest PROOF-axis `status` and a `provenance` pointer to the audit trace. No other
 skill creates a claim node: `/result-to-claim` (Hook 3) only adds empirical
-`supports`/`invalidates` *edges* to an already-born claim and never edits its `status`.
+`supports`/`invalidates` *edges* to an already-created claim and never edits its `status`.
 
 ```bash
 # (run by /proof-checker; shown here for the wiki's record)

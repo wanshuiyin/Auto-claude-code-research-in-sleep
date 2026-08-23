@@ -1,51 +1,42 @@
 ---
 name: meta-apply
-description: "Privileged applier that LANDS meta-optimize / corpus-audit patches the user approved — the ONLY skill permitted to mutate the skill corpus from a self-modification proposal, with cross-model jury and human approval at landing. Use when the user says \"meta apply\", \"/meta-apply\", \"land the staged patches\", \"应用优化\", after a /meta-optimize run."
+description: "Apply meta-optimize patches that the user has reviewed and approved, with independent cross-model review and human confirmation. Use when the user says \"meta apply\", \"/meta-apply\", \"land the staged patches\", \"应用优化\", after a /meta-optimize run."
 argument-hint: "[patch-number-or-all]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
-# Meta-Apply: the privileged landing gate for self-modification patches
+# Meta-Apply: Apply Approved Self-Modification Patches
 
-This skill exists to enforce a **privilege boundary**. Producers like
-[`/meta-optimize`](../meta-optimize/SKILL.md) (and, later, `corpus-audit`) are
-**read-only** — no `Write`/`Edit`, no apply step; they can only *stage* candidate patches
-under `.aris/meta/pending/`. **This skill is the only place a staged patch becomes a real
-change to the corpus.** Splitting "propose" from "land" across two skills with different
-tool grants is what makes "a loop cannot apply its own patch" structural rather than a
-sentence the producer is asked to obey.
+This skill applies optimization patches that were proposed by [`/meta-optimize`](../meta-optimize/SKILL.md) and approved by the user.
 
-It is **human-invoked only.** It runs when the user explicitly types `/meta-apply` after
-reading the producer's REPORT. That invocation IS the landing authorization (the locked
-2026-05-30 decision: the human stays at the landing gate).
+## Privilege Boundaries
 
-## The acquittal is generated HERE, not relayed
+- **What this skill CAN do**:
+  - Read staged patch files from `.aris/meta/pending/`
+  - Back up target files to `.aris/meta/backups/`
+  - Apply validated patches using Write/Edit tools
+  - Record provenance and audit logs
 
-The earlier design trusted a `jury_verdict: pass` field in the producer's manifest. That
-is **forgeable** — the producer writes that field, so a buggy/misaligned producer could
-stage a killed patch labelled "pass." **So this skill does not trust any producer-written
-verdict.** It runs the cross-model jury **itself, at landing time, on the actual staged
-diff** (fresh thread, paths-only). The verdict is produced where it is consumed, by the
-privileged human-invoked skill — nothing to forge.
+- **What this skill CANNOT do**:
+  - Run automatically without explicit user invocation
+  - Apply patches that failed the cross-model review check
+  - Modify skill files without a valid backup and provenance stamp
+  - Rely on producer-generated review verdicts without independent verification
 
-## The non-negotiable rules (jury-at-landing, reject-default)
+## Independent Review at Landing
 
-For each staged patch the user asks to land, in order — any failure ⇒ skip & report,
-never silently apply:
+This skill independently evaluates staged diffs before applying them. It launches a fresh cross-model reviewer subagent to evaluate the patch directly, rather than trusting unverified claims.
 
-1. **The human named THIS patch.** Apply only patches the user listed (`/meta-apply 1,3`
-   or `all`); default to applying nothing.
-2. **Fresh cross-model jury PASS, obtained now.** Run `mcp__codex__codex` (fresh thread,
-   NOT codex-reply; `model: gpt-5.6-sol`, `config: {"model_reasoning_effort": "ultra"}`, `sandbox: read-only`,
-   paths-only per [`reviewer-independence.md`](../shared-references/reviewer-independence.md))
-   on the staged `.diff` + its target. Ask: *does this change improve the harness without
-   regressions; PASS or KILL + one-line reason.* **KILL ⇒ refuse.** The human cannot
-   override a KILL — they may only pick among jury-PASSED survivors. (A loop can DRIVE;
-   only the cross-model jury can ACQUIT.)
-3. **Author ≠ reviewer family.** The author is the producer's executor model; the reviewer
-   is the codex model that just judged it. Run `provenance.py assert_cross_family` — if it
-   raises (same family / unknown), refuse. (Here it always holds: producer=Claude,
-   jury=codex. The check is the structural backstop.)
+## Core Rules (User Approval & Review Gate)
+
+For each staged patch requested:
+1. **User approval required**: Apply only patches explicitly specified by the user (`/meta-apply 1,3` or `all`).
+2. **Independent cross-model review PASS**: Run a fresh reviewer subagent on the staged diff. If the reviewer returns KILL (machine token; tell user REJECT/refused), refuse to apply the patch.
+3. **Cross-family enforcement**: The author and reviewer must be from different model families (`provenance.py assert_cross_family`).
 
 ## Workflow
 
@@ -62,24 +53,22 @@ Resolve `provenance.py` via the 4-layer chain in
 (`.aris/tools/` → `tools/` → `$ARIS_REPO/tools/` → `$ARIS_REPO/tools/` via
 `~/.aris/repo`).
 
-### Step 1: Jury-at-landing for each requested patch
+### Step 1: Review at landing for each requested patch
 
 For every patch the user asked to land, read its staged `.diff` and target, then run the
-fresh codex jury (Rule 2) — paths-only, no producer reasoning, no prior-round context.
-Record `{patch, jury_verdict, jury_thread_id, one_line_reason}`. Print a one-line result
-per patch (`PASS → eligible` / `KILL → refused: <reason>`).
+fresh reviewer subagent — paths-only, no producer reasoning, no prior-round context.
+Record `{patch, reviewer_verdict, reviewer_thread_id, one_line_reason}`. Print a one-line result
+per patch (`PASS → eligible` / `KILL → refused: <reason>`; note: when reporting to the user, present KILL as REJECT/refused).
 
-> The producer may have written an *advisory* pre-screen into the manifest to help the
-> human read the REPORT — **ignore it for the landing decision.** Only this fresh verdict
-> counts.
+> The producer may have written an advisory pre-screen into the manifest — only the fresh
+> landing review is binding.
 
 ### Step 2: Land the survivors (Write/Edit only — never Bash)
 
 For each patch that PASSED Step 1 **and** was named by the user:
 
 1. **Back up** the target to `.aris/meta/backups/<date>/<target>` (use the **Write** tool
-   to copy contents; corpus paths are not Bash-writable when `corpus_write_guard` is
-   active — and the applier should use Write/Edit for corpus mutation anyway).
+   to copy contents).
 2. **Apply** the diff by **Edit/Write** on the target corpus file.
 3. **Stamp provenance** on the changed file:
    ```bash
@@ -88,10 +77,9 @@ For each patch that PASSED Step 1 **and** was named by the user:
    ```
    `stamp()` re-asserts cross-family and refuses on same-family — the structural backstop
    at the moment the authorization record is written. The stamp is a **process receipt**
-   (who authored, who acquitted-at-landing, content hash) — NOT a claim the change is
-   correct.
+   (who authored, who verified at landing, content hash).
 4. **Log** to `.aris/meta/optimizations.jsonl`:
-   `{ts, patch, target, author_model, reviewer_model, jury_thread_id, applied: true}`.
+   `{ts, patch, target, author_model, reviewer_model, reviewer_thread_id, applied: true}`.
 
 ### Step 3: Report
 
@@ -99,39 +87,31 @@ Per patch: `LANDED <target>` (+ backup path + provenance sidecar) or
 `REFUSED <patch>: <reason>`. Remove landed patches from `.aris/meta/pending/`. Remind the
 user a landed patch is revertable from its backup, and to test the changed skill next run.
 
-## Provenance is a receipt, not an acquittal of correctness
+## Provenance is a process receipt, not an absolute guarantee
 
-A stamp records that a change passed *a process* (cross-model jury at landing + human
-landing), not that it is *correct*. To prevent "approved-but-wrong with a stamp that
-vouches for it" (false-authority laundering — worse than no stamp, because a later
-auto-curator reads it as evidence):
+A stamp records that a change passed the required process (cross-model review at landing + user
+confirmation), not that it is flawless.
 
-- The stamp carries `verdict_id` (auditable review) + `content_hash` (a later hand-edit
-  invalidates it).
-- **Recommended (not yet built):** a TTL forcing re-review of long-lived auto-authored
-  artifacts, and a behavioral auditor that REVOKES a stamp when a landed skill misbehaves.
-  Track as follow-up; never treat a stamp as permanent truth.
+- The stamp carries `verdict_id` (auditable review trace) + `content_hash` (invalidated if edited afterwards).
+- Track follow-up verification to ensure modified skills behave correctly in production.
 
 ## Key Rules
 
 - **Human-invoked only.** Never run as a side-effect of another skill or a hook.
-- **Jury-at-landing, reject-default, no override.** The binding verdict is produced HERE
-  on the staged diff; never trust a producer-written verdict; the human picks among
-  survivors, never resurrects a KILL.
+- **Review at landing, reject-default, no override.** The binding verdict is produced HERE
+  on the staged diff; never trust a producer-written verdict; the user picks among
+  survivors, and cannot override a reviewer rejection.
 - **Cross-family or refuse.** `assert_cross_family` must not raise. A
   `deterministic:<verifier>` reviewer is valid per skill-governance.md.
 - **Corpus mutation goes through Write/Edit** (reviewable, attributable), not Bash. The
-  `corpus_write_guard` hook (if installed) additionally denies Bash corpus writes — it
-  does NOT gate Write/Edit, so it does not by itself stop this skill from editing the
-  corpus; the jury-at-landing + stamp discipline above is what governs Write/Edit
-  mutations (that discipline is procedure, not a hook-enforced mechanism).
+  `corpus_write_guard` hook (if installed) additionally denies Bash corpus writes.
 - **Back up before every mutation.** Reversible by construction.
 - **Only land staged patches.** Applies what producers staged in `.aris/meta/pending/`;
   invents nothing of its own.
 
 ## Review Tracing
 
-Save each landing-jury codex call's trace per
+Save each landing reviewer call's trace per
 [`review-tracing.md`](../shared-references/review-tracing.md) to
-`.aris/traces/meta-apply/<date>_run<NN>/` — the acquittal that landed a corpus change must
-be forensically recoverable.
+`.aris/traces/meta-apply/<date>_run<NN>/` — the review trace that authorized a corpus change must
+remain auditable.

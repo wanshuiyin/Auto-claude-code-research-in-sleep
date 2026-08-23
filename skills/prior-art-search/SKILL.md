@@ -4,6 +4,10 @@ description: "Search patent databases and academic literature for prior art rele
 argument-hint: "[invention-description-or-path]"
 allowed-tools: Bash(*), Read, Glob, Grep, WebSearch, WebFetch, Write
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Prior Art Search
 

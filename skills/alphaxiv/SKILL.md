@@ -4,6 +4,10 @@ description: Quick single-paper lookup via AlphaXiv LLM-optimized summaries with
 argument-hint: "[arxiv-id-or-url]"
 allowed-tools: Bash(*), Read, Write, Glob
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Any reviewer call (`mcp__codex__codex(-reply)`, `codex exec`, `mcp__llm-chat__chat`, `mcp__manual_review__*`, `mcp__oracle__*`, `mcp__gemini_review__*`) maps to a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # AlphaXiv Paper Lookup
 
@@ -53,6 +57,13 @@ Strip version suffixes (`v1`, `v2`, ...) for API calls. Store as `PAPER_ID`.
 
 Parse optional directives:
 - **`- depth: overview|abs|src`**: force a specific tier instead of cascading
+
+### Step 1.5 (Cursor): Prefer the alphaXiv MCP when available
+
+If the `user-alphaxiv` MCP namespace is available in this session (tools like
+`get_paper_content`, `answer_pdf_queries`, `discover_papers`), use it as **Tier 0**:
+`get_paper_content` for the summary, `answer_pdf_queries` for specific questions.
+Fall through to the curl tiers below only if the MCP is absent or errors.
 
 ### Step 2: Fetch AlphaXiv Overview (Tier 1 — Fastest)
 

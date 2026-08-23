@@ -4,6 +4,10 @@ description: Manage GPU compute jobs on the Qizhi (启智) platform using qzcli 
 argument-hint: "[login|avail|list|create|stop <job-id>|batch|status|watch]"
 allowed-tools: Bash(*), Read, Write
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Runs locally on Cursor built-in models with standard workspace tools.
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # qzcli — 启智平台任务管理
 
@@ -13,11 +17,7 @@ A kubectl/docker-style CLI for managing GPU compute jobs on the Qizhi (启智) p
 
 ## Environment contract
 
-Qizhi is the scheduler-cluster shape of `../shared-references/compute-env-contract.md`:
-images are built OFF-platform and referenced at submit time, so the declarative
-env spec + `env:<name>@<specHash>` ledger (`.aris/compute/qizhi.md`) is what
-keeps "which image has which stack" answerable. Run the kernel witness inside a
-submitted job (not on the login side) before trusting an image for a long run.
+Qizhi follows the scheduler-cluster model defined in `../shared-references/compute-env-contract.md`. Because images are built off-platform and referenced at submission, use the declarative env spec and ledger (`.aris/compute/qizhi.md`) to track image configurations and maintain reproducibility. Run the kernel witness inside a submitted job (not on the login side) before trusting an image for a long run.
 
 ## Installation
 
@@ -29,14 +29,16 @@ cd qzcli_tool && pip install -e .
 
 ### MCP Integration (optional)
 
-To use qzcli as an MCP tool directly from Claude Code or Codex:
+To configure qzcli as a stdio MCP server:
 
-```bash
-# Claude Code
-claude mcp add qzcli -- qzcli-mcp
-
-# Codex
-codex mcp add qzcli -- qzcli-mcp
+```json
+{
+  "mcpServers": {
+    "qzcli": {
+      "command": "qzcli-mcp"
+    }
+  }
+}
 ```
 
 ---

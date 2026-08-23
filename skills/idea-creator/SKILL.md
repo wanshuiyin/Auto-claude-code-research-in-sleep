@@ -2,8 +2,12 @@
 name: idea-creator
 description: Generate and rank research ideas given a broad direction. Use when user says "找idea", "brainstorm ideas", "generate research ideas", "what can we work on", or wants to explore a research area for publishable directions.
 argument-hint: "[research-direction]"
-allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
+allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent, Skill, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Research Idea Creator
 
@@ -19,35 +23,36 @@ Given a broad research direction from the user, systematically generate, validat
 - **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill pilots exceeding 3 hours. Collect partial results if available.
 - **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Default model for the Codex backend. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`). Manual backend uses whatever model the user chooses, **but it must be a non-Claude model** — the executor is Claude, so pasting into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_MODEL** — per the model table in `shared-references/reviewer-routing.md`: a Cursor built-in model from a **different family than the executor** (executor Claude → `gpt-5.6-sol-max-fast` default). Override with `— reviewer-model: <slug>`.
+- **REVIEWER_BACKEND = `cursor-subagent`** — Default: Cursor Task subagent (zero API). Legacy `— reviewer: codex | oracle-pro | manual` only on explicit user request with the matching MCP installed. See `shared-references/reviewer-routing.md`.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 
 > 💡 Override via argument, e.g., `/idea-creator "topic" — pilot budget: 4h per idea, 20h total`.
 
-## Reviewer Calling Convention
+## Reviewer Calling Convention (Cursor edition)
 
-When calling the reviewer for idea evaluation, branch on REVIEWER_BACKEND:
+**New review thread** (replaces `mcp__codex__codex`):
 
-**If REVIEWER_BACKEND = `codex`:**
-  Use `mcp__codex__codex` for new review threads.
-  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+```
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS idea reviewer",
+  model: REVIEWER_MODEL,          # cross-family, per reviewer-routing.md
+  prompt: "<the exact prompt/bundle instruction the phase specifies>"
+)
+```
 
-**If REVIEWER_BACKEND = `manual`:**
-  Use `mcp__manual_review__review` for new review threads with:
-    prompt: [exact same prompt that would go to Codex]
-    config: {"model_reasoning_effort": "xhigh"}
-  Save the returned `threadId`.
-  Use `mcp__manual_review__review_reply` for follow-up rounds with:
-    threadId: [saved manual-review threadId]
-    prompt: [follow-up prompt]
-    config: {"model_reasoning_effort": "xhigh"}
+Save the returned subagent id as `reviewer_agent_id` (this is the `threadId`).
 
-Content fidelity: the manual reviewer should see the same substantive bundle
-content Codex would read. If the manual UI supports file upload / attachment,
-reuse the same bundle file; otherwise paste the bundle contents inline because
-remote web UIs cannot read your local filesystem paths. Review tracing applies
-equally to both backends.
+**Follow-up round in the same thread** (replaces `mcp__codex__codex-reply`):
+
+```
+Task(resume: <reviewer_agent_id>, prompt: "<follow-up prompt>")
+```
+
+Content fidelity: pass the bundle **file path** — the reviewer subagent reads
+files itself (see `reviewer-independence.md`). Review tracing applies
+(`.aris/traces/idea-creator/...`, tool name `cursor-task-subagent`).
 
 ## Workflow
 
@@ -114,18 +119,15 @@ Map the research area to understand what exists and where the gaps are.
    - Scaling regimes that haven't been explored
    - Diagnostic questions that nobody has asked
 
-### Phase 1.5: Parallel lens fan-out (Tier-aware) — breadth, not verdict
+### Phase 1.5: Parallel lens fan-out (Tier-aware) — breadth, not evaluation
 
 Idea generation benefits from **breadth**: more independent analytic angles
-surface more candidate ideas. This skill fans out *candidate generation*
+surface more candidate ideas. This skill fans out candidate generation
 across analytic **lenses**, then funnels every candidate through the single
-Phase-4 cross-model jury. Fan-out widens the jury's input; it never makes the
-accept/reject decision. This follows
-[`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md);
-the verdict stays cross-model per
-[`shared-references/acceptance-gate.md`](../shared-references/acceptance-gate.md)
-(idea novelty/quality is a Type-B verdict — same-family generation is fine,
-same-family *acquittal* is not).
+Phase-4 cross-model reviewer. Parallel generation widens coverage; all quality
+and novelty evaluation remains strictly with the independent cross-model reviewer.
+This follows [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md)
+and [`shared-references/acceptance-gate.md`](../shared-references/acceptance-gate.md).
 
 **Lenses** (the structural-gap angles from Phase 1, step 3):
 `method-transfer` (works in domain A, untried in B) · `contradiction`
@@ -134,7 +136,7 @@ nobody tested) · `scaling-regime` (unexplored regime) · `diagnostic`
 (question nobody asked). This set is a floor, not a ceiling — add a
 domain-specific lens when the direction warrants.
 
-**Tier-portable dispatch** (the Phase-4 jury downstream is identical on every tier):
+**Tier-portable dispatch** (the Phase-4 review downstream is identical on every tier):
 - **Tier 1** (Workflow available): spawn one **Claude subagent per lens**;
   each runs the Phase-1 survey *through its lens* and the Phase-2 generation
   prompt *restricted to that lens*, returning candidates as structured output.
@@ -143,14 +145,13 @@ domain-specific lens when the direction warrants.
 - **Tier 3** (no spawning): enumerate the lenses sequentially in one pass —
   the original single-thread behavior, made explicit. No capability assumed.
 
-> **Why the lens shards are Claude, not Codex.** Generation is candidate
-> production, not a verdict, so same-family is safe — and Codex MCP is
-> **serial** (concurrent codex calls hang), so spending its scarce capacity
-> on parallel generation is both unsafe-to-parallelize and wasteful. Reserve
-> Codex for the one Phase-4 jury call. On Tier 1/2 the lens subagents are the
-> generators; the single Phase-2 codex brainstorm below still runs once as an
-> optional cross-model *seed* (a generator, not a judge), and its ideas join
-> the merged pool.
+> **Why the lens shards are same-family (`model: "inherit"`), not the reviewer
+> model.** Generation is candidate production, not an evaluation, so same-family is
+> safe. Reserve the cross-family reviewer subagent for the Phase-4 review
+> call. On Tier 1/2 the lens subagents (Cursor Task, parallel) are the
+> generators; the single Phase-2 cross-family brainstorm below still runs once
+> as an optional cross-model *seed* (a generator, not a judge), and its ideas
+> join the merged pool.
 
 **Per-shard output** (the generation-fan-out schema from
 [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md) — `shard_id` +
@@ -163,30 +164,28 @@ domain-specific lens when the direction warrants.
 
 **Merge + mechanical dedup**: union all lenses' ideas; cluster near-identical
 ideas by hypothesis (mechanical similarity only — **never** drop one for being
-"weak"; weakness is a Phase-4 verdict, not a merge step). The deduped union is
+"weak"; weakness is assessed in Phase 4, not during the merge step). The deduped union is
 the candidate set that enters Phase 3.
 
-### Phase 2: Idea Generation (brainstorm with external LLM)
+### Phase 2: Idea Generation (brainstorm with cross-family model)
 
-Use the selected reviewer backend (see Reviewer Calling Convention) for divergent thinking.
+Use the reviewer backend (see Reviewer Calling Convention) for divergent thinking.
 
-For the `codex` backend, **do not inline the full landscape + gaps prompt**
-once it stops being tiny. Write the full brainstorming request to
-`idea-stage/codex_brainstorm_bundle.md`, then keep the MCP prompt short:
+**Do not inline the full landscape + gaps prompt** once it stops being tiny.
+Write the full brainstorming request to `idea-stage/brainstorm_bundle.md`, then
+keep the subagent prompt short:
 
 ```
-mcp__codex__codex:
-  model: REVIEWER_MODEL
-  config: {"model_reasoning_effort": "xhigh"}
-  prompt: |
-    Read the idea-generation bundle at <absolute path to
-    idea-stage/codex_brainstorm_bundle.md> and follow all instructions in it.
+Task(
+  subagent_type: "generalPurpose",
+  description: "ARIS idea brainstorm (cross-family)",
+  model: REVIEWER_MODEL,
+  prompt: "Read the idea-generation bundle at <absolute path to
+           idea-stage/brainstorm_bundle.md> and follow all instructions in it."
+)
 ```
 
-*For `manual` backend:* use `mcp__manual_review__review` with the same bundle
-contents. If the manual-review UI supports attachments, attach
-`idea-stage/codex_brainstorm_bundle.md`; otherwise paste the bundle contents
-inline. Save the returned `threadId` for Phase 4 follow-up.
+Save the returned subagent id as `reviewer_agent_id` for the Phase 4 follow-up.
 
 Bundle contents:
 
@@ -222,17 +221,14 @@ Save the threadId for follow-up.
 
 ### Phase 3: Mechanical consolidation + objective feasibility gate
 
-> **This phase does NOT judge idea quality, novelty, or impact.** Those are
-> Type-B verdicts reserved for the Phase-4 cross-model jury (see
+> **This phase does NOT judge idea quality, novelty, or impact.** Quality and novelty
+> evaluations are reserved for the Phase-4 cross-model reviewer (see
 > [`shared-references/acceptance-gate.md`](../shared-references/acceptance-gate.md)).
-> Eliminating ideas here on a same-family novelty or impact call would
-> pre-filter the jury's input with same-family quality judgment — exactly
-> what [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md) forbids.
-> Phase 3 only (a) finishes the mechanical dedup from the fan-out merge and
+> Phase 3 only (a) finishes mechanical deduplication from the parallel generation merge and
 > (b) drops ideas that are **objectively** out of budget. Everything else
-> passes through **annotated, not eliminated** — the jury decides.
+> passes through **annotated, not eliminated** for reviewer evaluation.
 
-1. **Objective feasibility gate (Type-A — safe same-model)**: drop an idea
+1. **Objective feasibility gate (deterministic execution check / Type-A — safe same-model)**: drop an idea
    ONLY on a mechanical, budget-based fact:
    - estimated compute > 1 week of available GPU time, OR
    - requires a dataset that is provably unavailable.
@@ -241,42 +237,40 @@ Save the threadId for follow-up.
 
 2. **Novelty signal — ANNOTATE, do not eliminate**: for each surviving idea,
    do 2-3 targeted searches and attach a `prior_work` note (what looks
-   related, with links). This is *input for the jury*, not a filter. The
-   authoritative novelty verdict is Phase 4's `/novelty-check` (multi-source +
+   related, with links). This provides context for the reviewer, not a filter. The
+   authoritative novelty check is Phase 4's `/novelty-check` (multi-source +
    cross-model). Do **not** drop an idea here because it "might already be
    done."
 
 3. **Impact signal — ANNOTATE, do not eliminate**: attach a one-line
    `so_what` note (why the result would matter either way). Do **not** drop on
    a same-family "a reviewer wouldn't care" call — "would a reviewer care?" is
-   *precisely* the question the Phase-4 cross-model devil's-advocate asks.
-   Forward the note; let the jury rule.
+   *precisely* the question the Phase-4 cross-model reviewer asks.
+   Forward the note; let the reviewer evaluate.
 
 Every feasible, non-duplicate idea — carrying its `prior_work`, `so_what`, and
 `effort_note` annotations — proceeds to Phase 4. Typically only the
-budget-infeasible are dropped; the cross-model jury, not the executor, does
-the quality narrowing.
+budget-infeasible are dropped; the cross-model reviewer, not the executor, does
+the quality evaluation.
 
-### Phase 4: Deep Validation (the cross-model jury)
+### Phase 4: Deep Validation (cross-model review)
 
-**This is the jury.** It receives the FULL annotated candidate set from
-Phase 3 (Phase 3 no longer pre-narrows on quality), and the **cross-model
-reviewer — not the executor — does the quality/novelty narrowing.** Run the
+**This step performs the quality evaluation.** It receives the FULL annotated candidate set from
+Phase 3, and the **cross-model reviewer — not the executor — evaluates quality and novelty.** Run the
 steps in this order so the cheap cross-model triage gates the expensive
 per-idea novelty search:
 
 1. **Cross-model triage (devil's advocate) — ranks ALL candidates first.**
-   Use the selected reviewer backend (see Reviewer Calling Convention). For
-   `codex`, use `mcp__codex__codex-reply` (same thread). For `manual`, use
-   `mcp__manual_review__review_reply` with the saved threadId. For the
-   `codex` backend, write the full annotated candidate set to
-   `idea-stage/codex_triage_bundle.md` and send only a path-based follow-up:
+   Use the reviewer backend (see Reviewer Calling Convention): write the full
+   annotated candidate set to `idea-stage/triage_bundle.md` and send a
+   path-based follow-up **in the same reviewer thread**:
    ```
-   Read the idea-triage bundle at <absolute path to
-   idea-stage/codex_triage_bundle.md> and follow all instructions in it.
+   Task(resume: <reviewer_agent_id>, prompt: "Read the idea-triage bundle at
+        <absolute path to idea-stage/triage_bundle.md> and follow all
+        instructions in it.")
    ```
-   For the `manual` backend, attach that same bundle if possible; otherwise
-   paste its contents inline. Bundle contents:
+   (If the resume fails, launch a fresh reviewer subagent with the same bundle
+   plus a one-line note that this is a triage round.) Bundle contents:
    ```
    Here is the full annotated candidate set (deduped, budget-feasible):
    [write all candidates with their prior_work / so_what / effort_note notes]
@@ -288,14 +282,14 @@ per-idea novelty search:
    - How would you rank these for a top venue submission?
    - Which 2-3 would you actually work on, and why?
    ```
-   The reviewer's ranking is the authoritative quality verdict. The executor
+   The reviewer's ranking is the authoritative quality evaluation. The executor
    does not eliminate candidates on its own taste before or instead of this.
 
 2. **Novelty check — on the reviewer's top picks only.** Run the
    `/novelty-check` workflow (multi-source search + cross-model verification)
    on the ideas the triage ranked worth pursuing. This bounds the expensive
    multi-source search to the survivors instead of every candidate, while
-   keeping the novelty verdict cross-model.
+   keeping the novelty evaluation cross-model.
 
 3. **Select for pilots**: take the top 2-3 ideas that survive both the
    cross-model triage and the novelty check forward to Phase 5.
@@ -449,12 +443,12 @@ elif research-wiki/ exists AND [ -z "$WIKI_SCRIPT" ]:
 - The user provides a DIRECTION, not an idea. Your job is to generate the ideas.
 - Quantity first, quality second: brainstorm broadly, then filter ruthlessly.
 - A good negative result is just as publishable as a positive one. Prioritize ideas where the answer matters regardless of direction.
-- Don't fall in love with any idea before validating it. Be willing to kill ideas.
+- Don't fall in love with any idea before validating it. Be willing to drop or reject ideas.
 - Always estimate compute cost. An idea that needs 1000 GPU-hours is not actionable for most researchers.
 - "Apply X to Y" is the lowest form of research idea. Push for deeper questions.
 - Include eliminated ideas in the report — they save future time by documenting dead ends.
 - **If the user's direction is too broad (e.g., "NLP", "computer vision", "reinforcement learning"), STOP and ask them to narrow it.** A good direction is 1-2 sentences specifying the problem, domain, and constraint — e.g., "factorized gap in discrete diffusion LMs" or "sample efficiency of offline RL with image observations". Without sufficient specificity, generated ideas will be too vague to run experiments on.
-- **Anti-hallucination for cited papers.** When the landscape survey or novelty justification cites specific papers, every cited paper must pass pre-search verification (`verify_papers.py`, canonical name resolved per [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2; 3-layer arXiv / CrossRef / S2 fallback inside the helper itself). Policy D1 (primary + degraded-output fallback): if the helper is unresolved **or** its invocation fails, mark candidates `[UNVERIFIED]` and continue rather than dropping or guessing. Never fabricate arXiv IDs, DOIs, or titles from memory. Full protocol in [`shared-references/citation-discipline.md`](../shared-references/citation-discipline.md) § Pre-Search Verification Protocol.
+- **Anti-hallucination for cited papers.** When the landscape survey or novelty justification cites specific papers, every cited paper must pass pre-search verification (`verify_papers.py`, canonical name resolved per [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2; 3-layer arXiv / CrossRef / S2 fallback inside the helper itself). Primary Helper with Fallback Protocol (Policy D1): if the helper is unresolved **or** its invocation fails, mark candidates `[UNVERIFIED]` and continue rather than dropping or guessing. Never fabricate arXiv IDs, DOIs, or titles from memory. Full protocol in [`shared-references/citation-discipline.md`](../shared-references/citation-discipline.md) § Pre-Search Verification Protocol.
 
 ## Composing with Other Skills
 
@@ -470,4 +464,4 @@ implement                     → write code
 
 ## Review Tracing
 
-After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer subagent call (fresh `Task(...)` or `Task(resume: ...)`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).

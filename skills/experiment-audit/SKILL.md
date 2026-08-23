@@ -2,15 +2,18 @@
 name: experiment-audit
 description: "Audit experiment integrity before claiming results. Uses cross-model review (external reviewer backend) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
 argument-hint: "[experiment-dir-or-results-path]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Experiment Audit: Cross-Model Integrity Verification
 
 > 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It is
 > verdict-bearing — it judges experiment integrity. Re-running that verdict on a
-> timer adds no new signal, and a loop that accepts its own output to decide
-> when to stop crosses into self-acquittal (`acceptance-gate.md`). Schedule the
+> timer adds no new signal, and a loop cannot self-certify its own integrity (`acceptance-gate.md`). Schedule the
 > *external wait that precedes it* — experiments done → then audit **once**. See
 > [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
@@ -34,28 +37,26 @@ This follows `shared-references/reviewer-independence.md` and `shared-references
 
 ## Constants
 
-- **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
+- **REVIEWER_MODEL** — max-tier cross-family Cursor built-in model per `shared-references/reviewer-routing.md` (deep-audit tier).
+- **REVIEWER_BACKEND = `cursor-subagent`** — Default: Cursor Task subagent (zero API). Legacy `— reviewer: codex | oracle-pro | manual` only on explicit user request.
 
-## Reviewer Calling Convention
+## Reviewer Calling Convention (Cursor edition)
 
-When calling the reviewer, branch on REVIEWER_BACKEND:
+**New audit thread** (this is an audit-chain skill — always a **fresh** subagent, never resume across invocations):
 
-**If REVIEWER_BACKEND = `codex`:**
-  Use `mcp__codex__codex` for new review threads.
-  Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
+```
+Task(
+  subagent_type: "generalPurpose",
+  description: "experiment-audit (cross-family)",
+  model: REVIEWER_MODEL,
+  prompt: "<the exact audit prompt below>"
+)
+```
 
-**If REVIEWER_BACKEND = `manual`:**
-  Use `mcp__manual_review__review` for new review threads with:
-    prompt: [exact same prompt that would go to Codex]
-    config: {"model_reasoning_effort": "xhigh"}
-  Save the returned `threadId`.
-  Use `mcp__manual_review__review_reply` for follow-up rounds with:
-    threadId: [saved manual-review threadId]
-    prompt: [follow-up prompt]
-    config: {"model_reasoning_effort": "xhigh"}
+Save the returned subagent id for the trace. Follow-up within the same audit
+(if the auditor asks for clarification): `Task(resume: <id>, ...)`.
 
-Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
-Review tracing applies equally to both backends.
+Prompt fidelity: use the exact prompt text below. Review tracing applies.
 
 ## Workflow
 
@@ -77,29 +78,21 @@ Scan project directory for:
 
 ### Step 2: Send to Reviewer
 
-Based on the selected reviewer backend (see Reviewer Calling Convention), pass ONLY file paths and the audit checklist to the reviewer. The reviewer reads everything directly.
+Pass ONLY file paths and the audit checklist to the reviewer subagent. The reviewer reads everything directly with its own tools.
 
-For `codex`, call `mcp__codex__codex` with:
-- `model: gpt-5.6-sol`
-- `config: {"model_reasoning_effort": "ultra"}`
-- `sandbox: read-only`
-- `cwd: [project directory]`
-- `prompt: [the exact full prompt below]`
+Launch the reviewer per the Calling Convention above, with the working
+directory and the file paths from Step 1 embedded in the prompt. Instruct the
+reviewer: read-only — do not modify any file.
 
-For `manual`, call `mcp__manual_review__review` with:
-- `config: {"model_reasoning_effort": "xhigh"}`
-- `prompt: [the exact full prompt below]`
-
-Manual review cannot use Codex-only `model`, `sandbox`, or `cwd`; include the same file paths in the prompt so the user can inspect them.
-
-Use this exact prompt for both backends:
+Use this exact prompt:
 
 ```
-You are an experiment integrity auditor. Start from the assumption that the
-    evaluation is compromised somewhere — your job is to find where. Be
-    adversarial. Trust nothing the author tells you — verify everything
-    yourself. Read ALL files listed below and check for the following fraud
-    patterns.
+    You are an independent experiment integrity auditor. Rigorously verify
+    evaluation scripts, result files, ground-truth sources, and metric computations
+    against reported claims. Check for discrepancies, proxy references without
+    explicit labeling, uncalled evaluation functions, or score normalization
+    anomalies. Base all findings strictly on file-level evidence. Read ALL files
+    listed below and check for the following integrity patterns.
 
     Files to read:
     - Evaluation scripts: [list paths]
@@ -301,4 +294,4 @@ Motivated by community-reported integrity issues (#57, #131) where executor agen
 
 ## Review Tracing
 
-After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer subagent call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).

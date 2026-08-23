@@ -1,9 +1,13 @@
 ---
 name: result-to-claim
-description: Use when experiments complete to judge what claims the results support, what they don't, and what evidence is still missing. Codex MCP evaluates results against intended claims and routes to next action (pivot, supplement, or confirm). Use after experiments finish — before writing the paper or running ablations.
+description: Use when experiments complete to judge what claims the results support, what they don't, and what evidence is still missing. A cross-family reviewer subagent evaluates results against intended claims and routes to next action (pivot, supplement, or confirm). Use after experiments finish — before writing the paper or running ablations.
 argument-hint: "[experiment-description-or-wandb-run]"
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__codex__codex-reply
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Task
 ---
+> **ARIS-Cursor port** — runs on Cursor built-in models, zero API keys / zero CLI.
+> - `/x "args"` = load `skills/x/SKILL.md` from this pack and follow it; `$ARGUMENTS` = the user's instruction text.
+> - Cross-model review uses a **Cursor Task subagent** per [reviewer-routing.md](../shared-references/reviewer-routing.md) — cross-family built-in model; `threadId` / resume = the subagent id (`Task(resume: ...)`).
+> - `allowed-tools` frontmatter is advisory on Cursor.
 
 # Result-to-Claim Gate
 
@@ -15,7 +19,7 @@ allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, mcp__codex__codex, mcp__c
 > run this gate **once**. See
 > [`shared-references/external-cadence.md`](../shared-references/external-cadence.md).
 
-Experiments produce numbers; this gate decides what those numbers *mean*. Collect results from available sources, get a Codex judgment, then auto-route based on the verdict.
+Experiments produce numbers; this gate decides what those numbers *mean*. Collect results from available sources, get a reviewer judgment, then auto-route based on the verdict.
 
 ## Context: $ARGUMENTS
 
@@ -43,11 +47,11 @@ Assemble the key information:
 - The intended claim these experiments were designed to test
 - Any known confounds or caveats
 
-### Step 1.5: Deterministic evidence pre-check (before spending a Codex call)
+### Step 1.5: Deterministic evidence pre-check (before spending a reviewer call)
 
 For every claim that cites a specific number + a source file, verify the evidence
 *exists* mechanically — no model call — to catch **hallucinated evidence** before
-the jury runs (see [`shared-references/evidence-precheck.md`](../shared-references/evidence-precheck.md)).
+the independent reviewer runs (see [`shared-references/evidence-precheck.md`](../shared-references/evidence-precheck.md)).
 
 **1. Build the claims list.** From the cited numbers and their result files, write
 `[{"id", "value", "source"}, ...]` to `.aris/claims.json` (`source` is the result
@@ -82,11 +86,11 @@ if [ -n "$EVIDENCE_CHECK" ]; then
         cat .aris/evidence_precheck.json
     else
         echo "WARN: evidence_check produced no valid output (see .aris/evidence_precheck.err);" >&2
-        echo "      pre-check skipped (Policy B); the Codex jury still runs." >&2
+        echo "      pre-check skipped (Policy B); the independent reviewer still runs." >&2
     fi
 else
     echo "WARN: evidence_check.py not resolved at .aris/tools/, tools/, \$ARIS_REPO/tools/, or via ~/.aris/repo." >&2
-    echo "      Pre-check skipped (Policy B); the Codex jury still runs. Fix: rerun" >&2
+    echo "      Pre-check skipped (Policy B); the independent reviewer still runs. Fix: rerun" >&2
     echo "      bash tools/install_aris.sh, export ARIS_REPO, or copy the helper to tools/." >&2
 fi
 ```
@@ -96,28 +100,29 @@ with `status ∈ {verified, value_not_found, path_missing, unparseable}`.
 
 **3. Act on the statuses.** Any claim returned `value_not_found` or `path_missing` is
 **hallucinated evidence** — mark it `claim_supported: no` with
-`integrity_status: evidence_not_found` immediately; do NOT spend a Codex call defending a
+`integrity_status: evidence_not_found` immediately; do NOT spend a model review call defending a
 number that isn't in the data. `unparseable` claims (no usable value/source) just go to
-the jury normally.
+the review normally.
 
 **4. Carry the per-claim status into Step 2.** Feed a small
 `evidence pre-check: <id> → verified | value_not_found | path_missing | unparseable`
-table (from `.aris/evidence_precheck.json`) into the Step-2 Codex prompt so the jury knows
+table (from `.aris/evidence_precheck.json`) into the Step-2 review prompt so the reviewer knows
 which claims have real evidence to read. If the pre-check was skipped (helper unresolved),
 say so in that slot rather than omitting it.
 
 `verified` here means only that the cited evidence **exists** — whether it
-**supports** the claim is still the Codex jury's call in Step 2 (a deterministic
-gate DRIVES, it does not ACQUIT).
+**supports** the claim is still the reviewer's call in Step 2 (a deterministic
+gate verifies existence, while semantic evaluation requires review).
 
-### Step 2: Codex Judgment
+### Step 2: Cross-Model Evaluation
 
-Send the collected results to Codex for objective evaluation. Include ONLY claims that passed the Step 1.5 pre-check — claims already terminally rejected (`evidence_not_found`) keep their deterministic verdict and are NOT re-litigated here:
+Send the collected results to the cross-family reviewer subagent for objective evaluation. Include ONLY claims that passed the Step 1.5 pre-check — claims already terminally rejected (`evidence_not_found`) keep their deterministic verdict and are NOT re-litigated here:
 
 ```
-mcp__codex__codex:
-  model: gpt-5.6-sol
-  config: {"model_reasoning_effort": "ultra"}
+Task(
+  subagent_type: "generalPurpose",
+  description: "result-to-claim gate (cross-family)",
+  model: REVIEWER_MODEL,   # max-tier cross-family per reviewer-routing.md
   prompt: |
     RESULT-TO-CLAIM EVALUATION
 
@@ -159,7 +164,7 @@ mcp__codex__codex:
 
 ### Step 3: Parse and Normalize
 
-Extract structured fields from Codex response:
+Extract structured fields from reviewer response:
 
 ```markdown
 - claim_supported: yes | partial | no
@@ -183,7 +188,7 @@ if EXPERIMENT_AUDIT.json exists:
 
     if integrity_status == "fail":
         append to verdict: "[INTEGRITY CONCERN] — audit found issues, see EXPERIMENT_AUDIT.md"
-        downgrade confidence to "low" regardless of Codex judgment
+        downgrade confidence to "low" regardless of reviewer judgment
 
     if integrity_status == "warn":
         append to verdict: "[INTEGRITY: WARN] — audit flagged potential issues"
@@ -229,7 +234,7 @@ chain documented in
 (Variant B — warn-and-skip for caller skills). The verdict / idea-outcome
 page edits below run on raw markdown and don't need the helper, but edges,
 query-pack rebuild, and the log line do. **This skill never edits a claim's
-`status` field and never creates a claim node** — claims are born (and their
+`status` field and never creates a claim node** — claims are created (and their
 proof `status` set) by `/proof-checker`; here we only attach experiment edges.
 
 ```bash
@@ -252,7 +257,7 @@ if research-wiki/ exists:
     # 1. Create/refresh the experiment node FIRST (verdict OWNER → --update-on-exist so
     #    a re-judge overwrites the stale verdict). The supports/invalidates edges in #2
     #    point FROM exp:<id>, and add_edge does NOT verify node existence — so GATE those
-    #    edges on the experiment node having been born (EXP_NODE_OK), else they'd dangle
+    #    edges on the experiment node having been created (EXP_NODE_OK), else they'd dangle
     #    (the exact bug this closes). On failure: warn, skip the wiki edges, still report.
     EXP_NODE_OK=0
     if [ -n "$WIKI_SCRIPT" ]; then
@@ -268,12 +273,12 @@ if research-wiki/ exists:
       fi
     fi
 
-    # 2. Record empirical support as EDGES ONLY — and ONLY when the exp node was born
+    # 2. Record empirical support as EDGES ONLY — and ONLY when the exp node was created
     #    ([ "$EXP_NODE_OK" = 1 ]), so no edge dangles off a missing node. Never edit the
     #    claim page's `status`: that is the PROOF axis (verified / refuted / unproven /
     #    sound-modulo-imports / drafted / retracted), owned by /proof-checker (the claim
-    #    birth point) — "supported"/"invalidated" are NOT valid claim statuses. The claim
-    #    target should ALREADY be born by /proof-checker; add_edge does not verify it.
+    #    creation point) — "supported"/"invalidated" are NOT valid claim statuses. The claim
+    #    target should ALREADY be created by /proof-checker; add_edge does not verify it.
     for each claim resolved by this verdict (only if [ "$EXP_NODE_OK" = 1 ]):
         if verdict == "yes":
             python3 "$WIKI_SCRIPT" add_edge research-wiki/ --from "exp:<id>" --to "claim:<cid>" --type supports --evidence "<metric>"
@@ -299,13 +304,13 @@ if research-wiki/ exists:
 
 ## Rules
 
-- **Codex is the judge, not CC.** CC collects evidence and routes; Codex evaluates. This prevents post-hoc rationalization.
-- Do not inflate claims beyond what the data supports. If Codex says "partial", do not round up to "yes".
+- **The cross-family reviewer is the judge, not the executor.** The executor collects evidence and routes; the reviewer subagent evaluates. This prevents post-hoc rationalization.
+- Do not inflate claims beyond what the data supports. If the reviewer says "partial", do not round up to "yes".
 - A single positive result on one dataset does not support a general claim. Be honest about scope.
 - If `confidence` is low, treat the judgment as inconclusive and add experiments rather than committing to a claim.
-- **Fail closed if the reviewer is unavailable.** If the Codex call fails, first walk the capability fallback chain in `shared-references/reviewer-routing.md` (`gpt-5.6-sol`+`ultra` → `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh`, capability errors only). If no allowed pair succeeds: write `CLAIMS_FROM_RESULTS.md` containing ONLY the first line `verdict: REVIEW_UNAVAILABLE` (a machine-checkable gate for pipeline callers), record the same in findings.md, and STOP — CC never substitutes its own claim judgment (a loop can drive, never acquit; `acceptance-gate.md`). Downstream steps (wiki `add_experiment` edges, ablation-planner, paper claims) must not consume a run without a Codex verdict. Exception: the deterministic evidence pre-check (Step 1.5) may still terminally mark a claim `claim_supported: no` for hallucinated evidence — a deterministic rejection needs no reviewer; only SUPPORTIVE or ambiguous outcomes require one.
+- **Fail closed if the reviewer is unavailable.** If the reviewer subagent call fails, retry once; on repeated failure: write `CLAIMS_FROM_RESULTS.md` containing ONLY the first line `verdict: REVIEW_UNAVAILABLE` (a machine-checkable gate for pipeline callers), record the same in findings.md, and STOP — the executor never substitutes its own unverified claim judgment (`acceptance-gate.md`). Downstream steps (wiki `add_experiment` edges, ablation-planner, paper claims) must not consume a run without a cross-family verdict. Exception: the deterministic evidence pre-check (Step 1.5) may still terminally mark a claim `claim_supported: no` for hallucinated evidence — a deterministic rejection needs no reviewer; only SUPPORTIVE or ambiguous outcomes require one.
 - Always record the verdict and reasoning in findings.md, regardless of outcome.
 
 ## Review Tracing
 
-After each `mcp__codex__codex` or `mcp__codex__codex-reply` reviewer call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+After each reviewer subagent call, save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
