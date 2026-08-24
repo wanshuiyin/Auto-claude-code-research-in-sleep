@@ -322,6 +322,8 @@ here first.
 | Helper (canonical name) | Policy | Rationale |
 |---|---|---|
 | `verify_paper_audits.sh` | A (gate) | Exit code is the source of truth for submission readiness |
+| `copilot_native_evidence.py` | A (gate) | Binds `/auto-review-loop` to the current Copilot root session and revalidates the native `rubber-duck` lifecycle, actual model pair, and raw response; without verified evidence, a native verdict cannot stop the loop |
+| `review_gate.py` | A (gate) | Authoritative stop/continue/escalate transition table for `/auto-review-loop`; missing helper means the loop cannot safely decide termination |
 | `save_trace.sh` | C (forensic) | Trace artifacts are load-bearing for audit traceability and reviewer-independence audit |
 | `research_wiki.py ingest_paper` (caller skills) | B (side-effect) | Primary output (idea ranking, paper summary) is delivered without wiki ingestion |
 | `research_wiki.py` (in `/research-wiki` itself) | A (gate) | The SKILL is the wiki tool; missing helper means no functionality (Variant A in `wiki-helper-resolution.md`) |

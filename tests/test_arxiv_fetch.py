@@ -220,6 +220,30 @@ def test_user_agent_no_contact_when_env_unset(monkeypatch):
 _FAKE_PDF = b"%PDF-1.4\n" + b"x" * 20_000  # > _MIN_PDF_BYTES
 
 
+def test_download_rejects_large_non_pdf_response(monkeypatch, tmp_path):
+    mod = load_module()
+    html_error = b"<!doctype html><title>Service unavailable</title>" + b"x" * 20_000
+    _patch_urlopen(monkeypatch, mod, [html_error])
+
+    with pytest.raises(ValueError, match="not a PDF"):
+        mod.download("2509.14933", output_dir=str(tmp_path))
+
+    assert not (tmp_path / "2509.14933.pdf").exists()
+
+
+def test_download_rejects_cached_non_pdf_response(tmp_path):
+    mod = load_module()
+    cached = tmp_path / "2509.14933.pdf"
+    html_error = b"<!doctype html><title>Service unavailable</title>" + b"x" * 20_000
+    cached.write_bytes(html_error)
+
+    with pytest.raises(ValueError, match="not a PDF"):
+        mod.download("2509.14933", output_dir=str(tmp_path))
+
+    # The poisoned entry is evicted so the next call re-downloads.
+    assert not cached.exists()
+
+
 def test_download_retries_on_429_then_succeeds(monkeypatch, tmp_path):
     mod = load_module()
     calls = _patch_urlopen(monkeypatch, mod, [_http_error_429(), _FAKE_PDF])

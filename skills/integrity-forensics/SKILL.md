@@ -1,6 +1,6 @@
 ---
 name: integrity-forensics
-description: "Run the Anti-Autoresearch integrity-forensics sweep (span-anchored evidence ledger → GPT auditors propose findings → deterministic rules-only adjudicator) against a paper via a SHA-pinned thin launcher — then convert the verdict into a typed policy gate (BLOCK/WARN/NO_NEW_BLOCKER) and an append-only obligations ledger. Use when user says \"integrity forensics\", \"forensic audit this paper\", \"投稿前自查诚信\", \"审这篇论文的诚信\", or says \"anti-autoresearch\" when the upstream repo's own skills are not installed. Also invoked by /paper-writing (submission self-forensics, default ON), /peer-review (forensic appendix), /resubmit-pipeline."
+description: "Run the Anti-Autoresearch integrity-forensics sweep (span-anchored evidence ledger → GPT auditors propose findings → a rules-only reporter that lists every proposal with what the auditor said about it) against a paper via a SHA-pinned thin launcher — then convert the verdict into a typed policy gate (BLOCK/WARN/NO_NEW_BLOCKER) and an append-only obligations ledger. Use when user says \"integrity forensics\", \"forensic audit this paper\", \"投稿前自查诚信\", \"审这篇论文的诚信\", or says \"anti-autoresearch\" when the upstream repo's own skills are not installed. Also invoked by /paper-writing (submission self-forensics, default ON), /peer-review (forensic appendix), /resubmit-pipeline."
 argument-hint: "[paper-dir | pdf | arxiv-id]"
 allowed-tools: Bash(*), Read, Write, Grep, Glob, mcp__codex__codex
 ---
@@ -12,7 +12,7 @@ Audit target: **$ARGUMENTS**
 > **What this is.** ARIS generates papers; [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch)
 > is its outward-pointed dual — reviewer-side integrity forensics (46 patterns
 > across 8 families, deterministic GRIM/GRIMMER/statcheck core, span-anchored
-> claims, a rules-only adjudicator that owns the verdict). This skill is a
+> claims, a rules-only reporter that summarizes rather than adjudicates). This skill is a
 > **thin launcher**: it pins an upstream commit, validates the pin with the
 > upstream eval gate, delegates execution unchanged, and post-processes the
 > verdict into ARIS's policy vocabulary. It vendors nothing and forks nothing.
@@ -25,10 +25,15 @@ Audit target: **$ARGUMENTS**
 ## Constants
 
 - **ANTI_AR_REPO = `https://github.com/wanshuiyin/Anti-Autoresearch.git`**
-- **ANTI_AR_COMMIT = `d8f510c49c29ccb5f98ecb1f8e397a7a27eb97c4`** — the SHA-pin.
+- **ANTI_AR_COMMIT = `b47af6f983b38347b6d2110379e266400597cf66`** — the SHA-pin.
   The launcher NEVER tracks upstream HEAD; bumping this constant is a reviewed
   change (see Pin-bump checklist).
-- **CLONE_DIR = `~/.claude/anti-autoresearch`** — the pinned working copy.
+- **CLONE_DIR = `~/.aris/anti-autoresearch`** — the pinned working copy. Host-neutral
+  on purpose: ARIS also runs on DeepSeek Harness, Codex CLI, Cursor, Trae,
+  Antigravity and Copilot CLI, where `~/.claude/` would name an installation the
+  user does not have. An older clone at `~/.claude/anti-autoresearch` is unused;
+  move it and its `.aris_eval_ok_*` receipt only to keep an offline
+  deterministic-only run working, otherwise delete it whenever convenient.
 - **NO REVIEWER KNOBS.** This launcher exposes no reviewer model/effort
   parameters and never maps ARIS `— effort:` onto upstream settings. The
   pinned upstream runs exactly what it pins (`gpt-5.6-sol` + `xhigh`, its own
@@ -43,9 +48,10 @@ Audit target: **$ARGUMENTS**
 ## Step 0 — Bootstrap the pin (idempotent)
 
 ```bash
-CLONE_DIR="$HOME/.claude/anti-autoresearch"
-ANTI_AR_COMMIT="d8f510c49c29ccb5f98ecb1f8e397a7a27eb97c4"
+CLONE_DIR="$HOME/.aris/anti-autoresearch"
+ANTI_AR_COMMIT="b47af6f983b38347b6d2110379e266400597cf66"
 
+mkdir -p "$HOME/.aris"
 if [ ! -d "$CLONE_DIR/.git" ]; then
     git clone --no-checkout https://github.com/wanshuiyin/Anti-Autoresearch.git "$CLONE_DIR"
 fi
@@ -96,7 +102,7 @@ end on the target. Two wrapper rules — the ONLY things this launcher adds:
    serial execution, and its own model pins — do not alter them).
 
 Everything else — the evidence ledger, coverage.json state machine, the nine
-auditor dimensions, the refutation pass, the deterministic adjudication — is
+auditor dimensions, the refutation pass, the deterministic summary — is
 upstream's contract. **Never rewrite, soften, or re-map its outputs**
 (`report.json` + `REPORT.md`, verdict ∈ CLEAN_GIVEN_EVIDENCE / SOFT_FLAGS /
 HARD_FLAGS / REVIEW_UNAVAILABLE). The observability level (L0/L1/L2) is
@@ -117,9 +123,9 @@ The gate translates the verdict into policy WITHOUT re-labeling it:
 
 | upstream verdict | policy |
 |---|---|
-| `HARD_FLAGS` | **BLOCK** |
+| `HARD_FLAGS` | **BLOCK** — an auditor proposed something critical and it is on the table for you to read; never "the machine found fraud" |
 | `REVIEW_UNAVAILABLE` | **BLOCK** — an incomplete sweep cannot wave a paper through |
-| `SOFT_FLAGS` | **WARN** — human disposition |
+| `SOFT_FLAGS` | **WARN** — human disposition. Read the never-ran list too: the upstream verdict folds incompleteness in only when it would otherwise be clean, so a WARN can sit on top of a sweep where verdict-bearing dimensions never ran. `evaluate` and `fresh` both print those dimensions |
 | `CLEAN_GIVEN_EVIDENCE` | **NO_NEW_BLOCKER** — *never* called PASS or accepted: it means "no flag found in the evidence at hand", not an acquittal |
 | anything else | **BLOCK** (fail closed) |
 
@@ -152,7 +158,15 @@ distinction is informational, not a loophole.
 
 ## Step 3 — Fix what it found (obligations, not a polish loop)
 
-Every OPEN obligation gets FIXED — through the right door:
+Every OPEN obligation gets DISPOSITIONED — fixed, or explicitly waived. Upstream now
+reports every proposal an auditor made rather than deciding which ones do not count, so
+expect more obligations than a pre-2026-08 sweep opened, and expect some of them to be
+proposals you disagree with. **`waive` is a first-class, expected outcome** — "a model
+proposed this and I, the human, judge it wrong" is a normal disposition here, not a last
+resort. Weigh each one against the report's columns: `Anchored`, `Observability`,
+`FP-risk`, `Surface`, `Ext-check`.
+
+For the ones that are real, use the right door:
 
 | Finding family | Repair route |
 |---|---|
@@ -212,9 +226,10 @@ verdict — decides whether the gate opens.
 - **Protocol** (instruction-graded, deliberately): that the sweep actually ran
   at the pinned clone against this paper. The gate raises the bar —
   structural floor (a report must name its adjudicator and carry a coverage
-  map), stale-report mtime guard — but true content-binding needs upstream to
-  stamp a paper fingerprint into `report.json` (tracked as an upstream
-  issue). Likewise `human:` / `checker:` / `cross-family-review:` labels are
+  map), stale-report mtime guard — and that is where it stops. There is no
+  cryptographic binding between the report and the paper, deliberately: this is
+  a research-workflow gate, not a provenance system, and the honest statement is
+  that a determined executor can hand it a stale report. Likewise `human:` / `checker:` / `cross-family-review:` labels are
   accountability, not authentication: a false label is an explicit,
   permanent false record.
 - **Out of scope**: a party rewriting the `.aris/` artifacts consistently with
@@ -232,6 +247,20 @@ verdict — decides whether the gate opens.
 3. Old findings/obligations stay valid (fingerprints are span/hash-based, not
    id-based) — but findings produced by an older adjudicator must be
    **re-audited, not re-adjudicated** (upstream's own migration rule).
+4. Tell users when a bump changes how much they must disposition. `fresh`
+   rejects every stored `gate.json` at the old pin with `PIN_MISMATCH`, so a
+   bump already forces a re-sweep for everyone — bundle upstream changes behind
+   ONE bump rather than two, or the re-sweep cost is paid twice.
+
+> **2026-08 bump (`98a75fc`) — expect more open obligations.** Upstream moved
+> from adjudicating proposals to reporting them: findings its FP-risk,
+> observability, surface and needs-external-check gates used to demote to `info`
+> now arrive above info, so they open obligations. Nothing got worse in the
+> paper; more of what the auditors said is now visible. Waiving a proposal you
+> judge wrong is the expected disposition, and the report's per-finding columns
+> (`Anchored`, `Observability`, `FP-risk`, `Surface`, `Ext-check`) are what you
+> weigh. Upstream also deleted its report self-binding hashes in the same window
+> — nothing here ever consumed them.
 
 ## Codex-native note (mirror)
 
@@ -239,7 +268,9 @@ Upstream ships no Codex-native pack; its auditor skills are Claude-Code
 contracts. A Codex-native session may run upstream's **deterministic-only
 mode** (numeric core + adjudicator with an all-`review_unavailable` coverage
 map — honestly scoped: it can flag, it can never say CLEAN). The full
-nine-dimension sweep requires a Claude Code session. Translating upstream's
+nine-dimension sweep requires a host that can execute upstream's Claude-Code
+contracts unchanged — Claude Code and the `dsh-aris` bundle on DeepSeek Harness
+are the known ones. Translating upstream's
 reviewer calls into `spawn_agent` on the fly is REWRITING an upstream
 contract — forbidden.
 

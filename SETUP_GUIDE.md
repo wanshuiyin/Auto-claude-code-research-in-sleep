@@ -41,6 +41,8 @@ claude mcp list | grep codex
 # should show: codex: codex mcp-server - ✓ Connected
 ```
 
+> **⚠️ Important**: After registering or modifying any MCP server, you **must restart Claude Code** for the change to take effect. MCP configurations are loaded at startup. For additional MCP servers needed by alternative model combinations, see [Step 3.2](#32-register-mcp-servers-optional).
+
 ### 1.3 LaTeX Environment (Optional)
 
 Required for Workflow 3 (paper writing), providing `latexmk` and `pdfinfo`:
@@ -66,7 +68,9 @@ touch CLAUDE.md
 - `git init` — some skills need git to locate the project root
 - `CLAUDE.md` — Claude Code's project config file; the install script will write ARIS info into it
 
-## Step 3: Install Skills
+## Step 3: Install Skills and Configure MCP
+
+### 3.1 Install Skills
 
 Install ARIS skills into your project via symlinks (the recommended project-local install method):
 
@@ -111,6 +115,23 @@ cd ~/aris_repo && git pull
 cd ~/your-paper-project
 bash ~/aris_repo/tools/install_aris.sh
 ```
+
+### 3.2 Register MCP Servers (Optional)
+
+Depending on your model combination, you may need to register additional MCP servers beyond the default `codex` registered in Step 1.2. ARIS ships the following MCP servers:
+
+| MCP Server | Registered Into | Required When | Registration Method |
+|---|---|---|---|
+| `codex` | Claude Code | Default setup (Claude + GPT review) | `claude mcp add codex -s user -- codex mcp-server` (already done in Step 1.2) |
+| `claude-review` | Codex CLI | Using Codex as executor with Claude as reviewer | `codex mcp add claude-review -- python3 ~/.codex/mcp-servers/claude-review/server.py` (see `mcp-servers/claude-review/README.md`) |
+| `gemini-review` | Codex CLI | Using Codex as executor with Gemini as reviewer | `codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api -- python3 ~/.codex/mcp-servers/gemini-review/server.py` (see `mcp-servers/gemini-review/README.md`) |
+| `llm-chat` | Claude Code | Using arbitrary OpenAI-compatible API as reviewer | `claude mcp add llm-chat -s user -- python3 /path/to/aris_repo/mcp-servers/llm-chat/server.py` (see `docs/LLM_API_MIX_MATCH_GUIDE.md`) |
+| `minimax-chat` | Claude Code | Using MiniMax as reviewer (no OpenAI key needed) | See `docs/MINIMAX_MCP_GUIDE.md` |
+| `manual-review` | Claude Code | Human-in-the-loop manual review | `claude mcp add manual-review -s user -- python3 /path/to/aris_repo/mcp-servers/manual-review/server.py` |
+| `feishu-bridge` | — (standalone HTTP service) | Receiving notifications via Feishu/飞书 | See `mcp-servers/feishu-bridge/` |
+| `codex-image2` | Claude Code | Enhanced image processing in Codex | See `mcp-servers/codex-image2/` |
+
+> **⚠️ Important**: After registering or modifying any MCP server, you **must restart Claude Code** for the changes to take effect. MCP configurations are loaded at startup. Correct order: register all needed MCP servers → restart Claude Code → start using ARIS workflows.
 
 ## Step 4: Configure GPU Server
 
@@ -171,6 +192,8 @@ Should output Python version, PyTorch version, and GPU count.
 
 Research Wiki is ARIS's core knowledge base — it automatically accumulates papers you've read, ideas you've generated, and experiments you've run. Other skills write to it automatically; you don't need to maintain it manually.
 
+> **⚠️ If you haven't restarted Claude Code after MCP registration in Step 3.2, do it now** — MCP servers are loaded at startup and won't be available without a restart.
+
 Open Claude Code in your research project directory and enter:
 
 ```
@@ -194,7 +217,16 @@ research-wiki/
 
 ## Step 6: Verify
 
-Restart Claude Code and test in your research project directory:
+Restart Claude Code and test in your research project directory.
+
+**In your terminal:** verify MCP servers are connected:
+
+```bash
+claude mcp list          # all Claude Code MCP servers should show ✓ Connected
+codex mcp list           # Codex CLI MCP servers (if applicable)
+```
+
+**In Claude Code:**
 
 **1. Test MCP connectivity** — enter in Claude Code:
 

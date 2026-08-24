@@ -9,7 +9,12 @@ Save full prompt/response pairs for every cross-model reviewer call, enabling:
 
 ## When to Trace
 
-After **every** `mcp__codex__codex` or `mcp__codex__codex-reply` call that serves a reviewer/critique function. This includes review scoring, experiment auditing, claim verification, idea critique, and patch gating.
+After **every** native `task(agent_type=rubber-duck)` (`copilot-native`),
+`mcp__codex__codex`, `mcp__codex__codex-reply`, compatibility
+`copilot --agent`, `mcp__manual_review__review`, or
+`mcp__manual_review__review_reply` call that serves a reviewer/critique
+function. This includes review scoring, experiment auditing, claim
+verification, idea critique, and patch gating.
 
 Do NOT trace: purely informational LLM calls (e.g., `codex exec` for code generation that is not a review).
 
@@ -31,7 +36,9 @@ Do NOT trace: purely informational LLM calls (e.g., `codex exec` for code genera
 
 ## How to Trace
 
-After each reviewer MCP call — including every FAILED attempt in a capability-fallback chain (one trace entry per attempt: `--status error` + `--fallback-reason`; the successful entry records the RESOLVED pair) — save the trace using `save_trace.sh`,
+After each reviewer call — including every FAILED attempt in a
+capability-fallback chain (one trace entry per attempt: `--status error` +
+`--fallback-reason`; the successful entry records the RESOLVED pair) — save the trace using `save_trace.sh`,
 resolved through the canonical helper chain (see
 `integration-contract.md` §2 — failure policy C, "forensic helper").
 The full invocation:
@@ -59,10 +66,22 @@ if [ -n "$TRACE_HELPER" ]; then
     --fallback-reason "<why the capability chain stepped down; empty when it didn't>" \
     --status "<ok | fallback_used | error>" \
     --thread-id "<threadId from response>" \
+    --backend "<codex | copilot-native | copilot | manual | oracle-pro | agy>" \
+    --tool "<mcp__codex__codex | task(agent_type=rubber-duck) | copilot --agent | ...>" \
+    --executor "<claude-code | copilot | codex>" \
+    --executor-model "<from --executor-model; omit this flag if not set>" \
+    --executor-family "<legacy consistency hint; helper re-derives from executor-model>" \
+    --reviewer-profile "<profile name for copilot backend; empty for others>" \
+    --reviewer-family "<legacy consistency hint; helper re-derives from reviewer model>" \
+    --requested-reviewer-model "<model originally requested>" \
+    --reported-reviewer-model "<model the backend reports it used>" \
+    --memory-hash "<sha256 of memory artifact if available; empty otherwise>" \
+    --native-evidence "<required for copilot-native; omit otherwise>" \
+    --independence-verified "<legacy consistency hint; helper ignores and re-derives>" \
     --prompt "<full prompt as sent>" \
     --response "<full response content>"
 else
-  # Required fallback: the resolver exhausted all three layers and
+  # Required fallback: the resolver exhausted all four layers and
   # save_trace.sh is unreachable, but trace artifacts are still
   # required (unless `--- trace: off` was explicitly set on this
   # SKILL invocation). Write the four files below directly per the
@@ -79,10 +98,39 @@ else
 fi
 ```
 
-The helper, when present, handles directory creation, run numbering,
-and file writing. The fallback branch above documents what to do
+The helper, when present, handles directory creation, run numbering, file
+writing, and provenance classification. For a successful `copilot-native`
+call, it first revalidates `--native-evidence`, overrides caller model/response
+fields with the host-bound values, and records the evidence ID/path; missing or
+invalid evidence is an error. A native dispatch that failed before evidence
+could exist may be traced only with `--status error` and no
+`--native-evidence`; that record has no verified model provenance or
+independence and can never enter the stop gate. For other backends it derives
+families from model strings
+(`reported_reviewer_model`, otherwise `requested_reviewer_model`, otherwise
+`model`) and ignores contradictory caller family/independence claims. It also
+records that `--executor-model` is `caller-declared`; a different family pair is
+`family_relation: "different"` but remains `independence_verified: "unverified"`.
+Validated native evidence instead records both sources as
+`host-session-event`, `family_relation: "different"`, and
+`independence_verified: true`.
+
+The native-specific required pair for a completed review is:
+
+```bash
+bash "$TRACE_HELPER" ... --backend copilot-native \
+  --native-evidence "review-stage/COPILOT_NATIVE_${RUN_ID}_ROUND_${ROUND}_REVIEW.evidence.json"
+```
+
+Omit `--native-evidence` for every other backend.
+For a failed native dispatch, instead use `--backend copilot-native --status
+error --fallback-reason "<host error>"` without evidence, then write a separate
+trace for any fallback backend that actually reviews the artifacts.
+The fallback branch above documents what to do
 when the helper is unreachable — the trace is forensic evidence, so
-"helper missing" never means "skip the trace."
+"helper missing" never means "skip the trace." A direct fallback writer MUST
+apply the same model-string derivation and evidence-source rules; it may not
+copy caller family labels or promote caller-declared identity to verification.
 
 ## File Schemas
 
@@ -93,9 +141,37 @@ when the helper is unreachable — the trace is forensic evidence, so
   "run_id": "2026-04-15_run01",
   "started_at": "2026-04-15T14:30:00+08:00",
   "executor": "claude-code",
+  "executor_model": "claude-sonnet-4-5",
+  "executor_model_source": "caller-declared",
+  "executor_family": "anthropic",
+  "reviewer_model_source": "requested",
+  "reviewer_family": "openai",
+  "reviewer_backend": "codex",
+  "native_evidence_id": null,
+  "native_evidence_path": null,
+  "family_relation": "different",
+  "independence_verified": "unverified",
   "project_dir": "/path/to/project"
 }
 ```
+
+- `executor`: the name of the running executor (from `--executor` parameter; defaults to `"claude-code"`). Dynamic — set by the caller, not hardcoded.
+- `executor_model`: the declared model running this ARIS invocation (from `--executor-model` when available; otherwise `null`).
+- `executor_model_source`: `"host-session-event"` for validated native evidence,
+  `"caller-declared"` when a non-native caller passes `--executor-model`, or
+  `"unavailable"`.
+- `executor_family`: derived from `executor_model` (`openai` / `anthropic` / `google` / `unknown`).
+- `reviewer_model_source`: `"host-session-event"`, `"backend-reported"`,
+  `"requested"`, or `"unavailable"`.
+- `reviewer_family`: derived from the backend-reported model when available, otherwise the requested model.
+- `family_relation`: `different`, `same`, or `unknown`, derived from model strings.
+- `independence_verified`: `true` only for a revalidated native cross-family
+  event chain, `false` for known same-family identities, otherwise
+  `"unverified"`.
+- `native_evidence_id` / `native_evidence_path`: set only for
+  `copilot-native`; `null` for other backends.
+- `reviewer_backend`: `codex` / `copilot-native` / `copilot` / `manual` /
+  `oracle-pro` / `agy`.
 
 ### `NNN-<purpose>.request.json`
 ```json
@@ -104,12 +180,86 @@ when the helper is unreachable — the trace is forensic evidence, so
   "purpose": "round-1-review",
   "timestamp": "2026-04-15T14:31:00+08:00",
   "tool": "mcp__codex__codex",
+  "backend": "codex",
   "model": "gpt-5.6-sol",
   "config": {"model_reasoning_effort": "xhigh"},
+  "reviewer_profile": null,
   "files_referenced": ["paper/sections/3_method.tex", "results/table1.csv"],
   "prompt": "<full prompt text>"
 }
 ```
+
+For native Copilot backend (no reviewer override in a bound Copilot session):
+```json
+{
+  "call_number": 1,
+  "purpose": "round-1-review",
+  "tool": "task(agent_type=rubber-duck)",
+  "backend": "copilot-native",
+  "model": "gpt-5.5",
+  "executor_model": "claude-sonnet-4.6",
+  "executor_model_source": "host-session-event",
+  "executor_family": "anthropic",
+  "reported_reviewer_model": "gpt-5.5",
+  "reviewer_model_source": "host-session-event",
+  "reviewer_family": "openai",
+  "family_relation": "different",
+  "independence_verified": true,
+  "native_evidence_id": "cne_0123456789abcdef0123456789abcdef",
+  "native_evidence_path": "/project/review-stage/COPILOT_NATIVE_run_20260715_a1b2c3d4_ROUND_1_REVIEW.evidence.json",
+  "prompt": "<full nonce-bound native task prompt>"
+}
+```
+
+For compatibility copilot backend (`--reviewer: copilot`):
+```json
+{
+  "call_number": 1,
+  "purpose": "round-1-review",
+  "timestamp": "2026-04-15T14:31:00+08:00",
+  "tool": "copilot --agent",
+  "backend": "copilot",
+  "model": "gpt-5.4",
+  "effort": "xhigh",
+  "effort_unpinned": false,
+  "reviewer_profile": "aris-reviewer-openai",
+  "requested_reviewer_model": "gpt-5.4",
+  "reported_reviewer_model": null,
+  "executor_model": "claude-sonnet-4-5",
+  "executor_model_source": "caller-declared",
+  "executor_family": "anthropic",
+  "reviewer_model_source": "requested",
+  "reviewer_family": "openai",
+  "family_relation": "different",
+  "independence_verified": "unverified",
+  "files_referenced": ["paper/sections/3_method.tex", "results/table1.csv"],
+  "prompt": "<full prompt text>"
+}
+```
+
+Fields:
+- `tool`: the tool name used (`task(agent_type=rubber-duck)`,
+  `mcp__codex__codex`, `copilot --agent`, etc.).
+- `backend`: the logical backend (`codex`, `copilot-native`, compatibility
+  `copilot`, `manual`, `oracle-pro`, `agy`).
+- `effort_unpinned`: applies only to compatibility `copilot`; native
+  complementary dispatch does not accept an ARIS model/effort pin.
+- `reviewer_profile`: custom profile for compatibility copilot; `rubber-duck`
+  may be used as a descriptive value for native traces; `null` otherwise.
+- `requested_reviewer_model`: the model parsed from profile frontmatter and repeated through subprocess `--model`; `null` when unavailable.
+- `reported_reviewer_model`: the model the tool reports actually using (for example, captured Copilot `gen_ai.response.model` telemetry); `null` when unavailable.
+- `executor_model`: native host-event value, or from `--executor-model` on
+  legacy/non-native paths; `null` if unavailable.
+- `executor_model_source`: `host-session-event`, `caller-declared`, or
+  `unavailable`.
+- `executor_family`: derived from `executor_model`.
+- `reviewer_model_source`: `backend-reported`, `requested`, or `unavailable`.
+- `reviewer_family`: derived by the helper from the reported/requested/actual reviewer model, never trusted from the caller.
+- `family_relation`: string-derived relation (`different` / `same` / `unknown`).
+- `independence_verified`: `true` only for validated native cross-family
+  evidence; `false` for known same-family; `"unverified"` for advisory pairs.
+- `native_evidence_id` / `native_evidence_path`: bind a native trace to the
+  revalidated session-event artifact; `null` otherwise.
 
 ### `NNN-<purpose>.response.md`
 The reviewer's full response, verbatim. No truncation, no summarization.
@@ -122,10 +272,60 @@ The reviewer's full response, verbatim. No truncation, no summarization.
   "timestamp": "2026-04-15T14:33:00+08:00",
   "thread_id": "019d8fe0-b25d-...",
   "model": "gpt-5.6-sol",
+  "model_family": "openai",
+  "executor_model": null,
+  "executor_model_source": "unavailable",
+  "executor_family": "unknown",
+  "reviewer_model_source": "requested",
+  "family_relation": "unknown",
+  "independence_verified": "unverified",
+  "reviewer_profile": null,
   "duration_ms": 142000,
   "status": "ok"
 }
 ```
+
+For compatibility copilot backend:
+```json
+{
+  "call_number": 1,
+  "purpose": "round-1-review",
+  "timestamp": "2026-04-15T14:33:00+08:00",
+  "thread_id": null,
+  "model": "gpt-5.4",
+  "model_family": "openai",
+  "effort": "xhigh",
+  "effort_unpinned": false,
+  "executor_model": "claude-sonnet-4-5",
+  "executor_model_source": "caller-declared",
+  "executor_family": "anthropic",
+  "requested_reviewer_model": "gpt-5.4",
+  "reported_reviewer_model": null,
+  "reviewer_model_source": "requested",
+  "family_relation": "different",
+  "independence_verified": "unverified",
+  "reviewer_profile": "aris-reviewer-openai",
+  "duration_ms": 142000,
+  "status": "ok"
+}
+```
+
+Fields new per this fix:
+- `model_family`: `openai` / `anthropic` / `google` / `unknown` — derived from the model that actually ran.
+- `effort_unpinned`: whether a compatibility Copilot subprocess lacked the
+  required explicit `xhigh` pin; it does not apply to native dispatch.
+- `executor_model` / `executor_model_source`: native calls record the actual
+  host event model/source; compatibility routing records `caller-declared`.
+- `executor_family`: derived from `executor_model`; `unknown` if not known.
+- `requested_reviewer_model`: the profile model also passed through subprocess `--model`; `null` when not available.
+- `reported_reviewer_model` / `reviewer_model_source`: backend output when available, otherwise the requested model and source.
+- `family_relation`: the model-string relation, separate from evidence assurance.
+- `independence_verified`: never `true` solely because caller-declared and requested model strings differ; use `"unverified"` in that case.
+- `reviewer_profile`: for compatibility copilot, the custom agent profile;
+  native may record `rubber-duck`; `null` for other backends.
+- `native_evidence_id` / `native_evidence_path`: present only on validated
+  `copilot-native` traces.
+- `memory_hash`: SHA-256 of `review-stage/REVIEWER_MEMORY.md` at trace time; `null` when no memory file exists.
 
 ## Configuration
 
@@ -139,7 +339,7 @@ Tracing respects three modes, set via inline parameter `--- trace: off | meta | 
 After writing a trace, append a compact summary event to `.aris/meta/events.jsonl`:
 
 ```json
-{"event":"review_trace","skill":"auto-review-loop","purpose":"round-1-review","thread_id":"...","trace_path":".aris/traces/auto-review-loop/2026-04-15_run01/","status":"ok"}
+{"event":"review_trace","skill":"auto-review-loop","purpose":"round-1-review","thread_id":null,"trace_path":".aris/traces/auto-review-loop/2026-04-15_run01/","backend":"copilot-native","tool":"task(agent_type=rubber-duck)","executor_model":"claude-sonnet-4.6","executor_model_source":"host-session-event","executor_family":"anthropic","reviewer_model_source":"host-session-event","reviewer_family":"openai","family_relation":"different","independence_verified":true,"native_evidence_id":"cne_0123456789abcdef0123456789abcdef","native_evidence_path":"/project/review-stage/COPILOT_NATIVE_run_20260715_a1b2c3d4_ROUND_1_REVIEW.evidence.json","status":"ok"}
 ```
 
 This allows `/meta-optimize` to discover traces without reading the full trace files.

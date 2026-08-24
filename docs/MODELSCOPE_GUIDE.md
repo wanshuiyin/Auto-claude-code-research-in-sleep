@@ -138,7 +138,7 @@ cp -r skills/* ~/.claude/skills/
 
 ### Step 6：改写所有使用 Codex MCP 的 Skills
 
-项目中有 **12 个 skill** 调用 `mcp__codex__codex`（依赖 OpenAI Responses API，ModelScope 不支持）。在启动 Claude Code 后执行以下指令，让它自动完成改写：
+项目中有 **46 个 skill** 在 frontmatter 里授权了 `mcp__codex__codex`（依赖 OpenAI Responses API，ModelScope 不支持），其中 **28 个**正文里有实际的调用块。在启动 Claude Code 后执行以下指令，让它自动完成改写：
 
 ```
 Read skills/auto-review-loop-llm/SKILL.md as a reference.

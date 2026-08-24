@@ -31,12 +31,13 @@ Autonomously iterate: review → implement fixes → re-review, until the extern
 
 ## Claude-Aligned Reviewer Memory and Debate
 
-For `difficulty: hard` and `difficulty: nightmare`, maintain `review-stage/REVIEWER_MEMORY.md`.
+Maintain `review-stage/REVIEWER_MEMORY.md` in all difficulty modes. Phase B.5 appends the reviewer's raw response and memory update regardless of `REVIEWER_DIFFICULTY`.
 
 - Before each reviewer call, prepend the full `REVIEWER_MEMORY.md` contents under `## Your Reviewer Memory (persistent across rounds)`.
 - Tell the reviewer to check whether prior suspicions were genuinely addressed or merely sidestepped.
 - Require a `Memory update` section in the reviewer response.
 - After Phase B, copy the `Memory update` into `REVIEWER_MEMORY.md` before writing `REVIEW_STATE.json`.
+- For `difficulty: hard` and `difficulty: nightmare`, additionally use the **Debate Protocol** after a critical review.
 - In `nightmare`, launch an additional fresh adversarial reviewer with direct repository/file-reading instructions. It should read `NARRATIVE_REPORT.md` or `review-stage/AUTO_REVIEW.md` for the author's claims, then verify those claims against code, logs, result files, and paper drafts instead of trusting executor summaries.
 
 ## Instructions
@@ -56,6 +57,7 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 ```json
 {
+  "run_id": "run_20260713_a1b2c3d4",
   "round": 2,
   "agent_id": "019cd392-...",
   "status": "in_progress",
@@ -66,9 +68,29 @@ Long-running loops may hit the context window limit, triggering automatic compac
 }
 ```
 
-**Write this file at the end of every Phase E** (after documenting the round). Overwrite each time — only the latest state matters.
+- **`run_id`** — Globally unique per invocation. Generated on fresh start as `run_<YYYYMMDD>_<8-char-hex>` (e.g., `run_20260713_a1b2c3d4`). Preserved across round writes. On resume, read from state file unchanged. This binds all round state and acquittal receipts to one run.
+
+**Write this file at the end of every Phase E** (after documenting the round). Overwrite each time — only the latest round's state matters. The `run_id` field MUST persist unchanged across overwrites within the same run.
 
 **On completion** (positive assessment or max rounds), set `"status": "completed"` so future invocations don't accidentally resume a finished loop.
+
+### Append-Only Acquittal Receipt
+
+In addition to the overwritable state file, maintain an **append-only** acquittal log at `review-stage/ACQUITTAL_LOG.jsonl`. Each line is a standalone JSON object recording an acquitting positive verdict:
+
+```jsonl
+{"run_id":"run_20260713_a1b2c3d4","round":3,"backend":"codex","effort":"xhigh","verdict":"ready","score":7.5,"trace_id":"trace_20260713_run03","timestamp":"2026-07-13T14:22:00Z"}
+```
+
+**Rules (non-negotiable):**
+
+| Rule | Detail |
+|------|--------|
+| **Append-only** | Never delete, never truncate, never overwrite lines. Only `>>`. |
+| **When to write** | At the end of Phase E, immediately after a positive verdict (score >= 6 AND verdict ∈ {"ready", "almost"}). |
+| **`run_id` binding** | Every acquittal line carries the current `run_id`. Only entries whose `run_id` matches the current run are valid acquittals for stop decisions. |
+| **Trace linkage** | `trace_id` MUST reference a trace artifact in `.aris/traces/`. |
+| **No overwrite** | `REVIEW_STATE.json` is overwritten each round. `ACQUITTAL_LOG.jsonl` is NEVER overwritten — it is the permanent, cumulative record.
 
 ## Workflow
 
@@ -76,10 +98,14 @@ Long-running loops may hit the context window limit, triggering automatic compac
 
 1. **Check for `review-stage/REVIEW_STATE.json`** *(fall back to `./REVIEW_STATE.json` if not found — legacy path)*:
    - If neither path exists: **fresh start** (normal case, identical to behavior before this feature existed)
-   - If it exists AND `status` is `"completed"`: **fresh start** (previous loop finished normally)
+     - **Generate `run_id`**: `run_<YYYYMMDD>_<8-char-hex>` (e.g., `run_20260713_a1b2c3d4`). This run_id persists across all round writes and binds acquittal receipts to this invocation.
+   - If it exists AND `status` is `"completed"`: **fresh start** (previous loop finished normally — but its `ACQUITTAL_LOG.jsonl` entries are retained as an audit trail with their own `run_id`, and are NOT valid for the current run's stop gate)
+     - **Generate a new `run_id`** for this invocation.
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is older than 24 hours: **fresh start** (stale state from a killed/abandoned run — delete the file and start over)
+     - **Generate a new `run_id`** for this invocation.
    - If it exists AND `status` is `"in_progress"` AND `timestamp` is within 24 hours: **resume**
-     - Read the state file to recover `round`, `agent_id`, `last_score`, `pending_experiments`
+     - Read the state file to recover `run_id`, `round`, `agent_id`, `last_score`, `pending_experiments`
+     - **Legacy backward compat**: if `run_id` is absent from the state file (pre-run_id era), generate a new `run_id` and log: "No run_id in legacy state file; assigned run_<...> for this resume."
      - Read `review-stage/AUTO_REVIEW.md` to restore full context of prior rounds *(fall back to `./AUTO_REVIEW.md`)*
      - If `pending_experiments` is non-empty, check if they have completed (e.g., check screen sessions)
      - Resume from the next round (round = saved round + 1)
@@ -126,6 +152,30 @@ spawn_agent:
 
     Be brutally honest. If, after genuinely trying to break it, the work holds
     up and is ready, say so clearly.
+
+    === SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+    Report anything that is actually wrong here — including a rare-looking case, if
+    this repo actually produces it. Then keep the fix in scope:
+    1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+       welcome; over-defense is not. Assume a cooperating operator on their own
+       machine — a malicious local user is NOT in the threat model.
+    2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+       Reporting a real defect in hashing code that already exists is fine.
+    3. NO speculative machinery: do not add feature flags, migration frameworks,
+       compat layers, wrappers, pins, or similar mechanisms unless evidence shows
+       a current repo defect they fix or an explicit existing invariant they must
+       preserve. "Load-bearing", "compatibility", and "not scaffolding" are labels,
+       not evidence. Point to the failing path/artifact or invariant, and check the
+       proposal's factual premises, such as whether a named package version exists.
+    4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+       millisecond races are out of scope unless you can show the case arises here.
+    5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+       judgement. A clear sentence a human reads beats a scored table nobody
+       maintains.
+    Exception: code that runs remote commands, starts a network service, or installs
+    an MCP server runs on the user's machine with their credentials — trust-boundary
+    findings there are in scope and the default is strict.
+    Say plainly when something is correct. Do not manufacture findings.
 ```
 
 If this is round 2+, use `send_input` with the saved agent id to maintain continuity.
@@ -136,7 +186,7 @@ Use the same `spawn_agent` / `send_input` route as medium, but prepend the full 
 
 ##### Nightmare — Independent Repository Review
 
-Use everything in hard mode, then ask an additional fresh adversarial reviewer to verify claims against repository files, logs, result files, and paper drafts instead of trusting executor summaries. Preserve the fresh review as a separate raw response and trace.
+Use everything in hard mode, then ask an additional fresh adversarial reviewer to verify claims against repository files, logs, result files, and paper drafts instead of trusting executor summaries. Preserve the fresh review as a separate raw response and trace. That reviewer is fresh, so it does not inherit the scope limits from the medium/hard prompt — repeat the block from [`review-scope-limits.md`](../shared-references/review-scope-limits.md) in its prompt. This is the mode with the widest repository access and the one most likely to propose defensive scaffolding.
 
 #### Phase B: Parse Assessment
 
@@ -147,13 +197,9 @@ Then extract structured fields:
 - **Verdict** ("ready" / "almost" / "not ready")
 - **Action items** (ranked list of fixes)
 
-**STOP CONDITION**: If score >= 6 AND verdict ∈ {"ready", "almost"} (exact match — "not ready" does NOT qualify) → stop loop, document final state.
+#### Phase B.5: Reviewer Memory Update
 
-#### Phase B.5: Reviewer Memory Update (hard + nightmare only)
-
-Skip entirely if `REVIEWER_DIFFICULTY = medium`.
-
-After parsing the assessment, update `review-stage/REVIEWER_MEMORY.md`:
+After parsing the assessment, update `review-stage/REVIEWER_MEMORY.md`. Copilot backend depends on this file for round-to-round continuity (every round is a fresh process), so the update runs regardless of `REVIEWER_DIFFICULTY`:
 
 ## Your Reviewer Memory (persistent across rounds)
 
@@ -181,6 +227,12 @@ Rules:
   find the exact criterion that flipped (see `shared-references/review-tracing.md`
   § *Debugging With Traces*). The memory file is a summary; the trace is evidence.
 - This file is passed back to the reviewer in the next round's Phase A.
+
+#### Phase B.5.1: Stop-Evaluation Gate
+
+**STOP CONDITION**: If score >= 6 AND verdict ∈ {"ready", "almost"} (exact match — "not ready" does NOT qualify), decide to stop and continue through Phase E. **Do not write a receipt here**; Phase E is the single append site.
+
+This evaluation runs AFTER Phase B.5 so the terminal-round memory is always appended to REVIEWER_MEMORY.md before exit.
 
 #### Phase B.6: Debate Protocol (hard + nightmare only)
 
@@ -308,7 +360,13 @@ This is the authoritative record. Do NOT truncate or paraphrase.]
 - [continuing to round N+1 / stopping]
 ```
 
-**Write `review-stage/REVIEW_STATE.json`** with current round, agent id, score, verdict, and any pending experiments.
+**Write `review-stage/REVIEW_STATE.json`** with current `run_id`, round, agent id, score, verdict, and any pending experiments. The `run_id` field MUST persist unchanged from initialization; do NOT regenerate it per round.
+
+**If score >= 6 AND verdict ∈ {"ready", "almost"}:** append an acquittal line to `review-stage/ACQUITTAL_LOG.jsonl`:
+```
+{"run_id":"<current-run_id>","round":<N>,"backend":"codex","effort":"xhigh","verdict":"<ready|almost>","score":<score>,"trace_id":"<skill>/<YYYY-MM-DD>_run<NN>","timestamp":"<ISO8601>"}
+```
+Use `>>` (append), never `>`. The `trace_id` must be the actual trace directory relative to `.aris/traces/` (for example `auto-review-loop/2026-07-13_run01`), not a fabricated `trace_...` identifier.
 
 **Append to `findings.md`** (when `COMPACT = true`): one-line entry per key finding this round.
 
@@ -381,4 +439,62 @@ send_input:
 
     Please re-score and re-assess. Are the remaining concerns addressed?
     Same format: Score, Verdict, Remaining Weaknesses, Minimum Fixes.
+
+    === SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+    Report anything that is actually wrong here — including a rare-looking case, if
+    this repo actually produces it. Then keep the fix in scope:
+    1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+       welcome; over-defense is not. Assume a cooperating operator on their own
+       machine — a malicious local user is NOT in the threat model.
+    2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+       Reporting a real defect in hashing code that already exists is fine.
+    3. NO speculative machinery: do not add feature flags, migration frameworks,
+       compat layers, wrappers, pins, or similar mechanisms unless evidence shows
+       a current repo defect they fix or an explicit existing invariant they must
+       preserve. "Load-bearing", "compatibility", and "not scaffolding" are labels,
+       not evidence. Point to the failing path/artifact or invariant, and check the
+       proposal's factual premises, such as whether a named package version exists.
+    4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+       millisecond races are out of scope unless you can show the case arises here.
+    5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+       judgement. A clear sentence a human reads beats a scored table nobody
+       maintains.
+    Exception: code that runs remote commands, starts a network service, or installs
+    an MCP server runs on the user's machine with their credentials — trust-boundary
+    findings there are in scope and the default is strict.
+    Say plainly when something is correct. Do not manufacture findings.
 ```
+
+## Acquittal Gate Test Specifications
+
+The following test cases validate the `run_id` + append-only acquittal receipt mechanism.
+
+### Test 1: Fresh Start — Codex Acquits
+
+**Setup:** Delete `review-stage/REVIEW_STATE.json` and `review-stage/ACQUITTAL_LOG.jsonl`. Run review.
+
+**Action:** Codex round 1 returns score=7, verdict="ready".
+
+**Expected:** Phase E writes acquittal line to `ACQUITTAL_LOG.jsonl` with current `run_id`. Loop stops.
+
+### Test 2: Stale Completed State — Old Run's Acquittal Does NOT Satisfy New Run
+
+**Setup:** Run 1 (run_id=`run_20260713_aaaaaaaa`) completes with `status: "completed"` and writes acquittal: `{"run_id":"run_20260713_aaaaaaaa","backend":"codex","verdict":"ready","score":7}` to `ACQUITTAL_LOG.jsonl`. Then a fresh-start invocation generates run_id=`run_20260713_bbbbbbbb`.
+
+**Action:** Run 2 round 1 returns score=5, verdict="not ready". Continue to round 2, score=8, verdict="ready".
+
+**Expected:** Run 2's acquittal line has `run_id=run_20260713_bbbbbbbb`. The old acquittal with `run_id=run_20260713_aaaaaaaa` is an audit artifact only. The stop gate for run 2 uses the current-run acquittal.
+
+### Test 3: Legacy State File — No run_id Field
+
+**Setup:** Create a `REVIEW_STATE.json` with `status: "in_progress"`, a fresh timestamp, but NO `run_id` field. Resume.
+
+**Expected:** Initialization detects missing `run_id` and generates one. Log: "No run_id in legacy state file; assigned run_<...> for this resume."
+
+### Test 4: Append-Only Integrity
+
+**Setup:** Run 1 reaches a positive verdict, appends one receipt, and stops. Start Run 2 with a new `run_id`; it also reaches a positive verdict and appends one receipt.
+
+**Action:** After the loop, inspect `ACQUITTAL_LOG.jsonl`.
+
+**Expected:** File contains exactly 2 lines with different run IDs. Run 1's line remains unchanged after Run 2 appends; a stopped loop cannot continue to a later positive round.

@@ -68,6 +68,8 @@
 #       path or differently-targeted symlink at `.aris/tools` is left alone.
 #   S12 Temp files live in the same directory as the destination.
 #   S13 Skill names must match ^[A-Za-z0-9][A-Za-z0-9._-]*$ (slug regex).
+#   S14 Copilot agent links are removed only when listed in the dedicated
+#       installed-agent-profiles.txt ownership sidecar.
 
 set -euo pipefail
 
@@ -75,8 +77,9 @@ set -euo pipefail
 MANIFEST_VERSION="1"
 MANIFEST_NAME="installed-skills.txt"
 MANIFEST_PREV_NAME="installed-skills.txt.prev"
-AGENT_MANIFEST_VERSION="1"
-AGENT_MANIFEST_NAME="installed-agents.txt"
+LEAF_AGENT_MANIFEST_VERSION="1"
+LEAF_AGENT_MANIFEST_NAME="installed-agents.txt"
+AGENT_PROFILE_MANIFEST_NAME="installed-agent-profiles.txt"
 DECLINED_NAME="skills-declined.txt"
 CATALOG_REL="tools/skill-groups.tsv"
 GLOBAL_POINTER="$HOME/.aris/repo"
@@ -90,6 +93,7 @@ BLOCK_BEGIN="<!-- ARIS:BEGIN -->"
 BLOCK_END="<!-- ARIS:END -->"
 SAFE_NAME_REGEX='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 SUPPORT_NAMES=("shared-references")
+AGENT_PROFILES_SRC=".github/agents"  # Copilot agent profiles deployed alongside skills (F5)
 EXCLUDE_TOP_NAMES=("skills-codex" "skills-codex.bak")  # not skills, not symlinked
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
@@ -646,7 +650,8 @@ PROJECT_SKILLS_DIR="$PROJECT_PATH/$SKILLS_REL"
 PROJECT_ARIS_DIR="$PROJECT_PATH/$ARIS_DIR_NAME"
 MANIFEST_PATH="$PROJECT_ARIS_DIR/$MANIFEST_NAME"
 MANIFEST_PREV="$PROJECT_ARIS_DIR/$MANIFEST_PREV_NAME"
-AGENT_MANIFEST_PATH="$PROJECT_ARIS_DIR/$AGENT_MANIFEST_NAME"
+LEAF_AGENT_MANIFEST_PATH="$PROJECT_ARIS_DIR/$LEAF_AGENT_MANIFEST_NAME"
+AGENT_PROFILE_MANIFEST_PATH="$PROJECT_ARIS_DIR/$AGENT_PROFILE_MANIFEST_NAME"
 LOCK_DIR="$PROJECT_ARIS_DIR/$LOCK_DIR_NAME"
 LEAF_AGENT_SOURCE="$ARIS_REPO/$LEAF_AGENT_SOURCE_REL"
 LEAF_AGENT_TARGET="$PROJECT_PATH/$LEAF_AGENT_TARGET_REL"
@@ -663,7 +668,7 @@ fi
 # (.aris and .claude/skills may not exist yet — only check if present.)
 check_no_symlinked_parents() {
     local p
-    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR"; do
+    for p in "$PROJECT_ARIS_DIR" "$PROJECT_PATH/.claude" "$PROJECT_SKILLS_DIR" "$PROJECT_PATH/.github" "$PROJECT_PATH/.github/agents"; do
         if is_symlink "$p"; then
             die "S9: $p is a symlink — refusing to install (would mutate symlink target)"
         fi
@@ -672,10 +677,10 @@ check_no_symlinked_parents() {
 
 # ─── Lock acquisition (mkdir-based, portable) ─────────────────────────────────
 LEAF_CREATED_THIS_RUN=false
-AGENT_MANIFEST_EXISTED_BEFORE_CREATE=false
-AGENT_MANIFEST_ROLLBACK_SNAPSHOT=""
-AGENT_MANIFEST_WRITTEN_SNAPSHOT=""
-AGENT_MANIFEST_COMMITTED_THIS_RUN=false
+LEAF_AGENT_MANIFEST_EXISTED_BEFORE_CREATE=false
+LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT=""
+LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT=""
+LEAF_AGENT_MANIFEST_COMMITTED_THIS_RUN=false
 SKILL_MANIFEST_COMMITTED=false
 MANIFEST_TMP=""
 
@@ -737,18 +742,18 @@ installer_exit_cleanup() {
             [[ "$current_target" == "$LEAF_AGENT_SOURCE" ]] && rm -f "$LEAF_AGENT_TARGET"
         fi
 
-        if $AGENT_MANIFEST_COMMITTED_THIS_RUN && \
+        if $LEAF_AGENT_MANIFEST_COMMITTED_THIS_RUN && \
            ! is_symlink "$PROJECT_ARIS_DIR" && [[ -d "$PROJECT_ARIS_DIR" ]] && \
-           [[ -n "$AGENT_MANIFEST_WRITTEN_SNAPSHOT" && \
-              -f "$AGENT_MANIFEST_WRITTEN_SNAPSHOT" && \
-              -f "$AGENT_MANIFEST_PATH" ]] && \
-           cmp -s "$AGENT_MANIFEST_WRITTEN_SNAPSHOT" "$AGENT_MANIFEST_PATH"; then
-            if [[ -n "$AGENT_MANIFEST_ROLLBACK_SNAPSHOT" && -f "$AGENT_MANIFEST_ROLLBACK_SNAPSHOT" ]]; then
+           [[ -n "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" && \
+              -f "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" && \
+              -f "$LEAF_AGENT_MANIFEST_PATH" ]] && \
+           cmp -s "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" "$LEAF_AGENT_MANIFEST_PATH"; then
+            if [[ -n "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" && -f "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" ]]; then
                 local restore_tmp; restore_tmp="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.restore.XXXXXX")"
-                cp -p "$AGENT_MANIFEST_ROLLBACK_SNAPSHOT" "$restore_tmp" && \
-                    mv -f "$restore_tmp" "$AGENT_MANIFEST_PATH"
+                cp -p "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" "$restore_tmp" && \
+                    mv -f "$restore_tmp" "$LEAF_AGENT_MANIFEST_PATH"
             else
-                rm -f "$AGENT_MANIFEST_PATH"
+                rm -f "$LEAF_AGENT_MANIFEST_PATH"
             fi
         fi
     fi
@@ -756,8 +761,8 @@ installer_exit_cleanup() {
         rm -f "$MANIFEST_TMP"
     fi
     if ! is_symlink "$PROJECT_ARIS_DIR" && [[ -d "$PROJECT_ARIS_DIR" ]]; then
-        [[ -n "$AGENT_MANIFEST_ROLLBACK_SNAPSHOT" ]] && rm -f "$AGENT_MANIFEST_ROLLBACK_SNAPSHOT"
-        [[ -n "$AGENT_MANIFEST_WRITTEN_SNAPSHOT" ]] && rm -f "$AGENT_MANIFEST_WRITTEN_SNAPSHOT"
+        [[ -n "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" ]] && rm -f "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT"
+        [[ -n "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" ]] && rm -f "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT"
     fi
     release_lock
 }
@@ -1084,38 +1089,38 @@ assert_leaf_mutation_parents() {
         die "S9: leaf-agent parent changed before mutation"
 }
 
-AGENT_MANIFEST_OWNED=false
-AGENT_MANIFEST_REPO_ROOT=""
+LEAF_AGENT_MANIFEST_OWNED=false
+LEAF_AGENT_MANIFEST_REPO_ROOT=""
 LEAF_AGENT_STATE="ABSENT"
 
 load_agent_ownership() {
-    AGENT_MANIFEST_OWNED=false
-    AGENT_MANIFEST_REPO_ROOT=""
-    [[ -e "$AGENT_MANIFEST_PATH" || -L "$AGENT_MANIFEST_PATH" ]] || return 0
-    [[ -f "$AGENT_MANIFEST_PATH" && ! -L "$AGENT_MANIFEST_PATH" ]] || \
-        die "CONFLICT: malformed agent ownership manifest: $AGENT_MANIFEST_PATH"
+    LEAF_AGENT_MANIFEST_OWNED=false
+    LEAF_AGENT_MANIFEST_REPO_ROOT=""
+    [[ -e "$LEAF_AGENT_MANIFEST_PATH" || -L "$LEAF_AGENT_MANIFEST_PATH" ]] || return 0
+    [[ -f "$LEAF_AGENT_MANIFEST_PATH" && ! -L "$LEAF_AGENT_MANIFEST_PATH" ]] || \
+        die "CONFLICT: malformed agent ownership manifest: $LEAF_AGENT_MANIFEST_PATH"
 
     local version repo_root project_root project_root_canonical current_project_canonical row_count row header_counts
-    version="$(awk -F'\t' '$1=="version"{print $2; exit}' "$AGENT_MANIFEST_PATH")"
-    repo_root="$(awk -F'\t' '$1=="repo_root"{print $2; exit}' "$AGENT_MANIFEST_PATH")"
-    project_root="$(awk -F'\t' '$1=="project_root"{print $2; exit}' "$AGENT_MANIFEST_PATH")"
-    header_counts="$(awk -F'\t' '$1=="version"{v++} $1=="repo_root"{r++} $1=="project_root"{p++} END{printf "%d:%d:%d",v,r,p}' "$AGENT_MANIFEST_PATH")"
-    row_count="$(awk -F'\t' 'BEGIN{body=0;c=0} /^kind\tname\tsource_rel\ttarget_rel\tmode$/{body=1;next} body&&NF==5{c++} END{print c}' "$AGENT_MANIFEST_PATH")"
-    row="$(awk -F'\t' 'BEGIN{body=0} /^kind\tname\tsource_rel\ttarget_rel\tmode$/{body=1;next} body&&NF==5{print;exit}' "$AGENT_MANIFEST_PATH")"
+    version="$(awk -F'\t' '$1=="version"{print $2; exit}' "$LEAF_AGENT_MANIFEST_PATH")"
+    repo_root="$(awk -F'\t' '$1=="repo_root"{print $2; exit}' "$LEAF_AGENT_MANIFEST_PATH")"
+    project_root="$(awk -F'\t' '$1=="project_root"{print $2; exit}' "$LEAF_AGENT_MANIFEST_PATH")"
+    header_counts="$(awk -F'\t' '$1=="version"{v++} $1=="repo_root"{r++} $1=="project_root"{p++} END{printf "%d:%d:%d",v,r,p}' "$LEAF_AGENT_MANIFEST_PATH")"
+    row_count="$(awk -F'\t' 'BEGIN{body=0;c=0} /^kind\tname\tsource_rel\ttarget_rel\tmode$/{body=1;next} body&&NF==5{c++} END{print c}' "$LEAF_AGENT_MANIFEST_PATH")"
+    row="$(awk -F'\t' 'BEGIN{body=0} /^kind\tname\tsource_rel\ttarget_rel\tmode$/{body=1;next} body&&NF==5{print;exit}' "$LEAF_AGENT_MANIFEST_PATH")"
 
-    [[ "$version" == "$AGENT_MANIFEST_VERSION" && -n "$repo_root" && -n "$project_root" && \
+    [[ "$version" == "$LEAF_AGENT_MANIFEST_VERSION" && -n "$repo_root" && -n "$project_root" && \
        "$header_counts" == "1:1:1" && "$row_count" == "1" ]] || \
-        die "CONFLICT: malformed agent ownership manifest: $AGENT_MANIFEST_PATH"
+        die "CONFLICT: malformed agent ownership manifest: $LEAF_AGENT_MANIFEST_PATH"
     project_root_canonical="$(canonicalize "$project_root" || true)"
     current_project_canonical="$(canonicalize "$PROJECT_PATH" || true)"
     [[ -n "$project_root_canonical" && -n "$current_project_canonical" && \
        "$project_root_canonical" == "$current_project_canonical" ]] || \
         die "CONFLICT: agent ownership manifest belongs to a different project: $project_root"
     [[ "$row" == $'agent\taris-fanout-leaf\tagents/aris-fanout-leaf.md\t.claude/agents/aris-fanout-leaf.md\tsymlink' ]] || \
-        die "CONFLICT: unsupported agent ownership entry in $AGENT_MANIFEST_PATH"
+        die "CONFLICT: unsupported agent ownership entry in $LEAF_AGENT_MANIFEST_PATH"
 
-    AGENT_MANIFEST_OWNED=true
-    AGENT_MANIFEST_REPO_ROOT="$repo_root"
+    LEAF_AGENT_MANIFEST_OWNED=true
+    LEAF_AGENT_MANIFEST_REPO_ROOT="$repo_root"
 }
 
 leaf_target_resolves_to() {
@@ -1139,7 +1144,7 @@ compute_leaf_agent_state() {
         if [[ ! -e "$LEAF_AGENT_TARGET" && ! -L "$LEAF_AGENT_TARGET" ]]; then
             LEAF_AGENT_STATE="CREATE_OWNED"
         elif leaf_target_resolves_to "$LEAF_AGENT_SOURCE"; then
-            if $AGENT_MANIFEST_OWNED; then
+            if $LEAF_AGENT_MANIFEST_OWNED; then
                 LEAF_AGENT_STATE="REUSE_OWNED"
             else
                 LEAF_AGENT_STATE="REUSE_EXTERNAL"
@@ -1150,8 +1155,8 @@ compute_leaf_agent_state() {
         return 0
     fi
 
-    $AGENT_MANIFEST_OWNED || return 0
-    local recorded_source="$AGENT_MANIFEST_REPO_ROOT/$LEAF_AGENT_SOURCE_REL"
+    $LEAF_AGENT_MANIFEST_OWNED || return 0
+    local recorded_source="$LEAF_AGENT_MANIFEST_REPO_ROOT/$LEAF_AGENT_SOURCE_REL"
     if [[ ! -e "$LEAF_AGENT_TARGET" && ! -L "$LEAF_AGENT_TARGET" ]]; then
         LEAF_AGENT_STATE="RETIRE_OWNERSHIP"
     elif leaf_target_resolves_to "$recorded_source"; then
@@ -1164,7 +1169,7 @@ compute_leaf_agent_state() {
 write_agent_manifest_tmp() {
     local out="$1"
     {
-        printf "version\t%s\n" "$AGENT_MANIFEST_VERSION"
+        printf "version\t%s\n" "$LEAF_AGENT_MANIFEST_VERSION"
         printf "repo_root\t%s\n" "$ARIS_REPO"
         printf "project_root\t%s\n" "$PROJECT_PATH"
         printf "generated\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1177,16 +1182,126 @@ write_agent_manifest_tmp() {
 commit_agent_manifest() {
     local tmp="$1"
     assert_agent_manifest_parent
-    mv -f "$tmp" "$AGENT_MANIFEST_PATH"
+    mv -f "$tmp" "$LEAF_AGENT_MANIFEST_PATH"
 }
 
 retire_agent_manifest() {
-    [[ -f "$AGENT_MANIFEST_PATH" ]] || return 0
+    [[ -f "$LEAF_AGENT_MANIFEST_PATH" ]] || return 0
     if $DRY_RUN; then
-        log "  (dry-run) retire $AGENT_MANIFEST_NAME"
+        log "  (dry-run) retire $LEAF_AGENT_MANIFEST_NAME"
     else
         assert_agent_manifest_parent
-        rm -f "$AGENT_MANIFEST_PATH"
+        rm -f "$LEAF_AGENT_MANIFEST_PATH"
+    fi
+}
+
+# F5: Deploy Copilot agent profiles from <aris-repo>/.github/agents/ to
+# <project>/.github/agents/. Each .agent.md file is symlinked individually;
+# user-created files/dirs/symlinks at the target path are left alone.
+# Pure-additive — existing users who don't rerun the installer never see
+# this. Idempotent across re-runs.
+record_managed_agent_profile() {
+    local name="$1" tmp="$AGENT_PROFILE_MANIFEST_PATH.tmp.$$" unsorted="$AGENT_PROFILE_MANIFEST_PATH.unsorted.$$"
+    mkdir -p "$PROJECT_ARIS_DIR"
+    if [[ -L "$AGENT_PROFILE_MANIFEST_PATH" ]]; then
+        warn "$AGENT_PROFILE_MANIFEST_PATH is a symlink; refusing to record agent ownership"
+        return 1
+    fi
+    if [[ -f "$AGENT_PROFILE_MANIFEST_PATH" ]]; then
+        cp "$AGENT_PROFILE_MANIFEST_PATH" "$unsorted" || { rm -f "$unsorted" "$tmp"; return 1; }
+    else
+        : > "$unsorted" || return 1
+    fi
+    printf '%s\n' "$name" >> "$unsorted" || { rm -f "$unsorted" "$tmp"; return 1; }
+    sort -u "$unsorted" > "$tmp" || { rm -f "$unsorted" "$tmp"; return 1; }
+    rm -f "$unsorted"
+    mv -f "$tmp" "$AGENT_PROFILE_MANIFEST_PATH"
+}
+
+ensure_agent_profiles() {
+    local src_dir="$ARIS_REPO/$AGENT_PROFILES_SRC"
+    [[ -d "$src_dir" ]] || return 0  # no profiles to deploy
+    [[ ! -L "$src_dir" ]] || { warn "skipping symlinked upstream agents directory: $src_dir"; return 0; }
+    local target_dir="$PROJECT_PATH/.github/agents"
+    local deployed=0 name src target
+
+    for src in "$src_dir"/*.agent.md; do
+        [[ -f "$src" ]] || continue
+        # Resolve symlink and verify it's within the expected directory
+        local resolved; resolved="$(canonicalize "$src")"
+        local src_canon; src_canon="$(canonicalize "$src_dir")"
+        [[ "$resolved" == "$src_canon"/* ]] || { warn "skipping external symlink: $src -> $resolved"; continue; }
+        name="$(basename "$src")"
+        target="$target_dir/$name"
+
+        if is_symlink "$target"; then
+            local cur; cur="$(read_link_target "$target")"
+            [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target")/$cur")"
+            if [[ "$cur" == "$src" ]]; then
+                continue  # already correct
+            fi
+            warn ".github/agents/$name already exists with different target ($cur); leaving alone"
+            continue
+        fi
+
+        if [[ -e "$target" ]]; then
+            warn ".github/agents/$name already exists as a non-symlink path; leaving alone"
+            continue
+        fi
+
+        if $DRY_RUN; then
+            log "  (dry-run) ln -s $src $target"
+        else
+            mkdir -p "$target_dir"
+            ln -s "$src" "$target"
+            if ! record_managed_agent_profile "$name"; then
+                rm -f "$target"
+                die "could not record ownership for .github/agents/$name"
+            fi
+            deployed=$((deployed + 1))
+        fi
+    done
+
+    if ! $DRY_RUN && (( deployed > 0 )); then
+        log "  + .github/agents/ ($deployed copilot profile(s) deployed)"
+    fi
+}
+
+# Counterpart for uninstall: only remove agent profile symlinks explicitly
+# recorded when this installer created them. An identical pre-existing link is
+# user-owned and must survive uninstall.
+remove_agent_profiles() {
+    local target_dir="$PROJECT_PATH/.github/agents"
+    [[ -d "$target_dir" || -L "$target_dir" ]] || return 0
+    [[ -f "$AGENT_PROFILE_MANIFEST_PATH" ]] || return 0
+    [[ ! -L "$AGENT_PROFILE_MANIFEST_PATH" ]] || { warn "$AGENT_PROFILE_MANIFEST_PATH is a symlink; refusing agent cleanup"; return 0; }
+    local src_dir="$ARIS_REPO/$AGENT_PROFILES_SRC"
+    local name target removed=0
+
+    while IFS= read -r name; do
+        [[ "$name" =~ $SAFE_NAME_REGEX && "$name" == *.agent.md ]] || { warn "invalid agent manifest entry: $name"; continue; }
+        target="$target_dir/$name"
+        [[ -L "$target" ]] || continue
+        local cur; cur="$(read_link_target "$target")"
+        [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target")/$cur")"
+        # Revalidate the exact source target before mutation.
+        if [[ "$cur" == "$src_dir/$name" ]]; then
+            if $DRY_RUN; then
+                log "  (dry-run) rm $target"
+            else
+                rm -f "$target"
+                removed=$((removed + 1))
+            fi
+        fi
+    done < "$AGENT_PROFILE_MANIFEST_PATH"
+
+    if ! $DRY_RUN && (( removed > 0 )); then
+        log "  - .github/agents/ ($removed copilot profile(s) removed)"
+        # Remove directory if empty after cleanup
+        rmdir "$target_dir" 2>/dev/null || true
+    fi
+    if ! $DRY_RUN; then
+        rm -f "$AGENT_PROFILE_MANIFEST_PATH"
     fi
 }
 
@@ -1199,11 +1314,11 @@ prepare_leaf_agent() {
             fi
             check_no_symlinked_parents
             assert_leaf_mutation_parents
-            if [[ -f "$AGENT_MANIFEST_PATH" ]]; then
-                AGENT_MANIFEST_EXISTED_BEFORE_CREATE=true
+            if [[ -f "$LEAF_AGENT_MANIFEST_PATH" ]]; then
+                LEAF_AGENT_MANIFEST_EXISTED_BEFORE_CREATE=true
                 assert_agent_manifest_parent
-                AGENT_MANIFEST_ROLLBACK_SNAPSHOT="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.rollback.XXXXXX")"
-                cp -p "$AGENT_MANIFEST_PATH" "$AGENT_MANIFEST_ROLLBACK_SNAPSHOT"
+                LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.rollback.XXXXXX")"
+                cp -p "$LEAF_AGENT_MANIFEST_PATH" "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT"
             fi
             mkdir -p "$(dirname "$LEAF_AGENT_TARGET")"
             assert_leaf_mutation_parents
@@ -1213,17 +1328,17 @@ prepare_leaf_agent() {
             assert_agent_manifest_parent
             local manifest_tmp; manifest_tmp="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.tmp.XXXXXX")"
             write_agent_manifest_tmp "$manifest_tmp"
-            AGENT_MANIFEST_WRITTEN_SNAPSHOT="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.written.XXXXXX")"
-            cp -p "$manifest_tmp" "$AGENT_MANIFEST_WRITTEN_SNAPSHOT"
-            if $AGENT_MANIFEST_EXISTED_BEFORE_CREATE; then
-                [[ -f "$AGENT_MANIFEST_PATH" && ! -L "$AGENT_MANIFEST_PATH" ]] && \
-                    cmp -s "$AGENT_MANIFEST_ROLLBACK_SNAPSHOT" "$AGENT_MANIFEST_PATH" || \
+            LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.written.XXXXXX")"
+            cp -p "$manifest_tmp" "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT"
+            if $LEAF_AGENT_MANIFEST_EXISTED_BEFORE_CREATE; then
+                [[ -f "$LEAF_AGENT_MANIFEST_PATH" && ! -L "$LEAF_AGENT_MANIFEST_PATH" ]] && \
+                    cmp -s "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" "$LEAF_AGENT_MANIFEST_PATH" || \
                     die "CONFLICT: agent ownership manifest changed during install"
-            elif [[ -e "$AGENT_MANIFEST_PATH" || -L "$AGENT_MANIFEST_PATH" ]]; then
+            elif [[ -e "$LEAF_AGENT_MANIFEST_PATH" || -L "$LEAF_AGENT_MANIFEST_PATH" ]]; then
                 die "CONFLICT: agent ownership manifest appeared during install"
             fi
             commit_agent_manifest "$manifest_tmp"
-            AGENT_MANIFEST_COMMITTED_THIS_RUN=true
+            LEAF_AGENT_MANIFEST_COMMITTED_THIS_RUN=true
             log "  + $LEAF_AGENT_TARGET_REL (owned bounded fan-out leaf symlink)"
             ;;
         REUSE_OWNED)
@@ -1242,7 +1357,7 @@ finalize_leaf_agent() {
                 warn "leaf-agent parent changed; preserving target and ownership record"
                 return 0
             fi
-            local recorded_source="$AGENT_MANIFEST_REPO_ROOT/$LEAF_AGENT_SOURCE_REL"
+            local recorded_source="$LEAF_AGENT_MANIFEST_REPO_ROOT/$LEAF_AGENT_SOURCE_REL"
             if ! leaf_target_resolves_to "$recorded_source"; then
                 warn "$LEAF_AGENT_TARGET changed before removal; preserving it and relinquishing ownership"
                 retire_agent_manifest
@@ -1345,7 +1460,8 @@ PYEOF
 do_uninstall() {
     local has_skill_manifest=false
     [[ -f "$MANIFEST_PATH" ]] && has_skill_manifest=true
-    if ! $has_skill_manifest && [[ ! -f "$AGENT_MANIFEST_PATH" ]]; then
+    if ! $has_skill_manifest && [[ ! -f "$LEAF_AGENT_MANIFEST_PATH" ]] && \
+       [[ ! -f "$AGENT_PROFILE_MANIFEST_PATH" ]]; then
         die "no skill or agent ownership manifest; nothing to uninstall"
     fi
 
@@ -1362,7 +1478,7 @@ do_uninstall() {
         [[ -z "$name" ]] && continue
         log "  - $name ($kind)"
     done < "$manifest_data"
-    $AGENT_MANIFEST_OWNED && log "  - aris-fanout-leaf (agent)"
+    $LEAF_AGENT_MANIFEST_OWNED && log "  - aris-fanout-leaf (agent)"
     if ! $DRY_RUN && ! $QUIET; then
         prompt "Proceed?" || { log "aborted"; exit 0; }
     fi
@@ -1391,6 +1507,7 @@ do_uninstall() {
         fi
     fi
     finalize_leaf_agent
+    remove_agent_profiles
     if ! $DRY_RUN; then
         log "  ✓ uninstalled (managed manifests preserved as .prev)"
     fi
@@ -1493,6 +1610,8 @@ if $DRY_RUN; then
     ensure_tools_symlink
     prepare_leaf_agent
     finalize_leaf_agent
+    # F5 preview: print planned agent profile symlinks.
+    ensure_agent_profiles
     log ""
     log "(dry-run) no changes made"
     exit 0
@@ -1521,6 +1640,9 @@ finalize_leaf_agent
 # #174 Phase 0: ensure project-local .aris/tools symlink (purely additive).
 # Runs after manifest commit so a failure here doesn't roll back skill links.
 ensure_tools_symlink
+# F5: deploy Copilot agent profiles from <aris-repo>/.github/agents/ (purely additive).
+ensure_agent_profiles
+
 
 # #366: persist declined skills + global repo pointer (both best-effort,
 # after manifest commit for the same reason as above).

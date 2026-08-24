@@ -103,6 +103,20 @@ If reviewer=oracle-pro:
   artifact changes. See `external-cadence.md`.
 - Browser-based Oracle review is acceptable for one-shot stress tests, not ideal for tight multi-round loops.
 
+## Copilot CLI reviewer behavior in the main skill set
+
+The main `skills/shared-references/reviewer-routing.md` defaults
+`/auto-review-loop` to Copilot CLI's native complementary `rubber-duck`
+subagent when a host-session marker binds. Its stop gate requires revalidated
+native lifecycle/model/response evidence and a known cross-family pair. The
+older `--reviewer: copilot` custom-agent subprocess remains an explicit
+compatibility drive mode and still needs a Codex/manual finalizer.
+
+**This routing applies to the main skills at `skills/`, not this Codex-mirror
+pack.** Here `spawn_agent` remains the native reviewer. See the main
+[`reviewer-routing.md`](../../../skills/shared-references/reviewer-routing.md#copilot-cli-native-rubber-duck-default-for-auto-review-loop)
+for the Copilot contract.
+
 ## Skills That Commonly Benefit From `oracle-pro`
 
 - `research-review`

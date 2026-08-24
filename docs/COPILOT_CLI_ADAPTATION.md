@@ -77,9 +77,23 @@ bash ~/aris_repo/tools/smart_update_copilot.sh --apply
 bash ~/aris_repo/tools/smart_update_copilot.sh --project ~/your-project --apply
 ```
 
-### 2.4 Configure Codex MCP reviewer
+### 2.4 Native auto-review and optional Codex MCP
 
-ARIS uses a cross-model reviewer (GPT-5.6-Sol/5.5 via Codex MCP). Configure it in Copilot CLI:
+`/auto-review-loop` now defaults to Copilot CLI's built-in complementary
+`rubber-duck` subagent. ARIS verifies the native lifecycle and the actual
+cross-family model pair from Copilot session events, so this default needs no
+Codex MCP. If no complementary model is available, the loop fails closed or
+uses a positively available opposite-family fallback.
+
+The current Copilot account/session must expose the built-in `rubber-duck`
+agent. Check `/subagents` in an interactive Copilot session if it is absent.
+ARIS does not change Copilot user settings or enable experimental features on
+your behalf; an unavailable native agent triggers the same fail-closed fallback
+and is never replaced by a generic agent under a rubber-duck label.
+
+Other reviewer skills still use their documented external backends. Configure
+Codex MCP if you use those skills, explicitly pass `— reviewer: codex`, or want
+an Anthropic/Google-executor fallback for `/auto-review-loop`:
 
 1. Install and authenticate Codex:
    ```bash
@@ -311,13 +325,17 @@ The built-in `web_fetch` tool complements ARIS's `/research-lit` for fetching pa
 |-----------|-----------|
 | Skills reference `CLAUDE.md` | Copilot reads `AGENTS.md` instead. The installer creates this. Skills that read `CLAUDE.md` internally will still work if you keep both files, or create a symlink: `ln -s AGENTS.md CLAUDE.md` |
 | `allowed-tools` in SKILL.md | Copilot respects these but requires user-level permission flags (`--allow-tool`) to actually execute |
-| Different executor model family | ARIS's cross-model review still works: Copilot (GPT) executes, Codex MCP (GPT) reviews. For true cross-family review, use `llm-chat` MCP with Claude/Gemini as reviewer |
+| Native rubber-duck unavailable | Check whether `/subagents` exposes/enables `rubber-duck`; ARIS does not change this setting automatically. If unavailable, configure an opposite-family external fallback or use an account/session that exposes it |
+| Native complementary model unavailable | `/auto-review-loop` never accepts a same/unknown-family review. Configure an opposite-family external fallback (Codex for Anthropic/Google executors; a non-OpenAI manual reviewer for OpenAI executors), or switch the Copilot session model/account |
 | No auto-compact recovery | Copilot CLI handles long sessions natively. Use state files for manual recovery if needed |
 | Context window varies by model | GPT-5 mini has smaller context. For long pipelines, use GPT-5 or break into stages |
 
 ### Cross-Model Review Consideration
 
-When Copilot CLI uses GPT-5 as executor **and** Codex MCP also routes to GPT-5.6-Sol as reviewer, you lose the cross-family diversity that ARIS recommends. For maximum review quality, consider:
+For `/auto-review-loop`, native rubber-duck chooses a complementary model and
+ARIS rejects same/unknown-family evidence. If you explicitly force Codex while
+the Copilot executor is also OpenAI-family—or use another reviewer skill whose
+default is Codex—choose a non-OpenAI external reviewer instead:
 
 1. Use `llm-chat` MCP with **Claude** as reviewer (true cross-family):
    ```json
@@ -362,9 +380,9 @@ copilot --allow-tool='write' --allow-tool='shell'
 ## 12. Migration Checklist: Claude Code → Copilot CLI
 
 - [ ] Install skills: `bash tools/install_aris_copilot.sh .`
-- [ ] Configure MCP: add Codex or llm-chat to `~/.copilot/mcp-config.json`
+- [ ] Optional/other reviewer skills: add Codex or llm-chat to `~/.copilot/mcp-config.json`
 - [ ] Copy `CLAUDE.md` content to `AGENTS.md` (or keep both + symlink)
 - [ ] Set permission flags: `--allow-tool='write' --allow-tool='shell'`
 - [ ] Verify: type `/` to see ARIS skills listed
-- [ ] Test: `/research-review "your draft"` to confirm MCP reviewer works
-- [ ] (Optional) Consider cross-family reviewer for GPT executor + non-GPT reviewer
+- [ ] Test native default: `/auto-review-loop "small review scope"`
+- [ ] If using external reviewer skills, test `/research-review "your draft"`

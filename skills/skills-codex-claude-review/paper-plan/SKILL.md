@@ -1,6 +1,6 @@
 ---
 name: "paper-plan"
-description: "Generate a structured paper outline from review conclusions and experiment results. Use when user says \\"写大纲\\", \\"paper outline\\", \\"plan the paper\\", \\"论文规划\\", or wants to create a paper plan before writing."
+description: "Generate a structured paper outline from review conclusions and experiment results. Use when user says \"写大纲\", \"paper outline\", \"plan the paper\", \"论文规划\", or wants to create a paper plan before writing."
 ---
 
 > Override for Codex users who want **Claude Code**, not a second Codex agent, to act as the reviewer. Install this package **after** `skills/skills-codex/*`.

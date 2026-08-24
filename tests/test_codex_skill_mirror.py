@@ -35,14 +35,14 @@ def has_send_input_block(text: str) -> bool:
 def test_codex_skill_set_matches_mainline() -> None:
     main_names = skill_names(MAIN_SKILLS)
     codex_names = skill_names(CODEX_SKILLS)
-    assert len(main_names) == 80
+    assert len(main_names) == 82
     assert main_names == codex_names
 
 
 def test_codex_shared_reference_set_matches_mainline() -> None:
     main_refs = {p.name for p in (MAIN_SKILLS / "shared-references").glob("*.md")}
     codex_refs = {p.name for p in (CODEX_SKILLS / "shared-references").glob("*.md")}
-    assert len(main_refs) == 30
+    assert len(main_refs) == 31
     assert codex_refs == main_refs
 
 
@@ -241,6 +241,19 @@ def test_codex_review_assurance_is_explicit_and_honest() -> None:
             f"{skill_file.relative_to(REPO_ROOT)} must not retain a non-Claude reviewer identity"
         assert "mcp__claude-review__review_start" in text
         assert "mcp__claude-review__review_status" in text
+
+
+def test_codex_auto_review_has_one_receipt_append_phase() -> None:
+    text = read(CODEX_SKILLS / "auto-review-loop" / "SKILL.md")
+    gate = text.split("#### Phase B.5.1: Stop-Evaluation Gate", 1)[1].split(
+        "#### Phase B.6:", 1
+    )[0]
+
+    assert "Do not write a receipt here" in gate
+    assert "Phase E is the single append site" in gate
+    assert '"trace_id":"<skill>/<YYYY-MM-DD>_run<NN>"' in text
+    assert "fabricated `trace_...` identifier" in text
+    assert 'round 3 (score=8, "ready")' not in text
 
 
 def test_overlay_boundaries_are_exact() -> None:

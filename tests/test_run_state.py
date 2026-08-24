@@ -275,6 +275,32 @@ def test_state_is_valid_json_on_disk():
         assert rs._find_phase(state, "W1")["artifact"] == "x/y.md"
 
 
+def test_record_gate_result_is_persisted_with_reasons():
+    with _tmp() as d:
+        rs.start_run(d, "run-a", PHASES)
+        state = rs.record_gate_result(
+            d,
+            "run-a",
+            "idea-discovery-evidence",
+            "BLOCKED",
+            ["research-lit evidence missing"],
+        )
+        gate = state["gates"]["idea-discovery-evidence"]
+        assert gate["verdict"] == "BLOCKED"
+        assert gate["reasons"] == ["research-lit evidence missing"]
+
+
+def test_record_gate_result_rejects_unknown_verdict():
+    with _tmp() as d:
+        rs.start_run(d, "run-a", PHASES)
+        try:
+            rs.record_gate_result(d, "run-a", "gate", "WARN", [])
+            raised = False
+        except ValueError:
+            raised = True
+        assert raised
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     passed = failed = 0

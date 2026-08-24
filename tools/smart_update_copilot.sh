@@ -27,6 +27,10 @@
 #               declined skills)
 #   --skip-new: skip every new skill without recording a decline (same as the
 #               automatic behavior when there is no TTY)
+#   --force-agents: force-overwrite customized agent profiles (requires --apply).
+#               Updates baseline hashes after overwrite so future non-force runs
+#               recognize the new upstream version as the baseline. Without this
+#               flag, customized agents are skipped with a warning.
 # shared-references is support content, not a selectable skill: it is always
 # kept in sync and never subject to this confirmation.
 #
@@ -36,6 +40,7 @@
 set -euo pipefail
 
 APPLY=false
+FORCE_AGENTS=false
 MODE="global"
 PROJECT_PATH=""
 CUSTOM_UPSTREAM=""
@@ -49,6 +54,7 @@ usage() { sed -n '2,34p' "$0" | sed 's/^# \?//'; }
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --apply) APPLY=true; shift ;;
+        --force-agents) FORCE_AGENTS=true; shift ;;
         --add-new) NEW_POLICY="add"; shift ;;
         --skip-new) NEW_POLICY="skip"; shift ;;
         --project) MODE="project"; PROJECT_PATH="${2:?--project requires path}"; shift 2 ;;
@@ -97,6 +103,63 @@ resolve_local() {
     fi
 }
 
+# Resolve the agents directory corresponding to the local skills directory.
+resolve_local_agents() {
+    if $HAS_CUSTOM_LOCAL; then
+        echo "$(dirname "$CUSTOM_LOCAL")/agents"
+    elif [[ "$MODE" == "project" ]]; then
+        local p
+        p="$(cd "$PROJECT_PATH" 2>/dev/null && pwd)" || die "project path not found: $PROJECT_PATH"
+        echo "$p/.github/agents"
+    else
+        echo "$HOME/.copilot/agents"
+    fi
+}
+
+# Refuse any existing symlink in a destination path.  A direct file check is
+# not enough: `.github/agents` (or one of its parents) could itself redirect
+# writes outside the selected project.
+refuse_symlink_components() {
+    local probe="$1" stop="$2" parent
+    while :; do
+        [[ ! -L "$probe" ]] || die "refusing symlinked agent destination path: $probe"
+        [[ "$probe" != "$stop" ]] || break
+        parent="$(dirname "$probe")"
+        [[ "$parent" != "$probe" ]] || die "agent destination escapes safety root: $1"
+        probe="$parent"
+    done
+}
+
+# Resolve an existing source path portably (GNU/Linux, macOS, then Python).
+canonicalize() {
+    if command -v realpath >/dev/null 2>&1; then
+        realpath "$1"
+    elif readlink -f "$1" >/dev/null 2>&1; then
+        readlink -f "$1"
+    elif command -v python3 >/dev/null 2>&1; then
+        python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"
+    else
+        return 1
+    fi
+}
+
+# Copy through a same-directory temporary file and rename it into place.  The
+# rename replaces a concurrently-created symlink instead of following it.
+copy_agent_atomically() {
+    local source="$1" target="$2" target_dir tmp
+    [[ ! -L "$target" ]] || die "refusing symlinked agent destination: $target"
+    target_dir="$(dirname "$target")"
+    refuse_symlink_components "$target_dir" "$LOCAL_AGENTS_ROOT"
+    tmp="$(mktemp "$target_dir/.aris-agent.XXXXXX")" || die "cannot create temporary agent file in $target_dir"
+    if ! cp "$source" "$tmp"; then
+        rm -f "$tmp"
+        die "cannot copy agent profile: $source"
+    fi
+    chmod 0644 "$tmp"
+    [[ ! -L "$target" ]] || { rm -f "$tmp"; die "agent destination became a symlink: $target"; }
+    mv -f "$tmp" "$target"
+}
+
 # Compute SHA-256 of a file (portable across GNU/BSD)
 file_sha256() {
     if command -v sha256sum >/dev/null 2>&1; then
@@ -134,6 +197,7 @@ record_baseline() {
 UPSTREAM="$(resolve_upstream)"
 LOCAL="$(resolve_local)"
 BASELINE_FILE="$LOCAL/$BASELINE_FILE_NAME"
+AGENT_BASELINE_FILE="$LOCAL/.aris-agent-baselines.sha256"
 
 # Refuse if managed by install_aris_copilot.sh
 if [[ "$MODE" == "project" ]]; then
@@ -287,35 +351,116 @@ if (( ${#NEW[@]} > 0 )); then
     log ""
 fi
 
-if (( ${#UPDATED[@]} == 0 && ${#NEW[@]} == 0 )); then
+# ─── Agent profile detection (must run BEFORE the early exit so agent-only
+# changes aren't silently skipped — #361 isolation finding P1) ───
+UPSTREAM_AGENTS_DIR="$(dirname "$UPSTREAM")/.github/agents"
+LOCAL_AGENTS_DIR="$(resolve_local_agents)"
+LOCAL_AGENTS_ROOT="$(dirname "$LOCAL_AGENTS_DIR")"
+refuse_symlink_components "$LOCAL_AGENTS_DIR" "$LOCAL_AGENTS_ROOT"
+AGENTS_UPDATED=0
+AGENTS_NEW=0
+AGENTS_CUSTOMIZED=0
+
+if [[ -d "$UPSTREAM_AGENTS_DIR" ]]; then
+    [[ ! -L "$UPSTREAM_AGENTS_DIR" ]] || die "refusing symlinked upstream agents directory: $UPSTREAM_AGENTS_DIR"
+    log ""
+    log "Agent profiles:"
+    log "  Upstream:  $UPSTREAM_AGENTS_DIR"
+    log "  Local:     $LOCAL_AGENTS_DIR"
+    log ""
+
+    for agent_file in "$UPSTREAM_AGENTS_DIR"/*.agent.md; do
+        [[ -f "$agent_file" ]] || continue
+        # Resolve symlink and verify it's within the expected directory
+        resolved="$(canonicalize "$agent_file")" || die "cannot canonicalize agent profile: $agent_file"
+        upstream_canon="$(canonicalize "$UPSTREAM_AGENTS_DIR")" || die "cannot canonicalize upstream agents directory: $UPSTREAM_AGENTS_DIR"
+        [[ "$resolved" == "$upstream_canon"/* ]] || { warn "skipping external symlink: $agent_file -> $resolved"; continue; }
+        agent_name="$(basename "$agent_file")"
+        local_agent="$LOCAL_AGENTS_DIR/$agent_name"
+
+        [[ ! -L "$local_agent" ]] || die "refusing symlinked agent destination: $local_agent"
+
+        if [[ ! -f "$local_agent" ]]; then
+            log "  + agent $agent_name (new)"
+            AGENTS_NEW=$((AGENTS_NEW + 1))
+        else
+            if ! cmp -s "$agent_file" "$local_agent"; then
+                # Check if local agent was customized by user
+                agent_custom=false
+                local_hash="$(file_sha256 "$local_agent")"
+                agent_baseline_hash="$(get_baseline_hash "$AGENT_BASELINE_FILE" "$agent_name")"
+
+                if [[ -n "$agent_baseline_hash" && -n "$local_hash" ]]; then
+                    if [[ "$local_hash" != "$agent_baseline_hash" ]]; then
+                        agent_custom=true
+                    fi
+                elif [[ -z "$agent_baseline_hash" ]]; then
+                    upstream_hash="$(file_sha256 "$agent_file")"
+                    if [[ -n "$local_hash" && "$local_hash" != "$upstream_hash" ]]; then
+                        agent_custom=true
+                    fi
+                fi
+
+                if $agent_custom; then
+                    AGENTS_CUSTOMIZED=$((AGENTS_CUSTOMIZED + 1))
+                    if $FORCE_AGENTS; then
+                        log "  ~ agent $agent_name (customized — will force-update)"
+                    else
+                        log "  ~ agent $agent_name (customized — will NOT update)"
+                    fi
+                else
+                    AGENTS_UPDATED=$((AGENTS_UPDATED + 1))
+                    log "  ~ agent $agent_name (updatable)"
+                fi
+            fi
+        fi
+    done
+
+    if (( AGENTS_NEW + AGENTS_UPDATED == 0 )); then
+        log "Agent profiles: up to date."
+    fi
+    log ""
+fi
+
+if (( ${#UPDATED[@]} == 0 && ${#NEW[@]} == 0 && AGENTS_UPDATED == 0 && AGENTS_NEW == 0 && AGENTS_CUSTOMIZED == 0 )); then
     log "Everything up to date."
     $APPLY && ensure_global_pointer
     exit 0
 fi
 
-if ! $APPLY; then
-    log "Run with --apply to perform updates."
-    exit 0
-fi
-
-# Apply updates
-log "Applying updates..."
-
-# bash 3.2 (stock macOS): "${ARR[@]}" on an EMPTY array trips `set -u`. Only one of
-# UPDATED/NEW is guaranteed non-empty here (the line-236 early-exit needs BOTH empty),
-# so each apply loop gets its own length guard.
-if (( ${#UPDATED[@]} > 0 )); then
-    for name in "${UPDATED[@]}"; do
-        rm -rf "$LOCAL/$name"
-        cp -r "$UPSTREAM/$name" "$LOCAL/$name"
-        # Record new baseline hash
-        if [[ -f "$LOCAL/$name/SKILL.md" ]]; then
-            new_hash="$(file_sha256 "$LOCAL/$name/SKILL.md")"
-            record_baseline "$BASELINE_FILE" "$name" "$new_hash"
+    # ── --apply dry-run guard: report changes but do NOT apply without --apply (#361 P0) ──
+    if ! $APPLY; then
+        log "Dry run complete. Use --apply to apply these changes."
+        if (( AGENTS_UPDATED + AGENTS_NEW + AGENTS_CUSTOMIZED > 0 )); then
+            if $FORCE_AGENTS && (( AGENTS_CUSTOMIZED > 0 )); then
+                log "Agent profiles: ${AGENTS_NEW} new, ${AGENTS_UPDATED} updatable, ${AGENTS_CUSTOMIZED} customized (will be force-updated with --apply). Run with --apply to deploy."
+            elif (( AGENTS_CUSTOMIZED > 0 )); then
+                log "Agent profiles: ${AGENTS_NEW} new, ${AGENTS_UPDATED} updatable, ${AGENTS_CUSTOMIZED} customized/skipped. Run with --apply to deploy, or --force-agents --apply to overwrite customized agents."
+            else
+                log "Agent profiles: ${AGENTS_NEW} new, ${AGENTS_UPDATED} updatable."
+            fi
         fi
-        log "  ~ updated $name"
-    done
-fi
+        exit 0
+    fi
+
+    # Apply updates
+    log "Applying updates..."
+
+    # bash 3.2 (stock macOS): "${ARR[@]}" on an EMPTY array trips `set -u`. Only one of
+    # UPDATED/NEW is guaranteed non-empty here, so each apply loop gets its own length guard.
+    if (( ${#UPDATED[@]} > 0 )); then
+        for name in "${UPDATED[@]}"; do
+            rm -rf "$LOCAL/$name"
+            cp -r "$UPSTREAM/$name" "$LOCAL/$name"
+            # Record new baseline hash
+            if [[ -f "$LOCAL/$name/SKILL.md" ]]; then
+                new_hash="$(file_sha256 "$LOCAL/$name/SKILL.md")"
+                record_baseline "$BASELINE_FILE" "$name" "$new_hash"
+            fi
+            log "  ~ updated $name"
+        done
+    fi
+
 
 # ── New-skill three-state policy: interactive confirm / --add-new / --skip-new ──
 # A skill already in .aris-declined.txt is never re-asked and never installed —
@@ -378,9 +523,73 @@ if (( ${#TO_INSTALL_NEW[@]} > 0 )); then
     done
 fi
 
+# --- Agent profile deployment (apply phase) ---
+if { (( AGENTS_UPDATED + AGENTS_NEW > 0 )) || ( $FORCE_AGENTS && (( AGENTS_CUSTOMIZED > 0 )) ); } && [[ -d "$UPSTREAM_AGENTS_DIR" ]]; then
+    refuse_symlink_components "$LOCAL_AGENTS_DIR" "$LOCAL_AGENTS_ROOT"
+    mkdir -p "$LOCAL_AGENTS_DIR"
+    refuse_symlink_components "$LOCAL_AGENTS_DIR" "$LOCAL_AGENTS_ROOT"
+
+    for agent_file in "$UPSTREAM_AGENTS_DIR"/*.agent.md; do
+        [[ -f "$agent_file" ]] || continue
+        # Resolve symlink and verify it's within the expected directory
+        resolved="$(canonicalize "$agent_file")" || die "cannot canonicalize agent profile: $agent_file"
+        upstream_canon="$(canonicalize "$UPSTREAM_AGENTS_DIR")" || die "cannot canonicalize upstream agents directory: $UPSTREAM_AGENTS_DIR"
+        [[ "$resolved" == "$upstream_canon"/* ]] || { warn "skipping external symlink: $agent_file -> $resolved"; continue; }
+        agent_name="$(basename "$agent_file")"
+        local_agent="$LOCAL_AGENTS_DIR/$agent_name"
+
+        [[ ! -L "$local_agent" ]] || die "refusing symlinked agent destination: $local_agent"
+
+        if [[ ! -f "$local_agent" ]]; then
+            copy_agent_atomically "$agent_file" "$local_agent"
+            # Record baseline hash for new agent install
+            agent_hash="$(file_sha256 "$local_agent")"
+            record_baseline "$AGENT_BASELINE_FILE" "$agent_name" "$agent_hash"
+            log "  + agent $agent_name"
+        else
+            if ! cmp -s "$agent_file" "$local_agent"; then
+                # Re-run customization check (same logic as detection phase)
+                agent_custom=false
+                local_hash="$(file_sha256 "$local_agent")"
+                agent_baseline_hash="$(get_baseline_hash "$AGENT_BASELINE_FILE" "$agent_name")"
+
+                if [[ -n "$agent_baseline_hash" && -n "$local_hash" ]]; then
+                    if [[ "$local_hash" != "$agent_baseline_hash" ]]; then
+                        agent_custom=true
+                    fi
+                elif [[ -z "$agent_baseline_hash" ]]; then
+                    upstream_hash="$(file_sha256 "$agent_file")"
+                    if [[ -n "$local_hash" && "$local_hash" != "$upstream_hash" ]]; then
+                        agent_custom=true
+                    fi
+                fi
+
+                if $agent_custom; then
+                    if $FORCE_AGENTS; then
+                        copy_agent_atomically "$agent_file" "$local_agent"
+                        agent_hash="$(file_sha256 "$local_agent")"
+                        record_baseline "$AGENT_BASELINE_FILE" "$agent_name" "$agent_hash"
+                        log "  ~ agent $agent_name (force-updated, baseline updated)"
+                    else
+                        warn "agent $agent_name appears customized — skipping (use --force-agents to override)"
+                    fi
+                else
+                    copy_agent_atomically "$agent_file" "$local_agent"
+                    # Record/update baseline hash
+                    agent_hash="$(file_sha256 "$local_agent")"
+                    record_baseline "$AGENT_BASELINE_FILE" "$agent_name" "$agent_hash"
+                    log "  ~ agent $agent_name"
+                fi
+            fi
+        fi
+    done
+fi
+
 log ""
 log "Done. ${#UPDATED[@]} updated, ${#TO_INSTALL_NEW[@]} added."
-log "Baselines recorded in: $BASELINE_FILE"
+log "Agent profiles: ${AGENTS_UPDATED} updated, ${AGENTS_NEW} new, ${AGENTS_CUSTOMIZED} customized/skipped."
+log "Skill baselines recorded in: $BASELINE_FILE"
+log "Agent baselines recorded in: $AGENT_BASELINE_FILE"
 
 if (( ${#SKIPPED_NEW[@]} > 0 )); then
     log "  ${#SKIPPED_NEW[@]} new skill(s) skipped, not declined: ${SKIPPED_NEW[*]}"

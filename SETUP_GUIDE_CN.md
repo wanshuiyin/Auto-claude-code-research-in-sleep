@@ -41,6 +41,8 @@ claude mcp list | grep codex
 # 应显示: codex: codex mcp-server - ✓ Connected
 ```
 
+> **⚠️ 重要提示**：注册或修改任何 MCP server 后，**必须重启 Claude Code** 才能生效。MCP 配置在启动时加载。如需为其他模型组合注册额外的 MCP server，请参见 [3.2 注册 MCP 服务（可选）](#32-注册-mcp-服务可选)。
+
 ### 1.3 LaTeX 环境（可选）
 
 工作流 3（论文写作）需要，含 `latexmk` 和 `pdfinfo`：
@@ -66,7 +68,9 @@ touch CLAUDE.md
 - `git init` — 部分技能需要 git 来定位项目根目录
 - `CLAUDE.md` — Claude Code 的项目配置文件，安装脚本会向其中写入 ARIS 信息
 
-## 第三步：安装 Skills
+## 第三步：安装 Skills 和配置 MCP
+
+### 3.1 安装 Skills
 
 通过符号链接将 ARIS skill 安装到项目中（推荐的项目级安装方式）：
 
@@ -111,6 +115,23 @@ cd ~/aris_repo && git pull
 cd ~/your-paper-project
 bash ~/aris_repo/tools/install_aris.sh
 ```
+
+### 3.2 注册 MCP 服务（可选）
+
+根据你选择的模型组合，除了 Step 1.2 中已注册的默认 `codex` MCP 外，你可能还需要注册额外的 MCP 服务。ARIS 提供了以下 MCP 服务：
+
+| MCP 服务 | 注册到 | 适用场景 | 注册方式 |
+|---|---|---|---|
+| `codex` | Claude Code | 默认配置（Claude + GPT 审稿） | `claude mcp add codex -s user -- codex mcp-server`（Step 1.2 已完成） |
+| `claude-review` | Codex CLI | 使用 Codex 作为执行者、Claude 作为审稿人 | `codex mcp add claude-review -- python3 ~/.codex/mcp-servers/claude-review/server.py`（详见 `mcp-servers/claude-review/README.md`） |
+| `gemini-review` | Codex CLI | 使用 Codex 作为执行者、Gemini 作为审稿人 | `codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api -- python3 ~/.codex/mcp-servers/gemini-review/server.py`（详见 `mcp-servers/gemini-review/README.md`） |
+| `llm-chat` | Claude Code | 使用任意 OpenAI 兼容 API 作为审稿人 | `claude mcp add llm-chat -s user -- python3 /path/to/aris_repo/mcp-servers/llm-chat/server.py`（详见 `docs/LLM_API_MIX_MATCH_GUIDE.md`） |
+| `minimax-chat` | Claude Code | 使用 MiniMax 作为审稿人（无需 OpenAI Key） | 详见 `docs/MINIMAX_MCP_GUIDE.md` |
+| `manual-review` | Claude Code | 人工手动审稿 | `claude mcp add manual-review -s user -- python3 /path/to/aris_repo/mcp-servers/manual-review/server.py` |
+| `feishu-bridge` | —（独立 HTTP 服务） | 飞书通知集成 | 详见 `mcp-servers/feishu-bridge/` |
+| `codex-image2` | Claude Code | 增强的 Codex 图片生成 | 详见 `mcp-servers/codex-image2/` |
+
+> **⚠️ 重要提示**：注册或修改任何 MCP 服务后，**必须重启 Claude Code** 才能生效。MCP 配置在启动时加载。正确顺序：注册所需 MCP 服务 → 重启 Claude Code → 开始使用 ARIS 工作流。
 
 ## 第四步：配置 GPU 服务器
 
@@ -171,6 +192,8 @@ ssh username@your-server-ip 'eval "$(/path/to/miniconda3/bin/conda shell.bash ho
 
 Research Wiki 是 ARIS 的核心知识库，自动积累你整个研究过程中读过的论文、产生的想法、跑过的实验。其他 skill 会自动往里写入内容，你不需要手动维护。
 
+> **⚠️ 如果你在 3.2 注册 MCP 后还没有重启 Claude Code，请现在重启**——MCP 服务在启动时加载，不重启将无法使用。
+
 在研究项目目录下打开 Claude Code，输入：
 
 ```
@@ -194,7 +217,16 @@ research-wiki/
 
 ## 第六步：验证
 
-重启 Claude Code，在研究项目目录下测试：
+重启 Claude Code，在研究项目目录下测试。
+
+**在终端中验证 MCP 服务是否已连接：**
+
+```bash
+claude mcp list          # 所有 Claude Code MCP 服务应显示 ✓ Connected
+codex mcp list           # Codex CLI MCP 服务（如适用）
+```
+
+**在 Claude Code 中：**
 
 **1. 测试 MCP 连通性** — 在 Claude Code 中输入：
 

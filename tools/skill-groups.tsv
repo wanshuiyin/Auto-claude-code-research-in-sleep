@@ -38,6 +38,7 @@ skill	deepxiv	lit-search	-	DeepXiv 渐进式论文阅读
 skill	semantic-scholar	lit-search	-	正式发表论文检索(引用数/venue)
 skill	openalex	lit-search	-	OpenAlex 引用图谱与机构元数据
 skill	exa-search	lit-search	-	Exa AI 网页搜索+内容抽取
+skill	web-debug-search	lit-search	-	多来源调试检索（GitHub/Stack Exchange/中文社区/General Web）与版本兼容性
 skill	gemini-search	lit-search	-	Gemini 驱动的文献发现
 skill	research-lit	lit-search	-	文献综述与相关工作分析
 skill	comm-lit-review	lit-search	-	通信领域专用文献综述
@@ -58,6 +59,7 @@ skill	kill-argument	review-loop	render-html	对抗性双线程评审(最强拒�
 skill	formula-derivation	theory	-	公式推导与理论线组织
 skill	proof-writer	theory	-	撰写严格数学证明
 skill	proof-checker	theory	render-html	证明缺口审查与修复
+skill	proof-orchestrator	theory	-	本地优先的证明编排、人工 GPT Pro 交接与显式 DeepSeek 复审
 skill	experiment-plan	experiments	-	claim 驱动的实验路线图
 skill	experiment-bridge	experiments	run-experiment,experiment-queue,monitor-experiment,training-check,ablation-planner	W1.5:从实验计划到跑通初步结果
 skill	experiment-queue	experiments	-	SSH 批量实验队列(OOM 重试)

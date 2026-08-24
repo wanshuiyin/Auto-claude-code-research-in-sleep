@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 import shutil
 from pathlib import Path
@@ -69,12 +70,21 @@ def extract_field(frontmatter: str, field: str) -> str:
 
 
 def build_frontmatter(name: str, description: str) -> str:
-    safe_desc = description.replace('"', '\\"')
-    return f'---\nname: "{name}"\ndescription: "{safe_desc}"\n---\n\n'
+    # JSON strings are a valid subset of YAML double-quoted scalars. Using a
+    # serializer here keeps backslashes and quotes from being escaped twice.
+    return (
+        f'---\nname: {json.dumps(name, ensure_ascii=False)}\n'
+        f'description: {json.dumps(description, ensure_ascii=False)}\n'
+        '---\n\n'
+    )
 
 
 def normalize_description(text: str) -> str:
     text = text or "Claude-review override for a Codex-native ARIS skill."
+    # A few legacy Codex-mirror descriptions contain an extra escape layer
+    # (the parsed value is `\\\"` instead of `\"`). Remove that layer before
+    # serializing the Claude overlay so regeneration stays idempotent.
+    text = text.replace('\\\"', '"')
     text = text.replace("GPT using a secondary Codex agent", "Claude via claude-review MCP")
     text = text.replace("using a secondary Codex agent", "using Claude Code via claude-review MCP")
     text = text.replace("via GPT-5.6-Sol xhigh review", "via Claude review through claude-review MCP")
@@ -163,6 +173,12 @@ def transform_body(text: str) -> str:
         text,
         count=1,
     )
+    # The acquittal receipt example is a literal the overlay would copy verbatim.
+    # This pack's backend is claude-review, so leaving the source's "codex" in it
+    # makes every overlay run write a false receipt.
+    text = text.replace('"backend":"codex","effort":"xhigh"', '"backend":"claude-review","effort":"high-rigor"')
+    text = text.replace('"backend": "codex", "effort": "xhigh"', '"backend": "claude-review", "effort": "high-rigor"')
+    text = text.replace('"backend":"codex"', '"backend":"claude-review"')
     text = text.replace("secondary Codex agent", "Claude reviewer via `claude-review` MCP")
     text = text.replace("via a Claude reviewer via `claude-review` MCP (xhigh reasoning)", "via `claude-review` MCP (high-rigor review)")
     text = text.replace("secondary Codex agent (xhigh reasoning)", "Claude reviewer via `claude-review` MCP")
