@@ -135,7 +135,31 @@ function Normalize-PathString {
 
 function Same-Path {
     param([string]$Left, [string]$Right)
-    return [System.StringComparer]::OrdinalIgnoreCase.Equals((Normalize-PathString $Left), (Normalize-PathString $Right))
+    if ([string]::IsNullOrWhiteSpace($Left) -or [string]::IsNullOrWhiteSpace($Right)) {
+        return $false
+    }
+    try {
+        $normalizedLeft = Normalize-PathString $Left
+        $normalizedRight = Normalize-PathString $Right
+    } catch {
+        return $false
+    }
+    if ([System.StringComparer]::OrdinalIgnoreCase.Equals($normalizedLeft, $normalizedRight)) {
+        return $true
+    }
+    if (-not (Test-Path -LiteralPath $Left) -or -not (Test-Path -LiteralPath $Right)) {
+        return $false
+    }
+    try {
+        $resolvedLeft = Resolve-ReparseChain $Left
+        $resolvedRight = Resolve-ReparseChain $Right
+    } catch {
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($resolvedLeft) -or [string]::IsNullOrWhiteSpace($resolvedRight)) {
+        return $false
+    }
+    return [System.StringComparer]::OrdinalIgnoreCase.Equals($resolvedLeft, $resolvedRight)
 }
 
 function Test-PathInside {
@@ -226,7 +250,22 @@ function Resolve-ReparseChain {
 
 function Test-ResolvedPathInside {
     param([string]$Path, [string]$Root)
-    return Test-PathInside (Resolve-ReparseChain $Path) (Resolve-ReparseChain $Root)
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Root)) {
+        return $false
+    }
+    if (-not (Test-Path -LiteralPath $Path) -or -not (Test-Path -LiteralPath $Root)) {
+        return $false
+    }
+    try {
+        $resolvedPath = Resolve-ReparseChain $Path
+        $resolvedRoot = Resolve-ReparseChain $Root
+    } catch {
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($resolvedPath) -or [string]::IsNullOrWhiteSpace($resolvedRoot)) {
+        return $false
+    }
+    return Test-PathInside $resolvedPath $resolvedRoot
 }
 
 function Read-Text {

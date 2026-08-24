@@ -33,14 +33,14 @@ class InstallTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _run(self, *extra_args):
-        result = subprocess.run(
+    def _run_with_repo(self, repo: Path, *extra_args):
+        return subprocess.run(
             [
                 "bash",
                 str(INSTALL_SCRIPT),
                 str(self.project),
                 "--aris-repo",
-                str(REPO_ROOT),
+                str(repo),
                 "--quiet",
                 "--no-doc",
                 *extra_args,
@@ -48,7 +48,9 @@ class InstallTest(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        return result
+
+    def _run(self, *extra_args):
+        return self._run_with_repo(REPO_ROOT, *extra_args)
 
     # ─── install behaviour ────────────────────────────────────────────────
 
@@ -91,6 +93,34 @@ class InstallTest(unittest.TestCase):
         link = self.project / ".aris" / "tools"
         self.assertTrue(link.is_symlink())
         self.assertEqual(os.readlink(link), str(REPO_ROOT / "tools"))
+
+    def test_repo_alias_reconcile_preserves_tools_target_spelling(self):
+        first = self._run()
+        self.assertEqual(first.returncode, 0, msg=first.stdout + first.stderr)
+        link = self.project / ".aris" / "tools"
+        original_target = os.readlink(link)
+        original_inode = link.lstat().st_ino
+        repo_alias = self.tmp / "repo-alias"
+        repo_alias.symlink_to(REPO_ROOT, target_is_directory=True)
+
+        second = self._run_with_repo(repo_alias, "--reconcile")
+
+        self.assertEqual(second.returncode, 0, msg=second.stdout + second.stderr)
+        self.assertEqual(os.readlink(link), original_target)
+        self.assertEqual(link.lstat().st_ino, original_inode)
+
+    def test_repo_alias_direct_uninstall_removes_tools_target(self):
+        first = self._run()
+        self.assertEqual(first.returncode, 0, msg=first.stdout + first.stderr)
+        link = self.project / ".aris" / "tools"
+        repo_alias = self.tmp / "repo-alias"
+        repo_alias.symlink_to(REPO_ROOT, target_is_directory=True)
+
+        uninstall = self._run_with_repo(repo_alias, "--uninstall")
+
+        self.assertEqual(uninstall.returncode, 0, msg=uninstall.stdout + uninstall.stderr)
+        self.assertFalse(link.exists())
+        self.assertFalse(link.is_symlink())
 
     def test_install_does_not_replace_existing_dir(self):
         # User already has a real .aris/tools dir; installer must leave it alone
@@ -238,6 +268,36 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, msg=result.stderr)
         self.assertTrue(link.is_symlink(), "user-created symlink must be preserved")
         self.assertEqual(os.readlink(link), str(elsewhere))
+
+    def test_leaf_and_profile_ownership_manifests_coexist_independently(self):
+        install = self._run()
+        self.assertEqual(install.returncode, 0, msg=install.stdout + install.stderr)
+        leaf_manifest = self.project / ".aris" / "installed-agents.txt"
+        profile_manifest = self.project / ".aris" / "installed-agent-profiles.txt"
+        self.assertTrue(leaf_manifest.is_file())
+        self.assertTrue(profile_manifest.is_file())
+        self.assertIn("version\t1", leaf_manifest.read_text(encoding="utf-8"))
+        profile_entries = profile_manifest.read_text(encoding="utf-8").splitlines()
+        self.assertTrue(profile_entries)
+        self.assertIn("aris-reviewer-openai.agent.md", profile_entries)
+        self.assertTrue(all(line.endswith(".agent.md") for line in profile_entries))
+
+        reconcile = self._run(
+            "--skills",
+            "auto-review-loop",
+            "--exclude",
+            "idea-creator,research-lit,proof-checker",
+        )
+        self.assertEqual(reconcile.returncode, 0, msg=reconcile.stdout + reconcile.stderr)
+        self.assertFalse(leaf_manifest.exists())
+        self.assertTrue(profile_manifest.is_file())
+        profile = self.project / ".github" / "agents" / "aris-reviewer-openai.agent.md"
+        self.assertTrue(profile.is_symlink())
+
+        uninstall = self._run("--uninstall")
+        self.assertEqual(uninstall.returncode, 0, msg=uninstall.stdout + uninstall.stderr)
+        self.assertFalse(profile.exists())
+        self.assertFalse(profile_manifest.exists())
 
     def test_uninstall_removes_installer_created_agent_profiles(self):
         self._run()

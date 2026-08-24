@@ -17,6 +17,7 @@ Covers:
 All runs use a synthetic aris-repo fixture and an overridden $HOME so the
 real global pointer is never touched.
 """
+import os
 import subprocess
 import tempfile
 import unittest
@@ -35,6 +36,7 @@ skill\tdelta\tg2\t-
 """
 
 
+@unittest.skipIf(os.name == "nt", "Bash selective installer tests require POSIX symlinks")
 class SelectiveInstallTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="aris-358-"))
@@ -363,6 +365,78 @@ class SelectiveInstallTest(unittest.TestCase):
         target = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
         self.assertTrue(target.is_symlink())
         self.assertTrue((self.project / ".aris" / "installed-agents.txt").is_file())
+
+    def test_repo_alias_reconcile_reuses_existing_fanout_links(self):
+        self._add_fanout_skill("idea-creator")
+        self._run("--skills", "idea-creator")
+        skill = self.project / ".claude" / "skills" / "idea-creator"
+        leaf = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        tools = self.project / ".aris" / "tools"
+        original_targets = (skill.readlink(), leaf.readlink(), tools.readlink())
+        original_inodes = (skill.lstat().st_ino, leaf.lstat().st_ino, tools.lstat().st_ino)
+        repo_alias = self.tmp / "repo-alias"
+        repo_alias.symlink_to(self.repo, target_is_directory=True)
+
+        original_repo = self.repo
+        self.repo = repo_alias
+        try:
+            self._run("--reconcile", "--skills", "idea-creator")
+        finally:
+            self.repo = original_repo
+
+        self.assertEqual((skill.readlink(), leaf.readlink(), tools.readlink()), original_targets)
+        self.assertEqual(
+            (skill.lstat().st_ino, leaf.lstat().st_ino, tools.lstat().st_ino),
+            original_inodes,
+        )
+        self.assertTrue((self.project / ".aris" / "installed-agents.txt").is_file())
+
+    def test_repo_alias_direct_uninstall_removes_managed_links(self):
+        self._add_fanout_skill("idea-creator")
+        self._run("--skills", "idea-creator")
+        repo_alias = self.tmp / "repo-alias"
+        repo_alias.symlink_to(self.repo, target_is_directory=True)
+
+        original_repo = self.repo
+        self.repo = repo_alias
+        try:
+            self._run("--uninstall")
+        finally:
+            self.repo = original_repo
+
+        self.assertFalse((self.project / ".claude" / "skills" / "idea-creator").exists())
+        self.assertFalse((self.project / ".claude" / "agents" / "aris-fanout-leaf.md").exists())
+        self.assertFalse((self.project / ".aris" / "tools").exists())
+        self.assertFalse((self.project / ".aris" / "installed-skills.txt").exists())
+        self.assertFalse((self.project / ".aris" / "installed-agents.txt").exists())
+        self.assertTrue((self.project / ".aris" / "installed-skills.txt.prev").is_file())
+
+    def test_uninstall_removes_owned_leaf_with_missing_source(self):
+        source = self._add_fanout_skill("idea-creator")
+        self._run("--skills", "idea-creator")
+        leaf = self.project / ".claude" / "agents" / "aris-fanout-leaf.md"
+        source.unlink()
+        self.assertTrue(leaf.is_symlink())
+        self.assertFalse(leaf.exists())
+
+        self._run("--uninstall")
+
+        self.assertFalse(leaf.is_symlink())
+        self.assertFalse((self.project / ".aris" / "installed-agents.txt").exists())
+
+    def test_reconcile_removes_owned_dangling_skill_link(self):
+        self._run("--skills", "alpha,beta")
+        skill = self.project / ".claude" / "skills" / "alpha"
+        (self.repo / "skills" / "alpha" / "SKILL.md").unlink()
+        (self.repo / "skills" / "alpha").rmdir()
+        self.assertTrue(skill.is_symlink())
+        self.assertFalse(skill.exists())
+
+        self._run("--reconcile")
+
+        self.assertFalse(skill.is_symlink())
+        manifest = (self.project / ".aris" / "installed-skills.txt").read_text(encoding="utf-8")
+        self.assertNotIn("\talpha\t", manifest)
 
     def test_agent_ownership_missing_project_root_reports_conflict(self):
         self._add_fanout_skill("idea-creator")
