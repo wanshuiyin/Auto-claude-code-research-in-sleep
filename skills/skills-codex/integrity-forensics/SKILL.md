@@ -25,7 +25,9 @@ Audit target: **$ARGUMENTS**
 - **ANTI_AR_COMMIT = `b47af6f983b38347b6d2110379e266400597cf66`** — never
   tracks HEAD; bumping is a reviewed change (mainline Pin-bump checklist).
 - **CLONE_DIR = `~/.aris/anti-autoresearch`** — host-neutral. An older clone at
-  `~/.claude/anti-autoresearch` is unused; delete it whenever convenient.
+  `~/.claude/anti-autoresearch` is unused; move it and its `.aris_eval_ok_*`
+  receipt to keep an offline deterministic-only run working — this pack's own
+  mode — otherwise delete it whenever convenient.
 - **NO REVIEWER KNOBS** — and no `— effort:` mapping onto upstream settings.
 
 ## Step 0 — Bootstrap the pin (identical to mainline)
