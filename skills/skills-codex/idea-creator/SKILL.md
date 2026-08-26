@@ -259,7 +259,7 @@ For each surviving idea, run a deeper evaluation:
        - What is the best case FOR it — what would make this the paper people cite?
        - What's the strongest objection a reviewer would raise?
        - What's the most likely failure mode?
-       - How would you rank these for a top venue submission?
+       - Rank by expected information and upside within the pilot budget — which results would matter most, whichever way they come out?
        - Which 2-3 would you actually work on?
 
        Rank; do not rewrite. An objection is answered or recorded as a named
@@ -281,7 +281,7 @@ Before committing to a full research effort, run cheap pilot experiments to get 
    - Single seed, small scale (e.g., small dataset subset, fewer epochs)
    - Target: 30 min - PILOT_MAX_HOURS per pilot on 1 GPU
    - **Estimate GPU-hours BEFORE launching.** If estimated time > PILOT_MAX_HOURS, reduce scale (fewer epochs, smaller subset) or flag as "needs manual pilot"
-   - Clear success metric defined upfront (e.g., "if metric improves by > 1%, signal is positive")
+   - Decision criterion defined upfront — including what a positive, negative, and null outcome would each teach. Metric improvement is not required for a diagnostic contribution.
 
 2. **Deploy in parallel**: Use `/run-experiment` to launch pilots on different GPUs simultaneously:
    ```
@@ -293,7 +293,7 @@ Before committing to a full research effort, run cheap pilot experiments to get 
 
 3. **Collect results**: Use `/monitor-experiment` to check progress. If any pilot exceeds PILOT_TIMEOUT_HOURS, kill it and collect partial results. Once all pilots complete (or timeout), compare:
    - Which ideas showed positive signal?
-   - Which showed null/negative results? (eliminate or deprioritize)
+   - Which showed null/negative results? Classify each: core-hypothesis refuted, informative negative (often publishable), or underpowered pilot — do not eliminate by sign alone.
    - Any surprising findings that suggest a pivot?
    - Total GPU-hours consumed (track against MAX_TOTAL_GPU_HOURS budget)
 
@@ -350,7 +350,7 @@ Write a structured report to `idea-stage/IDEA_REPORT.md`:
 | Idea 3 | GPU 2 | 1.5 hr | +0.8% CE | WEAK POSITIVE |
 
 ## Suggested Execution Order
-1. Start with Idea 1 (positive pilot signal, lowest risk)
+1. Start with Idea 1 (highest decision value after the pilot)
 2. Idea 3 as backup (weak signal, may need larger scale to confirm)
 3. Idea 2 eliminated by pilot — negative result documented
 
@@ -410,13 +410,13 @@ See [`output-composition.md`](../shared-references/output-composition.md).
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - The user provides a DIRECTION, not an idea. Your job is to generate the ideas.
-- Quantity first, quality second: brainstorm broadly, then filter ruthlessly.
+- Quantity first, quality second: brainstorm broadly, then narrow only to allocate pilot budget — annotate the rest, don't paper-kill them.
 - A good negative result is just as publishable as a positive one. Prioritize ideas where the answer matters regardless of direction.
-- Don't fall in love with any idea before validating it. Be willing to kill ideas.
+- Don't fall in love with any idea before validating it — but let evidence do the killing, not anticipated objections.
 - Always estimate compute cost. An idea that needs 1000 GPU-hours is not actionable for most researchers.
-- "Apply X to Y" is the lowest form of research idea. Push for deeper questions.
+- "Apply X to Y" is legitimate when Y can reveal a non-obvious interaction, failure mode, or finding — judge the revelation, not the template.
 - Include eliminated ideas in the report — they save future time by documenting dead ends.
-- **If the user's direction is too broad (e.g., "NLP", "computer vision", "reinforcement learning"), STOP and ask them to narrow it.** A good direction is 1-2 sentences specifying the problem, domain, and constraint — e.g., "factorized gap in discrete diffusion LMs" or "sample efficiency of offline RL with image observations". Without sufficient specificity, generated ideas will be too vague to run experiments on.
+- **If the user's direction is broad (e.g., "NLP"), use Phase 1 to derive 2-3 concrete frames and generate across them — ask the user only when a missing constraint would materially change the pilot slate.** A good direction is 1-2 sentences specifying the problem, domain, and constraint — e.g., "factorized gap in discrete diffusion LMs" or "sample efficiency of offline RL with image observations". Without sufficient specificity, generated ideas will be too vague to run experiments on.
 
 ## Composing with Other Skills
 

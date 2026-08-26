@@ -73,10 +73,11 @@ because the territory has neighbors.
    let the user decide whether to run it.
 5. A direct attack on a central problem is legitimate novelty when nobody has
    executed it well. "This area is hot" does not mean "this area is taken."
-6. This check is the FIRST gate, not the last — triage, pilots, and external
-   review all run after it. A wrongly passed idea dies cheaply at the next
-   gate; a wrongly killed idea is never seen again. When torn between two
-   verdicts, choose the more permissive one.
+6. This check is an early gate, never the last one — more triage, pilots, or
+   external review still stand between any idea and a paper, whatever order
+   this run uses. A wrongly passed idea dies cheaply at one of them; a wrongly
+   killed idea is never seen again. When torn between two verdicts, choose the
+   more permissive one.
 Say plainly when an idea clears the check. Do not manufacture overlap.
 ```
 
@@ -90,8 +91,8 @@ Output a structured report:
 [1-2 sentence description]
 
 ### Core Claims
-1. [Claim 1] — Novelty: HIGH/MEDIUM/LOW — Closest: [paper]
-2. [Claim 2] — Novelty: HIGH/MEDIUM/LOW — Closest: [paper]
+1. [Claim 1] — Closest: [paper] — What stays unknown or different: [delta]
+2. [Claim 2] — Closest: [paper] — What stays unknown or different: [delta]
 ...
 
 ### Closest Prior Work
