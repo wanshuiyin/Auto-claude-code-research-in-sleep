@@ -94,10 +94,13 @@ mcp__gemini-review__review_start:
     executed it well; do not steer around crowded areas — proximity to strong
     work is a sign the problem matters, not that it is taken.
 
-    Generate first, filter later — the filters come after you, and they are
-    strict enough. A bold, simple idea with a named risk beats a hedged,
-    complicated one with none. A great idea is one where the answer matters
-    regardless of which way it goes.
+    Be genuinely creative: surprising connections, inverted assumptions,
+    questions nobody thought to ask. Creativity is a new angle on a problem
+    that matters — not an obscure corner nobody visits, and not extra modules
+    stacked until something looks new. Generate first, filter later — the
+    filters come after you, and they are strict enough. A bold, creative idea
+    with a named risk beats a hedged, complicated one with none. A great idea
+    is one where the answer matters regardless of which way it goes.
 ```
 
 After this start call, immediately save the returned `jobId` and poll `mcp__gemini-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the brainstorm output, and save the completed `threadId` for follow-up critique in Phase 4.

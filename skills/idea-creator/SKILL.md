@@ -311,10 +311,13 @@ Bundle contents:
     executed it well; do not steer around crowded areas — proximity to strong
     work is a sign the problem matters, not that it is taken.
 
-    Generate first, filter later — the filters come after you, and they are
-    strict enough. A bold, simple idea with a named risk beats a hedged,
-    complicated one with none. A great idea is one where the answer matters
-    regardless of which way it goes.
+    Be genuinely creative: surprising connections, inverted assumptions,
+    questions nobody thought to ask. Creativity is a new angle on a problem
+    that matters — not an obscure corner nobody visits, and not extra modules
+    stacked until something looks new. Generate first, filter later — the
+    filters come after you, and they are strict enough. A bold, creative idea
+    with a named risk beats a hedged, complicated one with none. A great idea
+    is one where the answer matters regardless of which way it goes.
 ```
 
 ### Phase 3: Mechanical consolidation + objective feasibility gate
