@@ -76,7 +76,7 @@ def test_silence_timeout_antipattern_is_absent() -> None:
 def test_research_pipeline_passes_resolved_mode_to_nested_workflows() -> None:
     idea_invocation = '/idea-discovery "$ARGUMENTS" — AUTO_PROCEED: $AUTO_PROCEED'
     paper_invocations = (
-        '/paper-writing "NARRATIVE_REPORT.md" — venue: ICLR, AUTO_PROCEED: $AUTO_PROCEED',
+        '/paper-writing "NARRATIVE_REPORT.md" — venue: <VENUE>, AUTO_PROCEED: $AUTO_PROCEED',
         '/paper-writing "NARRATIVE_REPORT.md" — venue: [VENUE], AUTO_PROCEED: $AUTO_PROCEED',
         '/paper-writing "NARRATIVE_REPORT.md" — venue: $VENUE, AUTO_PROCEED: $AUTO_PROCEED',
     )
