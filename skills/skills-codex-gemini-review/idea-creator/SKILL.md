@@ -156,7 +156,9 @@ For each surviving idea, run a deeper evaluation:
        risk on the idea — never absorbed by adding a module, a gate, or a
        qualifier. A bold idea with a named risk outranks a hedged idea with
        none, and complexity added since the brainstorm is a red flag, not
-       progress.
+       progress. And do not let your picks be uniformly the safest — if
+       the top set is all LOW-risk, name the high-upside idea that most
+       deserves a pilot slot and what result would convince you.
    ```
 
    After this start call, immediately save the returned `jobId` and poll `mcp__gemini-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the follow-up critique.

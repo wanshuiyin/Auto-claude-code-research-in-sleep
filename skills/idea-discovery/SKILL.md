@@ -99,7 +99,9 @@ returned model and durable thread/trace id:
 ```
 
 Never invent either value and never call `accept` without the positive verdict
-required by the run-state contract. A negative verdict does not grant a review receipt.
+required by the run-state contract. For `novelty-check`, **both PROCEED and
+PROCEED WITH CAUTION are positive verdicts** — caution is guidance for the
+pilot, not a rejection; only ABANDON is negative. A negative verdict does not grant a review receipt.
 Leave the phase `done` and the final gate `BLOCKED`, select a surviving
 or new idea, then re-run that reviewer-bearing phase. Do the same if the
 reviewer is unavailable, returns no valid identity/response, or its output was
@@ -502,7 +504,7 @@ Skip this step if `RENDER_HTML = false`.
 
 - **Don't skip phases.** Each phase filters and validates — skipping leads to wasted effort later.
 - **Checkpoint between phases.** Briefly summarize what was found. With `AUTO_PROCEED=true`, state the selected next action and keep executing in the same turn; with `false`, ask and end the turn.
-- **Kill ideas early.** It's better to kill 10 bad ideas in Phase 3 than to implement one and fail.
+- **Let pilots kill, not vibes.** A cheap pilot that says no beats a month of implementation that says no — but the kill needs empirical signal or a named published paper, not taste. Talking yourself out of ideas on paper is how pipelines end up with nothing to run.
 - **Empirical signal > theoretical appeal.** An idea with a positive pilot outranks a "sounds great" idea without evidence.
 - **Document everything — inside the one report, not in scattered files.** Dead ends and eliminated ideas are valuable, so record them as sections of `idea-stage/IDEA_REPORT.md` (see *Output hygiene* above). Do not spawn a separate `.md` per phase.
 - **Be honest with the reviewer.** Include negative results and failed pilots in the review prompt.

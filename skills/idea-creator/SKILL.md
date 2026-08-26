@@ -392,7 +392,9 @@ per-idea novelty search:
    risk on the idea — never absorbed by adding a module, a gate, or a
    qualifier. A bold idea with a named risk outranks a hedged idea with
    none, and complexity added since the brainstorm is a red flag, not
-   progress.
+   progress. And do not let your picks be uniformly the safest — if the
+   top set is all LOW-risk, name the high-upside idea that most deserves a
+   pilot slot and what result would convince you.
    ```
    The reviewer's ranking is the authoritative quality verdict. The executor
    does not eliminate candidates on its own taste before or instead of this.

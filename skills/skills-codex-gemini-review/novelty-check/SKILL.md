@@ -21,7 +21,7 @@ Given a method description, systematically verify its novelty:
 
 ### Phase A: Extract Key Claims
 1. Read the user's method description
-2. Identify 3-5 core technical claims that would need to be novel:
+2. Identify 3-5 core technical claims that carry the claimed delta:
    - What is the method?
    - What problem does it solve?
    - What is the mechanism?
@@ -73,11 +73,17 @@ because the territory has neighbors.
    contains this result — name that paper. No named paper, no ABANDON.
 3. Crowded-but-deltaed is PROCEED: state the delta in one sentence a reviewer
    could verify. Thin or contested delta is PROCEED WITH CAUTION — say what
-   would make it carry, not why it should die.
+   would make it carry, not why it should die. CAUTION is not a safe middle:
+   if you cannot name the specific thing that makes the delta thin, the
+   verdict is PROCEED.
 4. Concurrent or competing work is not a veto. That is a race — report it and
    let the user decide whether to run it.
 5. A direct attack on a central problem is legitimate novelty when nobody has
    executed it well. "This area is hot" does not mean "this area is taken."
+6. This check is the FIRST gate, not the last — triage, pilots, and external
+   review all run after it. A wrongly passed idea dies cheaply at the next
+   gate; a wrongly killed idea is never seen again. When torn between two
+   verdicts, choose the more permissive one.
 Say plainly when an idea clears the check. Do not manufacture overlap.
 ```
 
@@ -115,6 +121,9 @@ Output a structured report:
 - Two failures waste months equally: a false novelty claim, and a viable idea
   abandoned because the territory has neighbors. Be brutally honest in both
   directions — and when an idea clears the check, say so plainly.
+- Novelty can live in the combination or the finding even when every
+  individual claim rates LOW — judge the idea, not each claim in isolation.
+  Known parts arranged to reveal something unknown are novel.
 - "Applying X to Y" earns novelty by what the application reveals — a
   non-obvious interaction, failure mode, or insight. Judge the revelation, not
   the template.
