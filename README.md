@@ -18,6 +18,12 @@ Restart the profile afterwards; plugin code loads at startup, so reloading the p
 
 `dsh plugin` shells out to **pnpm**, which the Harness does not bundle. Without it on `PATH` the install exits before doing anything.
 
+The command resolves the package from the npm registry. Without npm access, install the same tarball from the [GitHub Release](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/tag/dsh-aris-v0.1.0) instead — pinned to this version, and `dsh plugin update` does not apply to it:
+
+```sh
+dsh plugin --profile web add https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/dsh-aris-v0.1.0/dsh-aris-0.1.0.tgz
+```
+
 ## Prerequisites
 
 **Codex CLI, installed and authenticated.** It is the independent reviewer. The bundle spawns `codex mcp-server` and never overrides its model or reasoning effort — **`~/.codex/config.toml` is the reviewer posture contract**. ARIS expects a non-DeepSeek family at `xhigh`:

@@ -18,6 +18,12 @@ dsh plugin --profile web add dsh-aris
 
 `dsh plugin` 会调用 **pnpm**，而 Harness 不自带它。PATH 上没有 pnpm，安装会直接退出、什么都不做。
 
+这条命令从 npm registry 解析包。碰不到 npm 的话，改装 [GitHub Release](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/tag/dsh-aris-v0.1.0) 上的同一份 tarball——版本钉死在 URL 里，`dsh plugin update` 对它无效：
+
+```sh
+dsh plugin --profile web add https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/dsh-aris-v0.1.0/dsh-aris-0.1.0.tgz
+```
+
 ## 前置条件
 
 **已安装并登录的 Codex CLI。** 它就是那位独立审稿人。本 bundle 启动 `codex mcp-server`，且从不覆盖它的模型和推理档位——**`~/.codex/config.toml` 就是审稿人姿态契约**。ARIS 要求非 DeepSeek 家族、xhigh 档：
