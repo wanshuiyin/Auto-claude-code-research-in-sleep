@@ -490,7 +490,9 @@ Remove AI-isms: delve, pivotal, landscape, tapestry, underscore, noteworthy, int
 
 Passive voice IS acceptable for: established facts, methods where agent is irrelevant, or when required by venue style.
 
-**Pass 3: Sentence Architecture** — Structure and flow.
+**Pass 3: Sentence Architecture** — Structure and flow. Vary paragraph shape:
+if every paragraph runs problem → method → benefit → summary, the mold numbs
+the reader — break it.
 
 - Flag sentences > 40 words for splitting
 - Ensure subject and verb are close together (no long parenthetical insertions between them)
@@ -633,6 +635,8 @@ Before declaring done:
 - **Section count is flexible** — match PAPER_PLAN structure, don't force into 5 sections
 - **Backup before overwrite** — never destroy existing `paper/` directory without backing up
 - **Front-load the contribution** — do not hide the payoff until the experiments or appendix
+- **Order results by argument, not by lab notebook** — present experiments in the sequence that best builds the case, never in the order they happened to run
+- **Controls and ablations sit next to the claim they test** — not pooled in a distant subsection where the reader has forgotten what was at stake
 
 ## Writing Quality Reference
 
