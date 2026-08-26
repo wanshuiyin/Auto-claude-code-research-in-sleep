@@ -189,7 +189,7 @@ Before drafting the front matter, re-read the one-sentence contribution from `PA
 
 **§5 Conclusion:**
 - Summarize contributions (NOT copy-paste from intro — rephrase)
-- Limitations (be honest — reviewers appreciate this)
+- Limitations (2-4 material, specific limits — dataset scale, compute regime, assumption X; real ones only, never invented to fill a count. This section is the ONLY home for generic caveats)
 - Future work (1-2 concrete directions)
 - Ethics statement and reproducibility statement (if venue requires)
 - Target: 0.5 pages
@@ -324,6 +324,13 @@ spawn_agent:
   message: |
     Review this [VENUE] paper draft (main body, excluding appendix).
 
+    Judge claim calibration in BOTH directions. Recommend narrowing only when the
+    current scope or modality exceeds the evidence; do not ask for extra hedges
+    around a supported result. Flag stacked hedges, self-defence ("we do not
+    claim"), instruction confessions ("we do not address X"), and generic caveats
+    outside Limitations as writing defects to remove. Tone fixes must never alter
+    facts, negation, modality, scope, comparison direction, or numbers.
+
     Focus on:
     1. Does each claim from the intro have supporting evidence?
     2. Is the writing clear, concise, and free of AI-isms?
@@ -372,6 +379,42 @@ Before declaring done:
 
 ## Key Rules
 
+=== CONFIDENT PROSE, HONEST LIMITS (never upgrades claims) ===
+1. Calibrate each claim to the evidence's actual scope and modality, then state
+   that calibrated claim directly. Necessary assumptions, uncertainty, and
+   scope are part of the claim; stacked hedges and defensive throat-clearing
+   are not.
+2. If the current claim is unsupported, narrow it to a version the evidence
+   supports or cut it. Do not substitute a softer-sounding synonym for fixing
+   scope, modality, comparison, or aggregation.
+3. Put generic caveats and broader boundary discussion in one Limitations
+   section. Outside it, remove generic disclaimers such as "further research
+   is needed", "may not generalize", and "should be interpreted with caution".
+   Claim-defining scope, assumptions, and statistical qualifications stay
+   attached to the claims they make true.
+4. Aim for 2-4 material, specific limitations (dataset scale, compute regime,
+   assumption X). Real ones only — never invent one to meet a count, never
+   apologize generically, never repeat the same limitation through the paper.
+5. Writing instructions are not manuscript content. "Do not mention X" means
+   omit X, not write "we do not address/claim/discuss X". Never expose
+   drafting instructions, requested omissions, reviewer feedback, or revision
+   history in manuscript prose.
+6. Replace self-defence ("we do not claim", "our goal is merely") with a
+   positive, evidence-matched statement of what the paper does establish. If
+   the defensive sentence carries a real boundary, keep that boundary in the
+   claim or Limitations; do not delete truth-conditional content.
+7. Tone-only edits never alter facts, negation, modality, scope, assumptions,
+   comparison direction, aggregation, numbers, formulas, or citations. Genuine
+   overclaims must still be narrowed; supported claims wrapped in redundant
+   caution must be stated directly.
+8. One causal spine: gap -> question -> insight -> consequence -> evidence ->
+   implication. Every section advances it. Make the method feel inevitable:
+   the gap creates a concrete question, the key insight answers it, the method
+   follows from the insight, each major experiment tests a consequence of it,
+   and the conclusion states exactly what the evidence establishes.
+   Front-load the contribution; never narrate the drafting or revision process.
+
+
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - **Do NOT generate author names, emails, or affiliations** — use anonymous block or placeholder
@@ -379,7 +422,7 @@ Before declaring done:
 - **One file per section** — modular structure for easy editing
 - **Every claim must cite evidence** — cross-reference the Claims-Evidence Matrix
 - **Compile-ready** — the output should compile with `latexmk` without errors (modulo missing figures)
-- **No over-claiming** — use hedging language ("suggests", "indicates") for weak evidence
+- **Calibrate, don't hedge** — match each claim to its evidence's actual scope and modality, then state it directly; generic caveats live in Limitations only (the CONFIDENT PROSE, HONEST LIMITS block above is the contract)
 - **Venue style matters** — ML conferences (ICLR/NeurIPS/ICML) use `natbib` (`\citep`/`\citet`); **IEEE venues use `cite` package (`\cite{}`, numeric)**. Never mix.
 - **Page limit rules differ by venue** — ML conferences: main body to Conclusion, references/appendix NOT counted. **IEEE: references ARE counted toward the page limit.**
 - **Clean bib** — references.bib must only contain entries that are actually `\cite`d
