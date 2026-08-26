@@ -38,8 +38,8 @@ End-to-end autonomous research workflow for: **$ARGUMENTS**
 - **CODE_REVIEW = true** — GPT-5.6-Sol xhigh reviews experiment code before deployment. Catches logic bugs before wasting GPU hours. Set `false` to skip. Passed through to `/experiment-bridge`.
 - **BASE_REPO = false** — GitHub repo URL to use as base codebase. When set, `/experiment-bridge` clones the repo first and implements experiments on top of it. When `false` (default), writes code from scratch or reuses existing project files. Passed through to `/experiment-bridge`.
 - **COMPACT = false** — When `true`, generates compact summary files for short-context models and session recovery. Passed through to `/idea-discovery` and `/experiment-bridge`.
-- **AUTO_WRITE = false** — When `true`, automatically invoke Workflow 3 (`/paper-writing`) after Stage 4. Requires `VENUE` to be set. When `false` (default), Stage 4 generates `NARRATIVE_REPORT.md` and stops — user invokes `/paper-writing` manually.
-- **VENUE = ICLR** — Target venue for paper writing (Stage 5). Only used when `AUTO_WRITE=true`. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_CONF`, `IEEE_JOURNAL`.
+- **AUTO_WRITE = false** — When `true`, automatically invoke Workflow 3 (`/paper-writing`) after Stage 4. `VENUE` is needed only when Stage 5 begins — a missing venue defers paper writing; it never blocks Stages 1-4. When `false` (default), Stage 4 generates `NARRATIVE_REPORT.md` and stops — user invokes `/paper-writing` manually.
+- **VENUE = (unset)** — Target venue for paper writing; bound only when Stage 5 begins. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_CONF`, `IEEE_JOURNAL`. No default: a missing venue defers paper writing — it never blocks Stages 1-4 and is never guessed.
 - **RENDER_HTML = true** — When `true` (default), auto-render `NARRATIVE_REPORT.md` to HTML at Stage 4 completion via `/render-html`. Uses `--no-review` (this is an internal handoff doc to `/paper-writing`, not a reviewer-facing final artifact — the upstream Stage 3 auto-review loop already cross-model-reviewed the claims). Set `false` to skip, or pass `— render html: false`. **Non-blocking**: if `/render-html` fails or Codex MCP is unavailable, log the failure and continue — the HTML view is a nice-to-have, not a Stage 4 prerequisite.
 
 - **RESUMABLE = true** — When `true` (default), the pipeline records per-stage state to `.aris/runs/<run_id>.json` so a crashed/interrupted run can resume via `/research-pipeline — resume <run_id>` instead of restarting. Stage status splits `done` (executor finished writing) from `accepted` (the stage's cross-model gate / deterministic verifier passed); resume re-validates any `done`-but-unaccepted stage. See `shared-references/resumable-runs.md`.
@@ -299,7 +299,7 @@ The narrative report must contain:
 
 ```
 📝 Research complete. To write the paper:
-/paper-writing "NARRATIVE_REPORT.md" — venue: ICLR, AUTO_PROCEED: $AUTO_PROCEED
+/paper-writing "NARRATIVE_REPORT.md" — venue: <VENUE>, AUTO_PROCEED: $AUTO_PROCEED
 ```
 
 **If `AUTO_WRITE=true`:**
@@ -317,9 +317,15 @@ The narrative report must contain:
 Proceeding with paper writing...
 ```
 
-Checks before proceeding:
-- If `VENUE` is missing → stop and ask. Do NOT silently use a default venue.
-- If manual figures are required → pause and list them. Wait for user to add them.
+Checks before proceeding (venue binds HERE — Stages 1-4 are venue-independent):
+- If `VENUE` is missing: with `AUTO_PROCEED=false`, ask now. With
+  `AUTO_PROCEED=true`, do not guess and do not wait — stamp
+  "VENUE NOT SPECIFIED — paper writing deferred" in the report and checkpoint,
+  leave the paper-writing phase pending, and finish the run cleanly for a later
+  resume. Never silently pick a venue.
+- If manual figures are required: with `AUTO_PROCEED=false`, pause and list
+  them. With `AUTO_PROCEED=true`, record "paper writing deferred (manual
+  figures: <list>)" and finish cleanly the same way.
 
 Then invoke:
 
