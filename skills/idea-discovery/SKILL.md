@@ -101,7 +101,11 @@ returned model and durable thread/trace id:
 Never invent either value and never call `accept` without the positive verdict
 required by the run-state contract. For `novelty-check`, **both PROCEED and
 PROCEED WITH CAUTION are positive verdicts** — caution is guidance for the
-pilot, not a rejection; only ABANDON is negative. A negative verdict does not grant a review receipt.
+pilot, not a rejection; only ABANDON is negative. For `research-review`,
+positive means the review's bottom line does not argue for abandoning the
+idea — a list of named risks is not a rejection. If the review ends without a
+clear stance, ask the same reviewer thread for a one-line verdict (proceed or
+abandon) and record on that answer; never infer positivity from silence. A negative verdict does not grant a review receipt.
 Leave the phase `done` and the final gate `BLOCKED`, select a surviving
 or new idea, then re-run that reviewer-bearing phase. Do the same if the
 reviewer is unavailable, returns no valid identity/response, or its output was
