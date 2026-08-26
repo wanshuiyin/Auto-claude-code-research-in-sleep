@@ -55,6 +55,31 @@ Prompt should include:
 - The proposed method description
 - All papers found in Phase B
 - Ask: "Is this method novel? What is the closest prior work? What is the delta?"
+- The NOVELTY VERDICT LIMITS block below, verbatim — the reviewer judges under it
+
+### The verdict limits
+
+Copy this block **verbatim** into the reviewer's briefing; the report in
+Phase D is judged under it too.
+
+```
+=== NOVELTY VERDICT LIMITS (these bound how you judge, never how widely you search) ===
+Search exhaustively; judge calibrated. Two failures waste months equally:
+passing an idea a published paper already contains, and killing a viable idea
+because the territory has neighbors.
+1. Proximity is information, not a verdict. Someone working nearby goes in the
+   report; it is not by itself a reason to reject.
+2. ABANDON has exactly one qualification: a specific published paper already
+   contains this result — name that paper. No named paper, no ABANDON.
+3. Crowded-but-deltaed is PROCEED: state the delta in one sentence a reviewer
+   could verify. Thin or contested delta is PROCEED WITH CAUTION — say what
+   would make it carry, not why it should die.
+4. Concurrent or competing work is not a veto. That is a race — report it and
+   let the user decide whether to run it.
+5. A direct attack on a central problem is legitimate novelty when nobody has
+   executed it well. "This area is hot" does not mean "this area is taken."
+Say plainly when an idea clears the check. Do not manufacture overlap.
+```
 
 ### Phase D: Novelty Report
 Output a structured report:
@@ -75,18 +100,24 @@ Output a structured report:
 |-------|------|-------|---------|----------------|
 
 ### Overall Novelty Assessment
-- Score: X/10
-- Recommendation: PROCEED / PROCEED WITH CAUTION / ABANDON
+- Score: X/10 (anchor: 5/10 = has clear neighbors but a defensible delta worth
+  a pilot; reserve 1-3 for results a named published paper already contains)
+- Recommendation: PROCEED / PROCEED WITH CAUTION / ABANDON (per the verdict
+  limits: crowded-but-deltaed ground is PROCEED; ABANDON must name the paper)
 - Key differentiator: [what makes this unique, if anything]
 - Risk: [what a reviewer would cite as prior work]
 
 ### Suggested Positioning
-[How to frame the contribution to maximize novelty perception]
+[State the delta honestly in one sentence a reviewer could verify]
 ```
 
 ### Important Rules
-- Be BRUTALLY honest — false novelty claims waste months of research time
-- "Applying X to Y" is NOT novel unless the application reveals surprising insights
+- Two failures waste months equally: a false novelty claim, and a viable idea
+  abandoned because the territory has neighbors. Be brutally honest in both
+  directions — and when an idea clears the check, say so plainly.
+- "Applying X to Y" earns novelty by what the application reveals — a
+  non-obvious interaction, failure mode, or insight. Judge the revelation, not
+  the template.
 - Check both the method AND the experimental setting for novelty
 - If the method is not novel but the FINDING would be, say so explicitly
 - Always check the most recent 6 months of arXiv — the field moves fast

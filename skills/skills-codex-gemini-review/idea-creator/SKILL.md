@@ -82,10 +82,22 @@ mcp__gemini-review__review_start:
     Prioritize ideas that are:
     - Testable with moderate compute (8x RTX 3090 or less)
     - Likely to produce a clear positive OR negative result (both are publishable)
-    - Not "apply X to Y" unless the application reveals genuinely surprising insights
-    - Differentiated from the 10-15 papers above
+    - Simple at the core: one mechanism, few moving parts — an idea a colleague
+      could restate after hearing it once. If the novelty only appears once a
+      second module or an extra gate is added, that is packaging, not novelty.
+    - Aware of the 10-15 papers above — awareness, not avoidance. Differentiation
+      is the novelty check's job later, not a constraint on brainstorming.
 
-    Be creative but grounded. A great idea is one where the answer matters regardless of which way it goes.
+    "Apply X to Y" is legitimate when the application would reveal something
+    non-obvious — judge it by what it reveals, not by the template. A direct,
+    well-executed attack on a central problem is a valid idea when nobody has
+    executed it well; do not steer around crowded areas — proximity to strong
+    work is a sign the problem matters, not that it is taken.
+
+    Generate first, filter later — the filters come after you, and they are
+    strict enough. A bold, simple idea with a named risk beats a hedged,
+    complicated one with none. A great idea is one where the answer matters
+    regardless of which way it goes.
 ```
 
 After this start call, immediately save the returned `jobId` and poll `mcp__gemini-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the brainstorm output, and save the completed `threadId` for follow-up critique in Phase 4.
@@ -133,11 +145,18 @@ For each surviving idea, run a deeper evaluation:
        Here are our top ideas after filtering:
        [paste surviving ideas with novelty check results]
 
-       For each, play devil's advocate:
+       For each, make the strongest case both ways:
+       - What is the best case FOR it — what would make this the paper people cite?
        - What's the strongest objection a reviewer would raise?
        - What's the most likely failure mode?
        - How would you rank these for a top venue submission?
        - Which 2-3 would you actually work on?
+
+       Rank; do not rewrite. An objection is answered or recorded as a named
+       risk on the idea — never absorbed by adding a module, a gate, or a
+       qualifier. A bold idea with a named risk outranks a hedged idea with
+       none, and complexity added since the brainstorm is a red flag, not
+       progress.
    ```
 
    After this start call, immediately save the returned `jobId` and poll `mcp__gemini-review__review_status` with a bounded `waitSeconds` until `done=true`. Treat the completed status payload's `response` as the follow-up critique.

@@ -252,6 +252,24 @@ mcp__codex__codex:
     idea-stage/codex_brainstorm_bundle.md> and follow all instructions in it.
 ```
 
+Run the bundle through **two reviewer models** and take the union — the two
+fail differently as generators, and the union keeps either model's taste from
+capping the pool:
+
+1. Once with the default reviewer model (`gpt-5.6-sol` today), as above.
+2. Once more with `model: "gpt-5.5"` — same `xhigh` effort, same bundle, a
+   fresh thread. Save both threadIds; Phase 4's triage follow-up goes to the
+   default-model thread.
+
+Tag each candidate with the model that produced it, then merge both sets the
+same way the lens shards merge: union, cluster near-identical ideas by
+hypothesis, and never drop a candidate for being "weak" — weakness is a
+Phase-4 verdict, not a merge step.
+
+If the second call errors (older codex-cli, or the model is unavailable on
+this account), print one WARN line and continue single-model. The union is an
+upgrade, not a new requirement.
+
 *For `manual` backend:* use `mcp__manual_review__review` with the same bundle
 contents. If the manual-review UI supports attachments, attach
 `idea-stage/codex_brainstorm_bundle.md`; otherwise paste the bundle contents
@@ -281,13 +299,23 @@ Bundle contents:
     Prioritize ideas that are:
     - Testable with moderate compute (8x RTX 3090 or less)
     - Likely to produce a clear positive OR negative result (both are publishable)
-    - Not "apply X to Y" unless the application reveals genuinely surprising insights
-    - Differentiated from the 10-15 papers above
+    - Simple at the core: one mechanism, few moving parts — an idea a colleague
+      could restate after hearing it once. If the novelty only appears once a
+      second module or an extra gate is added, that is packaging, not novelty.
+    - Aware of the 10-15 papers above — awareness, not avoidance. Differentiation
+      is the novelty check's job later, not a constraint on brainstorming.
 
-    Be creative but grounded. A great idea is one where the answer matters regardless of which way it goes.
+    "Apply X to Y" is legitimate when the application would reveal something
+    non-obvious — judge it by what it reveals, not by the template. A direct,
+    well-executed attack on a central problem is a valid idea when nobody has
+    executed it well; do not steer around crowded areas — proximity to strong
+    work is a sign the problem matters, not that it is taken.
+
+    Generate first, filter later — the filters come after you, and they are
+    strict enough. A bold, simple idea with a named risk beats a hedged,
+    complicated one with none. A great idea is one where the answer matters
+    regardless of which way it goes.
 ```
-
-Save the threadId for follow-up.
 
 ### Phase 3: Mechanical consolidation + objective feasibility gate
 
@@ -336,7 +364,9 @@ per-idea novelty search:
 
 1. **Cross-model triage (devil's advocate) — ranks ALL candidates first.**
    Use the selected reviewer backend (see Reviewer Calling Convention). For
-   `codex`, use `mcp__codex__codex-reply` (same thread). For `manual`, use
+   `codex`, use `mcp__codex__codex-reply` on the **default-model thread**
+   from Phase 2 (the triage bundle carries the full union, so no context is
+   lost from the second model's thread). For `manual`, use
    `mcp__manual_review__review_reply` with the saved threadId. For the
    `codex` backend, write the full annotated candidate set to
    `idea-stage/codex_triage_bundle.md` and send only a path-based follow-up:
@@ -350,12 +380,19 @@ per-idea novelty search:
    Here is the full annotated candidate set (deduped, budget-feasible):
    [write all candidates with their prior_work / so_what / effort_note notes]
 
-   For each, play devil's advocate:
+   For each, make the strongest case both ways:
+   - What is the best case FOR it — what would make this the paper people cite?
    - What's the strongest objection a reviewer would raise?
    - What's the most likely failure mode?
    - Is the prior_work note a real novelty problem, or differentiable?
    - How would you rank these for a top venue submission?
    - Which 2-3 would you actually work on, and why?
+
+   Rank; do not rewrite. An objection is answered or recorded as a named
+   risk on the idea — never absorbed by adding a module, a gate, or a
+   qualifier. A bold idea with a named risk outranks a hedged idea with
+   none, and complexity added since the brainstorm is a red flag, not
+   progress.
    ```
    The reviewer's ranking is the authoritative quality verdict. The executor
    does not eliminate candidates on its own taste before or instead of this.
