@@ -167,6 +167,18 @@ Layer 3:  $ARIS_REPO/tools/<helper>                # global fallback
 
 Pick a failure policy from `integration-contract.md` §2 per-helper table: A (gate) / B (side-effect) / C (forensic) / D1 (cascade) / D2 (multi-source aggregate) / E (diagnostic). Each has POSIX-sh + `set -e` + `set -u` safe example blocks.
 
+Python helpers must run through the isolated uv runtime; do not invoke the
+system `python3` directly:
+
+```bash
+ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+bash "$ARIS_PY_RUNNER" "$HELPER" [args ...]
+```
+
+The runner uses `tools/uv-runtime/pyproject.toml` and `uv.lock` with
+`uv run --project ... --frozen python`. Helper dependencies belong to that
+runtime, not to a downstream research project's environment.
+
 Advisory CI lint at `.github/workflows/lint-skills-helpers.yml` flags hardcoded `python3 tools/foo.py` patterns in PR-modified SKILL.md (warning only, never fails CI). Single-owner helpers (used by exactly one SKILL) live at `skills/<owner>/scripts/<helper>` per Arch C; precedents: `figure-spec`, `paper-illustration-image2`, `experiment-queue`, `render-html`.
 
 ## Cross-Model Protocol
