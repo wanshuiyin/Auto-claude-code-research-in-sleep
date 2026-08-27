@@ -30,8 +30,8 @@ class Response:
     def __exit__(self, *_args):
         return None
 
-    def read(self):
-        return self.payload
+    def read(self, size=-1):
+        return self.payload if size < 0 else self.payload[:size]
 
 
 def test_search_encodes_query_bounds_limit_and_sends_key(monkeypatch):
@@ -70,6 +70,22 @@ def test_search_rejects_empty_query(monkeypatch):
 
     with pytest.raises(ValueError, match="query is required"):
         xquik.search("  ")
+
+
+def test_search_rejects_oversized_query(monkeypatch):
+    xquik = load_module()
+    monkeypatch.setenv("XQUIK_API_KEY", "test-secret")
+
+    with pytest.raises(ValueError, match="at most 512 characters"):
+        xquik.search("x" * 513)
+
+
+def test_search_rejects_unknown_query_type(monkeypatch):
+    xquik = load_module()
+    monkeypatch.setenv("XQUIK_API_KEY", "test-secret")
+
+    with pytest.raises(ValueError, match="Latest or Top"):
+        xquik.search("query", query_type="Popular")
 
 
 def test_search_requires_api_key(monkeypatch):
@@ -143,6 +159,62 @@ def test_search_caps_unexpected_extra_results(monkeypatch):
 
     assert result["returned"] == 2
     assert [tweet["id"] for tweet in result["tweets"]] == ["0", "1"]
+
+
+def test_search_omits_unavailable_fields_and_malformed_tweets(monkeypatch):
+    xquik = load_module()
+    monkeypatch.setenv("XQUIK_API_KEY", "test-secret")
+    payload = {
+        "tweets": [
+            {"id": "123", "text": "No optional fields."},
+            {"id": "456"},
+            {"id": 789, "text": "Non-string identifier."},
+        ],
+        "has_next_page": False,
+        "next_cursor": "",
+    }
+
+    result = xquik.search("query", opener=lambda *_args, **_kwargs: Response(payload))
+
+    assert result["returned"] == 1
+    assert result["tweets"] == [{"id": "123", "text": "No optional fields."}]
+
+
+def test_search_rejects_oversized_response(monkeypatch):
+    xquik = load_module()
+    monkeypatch.setenv("XQUIK_API_KEY", "test-secret")
+
+    class OversizedResponse(Response):
+        def __init__(self):
+            self.payload = b"x" * (xquik.MAX_RESPONSE_BYTES + 1)
+
+    with pytest.raises(RuntimeError, match="exceeded the 2 MiB limit"):
+        xquik.search("query", opener=lambda *_args, **_kwargs: OversizedResponse())
+
+
+def test_search_rejects_unsafe_generated_urls(monkeypatch):
+    xquik = load_module()
+    monkeypatch.setenv("XQUIK_API_KEY", "test-secret")
+    payload = {
+        "tweets": [
+            {
+                "id": "not-numeric",
+                "text": "Post",
+                "url": "https://x.com/example/status/not-numeric",
+                "author": {"username": "../escape", "name": "Example"},
+            }
+        ]
+    }
+
+    result = xquik.search("query", opener=lambda *_args, **_kwargs: Response(payload))
+
+    assert result["tweets"] == [
+        {
+            "id": "not-numeric",
+            "text": "Post",
+            "author": {"username": "../escape", "name": "Example"},
+        }
+    ]
 
 
 def test_search_rejects_malformed_response(monkeypatch):

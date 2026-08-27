@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
@@ -15,7 +16,14 @@ from urllib.request import Request, urlopen
 
 SEARCH_URL = "https://xquik.com/api/v1/x/tweets/search"
 MAX_RESULTS = 20
+MAX_QUERY_CHARACTERS = 512
+MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 TIMEOUT_SECONDS = 20
+QUERY_TYPES = frozenset({"Latest", "Top"})
+STATUS_URL_PATTERN = re.compile(
+    r"https://x\.com/[A-Za-z0-9_]{1,15}/status/[0-9]+"
+)
+USERNAME_PATTERN = re.compile(r"[A-Za-z0-9_]{1,15}")
 Opener = Callable[..., Any]
 
 
@@ -33,9 +41,20 @@ def _validate_limit(limit: int) -> None:
         raise ValueError(f"max results must be between 1 and {MAX_RESULTS}")
 
 
-def _validate_query(query: str) -> None:
-    if not query.strip():
+def _validate_query(query: str) -> str:
+    normalized = query.strip()
+    if not normalized:
         raise ValueError("query is required")
+    if len(normalized) > MAX_QUERY_CHARACTERS:
+        raise ValueError(
+            f"query must contain at most {MAX_QUERY_CHARACTERS} characters"
+        )
+    return normalized
+
+
+def _validate_query_type(query_type: str) -> None:
+    if query_type not in QUERY_TYPES:
+        raise ValueError("query type must be Latest or Top")
 
 
 def _request(query: str, limit: int, query_type: str) -> Request:
@@ -63,32 +82,56 @@ def _author(tweet: dict[str, Any]) -> dict[str, str]:
 
 def _tweet_url(tweet: dict[str, Any], author: dict[str, str]) -> str:
     supplied = tweet.get("url")
-    if isinstance(supplied, str) and supplied.startswith("https://x.com/"):
+    if isinstance(supplied, str) and STATUS_URL_PATTERN.fullmatch(supplied):
         return supplied
     tweet_id = tweet.get("id")
     username = author.get("username")
-    if isinstance(tweet_id, str) and username:
+    if (
+        isinstance(tweet_id, str)
+        and tweet_id.isdigit()
+        and username
+        and USERNAME_PATTERN.fullmatch(username)
+    ):
         return f"https://x.com/{username}/status/{tweet_id}"
     return ""
 
 
-def _normalize_tweet(tweet: dict[str, Any]) -> dict[str, Any]:
-    author = _author(tweet)
-    return {
-        "id": tweet.get("id", ""),
-        "text": tweet.get("text", ""),
-        "url": _tweet_url(tweet, author),
-        "created_at": tweet.get("createdAt", ""),
-        "author": author,
-        "engagement": {
-            "likes": tweet.get("likeCount", 0),
-            "reposts": tweet.get("retweetCount", 0),
-            "replies": tweet.get("replyCount", 0),
-            "quotes": tweet.get("quoteCount", 0),
-            "views": tweet.get("viewCount", 0),
-            "bookmarks": tweet.get("bookmarkCount", 0),
-        },
+def _engagement(tweet: dict[str, Any]) -> dict[str, int]:
+    fields = {
+        "likes": "likeCount",
+        "reposts": "retweetCount",
+        "replies": "replyCount",
+        "quotes": "quoteCount",
+        "views": "viewCount",
+        "bookmarks": "bookmarkCount",
     }
+    return {
+        target: value
+        for target, source in fields.items()
+        if type((value := tweet.get(source))) is int and value >= 0
+    }
+
+
+def _normalize_tweet(tweet: dict[str, Any]) -> dict[str, Any] | None:
+    tweet_id = tweet.get("id")
+    text = tweet.get("text")
+    if not isinstance(tweet_id, str) or not tweet_id or not isinstance(text, str):
+        return None
+
+    author = _author(tweet)
+    normalized: dict[str, Any] = {"id": tweet_id, "text": text}
+    url = _tweet_url(tweet, author)
+    created_at = tweet.get("createdAt")
+    engagement = _engagement(tweet)
+    if url:
+        normalized["url"] = url
+    if isinstance(created_at, str) and created_at:
+        normalized["created_at"] = created_at
+    if author:
+        normalized["author"] = author
+    if engagement:
+        normalized["engagement"] = engagement
+    return normalized
 
 
 def _decode(payload: bytes) -> dict[str, Any]:
@@ -109,22 +152,27 @@ def search(
     opener: Opener = urlopen,
 ) -> dict[str, Any]:
     """Search one page and return stable fields for discovery review."""
-    _validate_query(query)
+    query = _validate_query(query)
     _validate_limit(max_results)
+    _validate_query_type(query_type)
     request = _request(query, max_results, query_type)
     try:
         with opener(request, timeout=TIMEOUT_SECONDS) as response:
-            payload = _decode(response.read())
+            raw_payload = response.read(MAX_RESPONSE_BYTES + 1)
+            if len(raw_payload) > MAX_RESPONSE_BYTES:
+                raise RuntimeError("Xquik response exceeded the 2 MiB limit.")
+            payload = _decode(raw_payload)
     except HTTPError as error:
         raise RuntimeError(f"Xquik search failed with HTTP {error.code}.") from error
     except URLError as error:
         raise RuntimeError("Xquik search failed. Check the network connection.") from error
+    except TimeoutError as error:
+        raise RuntimeError("Xquik search timed out.") from error
 
-    tweets = [
-        _normalize_tweet(tweet)
-        for tweet in payload["tweets"][:max_results]
-        if isinstance(tweet, dict)
-    ]
+    tweets = []
+    for tweet in payload["tweets"][:max_results]:
+        if isinstance(tweet, dict) and (normalized := _normalize_tweet(tweet)):
+            tweets.append(normalized)
     return {
         "query": query,
         "query_type": query_type,

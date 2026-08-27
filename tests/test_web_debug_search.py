@@ -126,6 +126,10 @@ def test_web_debug_search_keeps_x_results_bounded_and_discovery_only() -> None:
     assert "[DISCOVERY-ONLY] [COMMUNITY-DISCUSSION]" in text
     assert "XQUIK_API_KEY" in text
     assert "xquik_search.py" in text
+    assert "authorized legal basis" in text
+    assert "retention period or deletion date" in text
+    assert "Do not treat source selection alone as confirmation" in text
+    assert "Never infer missing engagement counts" in text
 
 
 def test_web_debug_search_keeps_translations_and_communities_discovery_only() -> None:
