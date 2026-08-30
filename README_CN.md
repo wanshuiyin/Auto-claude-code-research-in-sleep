@@ -10,7 +10,7 @@
 
 💡 *在 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) / [Codex CLI](skills/skills-codex/) / [Cursor](docs/CURSOR_ADAPTATION.md) / [Trae](docs/TRAE_ARIS_RUNBOOK_CN.md) / [Antigravity](docs/ANTIGRAVITY_ADAPTATION_CN.md) / [GitHub Copilot CLI](docs/COPILOT_CLI_ADAPTATION.md) / [OpenClaw](docs/OPENCLAW_ADAPTATION.md) / [DeepSeek Harness](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/dsh-aris/README_CN.md) 里以 skill-based workflow 用 ARIS，或用独立的 **[ARIS-Code](docs/ARIS-Code-README_CN.md)** CLI 完整版体验——任你选！*
 
-🐋 **在 DeepSeek Harness 上，ARIS 是一个插件：** `dsh plugin --profile web add dsh-aris`（命令自己从 npm 拉包，无需先装什么——但 `pnpm` 必须在 `PATH` 里）—— 82 个技能零改动，审稿人仍是 Codex。安装与限制见 [`dsh-aris` 分支](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/dsh-aris/README_CN.md)。
+🐋 **在 DeepSeek Harness 上，ARIS 是一个插件：** `dsh plugin --profile web add dsh-aris`（命令自己从 npm 拉包，无需先装什么——但 `pnpm` 必须在 `PATH` 里）—— 83 个技能零改动，审稿人仍是 Codex。安装与限制见 [`dsh-aris` 分支](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/dsh-aris/README_CN.md)。
 
 🌱 *ARIS 是方法论，不是平台。重要的是科研工作流——带着它去任何地方。*
 
@@ -283,13 +283,14 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 - **2026-08-21** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🔌 **Codex 审稿连不上时,可配 HTTP 兜底**([#413](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/413);by [@TheFlashForge](https://github.com/TheFlashForge))。默认关;只在能证明 Codex 根本没收到请求时启用——超时不算,那可能花两份钱买两个打架的结论。兜底读你的原始文件,信任比 Codex 更低,绝不更高。
 - **2026-08-21** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 🧹 **一天合并四个社区修复**([#406](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/406)–[#410](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/410);by [@ZLZLGe](https://github.com/ZLZLGe) 和 [@JasmineLCY](https://github.com/JasmineLCY))。`AUTO_PROCEED=true` 真的自己往下走了;idea-discovery 的门要见真审稿回执,不认打勾;缓存的 wiki 上下文读之前先扫描;选 Claude 当审稿人的 Codex 用户找回三个论文 skill。
 <details>
-<summary>更早的更新(2026-03-12 — 2026-08-09,77 条)</summary>
+<summary>更早的更新(2026-03-12 — 2026-08-09,78 条)</summary>
 
 - **2026-08-09** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🦆 **Copilot CLI 宿主下 `/auto-review-loop` 默认用原生 rubber-duck 审稿**([#360](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/360),closes [#258](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/258))。只在 Copilot CLI 会话里启用;审稿证据从宿主事件复验,同族/不明一律 fail-closed。标准 Claude Code + Codex 搭配不受影响。
 - **2026-08-09** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🚧 **`/idea-discovery` 不能再静默跳过阶段**([#383](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/383),closes [#285](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/285);by [@3mom3](https://github.com/3mom3))。五个阶段每个都要有记录在案的证据,否则报告写明 `BLOCKED`,不装完整。
 - **2026-08-05** — ![FIX](https://img.shields.io/badge/FIX-2ea44f?style=flat-square) 🈶 **research wiki 的非 ASCII 修好了**([#386](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/386)、[#387](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/387);由 [@LIMMIL7](https://github.com/LIMMIL7) 报告)。cp936 下写的 wiki 换机器读不了,纯中文标题塌成 `<年份>_untitled` 还被当重复丢掉。已有 UTF-8 wiki 不受影响。
 - **2026-08-04** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🖼️ **上游动态:[posterly](https://github.com/Chenruishuo/posterly)——`/paper-poster-html` 的引擎——大幅设计升级**(MIT,by [@Chenruishuo](https://github.com/Chenruishuo);今年 ICML 约 50 张海报出自它)。[GitHub](https://github.com/Chenruishuo/posterly) · [Blog](https://www.tryposterly.com/blog)。
 - **2026-08-03** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧭 **`/proof-orchestrator`——工作流 7:带记忆的证明战役**([#381](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/381);by [@shenmuxing](https://github.com/shenmuxing),改编自其 [EtaSkill](https://github.com/shenmuxing/EtaSkill))。有状态的 local-first 证明 run,跨 session 延续,卡住时产出可直接粘贴的 GPT Pro 交接包。`/proof-checker` 仍是投稿门。
+- **2026-07-15** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🔗 **双盲引用字段核对**([#371](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/371))。新 skill `/citation-crosscheck`:两个 agent 盲审——一个从本地 `.bib` 读取每条被引条目,一个从网上独立重抓——再由确定性 gate 逐字段 diff(作者集合+顺序、年份、venue、arXiv-id/DOI),输出并排 `.xlsx`,每条给出 `MATCH`/`MINOR`/`MISMATCH`。与 `/citation-audit`(context-fit)互补;这个负责字段准确性。
 
 - **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🐞 **[`/web-debug-search`](skills/web-debug-search/SKILL.md)**（Issue [#211](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/211)）。新增聚焦调试/发现的检索流程：搜索 GitHub Issues 与 Discussions，支持精确/归一化错误字符串匹配、版本兼容性追踪和明确的失败处理。所有结果都标记为调试用途，不能作为论文引用证据。
 - **2026-07-14** — ![NEW](https://img.shields.io/badge/NEW-red?style=flat-square) 🧩 **选择性安装 + 全局脚本指针**([#366](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/366))。81 个 skill 不再"一股脑全装"——四套安装器都支持按组/按 skill 选装(`--list-groups` / `--groups X,Y` / `--skills X` / `--exclude Y`,或 TTY 下的全屏勾选界面),pipeline 硬依赖自动带全。更新时上游**新增**的 skill 会逐个确认(`--add-new` / `--skip-new` 供脚本化;拒绝的记住、不再重复问)。同时修了全局 copy 安装(`~/.claude/skills`)找不到 helper 脚本的问题,新增指针文件 `~/.aris/repo`。⚠️ 向后兼容:`--quiet` 全新安装仍是全装;跑一次任意安装器/更新器即可拿到指针文件。[选择性安装 →](#install-skills)
@@ -391,7 +392,7 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 bash Auto-claude-code-research-in-sleep/tools/install_aris.sh ~/your-project   # 把 ARIS skill symlink 进 <project>/.claude/skills/
 # （想全局安装？cp -r Auto-claude-code-research-in-sleep/skills/* ~/.claude/skills/）
-# （不需要全部 82 个？--list-groups / --groups X,Y / --skills X —— 见下方"选择性安装"）
+# （不需要全部 83 个？--list-groups / --groups X,Y / --skills X —— 见下方"选择性安装"）
 
 # 可选：Codex mirror 项目级受管安装
 bash Auto-claude-code-research-in-sleep/tools/install_aris_codex.sh ~/your-codex-project
@@ -423,7 +424,7 @@ claude
 > /meta-optimize                               # 元优化：分析使用记录 → 提出技能改进方案
 ```
 
-> 不需要全部 82 个 skill？见下方[选择性安装](#install-skills)按组/按 skill 挑选。
+> 不需要全部 83 个 skill？见下方[选择性安装](#install-skills)按组/按 skill 挑选。
 
 <details>
 <summary><b>📚 Research Wiki（可选）</b> —— 一行 init 启用跨 session 持久记忆；完整说明见 <a href="#-research-wiki--persistent-research-memory">§ Research Wiki</a></summary>
@@ -565,14 +566,14 @@ Codex 基础镜像默认由新的 Codex `spawn_agent` 自审：流程可以继�
 
 ## 4. ✨ 功能亮点
 
-ARIS 用 **82 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
+ARIS 用 **83 个可组合 skill** 覆盖科研全生命周期——文献查新 → idea 发现 → GPU 实验 → 自动 review 循环 → 论文写作 → peer review——配合**跨模型对抗审**（Claude 执行 · GPT-5.6-Sol xhigh 审 · 可选 **GPT-5.5 Pro** via Oracle）、DBLP/CrossRef 反幻觉引用、持久化 **Research Wiki**、灵活模型后端、human-in-the-loop 检查点，以及可选的飞书 / Zotero / Obsidian / GPU 集成。
 
 🔥 *而且这套"广度 / 审 / 记忆"三角能适配任何 agent 的 **ultracode 式深度模式**：广度 pass 适配运行时暴露的能力（Claude Code 原生 ultracode / workflows + Opus 4.8、Codex `spawn_agent`，或纯顺序执行），并按层级干净降级（fan-out → agent spawn → 顺序）。三件事分得很清楚：**广度 · 跨模型对抗审 → 准确性 · research wiki → 记忆性**。无论循环由谁推进，最后都回到同一套跨模型对抗审 + research wiki：**能推进，不能定案**。*
 
 <details>
 <summary><b>完整功能清单</b></summary>
 
-- 📊 **82 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
+- 📊 **83 个可组合 skill** — 自由混搭，或串联为完整流水线（`/idea-discovery`、`/auto-review-loop`、`/paper-writing`、`/research-pipeline`）。[完整目录 →](docs/SKILLS_CATALOG.md)
 - 🔍 **文献 & 查新** — 多源论文搜索（**[Zotero](docs/integrations/ZOTERO_CN.md)** + **[Obsidian](docs/integrations/OBSIDIAN_CN.md)** + **本地 PDF** + arXiv/Scholar）+ 跨模型查新验证
 - 💡 **Idea 发现** — 文献调研 → 头脑风暴 8-12 个 idea → 查新 → GPU pilot 实验 → 排名报告
 - 🔄 **自动 review 循环** — 4 轮自主审稿，一夜从 5/10 提升到 7.5/10，自动跑 20+ 组 GPU 实验
@@ -605,7 +606,7 @@ ARIS 用 **82 个可组合 skill** 覆盖科研全生命周期——文献查新
 <a id="skills-catalog"></a>
 <a id="-skills-catalog"></a>
 
-ARIS 现有 **82+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、演讲、专利、meta 工具等——完整目录（每个 skill 含 role / category / 依赖）在 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)**，独立成文以保持 README 可扫读。
+ARIS 现有 **83+ 个 skill**，覆盖文献调研、idea 生成、实验、审计、论文写作、演讲、专利、meta 工具等——完整目录（每个 skill 含 role / category / 依赖）在 **[`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md)**，独立成文以保持 README 可扫读。
 
 <details>
 <summary><b>常用入口</b> —— 场景 → 入口 skill</summary>
@@ -626,7 +627,7 @@ ARIS 现有 **82+ 个 skill**，覆盖文献调研、idea 生成、实验、审�
 
 </details>
 
-→ **[按 category 浏览全部 82 个 skill →](docs/SKILLS_CATALOG.md)**
+→ **[按 category 浏览全部 83 个 skill →](docs/SKILLS_CATALOG.md)**
 
 ---
 
