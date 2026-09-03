@@ -47,6 +47,9 @@ codex mcp add claude-review -- ~/.codex/mcp-servers/claude-review/run_with_claud
 
 - The bridge runs Claude in non-interactive `-p` mode.
 - By default the reviewer gets **no tools**. This matches the original ARIS pattern where the external reviewer only sees the prompt context prepared by the executor.
+- A prompt that hands the reviewer **artifact paths** instead of pasted context must therefore opt in per call, e.g. `"tools": "Read,Grep,Glob"`. Without it the reviewer is asked to read files it has no tool to open, and it answers from your framing alone — exactly what artifact-grounded review is meant to avoid. The `skills-codex-claude-review` overlay passes this on its artifact-grounded review blocks; the server default stays tool-free, so prompt-only reviews are unchanged.
+- The opt-in is **per call, not per thread**: every call re-sends `--tools`, so a `review_reply` / `review_reply_start` continuing an artifact-grounded thread has to repeat it.
+- Keep the opt-in read-only. The bridge already runs Claude with `--permission-mode plan`, and a reviewer has no reason to hold `Bash`, `Edit`, or `Write`.
 - `threadId` is the native Claude session id and can be passed directly to `review_reply`.
 - `jobId` is a bridge-local background task id stored on disk under `~/.codex/state/claude-review/jobs/` by default, so status can be resumed across MCP server restarts.
 

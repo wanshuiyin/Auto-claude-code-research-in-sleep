@@ -94,6 +94,9 @@ Use `mcp__claude-review__review_reply_start` with the saved completed `threadId`
 
 ```
 mcp__claude-review__review_reply_start:
+  # the bridge grants the reviewer no tools by default; this prompt passes
+  # artifact paths, so it has to ask for read-only access explicitly
+  tools: "Read,Grep,Glob"
   threadId: [saved reviewer id from Step 2]
   prompt: |
     Please continue the review using the revised materials below.

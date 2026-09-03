@@ -134,6 +134,9 @@ Send comprehensive context to the external reviewer:
 
 ```
 mcp__claude-review__review_start:
+  # the bridge grants the reviewer no tools by default; this prompt passes
+  # artifact paths, so it has to ask for read-only access explicitly
+  tools: "Read,Grep,Glob"
   prompt: |
     [Round N/MAX_ROUNDS of autonomous review loop]
 
@@ -434,6 +437,9 @@ When loop ends (positive assessment or max rounds):
 
 ```
 mcp__claude-review__review_reply_start:
+  # the bridge grants the reviewer no tools by default; this prompt passes
+  # artifact paths, so it has to ask for read-only access explicitly
+  tools: "Read,Grep,Glob"
   threadId: [saved from round 1]
   # inherits the agent's model/effort — do not re-send
   prompt: |
