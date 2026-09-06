@@ -81,6 +81,7 @@ skill	paper-write	paper-core	-	按大纲逐节写 LaTeX
 skill	paper-compile	paper-core	-	LaTeX 编译修错出 PDF
 skill	paper-figure	paper-core	-	从实验结果出论文图表
 skill	citation-audit	paper-core	render-html	引用真实性/正确性核查
+skill	citation-crosscheck	paper-core	-	双盲 bib-vs-web 字段级交叉核对（作者顺序/年份/venue/DOI）
 skill	paper-claim-audit	paper-core	render-html	论文数字与原始结果核对
 skill	integrity-forensics	paper-core	-	投稿前诚信取证扫描
 skill	auto-paper-improvement-loop	paper-core	proof-checker,paper-claim-audit,kill-argument	论文 review→润色→重编译循环

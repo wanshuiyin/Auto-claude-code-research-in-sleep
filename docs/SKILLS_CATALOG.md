@@ -1,6 +1,6 @@
 # ARIS Skills Catalog
 
-Every skill that ships with ARIS, grouped by role. **82 skills** as of the
+Every skill that ships with ARIS, grouped by role. **83 skills** as of the
 latest update; new skills land via PR and get added to the table below.
 
 - Each `Skill` link goes to the canonical `SKILL.md` (the LLM-readable spec).
@@ -106,6 +106,7 @@ Cross-model critique, integrity checking, evidence verification.
 | [`/result-to-claim`](../skills/result-to-claim/SKILL.md) | Map experimental results to intended claims — judges what's supported, what's not, what's missing; routes to next action | Codex MCP |
 | [`/paper-claim-audit`](../skills/paper-claim-audit/SKILL.md) | Zero-context numeric verification — every number / comparison / scope claim in the paper checked against raw result files by a fresh reviewer (no confirmation bias) | Codex MCP |
 | [`/citation-audit`](../skills/citation-audit/SKILL.md) | Bibliography audit — existence + metadata correctness + context appropriateness for every `\cite{}`; `--soft-only` mode for frozen-bib resubmits | Codex MCP, web access |
+| [`/citation-crosscheck`](../skills/citation-crosscheck/SKILL.md) | Double-blind bib-vs-web field audit — one agent extracts each cited entry verbatim from the local `.bib`, a second re-fetches it from the web blind to the `.bib`, a third emits a mechanical field-by-field delta (author set+order, year, venue, arXiv-id/DOI); a deterministic `cx_verify.py` gate assigns MATCH/MINOR and fails closed to the main agent's primary-source fetch; side-by-side `.xlsx` per entry | web access; openpyxl (for the `.xlsx`) |
 | [`/proof-checker`](../skills/proof-checker/SKILL.md) | Rigorous mathematical proof verification — 20-category issue taxonomy, two-axis severity, side-condition checklists, counterexample red team, proof-obligation ledger | Codex MCP |
 | [`/kill-argument`](../skills/kill-argument/SKILL.md) | Two-thread adversarial review — Thread 1 writes the strongest 200-word rejection memo; Thread 2 (independent) defends point-by-point and surfaces still-unresolved issues | Codex MCP |
 | [`/integrity-forensics`](../skills/integrity-forensics/SKILL.md) | SHA-pinned thin launcher for [Anti-Autoresearch](https://github.com/wanshuiyin/Anti-Autoresearch) — evidence-ledger forensic sweep (46 patterns, deterministic adjudicator) → typed BLOCK/WARN/NO_NEW_BLOCKER gate + append-only obligations ledger; default pre-submission self-audit in `/paper-writing` | git, Codex MCP (via upstream) |
