@@ -10,9 +10,9 @@
       Claude: <project>\.claude\skills\<skill-name>
       Codex:  <project>\.agents\skills\<skill-name>
 
-    Managed entries are tracked in .aris manifests. The script never replaces
-    real files or user-owned skill directories; conflicts must be resolved
-    explicitly.
+    Managed skills and Claude leaf-agent ownership are tracked separately in
+    .aris manifests. The script never infers leaf ownership from target equality,
+    replaces real files, or removes user-owned skill/agent paths.
 
     Selective install (catalog: tools\skill-groups.tsv in the ARIS repo):
       -Groups A,B     install only these skill groups (see -ListGroups)
@@ -99,14 +99,29 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = $Utf8NoBom
+$OutputEncoding = $Utf8NoBom
 $ManifestVersion = '1'
+$AgentManifestVersion = '1'
+$AgentManifestName = 'installed-agents.txt'
 $SafeNameRegex = '^[A-Za-z0-9][A-Za-z0-9._-]*$'
 $SupportNames = @('shared-references')
 $CatalogRel = 'tools/skill-groups.tsv'
 $GlobalPointerDir = Join-Path $HOME '.aris'
 $GlobalPointerPath = Join-Path $GlobalPointerDir 'repo'
+$LeafAgentSourceRel = 'agents\aris-fanout-leaf.md'
+$LeafAgentTargetRel = '.claude\agents\aris-fanout-leaf.md'
 $script:LockDir = $null
 $script:LockAcquired = $false
+$script:LeafCreatedThisRun = $false
+$script:AgentManifestExistedBeforeCreate = $false
+$script:AgentManifestRollbackContent = $null
+$script:AgentManifestWrittenContent = $null
+$script:AgentManifestCommittedThisRun = $false
+$script:SkillManifestCommitted = $false
+$script:LeafAgentSourcePath = $null
+$script:LeafAgentTargetPath = $null
+$script:AgentManifestPath = $null
 
 function Die {
     param([string]$Message)
@@ -120,7 +135,31 @@ function Normalize-PathString {
 
 function Same-Path {
     param([string]$Left, [string]$Right)
-    return [System.StringComparer]::OrdinalIgnoreCase.Equals((Normalize-PathString $Left), (Normalize-PathString $Right))
+    if ([string]::IsNullOrWhiteSpace($Left) -or [string]::IsNullOrWhiteSpace($Right)) {
+        return $false
+    }
+    try {
+        $normalizedLeft = Normalize-PathString $Left
+        $normalizedRight = Normalize-PathString $Right
+    } catch {
+        return $false
+    }
+    if ([System.StringComparer]::OrdinalIgnoreCase.Equals($normalizedLeft, $normalizedRight)) {
+        return $true
+    }
+    if (-not (Test-Path -LiteralPath $Left) -or -not (Test-Path -LiteralPath $Right)) {
+        return $false
+    }
+    try {
+        $resolvedLeft = Resolve-ReparseChain $Left
+        $resolvedRight = Resolve-ReparseChain $Right
+    } catch {
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($resolvedLeft) -or [string]::IsNullOrWhiteSpace($resolvedRight)) {
+        return $false
+    }
+    return [System.StringComparer]::OrdinalIgnoreCase.Equals($resolvedLeft, $resolvedRight)
 }
 
 function Test-PathInside {
@@ -211,7 +250,22 @@ function Resolve-ReparseChain {
 
 function Test-ResolvedPathInside {
     param([string]$Path, [string]$Root)
-    return Test-PathInside (Resolve-ReparseChain $Path) (Resolve-ReparseChain $Root)
+    if ([string]::IsNullOrWhiteSpace($Path) -or [string]::IsNullOrWhiteSpace($Root)) {
+        return $false
+    }
+    if (-not (Test-Path -LiteralPath $Path) -or -not (Test-Path -LiteralPath $Root)) {
+        return $false
+    }
+    try {
+        $resolvedPath = Resolve-ReparseChain $Path
+        $resolvedRoot = Resolve-ReparseChain $Root
+    } catch {
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($resolvedPath) -or [string]::IsNullOrWhiteSpace($resolvedRoot)) {
+        return $false
+    }
+    return Test-PathInside $resolvedPath $resolvedRoot
 }
 
 function Read-Text {
@@ -777,7 +831,7 @@ function Test-NameInReplaceList {
 }
 
 function Compute-Plan {
-    param($Inventory, $Manifest, $Config, [string]$ProjectRoot, [string]$ManifestPath)
+    param($Inventory, $Manifest, $Config, [string]$ProjectRoot, [string]$ManifestPath, $Legacy)
     $plan = New-Object System.Collections.Generic.List[object]
     $targetRoot = Join-Path $ProjectRoot $Config.TargetRel
 
@@ -785,6 +839,16 @@ function Compute-Plan {
         $targetPath = Join-Path $targetRoot $entry.Name
         $item = Get-PathItem $targetPath
         $inManifest = $Manifest.ByName.ContainsKey($entry.Name)
+        $isApprovedLegacyAris = (
+            $entry.Name -eq 'aris' -and
+            $FromOld -and
+            $null -ne $Legacy -and
+            $Legacy.Kind -eq 'link_to_repo' -and
+            (Same-Path $targetPath $Legacy.Path)
+        )
+        if ($isApprovedLegacyAris) {
+            $item = $null
+        }
 
         if ($null -eq $item) {
             $action = 'CREATE'
@@ -979,6 +1043,14 @@ function Apply-LegacyMigration {
         if ($DryRun) {
             Write-Host "  (dry-run) remove legacy nested link $($Legacy.Path)"
         } else {
+            $currentItem = Get-PathItem $Legacy.Path
+            if (-not (Test-LinkItem $currentItem)) {
+                Die "legacy nested link changed before migration: $($Legacy.Path)"
+            }
+            $currentTarget = Get-LinkTarget $Legacy.Path
+            if (-not (Same-Path $currentTarget $Legacy.Target)) {
+                Die "legacy nested link target changed before migration: $($Legacy.Path) -> $currentTarget"
+            }
             Remove-LinkPath $Legacy.Path
             Write-Host "  - legacy nested link"
         }
@@ -1050,6 +1122,262 @@ function Remove-ToolsJunction {
     } else {
         Remove-LinkPath $linkPath
         Write-Host "  - .aris\tools"
+    }
+}
+
+function Get-AgentOwnership {
+    param([string]$AgentManifestPath, [string]$ProjectRoot)
+    $result = [pscustomobject]@{ Owned = $false; RepoRoot = '' }
+    $item = Get-PathItem $AgentManifestPath
+    if ($null -eq $item) { return $result }
+    if ((Test-LinkItem $item) -or -not (Test-Path -LiteralPath $AgentManifestPath -PathType Leaf)) {
+        Die "CONFLICT: malformed agent ownership manifest: $AgentManifestPath"
+    }
+
+    $lines = Get-Content -LiteralPath $AgentManifestPath -Encoding UTF8
+    $versionCount = @($lines | Where-Object { $_ -match '^version\t' }).Count
+    $repoCount = @($lines | Where-Object { $_ -match '^repo_root\t' }).Count
+    $projectCount = @($lines | Where-Object { $_ -match '^project_root\t' }).Count
+    $manifest = Load-Manifest $AgentManifestPath
+    if ($versionCount -ne 1 -or $repoCount -ne 1 -or $projectCount -ne 1 -or
+        -not $manifest.Headers.ContainsKey('version') -or
+        $manifest.Headers['version'] -ne $AgentManifestVersion -or
+        -not $manifest.Headers.ContainsKey('repo_root') -or
+        -not $manifest.Headers.ContainsKey('project_root') -or
+        -not (Same-Path $manifest.Headers['project_root'] $ProjectRoot) -or
+        @($manifest.Entries).Count -ne 1) {
+        Die "CONFLICT: malformed or foreign agent ownership manifest: $AgentManifestPath"
+    }
+    $entry = @($manifest.Entries)[0]
+    $sourceRel = $entry.SourceRel.Replace('\', '/')
+    $targetRel = $entry.TargetRel.Replace('\', '/')
+    if ($entry.Kind -ne 'agent' -or $entry.Name -ne 'aris-fanout-leaf' -or
+        $sourceRel -ne 'agents/aris-fanout-leaf.md' -or
+        $targetRel -ne '.claude/agents/aris-fanout-leaf.md' -or
+        $entry.Mode -ne 'symlink') {
+        Die "CONFLICT: unsupported agent ownership entry in $AgentManifestPath"
+    }
+    return [pscustomobject]@{
+        Owned = $true
+        RepoRoot = $manifest.Headers['repo_root']
+    }
+}
+
+function Test-LeafMutationParentsSafe {
+    param([string]$ProjectRoot, [string]$Target)
+    $targetParent = Split-Path -Parent $Target
+    foreach ($path in @((Join-Path $ProjectRoot '.claude'), $targetParent)) {
+        $item = Get-PathItem $path
+        if (Test-LinkItem $item) { return $false }
+        if ($null -ne $item -and -not $item.PSIsContainer) { return $false }
+    }
+    return $true
+}
+
+function Assert-LeafMutationParents {
+    param([string]$ProjectRoot, [string]$Target)
+    if (-not (Test-LeafMutationParentsSafe $ProjectRoot $Target)) {
+        Die 'S9: leaf-agent parent changed before mutation'
+    }
+}
+
+function Get-LeafAgentState {
+    param(
+        [string]$RepoRoot,
+        [string]$ProjectRoot,
+        [string]$AgentManifestPath,
+        [bool]$Required
+    )
+    $source = Join-Path $RepoRoot $LeafAgentSourceRel
+    $target = Join-Path $ProjectRoot $LeafAgentTargetRel
+    $ownership = Get-AgentOwnership $AgentManifestPath $ProjectRoot
+    $recordedSource = ''
+    if ($ownership.Owned) {
+        $recordedSource = Join-RelativePath $ownership.RepoRoot $LeafAgentSourceRel
+    }
+
+    if ($Required) {
+        $sourceItem = Get-PathItem $source
+        if ($null -eq $sourceItem -or (Test-LinkItem $sourceItem) -or -not (Test-Path -LiteralPath $source -PathType Leaf)) {
+            Die "bounded fan-out leaf agent not found: $source"
+        }
+        Assert-LeafMutationParents $ProjectRoot $target
+        $targetItem = Get-PathItem $target
+        if ($null -eq $targetItem) {
+            return [pscustomobject]@{ State = 'CREATE_OWNED'; Source = $source; Target = $target; Ownership = $ownership; RecordedSource = $recordedSource }
+        }
+        if ($targetItem.LinkType -eq 'SymbolicLink' -and (Same-Path (Get-LinkTarget $target) $source)) {
+            $state = $(if ($ownership.Owned) { 'REUSE_OWNED' } else { 'REUSE_EXTERNAL' })
+            return [pscustomobject]@{ State = $state; Source = $source; Target = $target; Ownership = $ownership; RecordedSource = $recordedSource }
+        }
+        Die "CONFLICT: $target exists and differs from the bundled leaf agent"
+    }
+
+    if (-not $ownership.Owned) {
+        return [pscustomobject]@{ State = 'ABSENT'; Source = $source; Target = $target; Ownership = $ownership; RecordedSource = $recordedSource }
+    }
+    $targetItem = Get-PathItem $target
+    if ($null -eq $targetItem) {
+        $state = 'RETIRE_OWNERSHIP'
+    } elseif ($targetItem.LinkType -eq 'SymbolicLink' -and (Same-Path (Get-LinkTarget $target) $recordedSource)) {
+        $state = 'REMOVE_OWNED'
+    } else {
+        $state = 'RELEASE_OWNERSHIP'
+    }
+    return [pscustomobject]@{ State = $state; Source = $source; Target = $target; Ownership = $ownership; RecordedSource = $recordedSource }
+}
+
+function New-AgentManifestContent {
+    param([string]$RepoRoot, [string]$ProjectRoot)
+    $lines = @(
+        "version`t$AgentManifestVersion"
+        "repo_root`t$RepoRoot"
+        "project_root`t$ProjectRoot"
+        "generated`t$((Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ'))"
+        "kind`tname`tsource_rel`ttarget_rel`tmode"
+        "agent`taris-fanout-leaf`tagents/aris-fanout-leaf.md`t.claude/agents/aris-fanout-leaf.md`tsymlink"
+    )
+    return ($lines -join "`n") + "`n"
+}
+
+function Assert-AgentManifestParent {
+    param([string]$AgentManifestPath)
+    $arisDir = Split-Path -Parent $AgentManifestPath
+    $item = Get-PathItem $arisDir
+    if ($null -eq $item -or (Test-LinkItem $item) -or -not $item.PSIsContainer) {
+        Die "S9: $arisDir is not a safe manifest directory"
+    }
+}
+
+function Commit-AgentManifest {
+    param([string]$AgentManifestPath, [string]$Content)
+    Assert-AgentManifestParent $AgentManifestPath
+    $arisDir = Split-Path -Parent $AgentManifestPath
+    $tmp = Join-Path $arisDir ('.installed-agents.' + [Guid]::NewGuid().ToString('N') + '.tmp')
+    Write-Text $tmp $Content
+    Assert-AgentManifestParent $AgentManifestPath
+    Move-Item -LiteralPath $tmp -Destination $AgentManifestPath -Force
+}
+
+function Retire-AgentManifest {
+    param([string]$AgentManifestPath)
+    if (-not (Test-Path -LiteralPath $AgentManifestPath -PathType Leaf)) { return }
+    if ($DryRun) {
+        Write-Host "  (dry-run) retire installed-agents.txt"
+    } else {
+        Assert-AgentManifestParent $AgentManifestPath
+        Remove-Item -LiteralPath $AgentManifestPath -Force -Confirm:$false
+    }
+}
+
+function Prepare-LeafAgent {
+    param($LeafState, [string]$AgentManifestPath, [string]$ProjectRoot)
+    switch ($LeafState.State) {
+        'CREATE_OWNED' {
+            if ($DryRun) {
+                Write-Host "  (dry-run) create owned .claude/agents/aris-fanout-leaf.md symbolic link"
+                return
+            }
+            $targetParent = Split-Path -Parent $LeafState.Target
+            Assert-LeafMutationParents $ProjectRoot $LeafState.Target
+            $script:AgentManifestExistedBeforeCreate = Test-Path -LiteralPath $AgentManifestPath -PathType Leaf
+            if ($script:AgentManifestExistedBeforeCreate) {
+                $script:AgentManifestRollbackContent = Read-Text $AgentManifestPath
+            }
+            New-Item -ItemType Directory -Force -Path $targetParent | Out-Null
+            Assert-LeafMutationParents $ProjectRoot $LeafState.Target
+            try {
+                New-Item -ItemType SymbolicLink -Path $LeafState.Target -Target $LeafState.Source -ErrorAction Stop | Out-Null
+            } catch {
+                Die "failed to create $($LeafState.Target) as a symbolic link; enable Windows Developer Mode or grant symbolic-link privilege"
+            }
+            $script:LeafCreatedThisRun = $true
+            $repoRoot = Split-Path -Parent (Split-Path -Parent $LeafState.Source)
+            $manifestContent = New-AgentManifestContent $repoRoot $ProjectRoot
+            $script:AgentManifestWrittenContent = $manifestContent
+            $currentManifestItem = Get-PathItem $AgentManifestPath
+            if ($script:AgentManifestExistedBeforeCreate) {
+                if ($null -eq $currentManifestItem -or (Test-LinkItem $currentManifestItem) -or
+                    -not (Test-Path -LiteralPath $AgentManifestPath -PathType Leaf) -or
+                    (Read-Text $AgentManifestPath) -ne $script:AgentManifestRollbackContent) {
+                    Die 'CONFLICT: agent ownership manifest changed during install'
+                }
+            } elseif ($null -ne $currentManifestItem) {
+                Die 'CONFLICT: agent ownership manifest appeared during install'
+            }
+            Commit-AgentManifest $AgentManifestPath $manifestContent
+            $script:AgentManifestCommittedThisRun = $true
+            Write-Host "  + .claude/agents/aris-fanout-leaf.md (owned bounded fan-out leaf symlink)"
+        }
+        'REUSE_OWNED' { Write-Host "  = .claude/agents/aris-fanout-leaf.md (owned leaf reused)" }
+        'REUSE_EXTERNAL' { Write-Host "  = .claude/agents/aris-fanout-leaf.md (compatible external leaf preserved)" }
+    }
+}
+
+function Finalize-LeafAgent {
+    param($LeafState, [string]$AgentManifestPath, [string]$ProjectRoot)
+    switch ($LeafState.State) {
+        'REMOVE_OWNED' {
+            if (-not (Test-LeafMutationParentsSafe $ProjectRoot $LeafState.Target)) {
+                Write-Warning 'leaf-agent parent changed; preserving target and ownership record'
+                return
+            }
+            $targetItem = Get-PathItem $LeafState.Target
+            if ($null -eq $targetItem -or $targetItem.LinkType -ne 'SymbolicLink' -or
+                -not (Same-Path (Get-LinkTarget $LeafState.Target) $LeafState.RecordedSource)) {
+                Write-Warning "$($LeafState.Target) changed before removal; preserving it and relinquishing ownership"
+                Retire-AgentManifest $AgentManifestPath
+                return
+            }
+            if ($DryRun) {
+                Write-Host "  (dry-run) remove owned .claude/agents/aris-fanout-leaf.md"
+            } else {
+                if (-not (Test-LeafMutationParentsSafe $ProjectRoot $LeafState.Target)) {
+                    Write-Warning 'leaf-agent parent changed at removal; preserving target and ownership record'
+                    return
+                }
+                $targetItem = Get-PathItem $LeafState.Target
+                if ($null -eq $targetItem -or $targetItem.LinkType -ne 'SymbolicLink' -or
+                    -not (Same-Path (Get-LinkTarget $LeafState.Target) $LeafState.RecordedSource)) {
+                    Write-Warning "$($LeafState.Target) changed at removal; preserving it and ownership record"
+                    return
+                }
+                Remove-Item -LiteralPath $LeafState.Target -Force -Confirm:$false
+                Retire-AgentManifest $AgentManifestPath
+                Write-Host "  - .claude/agents/aris-fanout-leaf.md (owned leaf symlink)"
+            }
+        }
+        'RETIRE_OWNERSHIP' { Retire-AgentManifest $AgentManifestPath }
+        'RELEASE_OWNERSHIP' {
+            Write-Warning "$($LeafState.Target) is no longer the recorded leaf; preserving it and relinquishing ownership"
+            Retire-AgentManifest $AgentManifestPath
+        }
+    }
+}
+
+function Undo-NewLeafAgentOnFailure {
+    if (-not $script:LeafCreatedThisRun -or $script:SkillManifestCommitted) { return }
+    $targetParent = Split-Path -Parent $script:LeafAgentTargetPath
+    $claudeParent = Split-Path -Parent $targetParent
+    $parentsSafe = -not (Test-LinkItem (Get-PathItem $claudeParent)) -and
+        -not (Test-LinkItem (Get-PathItem $targetParent))
+    $targetItem = Get-PathItem $script:LeafAgentTargetPath
+    if ($parentsSafe -and $null -ne $targetItem -and $targetItem.LinkType -eq 'SymbolicLink' -and
+        (Same-Path (Get-LinkTarget $script:LeafAgentTargetPath) $script:LeafAgentSourcePath)) {
+        Remove-Item -LiteralPath $script:LeafAgentTargetPath -Force -Confirm:$false -ErrorAction SilentlyContinue
+    }
+    $arisDir = $(if ($script:AgentManifestPath) { Split-Path -Parent $script:AgentManifestPath } else { '' })
+    $arisItem = $(if ($arisDir) { Get-PathItem $arisDir } else { $null })
+    $agentParentSafe = $null -ne $arisItem -and -not (Test-LinkItem $arisItem) -and $arisItem.PSIsContainer
+    if ($script:AgentManifestCommittedThisRun -and $agentParentSafe -and
+        $script:AgentManifestPath -and $null -ne $script:AgentManifestWrittenContent -and
+        (Test-Path -LiteralPath $script:AgentManifestPath -PathType Leaf) -and
+        (Read-Text $script:AgentManifestPath) -eq $script:AgentManifestWrittenContent) {
+        if ($null -ne $script:AgentManifestRollbackContent) {
+            Write-Text $script:AgentManifestPath $script:AgentManifestRollbackContent
+        } else {
+            Remove-Item -LiteralPath $script:AgentManifestPath -Force -Confirm:$false -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -1208,18 +1536,34 @@ function Remove-ManagedDocBlock {
 
 function Do-Uninstall {
     param($Config, [string]$ProjectRoot, [string]$ManifestPath, [string]$ManifestPrevPath, [string]$DocPath)
-    if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) {
-        Die "no manifest at $ManifestPath; nothing to uninstall"
+    $arisDir = Split-Path -Parent $ManifestPath
+    $agentManifestPath = Join-Path $arisDir $AgentManifestName
+    $hasSkillManifest = Test-Path -LiteralPath $ManifestPath -PathType Leaf
+    $hasAgentManifest = $Config.Platform -eq 'claude' -and (Test-Path -LiteralPath $agentManifestPath -PathType Leaf)
+    if (-not $hasSkillManifest -and -not $hasAgentManifest) {
+        Die "no skill or agent ownership manifest; nothing to uninstall"
     }
-    $manifest = Load-Manifest $ManifestPath
-    if (-not $manifest.Headers.ContainsKey('repo_root')) {
-        Die "manifest missing repo_root: $ManifestPath"
+
+    $manifest = $(if ($hasSkillManifest) { Load-Manifest $ManifestPath } else { [pscustomobject]@{ Headers = @{}; Entries = @() } })
+    $recordedRepo = $Config.RepoRoot
+    if ($hasSkillManifest) {
+        if (-not $manifest.Headers.ContainsKey('repo_root')) {
+            Die "manifest missing repo_root: $ManifestPath"
+        }
+        $recordedRepo = $manifest.Headers['repo_root']
     }
-    $recordedRepo = $manifest.Headers['repo_root']
+    $leafState = $null
+    if ($Config.Platform -eq 'claude') {
+        $leafState = Get-LeafAgentState $Config.RepoRoot $ProjectRoot $agentManifestPath $false
+    }
+
     Write-Host ''
     Write-Host 'Uninstall plan:'
     foreach ($entry in $manifest.Entries) {
         Write-Host "  - $($entry.Name) ($($entry.Kind))"
+    }
+    if ($null -ne $leafState -and $leafState.Ownership.Owned) {
+        Write-Host '  - aris-fanout-leaf (agent)'
     }
     foreach ($entry in $manifest.Entries) {
         $targetPath = Join-RelativePath $ProjectRoot $entry.TargetRel
@@ -1242,11 +1586,17 @@ function Do-Uninstall {
             Write-Warning "skipping $($entry.Name); target changed to $currentTarget"
         }
     }
-    Remove-ToolsJunction (Split-Path -Parent $ManifestPath) $recordedRepo $Config.ManifestName
-    if (-not $DryRun) {
-        Move-Item -LiteralPath $ManifestPath -Destination $ManifestPrevPath -Force
+    if ($hasSkillManifest) {
+        Remove-ToolsJunction $arisDir $recordedRepo $Config.ManifestName
+        if (-not $DryRun) {
+            Move-Item -LiteralPath $ManifestPath -Destination $ManifestPrevPath -Force
+            $script:SkillManifestCommitted = $true
+        }
+        Remove-ManagedDocBlock $Config $DocPath
     }
-    Remove-ManagedDocBlock $Config $DocPath
+    if ($null -ne $leafState) {
+        Finalize-LeafAgent $leafState $agentManifestPath $projectRoot
+    }
 }
 
 function Invoke-Main {
@@ -1277,6 +1627,7 @@ function Invoke-Main {
     $arisDir = Join-Path $projectRoot '.aris'
     $manifestPath = Join-Path $arisDir $config.ManifestName
     $manifestPrevPath = Join-Path $arisDir $config.ManifestPrevName
+    $agentManifestPath = Join-Path $arisDir $AgentManifestName
     $docPath = Join-Path $projectRoot $config.DocName
     $targetRoot = Join-Path $projectRoot $config.TargetRel
     $lockPath = Join-Path $arisDir $config.LockName
@@ -1321,7 +1672,7 @@ function Invoke-Main {
     Write-Host ''
     Write-Host "Selection: $($selection.Selected.Count) of $($upstreamSkillNames.Count) upstream skills"
 
-    $plan = Compute-Plan $selectedInventory $manifest $config $projectRoot $manifestPath
+    $plan = Compute-Plan $selectedInventory $manifest $config $projectRoot $manifestPath $legacy
     Print-Plan $plan $mode
 
     $conflicts = @($plan | Where-Object { $_.Action -eq 'CONFLICT' })
@@ -1329,16 +1680,38 @@ function Invoke-Main {
         Die "CONFLICT: $($conflicts.Count) existing path(s) must be resolved before install"
     }
 
+    $fanoutSkillNames = @('idea-creator', 'research-lit', 'proof-checker')
+    $activeFanoutEntries = @($plan | Where-Object {
+        $_.Name -in $fanoutSkillNames -and
+        $_.Action -in @('REUSE', 'ADOPT', 'CREATE', 'UPDATE_TARGET')
+    })
+    $requiresLeafAgent = $selectedPlatform -eq 'claude' -and $activeFanoutEntries.Count -gt 0
+    $leafState = $null
+    if ($selectedPlatform -eq 'claude') {
+        $leafState = Get-LeafAgentState $repoRoot $projectRoot $agentManifestPath $requiresLeafAgent
+    }
+
     if ($DryRun) {
         Apply-LegacyMigration $legacy $arisDir
         Archive-LegacyCopy $legacy $arisDir
         Ensure-ToolsJunction $arisDir $repoRoot
+        if ($null -ne $leafState) {
+            Prepare-LeafAgent $leafState $agentManifestPath $projectRoot
+            Finalize-LeafAgent $leafState $agentManifestPath $projectRoot
+        }
         Write-Host ''
         Write-Host '(dry-run) no changes made'
         return
     }
 
     Acquire-Lock $arisDir $lockPath
+    if ($selectedPlatform -eq 'claude') {
+        $leafState = Get-LeafAgentState $repoRoot $projectRoot $agentManifestPath $requiresLeafAgent
+        $script:LeafAgentSourcePath = $leafState.Source
+        $script:LeafAgentTargetPath = $leafState.Target
+        $script:AgentManifestPath = $agentManifestPath
+        Prepare-LeafAgent $leafState $agentManifestPath $projectRoot
+    }
     Apply-LegacyMigration $legacy $arisDir
     New-Item -ItemType Directory -Force -Path $targetRoot | Out-Null
     Write-Host ''
@@ -1346,6 +1719,10 @@ function Invoke-Main {
     Apply-Plan $plan $repoRoot
     $manifestContent = New-ManifestContent $plan $repoRoot $projectRoot $selectedPlatform
     Commit-Manifest $manifestPath $manifestPrevPath $manifestContent
+    $script:SkillManifestCommitted = $true
+    if ($null -ne $leafState) {
+        Finalize-LeafAgent $leafState $agentManifestPath $projectRoot
+    }
     Ensure-ToolsJunction $arisDir $repoRoot
     Archive-LegacyCopy $legacy $arisDir
 
@@ -1364,6 +1741,7 @@ $exitCode = 0
 try {
     Invoke-Main
 } catch {
+    Undo-NewLeafAgentOnFailure
     Write-Error $_.Exception.Message
     $exitCode = 1
 } finally {

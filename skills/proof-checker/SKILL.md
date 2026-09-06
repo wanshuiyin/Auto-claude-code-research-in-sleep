@@ -2,7 +2,7 @@
 name: proof-checker
 description: Rigorous mathematical proof verification and fixing workflow. Reads a LaTeX proof, identifies gaps via cross-model review (external reviewer backend, ultra reasoning), fixes each gap with full derivations, re-reviews, and generates an audit report. Use when user says "检查证明", "verify proof", "proof check", "审证明", "check this proof", or wants rigorous mathematical verification of a theory paper.
 argument-hint: "[path-to-tex-file or proof-description] [--deep-fix] [--restatement-check]"
-allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
+allowed-tools: Bash(*), Read, Grep, Glob, Write, Edit, Agent(aris-fanout-leaf), mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
 # Proof Checker: Rigorous Mathematical Verification & Fixing
@@ -163,47 +163,56 @@ When the proof invokes any of the following, require explicit verification of AL
 
 ### Phase 0.5: Proof-Obligation Ledger
 
-> **Fan-out (Tier-aware) — build the ledger in parallel; never judge in
-> parallel.** For a large multi-theorem paper, ledger *construction* is breadth
-> over independent sections. **Tier 1** (Workflow): spawn one Claude subagent
-> per section/theorem to extract that unit's symbols, assumptions, micro-claims,
-> and local quantified statements, each returning a structured ledger fragment.
-> **Tier 2**: the same subagents via the Agent tool. **Tier 3**: walk the
-> sections sequentially. This follows
+> **Bounded fan-out — build the ledger in parallel; never judge in parallel.**
+> Freeze mechanically enumerable **source-unit IDs** before dispatch: file spans,
+> sections, theorem/lemma/proposition blocks, or proof environments with stable
+> source anchors. Sort them by source order and partition them into no more than
+> `max_shards: 8`. Run waves of at most `max_concurrency: 4`, with
+> `max_turns: 8` per leaf. Obligations are discovered from these units and receive
+> deterministic IDs only **after extraction**, derived from the source-unit ID
+> plus a stable ordinal or anchor (for example `THM-3:OB-004`).
+>
+> - **Tier 1** (Workflow): explicitly select `aris-fanout-leaf` for every shard.
+> - **Tier 2** (Agent): call only `Agent(aris-fanout-leaf)`.
+> - **Tier 3**: process the same frozen shards sequentially. A failed,
+>   malformed, or timed-out shard gets at most one executor-side
+>   **sequential fallback** and never a replacement Agent.
+>
+> This follows
 > [`shared-references/fan-out-pattern.md`](../shared-references/fan-out-pattern.md).
+> The leaf prompt repeats the assigned IDs, no-delegation, read-only,
+> no-verdict, and output-schema rules because workers do not inherit this skill.
 >
 > Two hard rules:
 > 1. **The shards EXTRACT, they do not ADJUDICATE.** Building the ledger
 >    (inventorying obligations, typing symbols, restating with explicit
->    quantifiers) is structural extraction. Whether a proof step is *valid* —
->    whether an obligation is actually discharged — is a Type-B correctness
->    verdict reserved for the cross-model jury in Phase 1 / Phase 3 (codex or
->    manual, `ultra`). A Claude shard MUST NOT mark a micro-claim "proved" or
->    "sound"; it only records the obligation and where the paper claims to
->    discharge it. See [`acceptance-gate.md`](../shared-references/acceptance-gate.md)
->    — the loop may self-verify *that the ledger is complete*, never *that the
->    proofs are correct*.
->    - **This governs the ledger spec wording below.** Where the artifacts say
->      "WHERE each is verified", "or mark UNVERIFIED", or "where conditions are
->      proven", a shard records a **location pointer** (`file:line` the paper
->      claims discharge) — never its own judgment that the discharge is
->      mathematically valid. A shard's `UNVERIFIED` means *"the paper cites no
->      discharge location"*, NOT *"the shard checked the math and it fails"*.
->      Soundness is the jury's verdict, not the shard's.
+>    quantifiers) is structural extraction. Whether a proof step is *valid* is
+>    a Type-B correctness verdict reserved for the cross-model jury in Phase 1
+>    / Phase 3. A leaf MUST NOT mark a micro-claim "proved" or "sound"; it only
+>    records the obligation and the location where the paper claims to discharge
+>    it. A shard's `UNVERIFIED` means the paper cites no discharge location, not
+>    that the leaf checked the mathematics and rejected it.
 >
-> **Shard output** (extraction schema, per
-> [`fan-out-pattern.md`](../shared-references/fan-out-pattern.md)): each shard
-> returns `{shard_id: "<section/theorem id>", entries: [...]}` — the typed
-> ledger items (symbols, assumptions, micro-claims, canonical statements,
-> limit-order facts) for that unit, each carrying its canonical id (e.g.
-> `MC-17`, the symbol name) as `dedup_key`. Never prose-only; never a validity
-> verdict field.
-> 2. **Global artifacts are a barrier, computed on the merged ledger, not
->    per-shard.** The Dependency DAG and its cycle detection (incl. semantic
->    circularity), and cross-section symbol-type consistency, require the whole
->    paper in view. Merge all shard fragments first, then compute these on the
->    union — a per-shard DAG would miss exactly the cross-section cycles this
->    phase exists to catch.
+> **Shard output:** each leaf returns
+> `{shard_id, assigned_unit_ids, covered_unit_ids, status, entries, errors}`.
+> `assigned_unit_ids` and `covered_unit_ids` contain source-unit IDs. Entries
+> contain typed ledger items discovered in those units, each with a deterministic
+> post-extraction obligation ID or symbol key as `dedup_key`. Never prose-only;
+> never a validity-verdict field.
+>
+> **Coverage receipt:** reconcile the merged `covered_unit_ids` with the frozen
+> source-unit set after the one allowed sequential fallback. Record
+> planned/completed/failed/uncovered IDs and `coverage_complete`. The receipt
+> proves **source-unit execution coverage only**; it does not prove that every
+> relevant obligation was discovered or that the extracted ledger is
+> mathematically complete. Any uncovered source unit makes the proof check
+> `INCOMPLETE`/`BLOCKED` and blocks a complete validity verdict.
+>
+> 2. **Global artifacts are a barrier, computed on the merged extracted ledger,
+>    not per shard.** Run the Dependency DAG, cycle detection, and cross-section
+>    symbol consistency only after the coverage receipt says
+>    `coverage_complete: true`. Full source-unit coverage is necessary for these
+>    checks but is not itself a claim of obligation completeness or proof validity.
 
 Build formal accounting artifacts. Save to `PROOF_SKELETON.md`:
 

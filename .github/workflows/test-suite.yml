@@ -15,6 +15,7 @@ on:
       # reads docs/**, README*, AGENT_GUIDE.md — so changes there must retrigger.
       - 'tools/**'
       - 'tests/**'
+      - 'agents/**'
       - 'mcp-servers/**'
       - 'skills/**'
       - 'templates/**'
@@ -28,6 +29,7 @@ on:
     paths:
       - 'tools/**'
       - 'tests/**'
+      - 'agents/**'
       - 'mcp-servers/**'
       - 'skills/**'
       - 'templates/**'

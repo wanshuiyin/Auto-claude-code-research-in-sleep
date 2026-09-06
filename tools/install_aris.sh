@@ -4,8 +4,9 @@
 # Each ARIS skill is symlinked into `<project>/.claude/skills/<skill-name>` so
 # Claude Code's slash-command discovery (which only scans one level deep) finds it.
 # A versioned manifest at `<project>/.aris/installed-skills.txt` tracks every
-# entry this installer created — uninstall and reconcile read from the manifest
-# and never touch user-owned skills with the same name.
+# managed skill. Claude leaf-agent ownership is tracked separately in
+# `.aris/installed-agents.txt`, so reconcile/uninstall never infer ownership
+# from target equality or delete a compatible user-owned leaf link.
 #
 # Usage:
 #   bash tools/install_aris.sh [project_path] [options]
@@ -76,13 +77,17 @@ set -euo pipefail
 MANIFEST_VERSION="1"
 MANIFEST_NAME="installed-skills.txt"
 MANIFEST_PREV_NAME="installed-skills.txt.prev"
-AGENT_MANIFEST_NAME="installed-agent-profiles.txt"
+LEAF_AGENT_MANIFEST_VERSION="1"
+LEAF_AGENT_MANIFEST_NAME="installed-agents.txt"
+AGENT_PROFILE_MANIFEST_NAME="installed-agent-profiles.txt"
 DECLINED_NAME="skills-declined.txt"
 CATALOG_REL="tools/skill-groups.tsv"
 GLOBAL_POINTER="$HOME/.aris/repo"
 ARIS_DIR_NAME=".aris"
 LOCK_DIR_NAME=".install.lock.d"
 SKILLS_REL=".claude/skills"
+LEAF_AGENT_SOURCE_REL="agents/aris-fanout-leaf.md"
+LEAF_AGENT_TARGET_REL=".claude/agents/aris-fanout-leaf.md"
 DOC_FILE_NAME="CLAUDE.md"
 BLOCK_BEGIN="<!-- ARIS:BEGIN -->"
 BLOCK_END="<!-- ARIS:END -->"
@@ -219,12 +224,53 @@ canonicalize() {
     if command -v greadlink >/dev/null 2>&1; then greadlink -f "$1" 2>/dev/null || true
     elif readlink -f "$1" 2>/dev/null; then :
     else
-        # macOS fallback: cd + pwd
+        # macOS fallback: resolve directory aliases physically.
         local d f
-        if [[ -d "$1" ]]; then ( cd "$1" && pwd )
-        else d="$(dirname "$1")"; f="$(basename "$1")"; ( cd "$d" 2>/dev/null && echo "$(pwd)/$f" )
+        if [[ -d "$1" ]]; then ( cd -P "$1" && pwd -P )
+        else d="$(dirname "$1")"; f="$(basename "$1")"; ( cd -P "$d" 2>/dev/null && printf '%s/%s\n' "$(pwd -P)" "$f" )
         fi
     fi
+}
+
+# Compare path identity without losing the ability to recognize a dangling
+# installer-owned link. Exact spelling wins first; physical comparison is used
+# only when both paths still exist and both resolutions succeed.
+same_path() {
+    local left="$1" right="$2" left_canonical right_canonical
+    [[ -n "$left" && -n "$right" ]] || return 1
+    [[ "$left" == "$right" ]] && return 0
+    [[ -e "$left" && -e "$right" ]] || return 1
+    left_canonical="$(canonicalize "$left")"
+    right_canonical="$(canonicalize "$right")"
+    [[ -n "$left_canonical" && -n "$right_canonical" && \
+       "$left_canonical" == "$right_canonical" ]]
+}
+
+resolved_path_inside() {
+    local path="$1" root="$2" path_canonical root_canonical
+    [[ -e "$path" && -e "$root" ]] || return 1
+    path_canonical="$(canonicalize "$path")"
+    root_canonical="$(canonicalize "$root")"
+    [[ -n "$path_canonical" && -n "$root_canonical" ]] || return 1
+    [[ "$path_canonical" == "$root_canonical" || \
+       "$path_canonical" == "$root_canonical"/* ]]
+}
+
+link_target_path() {
+    local link_path="$1" raw_target="$2"
+    if [[ "$raw_target" == /* ]]; then
+        printf '%s\n' "$raw_target"
+    else
+        printf '%s/%s\n' "$(dirname "$link_path")" "$raw_target"
+    fi
+}
+
+link_target_matches() {
+    local link_path="$1" expected="$2" raw_target target_path
+    is_symlink "$link_path" || return 1
+    raw_target="$(read_link_target "$link_path")"
+    target_path="$(link_target_path "$link_path" "$raw_target")"
+    same_path "$target_path" "$expected"
 }
 
 # True if $1 is a symlink (lstat-style; doesn't follow)
@@ -278,7 +324,7 @@ build_upstream_inventory() {
         src="$skills_dir/$name"
         if is_symlink "$src"; then
             local resolved; resolved="$(canonicalize "$src")"
-            [[ "$resolved" == "$repo"/* ]] || { warn "skipping upstream symlink leading outside repo: $name -> $resolved"; continue; }
+            resolved_path_inside "$src" "$repo" || { warn "skipping upstream symlink leading outside repo: $name -> $resolved"; continue; }
         fi
         entries+=("skill|$name")
     done
@@ -596,6 +642,9 @@ manifest_lookup_target() {
 manifest_lookup_source() {
     awk -F'\t' -v n="$2" '$2==n {print $3; exit}' "$1"
 }
+manifest_header() {
+    awk -F'\t' -v key="$2" '$1==key {print $2; exit}' "$1"
+}
 manifest_names() { awk -F'\t' '{print $2}' "$1"; }
 manifest_kind_of() {
     awk -F'\t' -v n="$2" '$2==n {print $1; exit}' "$1"
@@ -645,8 +694,11 @@ PROJECT_SKILLS_DIR="$PROJECT_PATH/$SKILLS_REL"
 PROJECT_ARIS_DIR="$PROJECT_PATH/$ARIS_DIR_NAME"
 MANIFEST_PATH="$PROJECT_ARIS_DIR/$MANIFEST_NAME"
 MANIFEST_PREV="$PROJECT_ARIS_DIR/$MANIFEST_PREV_NAME"
-AGENT_MANIFEST_PATH="$PROJECT_ARIS_DIR/$AGENT_MANIFEST_NAME"
+LEAF_AGENT_MANIFEST_PATH="$PROJECT_ARIS_DIR/$LEAF_AGENT_MANIFEST_NAME"
+AGENT_PROFILE_MANIFEST_PATH="$PROJECT_ARIS_DIR/$AGENT_PROFILE_MANIFEST_NAME"
 LOCK_DIR="$PROJECT_ARIS_DIR/$LOCK_DIR_NAME"
+LEAF_AGENT_SOURCE="$ARIS_REPO/$LEAF_AGENT_SOURCE_REL"
+LEAF_AGENT_TARGET="$PROJECT_PATH/$LEAF_AGENT_TARGET_REL"
 DOC_FILE="$PROJECT_PATH/$DOC_FILE_NAME"
 CATALOG_PATH="$ARIS_REPO/$CATALOG_REL"
 DECLINED_PATH="$PROJECT_ARIS_DIR/$DECLINED_NAME"
@@ -668,6 +720,14 @@ check_no_symlinked_parents() {
 }
 
 # ─── Lock acquisition (mkdir-based, portable) ─────────────────────────────────
+LEAF_CREATED_THIS_RUN=false
+LEAF_AGENT_MANIFEST_EXISTED_BEFORE_CREATE=false
+LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT=""
+LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT=""
+LEAF_AGENT_MANIFEST_COMMITTED_THIS_RUN=false
+SKILL_MANIFEST_COMMITTED=false
+MANIFEST_TMP=""
+
 write_lock_metadata() {
     # Two files: owner.json for human inspection, owner.pid for reliable parsing
     cat > "$LOCK_DIR/owner.json" <<EOF
@@ -681,7 +741,8 @@ acquire_lock() {
     mkdir -p "$PROJECT_ARIS_DIR"
     if mkdir "$LOCK_DIR" 2>/dev/null; then
         write_lock_metadata
-        trap release_lock EXIT INT TERM
+        trap installer_exit_cleanup EXIT
+        trap 'exit 130' INT TERM
         return 0
     fi
     if $CLEAR_STALE_LOCK; then
@@ -691,7 +752,8 @@ acquire_lock() {
         rm -rf "$LOCK_DIR"
         mkdir "$LOCK_DIR" || die "still cannot acquire lock after stale clear"
         write_lock_metadata
-        trap release_lock EXIT INT TERM
+        trap installer_exit_cleanup EXIT
+        trap 'exit 130' INT TERM
         return 0
     fi
     local owner=""
@@ -712,14 +774,52 @@ release_lock() {
     fi
 }
 
+installer_exit_cleanup() {
+    local status=$?
+    if (( status != 0 )) && $LEAF_CREATED_THIS_RUN && ! $SKILL_MANIFEST_COMMITTED; then
+        local leaf_parent; leaf_parent="$(dirname "$LEAF_AGENT_TARGET")"
+        if ! is_symlink "$PROJECT_PATH/.claude" && ! is_symlink "$leaf_parent" && \
+           is_symlink "$LEAF_AGENT_TARGET"; then
+            local current_target current_target_path
+            current_target="$(read_link_target "$LEAF_AGENT_TARGET" 2>/dev/null || true)"
+            current_target_path="$(link_target_path "$LEAF_AGENT_TARGET" "$current_target")"
+            same_path "$current_target_path" "$LEAF_AGENT_SOURCE" && rm -f "$LEAF_AGENT_TARGET"
+        fi
+
+        if $LEAF_AGENT_MANIFEST_COMMITTED_THIS_RUN && \
+           ! is_symlink "$PROJECT_ARIS_DIR" && [[ -d "$PROJECT_ARIS_DIR" ]] && \
+           [[ -n "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" && \
+              -f "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" && \
+              -f "$LEAF_AGENT_MANIFEST_PATH" ]] && \
+           cmp -s "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" "$LEAF_AGENT_MANIFEST_PATH"; then
+            if [[ -n "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" && -f "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" ]]; then
+                local restore_tmp; restore_tmp="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.restore.XXXXXX")"
+                cp -p "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" "$restore_tmp" && \
+                    mv -f "$restore_tmp" "$LEAF_AGENT_MANIFEST_PATH"
+            else
+                rm -f "$LEAF_AGENT_MANIFEST_PATH"
+            fi
+        fi
+    fi
+    if ! $SKILL_MANIFEST_COMMITTED && [[ -n "$MANIFEST_TMP" ]]; then
+        rm -f "$MANIFEST_TMP"
+    fi
+    if ! is_symlink "$PROJECT_ARIS_DIR" && [[ -d "$PROJECT_ARIS_DIR" ]]; then
+        [[ -n "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" ]] && rm -f "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT"
+        [[ -n "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT" ]] && rm -f "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT"
+    fi
+    release_lock
+}
+
 # ─── Migration detection ──────────────────────────────────────────────────────
 LEGACY_NESTED="$PROJECT_SKILLS_DIR/aris"
 
 detect_legacy() {
     if [[ ! -e "$LEGACY_NESTED" && ! -L "$LEGACY_NESTED" ]]; then echo "none"; return; fi
     if is_symlink "$LEGACY_NESTED"; then
-        local tgt; tgt="$(read_link_target "$LEGACY_NESTED")"
-        if [[ "$tgt" == "$SKILLS_DIR_ABS" || "$tgt" == "$SKILLS_DIR_ABS/" ]]; then
+        local tgt tgt_path; tgt="$(read_link_target "$LEGACY_NESTED")"
+        tgt_path="$(link_target_path "$LEGACY_NESTED" "${tgt%/}")"
+        if same_path "$tgt_path" "$SKILLS_DIR_ABS"; then
             echo "symlink_to_repo"
         else
             echo "symlink_to_other"
@@ -771,23 +871,29 @@ archive_legacy_copy() {
 # Plan is written to a temp file, one line per action: ACTION|kind|name|extra
 # Actions: CREATE | UPDATE_TARGET | REUSE | REMOVE | ADOPT | CONFLICT
 compute_plan() {
-    local upstream_file="$1" manifest_data="$2" out="$3"
+    local upstream_file="$1" manifest_data="$2" out="$3" installed_repo_root="$4"
     : > "$out"
-    local target_path src expected_target current_target line kind name
+    local target_path src expected_target current_target current_target_path line kind name
     # Iterate upstream entries
     while IFS='|' read -r kind name; do
         [[ -z "$name" ]] && continue
         target_path="$PROJECT_SKILLS_DIR/$name"
         expected_target="$SKILLS_DIR_ABS/$name"
+        # A verified legacy `.claude/skills/aris -> <repo>/skills` link occupies
+        # the future flat target for a genuine skill named `aris`. Model that
+        # one approved migration path as absent; migrate_legacy revalidates and
+        # removes it immediately before apply. Dry-run remains non-mutating.
+        if [[ "$name" == "aris" && "$target_path" == "$LEGACY_NESTED" && \
+              "$FROM_OLD" == "true" && "$LEGACY_KIND" == "symlink_to_repo" ]]; then
+            echo "CREATE|$kind|$name|" >> "$out"
+            continue
+        fi
         if [[ -L "$target_path" ]]; then
             current_target="$(read_link_target "$target_path")"
-            # Convert relative readlink to absolute (relative to symlink's dir)
-            if [[ "$current_target" != /* ]]; then
-                current_target="$(canonicalize "$PROJECT_SKILLS_DIR/$current_target")"
-            fi
+            current_target_path="$(link_target_path "$target_path" "$current_target")"
             local in_manifest=false
             if [[ -n "$(manifest_lookup_target "$manifest_data" "$name")" ]]; then in_manifest=true; fi
-            if [[ "$current_target" == "$expected_target" ]]; then
+            if same_path "$current_target_path" "$expected_target"; then
                 if $in_manifest; then echo "REUSE|$kind|$name|" >> "$out"
                 else echo "ADOPT|$kind|$name|" >> "$out"
                 fi
@@ -813,7 +919,7 @@ compute_plan() {
         [[ -z "$mname" ]] && continue
         # is name in upstream?
         if grep -q "^[^|]*|$mname$" "$upstream_file"; then continue; fi
-        echo "REMOVE|$mkind|$mname|" >> "$out"
+        echo "REMOVE|$mkind|$mname|$installed_repo_root/$msrc" >> "$out"
     done < "$manifest_data"
 }
 
@@ -871,10 +977,7 @@ write_manifest_tmp() {
 # Verify current symlink state matches our expectation immediately before mutating
 revalidate_symlink_target() {
     local path="$1" expected="$2"
-    is_symlink "$path" || return 1
-    local cur; cur="$(read_link_target "$path")"
-    [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$path")/$cur")"
-    [[ "$cur" == "$expected" ]]
+    link_target_matches "$path" "$expected"
 }
 
 apply_plan() {
@@ -899,15 +1002,16 @@ apply_plan() {
                 fi
                 ;;
             UPDATE_TARGET)
-                # S11: revalidate current target equals what plan saw
-                local plan_saw_target; plan_saw_target="$(read_link_target "$target_path" 2>/dev/null || echo "")"
-                [[ "$plan_saw_target" != /* && -n "$plan_saw_target" ]] && plan_saw_target="$(canonicalize "$(dirname "$target_path")/$plan_saw_target")"
+                # S11: revalidate the exact readlink text that the plan observed.
+                local plan_saw_target plan_saw_path
+                plan_saw_target="$(read_link_target "$target_path" 2>/dev/null || echo "")"
                 if [[ "$plan_saw_target" != "$extra" ]]; then
                     warn "S11: $target_path target changed since plan ($plan_saw_target vs $extra) — skipping"
                     continue
                 fi
-                # S2: stale target must point inside aris-repo
-                if [[ "$plan_saw_target" != "$ARIS_REPO"/* ]]; then
+                # S2: stale target must resolve inside aris-repo.
+                plan_saw_path="$(link_target_path "$target_path" "$plan_saw_target")"
+                if ! resolved_path_inside "$plan_saw_path" "$ARIS_REPO"; then
                     warn "S2: refusing to replace symlink pointing outside aris-repo: $target_path -> $plan_saw_target"
                     continue
                 fi
@@ -919,12 +1023,16 @@ apply_plan() {
                 fi
                 ;;
             REMOVE)
-                # S1: must be a symlink
+                # S1: must be a symlink.
                 is_symlink "$target_path" || { warn "S1: $target_path is not a symlink, refusing to remove"; continue; }
-                # S2: target must be inside aris-repo
+                # Compare against the source recorded by the owning manifest first.
+                # This still identifies a dangling installer-owned link after its
+                # upstream source has been removed.
                 local cur; cur="$(read_link_target "$target_path")"
-                [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target_path")/$cur")"
-                [[ "$cur" == "$ARIS_REPO"/* ]] || { warn "S2: $target_path target $cur outside aris-repo, refusing"; continue; }
+                if ! link_target_matches "$target_path" "$extra"; then
+                    warn "S2: $target_path target $cur differs from recorded source $extra, refusing"
+                    continue
+                fi
                 if $DRY_RUN; then log "  (dry-run) rm $target_path"
                 else rm -f "$target_path"; log "  - $name"
                 fi
@@ -952,8 +1060,7 @@ ensure_tools_symlink() {
 
     if is_symlink "$link_path"; then
         local cur; cur="$(read_link_target "$link_path")"
-        [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$link_path")/$cur")"
-        if [[ "$cur" == "$expected_target" ]]; then
+        if link_target_matches "$link_path" "$expected_target"; then
             return 0
         fi
         warn ".aris/tools already exists with different target ($cur); leaving alone (#174)"
@@ -977,15 +1084,11 @@ ensure_tools_symlink() {
 # managed symlink (target == $ARIS_REPO/tools). User-created directories /
 # files / different symlinks are untouched.
 remove_tools_symlink() {
+    local repo_root="${1:-$ARIS_REPO}"
     local link_path="$PROJECT_ARIS_DIR/tools"
-    local expected_target="$ARIS_REPO/tools"
+    local expected_target="$repo_root/tools"
 
-    is_symlink "$link_path" || return 0
-    local cur; cur="$(read_link_target "$link_path")"
-    [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$link_path")/$cur")"
-    if [[ "$cur" != "$expected_target" ]]; then
-        return 0
-    fi
+    link_target_matches "$link_path" "$expected_target" || return 0
 
     if $DRY_RUN; then
         log "  (dry-run) rm $link_path"
@@ -995,27 +1098,156 @@ remove_tools_symlink() {
     fi
 }
 
+assert_agent_manifest_parent() {
+    if is_symlink "$PROJECT_ARIS_DIR" || [[ ! -d "$PROJECT_ARIS_DIR" ]]; then
+        die "S9: $PROJECT_ARIS_DIR is not a safe manifest directory"
+    fi
+}
+
+check_leaf_agent_parent() {
+    local parent; parent="$(dirname "$LEAF_AGENT_TARGET")"
+    if is_symlink "$parent"; then
+        die "S9: $parent is a symlink — refusing to install the bounded fan-out leaf"
+    fi
+    if [[ -e "$parent" && ! -d "$parent" ]]; then
+        die "CONFLICT: $parent exists and is not a directory"
+    fi
+}
+
+leaf_mutation_parents_safe() {
+    local p
+    for p in "$PROJECT_PATH/.claude" "$(dirname "$LEAF_AGENT_TARGET")"; do
+        is_symlink "$p" && return 1
+        [[ -e "$p" && ! -d "$p" ]] && return 1
+    done
+    return 0
+}
+
+assert_leaf_mutation_parents() {
+    leaf_mutation_parents_safe || \
+        die "S9: leaf-agent parent changed before mutation"
+}
+
+LEAF_AGENT_MANIFEST_OWNED=false
+LEAF_AGENT_MANIFEST_REPO_ROOT=""
+LEAF_AGENT_STATE="ABSENT"
+
+load_agent_ownership() {
+    LEAF_AGENT_MANIFEST_OWNED=false
+    LEAF_AGENT_MANIFEST_REPO_ROOT=""
+    [[ -e "$LEAF_AGENT_MANIFEST_PATH" || -L "$LEAF_AGENT_MANIFEST_PATH" ]] || return 0
+    [[ -f "$LEAF_AGENT_MANIFEST_PATH" && ! -L "$LEAF_AGENT_MANIFEST_PATH" ]] || \
+        die "CONFLICT: malformed agent ownership manifest: $LEAF_AGENT_MANIFEST_PATH"
+
+    local version repo_root project_root row_count row header_counts
+    version="$(awk -F'\t' '$1=="version"{print $2; exit}' "$LEAF_AGENT_MANIFEST_PATH")"
+    repo_root="$(awk -F'\t' '$1=="repo_root"{print $2; exit}' "$LEAF_AGENT_MANIFEST_PATH")"
+    project_root="$(awk -F'\t' '$1=="project_root"{print $2; exit}' "$LEAF_AGENT_MANIFEST_PATH")"
+    header_counts="$(awk -F'\t' '$1=="version"{v++} $1=="repo_root"{r++} $1=="project_root"{p++} END{printf "%d:%d:%d",v,r,p}' "$LEAF_AGENT_MANIFEST_PATH")"
+    row_count="$(awk -F'\t' 'BEGIN{body=0;c=0} /^kind\tname\tsource_rel\ttarget_rel\tmode$/{body=1;next} body&&NF==5{c++} END{print c}' "$LEAF_AGENT_MANIFEST_PATH")"
+    row="$(awk -F'\t' 'BEGIN{body=0} /^kind\tname\tsource_rel\ttarget_rel\tmode$/{body=1;next} body&&NF==5{print;exit}' "$LEAF_AGENT_MANIFEST_PATH")"
+
+    [[ "$version" == "$LEAF_AGENT_MANIFEST_VERSION" && -n "$repo_root" && -n "$project_root" && \
+       "$header_counts" == "1:1:1" && "$row_count" == "1" ]] || \
+        die "CONFLICT: malformed agent ownership manifest: $LEAF_AGENT_MANIFEST_PATH"
+    same_path "$project_root" "$PROJECT_PATH" || \
+        die "CONFLICT: agent ownership manifest belongs to a different project: $project_root"
+    [[ "$row" == $'agent\taris-fanout-leaf\tagents/aris-fanout-leaf.md\t.claude/agents/aris-fanout-leaf.md\tsymlink' ]] || \
+        die "CONFLICT: unsupported agent ownership entry in $LEAF_AGENT_MANIFEST_PATH"
+
+    LEAF_AGENT_MANIFEST_OWNED=true
+    LEAF_AGENT_MANIFEST_REPO_ROOT="$repo_root"
+}
+
+leaf_target_resolves_to() {
+    local expected="$1"
+    link_target_matches "$LEAF_AGENT_TARGET" "$expected"
+}
+
+compute_leaf_agent_state() {
+    local required="$1"
+    load_agent_ownership
+    LEAF_AGENT_STATE="ABSENT"
+
+    if [[ "$required" == "true" ]]; then
+        [[ -f "$LEAF_AGENT_SOURCE" && ! -L "$LEAF_AGENT_SOURCE" ]] || \
+            die "bounded fan-out leaf agent not found: $LEAF_AGENT_SOURCE"
+        check_leaf_agent_parent
+        if [[ ! -e "$LEAF_AGENT_TARGET" && ! -L "$LEAF_AGENT_TARGET" ]]; then
+            LEAF_AGENT_STATE="CREATE_OWNED"
+        elif leaf_target_resolves_to "$LEAF_AGENT_SOURCE"; then
+            if $LEAF_AGENT_MANIFEST_OWNED; then
+                LEAF_AGENT_STATE="REUSE_OWNED"
+            else
+                LEAF_AGENT_STATE="REUSE_EXTERNAL"
+            fi
+        else
+            die "CONFLICT: $LEAF_AGENT_TARGET exists and differs from the bundled leaf agent"
+        fi
+        return 0
+    fi
+
+    $LEAF_AGENT_MANIFEST_OWNED || return 0
+    local recorded_source="$LEAF_AGENT_MANIFEST_REPO_ROOT/$LEAF_AGENT_SOURCE_REL"
+    if [[ ! -e "$LEAF_AGENT_TARGET" && ! -L "$LEAF_AGENT_TARGET" ]]; then
+        LEAF_AGENT_STATE="RETIRE_OWNERSHIP"
+    elif leaf_target_resolves_to "$recorded_source"; then
+        LEAF_AGENT_STATE="REMOVE_OWNED"
+    else
+        LEAF_AGENT_STATE="RELEASE_OWNERSHIP"
+    fi
+}
+
+write_agent_manifest_tmp() {
+    local out="$1"
+    {
+        printf "version\t%s\n" "$LEAF_AGENT_MANIFEST_VERSION"
+        printf "repo_root\t%s\n" "$ARIS_REPO"
+        printf "project_root\t%s\n" "$PROJECT_PATH"
+        printf "generated\t%s\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        printf "kind\tname\tsource_rel\ttarget_rel\tmode\n"
+        printf "agent\taris-fanout-leaf\t%s\t%s\tsymlink\n" \
+            "$LEAF_AGENT_SOURCE_REL" "$LEAF_AGENT_TARGET_REL"
+    } > "$out"
+}
+
+commit_agent_manifest() {
+    local tmp="$1"
+    assert_agent_manifest_parent
+    mv -f "$tmp" "$LEAF_AGENT_MANIFEST_PATH"
+}
+
+retire_agent_manifest() {
+    [[ -f "$LEAF_AGENT_MANIFEST_PATH" ]] || return 0
+    if $DRY_RUN; then
+        log "  (dry-run) retire $LEAF_AGENT_MANIFEST_NAME"
+    else
+        assert_agent_manifest_parent
+        rm -f "$LEAF_AGENT_MANIFEST_PATH"
+    fi
+}
+
 # F5: Deploy Copilot agent profiles from <aris-repo>/.github/agents/ to
 # <project>/.github/agents/. Each .agent.md file is symlinked individually;
 # user-created files/dirs/symlinks at the target path are left alone.
 # Pure-additive — existing users who don't rerun the installer never see
 # this. Idempotent across re-runs.
 record_managed_agent_profile() {
-    local name="$1" tmp="$AGENT_MANIFEST_PATH.tmp.$$" unsorted="$AGENT_MANIFEST_PATH.unsorted.$$"
+    local name="$1" tmp="$AGENT_PROFILE_MANIFEST_PATH.tmp.$$" unsorted="$AGENT_PROFILE_MANIFEST_PATH.unsorted.$$"
     mkdir -p "$PROJECT_ARIS_DIR"
-    if [[ -L "$AGENT_MANIFEST_PATH" ]]; then
-        warn "$AGENT_MANIFEST_PATH is a symlink; refusing to record agent ownership"
+    if [[ -L "$AGENT_PROFILE_MANIFEST_PATH" ]]; then
+        warn "$AGENT_PROFILE_MANIFEST_PATH is a symlink; refusing to record agent ownership"
         return 1
     fi
-    if [[ -f "$AGENT_MANIFEST_PATH" ]]; then
-        cp "$AGENT_MANIFEST_PATH" "$unsorted" || { rm -f "$unsorted" "$tmp"; return 1; }
+    if [[ -f "$AGENT_PROFILE_MANIFEST_PATH" ]]; then
+        cp "$AGENT_PROFILE_MANIFEST_PATH" "$unsorted" || { rm -f "$unsorted" "$tmp"; return 1; }
     else
         : > "$unsorted" || return 1
     fi
     printf '%s\n' "$name" >> "$unsorted" || { rm -f "$unsorted" "$tmp"; return 1; }
     sort -u "$unsorted" > "$tmp" || { rm -f "$unsorted" "$tmp"; return 1; }
     rm -f "$unsorted"
-    mv -f "$tmp" "$AGENT_MANIFEST_PATH"
+    mv -f "$tmp" "$AGENT_PROFILE_MANIFEST_PATH"
 }
 
 ensure_agent_profiles() {
@@ -1027,17 +1259,15 @@ ensure_agent_profiles() {
 
     for src in "$src_dir"/*.agent.md; do
         [[ -f "$src" ]] || continue
-        # Resolve symlink and verify it's within the expected directory
+        # Resolve symlinks and verify the profile remains inside the bundled directory.
         local resolved; resolved="$(canonicalize "$src")"
-        local src_canon; src_canon="$(canonicalize "$src_dir")"
-        [[ "$resolved" == "$src_canon"/* ]] || { warn "skipping external symlink: $src -> $resolved"; continue; }
+        resolved_path_inside "$src" "$src_dir" || { warn "skipping external symlink: $src -> $resolved"; continue; }
         name="$(basename "$src")"
         target="$target_dir/$name"
 
         if is_symlink "$target"; then
             local cur; cur="$(read_link_target "$target")"
-            [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target")/$cur")"
-            if [[ "$cur" == "$src" ]]; then
+            if link_target_matches "$target" "$src"; then
                 continue  # already correct
             fi
             warn ".github/agents/$name already exists with different target ($cur); leaving alone"
@@ -1073,8 +1303,8 @@ ensure_agent_profiles() {
 remove_agent_profiles() {
     local target_dir="$PROJECT_PATH/.github/agents"
     [[ -d "$target_dir" || -L "$target_dir" ]] || return 0
-    [[ -f "$AGENT_MANIFEST_PATH" ]] || return 0
-    [[ ! -L "$AGENT_MANIFEST_PATH" ]] || { warn "$AGENT_MANIFEST_PATH is a symlink; refusing agent cleanup"; return 0; }
+    [[ -f "$AGENT_PROFILE_MANIFEST_PATH" ]] || return 0
+    [[ ! -L "$AGENT_PROFILE_MANIFEST_PATH" ]] || { warn "$AGENT_PROFILE_MANIFEST_PATH is a symlink; refusing agent cleanup"; return 0; }
     local src_dir="$ARIS_REPO/$AGENT_PROFILES_SRC"
     local name target removed=0
 
@@ -1082,10 +1312,8 @@ remove_agent_profiles() {
         [[ "$name" =~ $SAFE_NAME_REGEX && "$name" == *.agent.md ]] || { warn "invalid agent manifest entry: $name"; continue; }
         target="$target_dir/$name"
         [[ -L "$target" ]] || continue
-        local cur; cur="$(read_link_target "$target")"
-        [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target")/$cur")"
-        # Revalidate the exact source target before mutation.
-        if [[ "$cur" == "$src_dir/$name" ]]; then
+        # Revalidate the source identity before mutation.
+        if link_target_matches "$target" "$src_dir/$name"; then
             if $DRY_RUN; then
                 log "  (dry-run) rm $target"
             else
@@ -1093,7 +1321,7 @@ remove_agent_profiles() {
                 removed=$((removed + 1))
             fi
         fi
-    done < "$AGENT_MANIFEST_PATH"
+    done < "$AGENT_PROFILE_MANIFEST_PATH"
 
     if ! $DRY_RUN && (( removed > 0 )); then
         log "  - .github/agents/ ($removed copilot profile(s) removed)"
@@ -1101,8 +1329,92 @@ remove_agent_profiles() {
         rmdir "$target_dir" 2>/dev/null || true
     fi
     if ! $DRY_RUN; then
-        rm -f "$AGENT_MANIFEST_PATH"
+        rm -f "$AGENT_PROFILE_MANIFEST_PATH"
     fi
+}
+
+prepare_leaf_agent() {
+    case "$LEAF_AGENT_STATE" in
+        CREATE_OWNED)
+            if $DRY_RUN; then
+                log "  (dry-run) create owned $LEAF_AGENT_TARGET_REL"
+                return 0
+            fi
+            check_no_symlinked_parents
+            assert_leaf_mutation_parents
+            if [[ -f "$LEAF_AGENT_MANIFEST_PATH" ]]; then
+                LEAF_AGENT_MANIFEST_EXISTED_BEFORE_CREATE=true
+                assert_agent_manifest_parent
+                LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.rollback.XXXXXX")"
+                cp -p "$LEAF_AGENT_MANIFEST_PATH" "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT"
+            fi
+            mkdir -p "$(dirname "$LEAF_AGENT_TARGET")"
+            assert_leaf_mutation_parents
+            ln -s "$LEAF_AGENT_SOURCE" "$LEAF_AGENT_TARGET" || \
+                die "CONFLICT: $LEAF_AGENT_TARGET appeared during install"
+            LEAF_CREATED_THIS_RUN=true
+            assert_agent_manifest_parent
+            local manifest_tmp; manifest_tmp="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.tmp.XXXXXX")"
+            write_agent_manifest_tmp "$manifest_tmp"
+            LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT="$(mktemp "$PROJECT_ARIS_DIR/.installed-agents.written.XXXXXX")"
+            cp -p "$manifest_tmp" "$LEAF_AGENT_MANIFEST_WRITTEN_SNAPSHOT"
+            if $LEAF_AGENT_MANIFEST_EXISTED_BEFORE_CREATE; then
+                [[ -f "$LEAF_AGENT_MANIFEST_PATH" && ! -L "$LEAF_AGENT_MANIFEST_PATH" ]] && \
+                    cmp -s "$LEAF_AGENT_MANIFEST_ROLLBACK_SNAPSHOT" "$LEAF_AGENT_MANIFEST_PATH" || \
+                    die "CONFLICT: agent ownership manifest changed during install"
+            elif [[ -e "$LEAF_AGENT_MANIFEST_PATH" || -L "$LEAF_AGENT_MANIFEST_PATH" ]]; then
+                die "CONFLICT: agent ownership manifest appeared during install"
+            fi
+            commit_agent_manifest "$manifest_tmp"
+            LEAF_AGENT_MANIFEST_COMMITTED_THIS_RUN=true
+            log "  + $LEAF_AGENT_TARGET_REL (owned bounded fan-out leaf symlink)"
+            ;;
+        REUSE_OWNED)
+            log "  = $LEAF_AGENT_TARGET_REL (owned leaf reused)"
+            ;;
+        REUSE_EXTERNAL)
+            log "  = $LEAF_AGENT_TARGET_REL (compatible external leaf preserved)"
+            ;;
+    esac
+}
+
+finalize_leaf_agent() {
+    case "$LEAF_AGENT_STATE" in
+        REMOVE_OWNED)
+            if ! leaf_mutation_parents_safe; then
+                warn "leaf-agent parent changed; preserving target and ownership record"
+                return 0
+            fi
+            local recorded_source="$LEAF_AGENT_MANIFEST_REPO_ROOT/$LEAF_AGENT_SOURCE_REL"
+            if ! leaf_target_resolves_to "$recorded_source"; then
+                warn "$LEAF_AGENT_TARGET changed before removal; preserving it and relinquishing ownership"
+                retire_agent_manifest
+                return 0
+            fi
+            if $DRY_RUN; then
+                log "  (dry-run) remove owned $LEAF_AGENT_TARGET_REL"
+            else
+                if ! leaf_mutation_parents_safe; then
+                    warn "leaf-agent parent changed at removal; preserving target and ownership record"
+                    return 0
+                fi
+                if ! leaf_target_resolves_to "$recorded_source"; then
+                    warn "$LEAF_AGENT_TARGET changed at removal; preserving it and ownership record"
+                    return 0
+                fi
+                rm -f "$LEAF_AGENT_TARGET"
+                retire_agent_manifest
+                log "  - $LEAF_AGENT_TARGET_REL (owned leaf symlink)"
+            fi
+            ;;
+        RETIRE_OWNERSHIP)
+            retire_agent_manifest
+            ;;
+        RELEASE_OWNERSHIP)
+            warn "$LEAF_AGENT_TARGET is no longer the recorded leaf; preserving it and relinquishing ownership"
+            retire_agent_manifest
+            ;;
+    esac
 }
 
 commit_manifest() {
@@ -1174,28 +1486,40 @@ PYEOF
 
 # ─── Uninstall ────────────────────────────────────────────────────────────────
 do_uninstall() {
-    [[ -f "$MANIFEST_PATH" ]] || die "no manifest at $MANIFEST_PATH; nothing to uninstall"
-    local manifest_data; manifest_data="$(mktemp -t aris-manifest.XXXX)"
-    load_manifest "$MANIFEST_PATH" "$manifest_data"
+    local has_skill_manifest=false
+    [[ -f "$MANIFEST_PATH" ]] && has_skill_manifest=true
+    if ! $has_skill_manifest && [[ ! -f "$LEAF_AGENT_MANIFEST_PATH" ]] && \
+       [[ ! -f "$AGENT_PROFILE_MANIFEST_PATH" ]]; then
+        die "no skill or agent ownership manifest; nothing to uninstall"
+    fi
+
+    compute_leaf_agent_state false
+    local manifest_data recorded_repo=""
+    manifest_data="$(mktemp -t aris-manifest.XXXX)"
+    if $has_skill_manifest; then
+        recorded_repo="$(manifest_header "$MANIFEST_PATH" repo_root)"
+        [[ -n "$recorded_repo" ]] || die "manifest missing repo_root: $MANIFEST_PATH"
+        load_manifest "$MANIFEST_PATH" "$manifest_data"
+    else
+        : > "$manifest_data"
+    fi
     log ""
     log "Uninstall plan:"
     while IFS=$'\t' read -r kind name src target mode; do
         [[ -z "$name" ]] && continue
         log "  - $name ($kind)"
     done < "$manifest_data"
+    $LEAF_AGENT_MANIFEST_OWNED && log "  - aris-fanout-leaf (agent)"
     if ! $DRY_RUN && ! $QUIET; then
         prompt "Proceed?" || { log "aborted"; exit 0; }
     fi
     while IFS=$'\t' read -r kind name src target mode; do
         [[ -z "$name" ]] && continue
         local target_path="$PROJECT_PATH/$target"
-        local expected="$SKILLS_DIR_ABS/$name"
-        # S1: must be symlink
+        local expected="$recorded_repo/$src"
         is_symlink "$target_path" || { warn "S1: $target_path not a symlink, skipping"; continue; }
-        # S8 + S11: revalidate target
         local cur; cur="$(read_link_target "$target_path")"
-        [[ "$cur" != /* ]] && cur="$(canonicalize "$(dirname "$target_path")/$cur")"
-        if [[ "$cur" != "$expected" ]]; then
+        if ! link_target_matches "$target_path" "$expected"; then
             warn "S8: $target_path target $cur != expected $expected, skipping"
             continue
         fi
@@ -1204,16 +1528,18 @@ do_uninstall() {
         fi
     done < "$manifest_data"
     rm -f "$manifest_data"
-    # #174 Phase 0: best-effort cleanup of `.aris/tools` symlink, only if it
-    # is exactly the managed symlink. Anything else (user-created dir, custom
-    # symlink target) is left alone.
-    remove_tools_symlink
-    # F5: best-effort cleanup of managed agent profile symlinks.
+
+    if $has_skill_manifest; then
+        remove_tools_symlink "$recorded_repo"
+        if ! $DRY_RUN; then
+            mv -f "$MANIFEST_PATH" "$MANIFEST_PREV"
+            SKILL_MANIFEST_COMMITTED=true
+        fi
+    fi
+    finalize_leaf_agent
     remove_agent_profiles
     if ! $DRY_RUN; then
-        # Keep .prev for forensics, remove current manifest
-        [[ -f "$MANIFEST_PATH" ]] && mv -f "$MANIFEST_PATH" "$MANIFEST_PREV"
-        log "  ✓ uninstalled (manifest preserved as $MANIFEST_PREV)"
+        log "  ✓ uninstalled (managed manifests preserved as .prev)"
     fi
 }
 
@@ -1242,7 +1568,6 @@ if [[ "$LEGACY_KIND" != "none" ]]; then
         log "  for COPY-style legacy installs, also pass --migrate-copy keep-user|prefer-upstream"
         exit 1
     fi
-    migrate_legacy
 fi
 
 # If --reconcile but no manifest, fail
@@ -1257,6 +1582,11 @@ build_upstream_inventory "$ARIS_REPO" > "$UPSTREAM_FILE"
 
 MANIFEST_DATA="$(mktemp -t aris-manifest.XXXX)"
 load_manifest "$MANIFEST_PATH" "$MANIFEST_DATA"
+INSTALLED_REPO_ROOT=""
+if [[ -f "$MANIFEST_PATH" ]]; then
+    INSTALLED_REPO_ROOT="$(manifest_header "$MANIFEST_PATH" repo_root)"
+    [[ -n "$INSTALLED_REPO_ROOT" ]] || die "manifest missing repo_root: $MANIFEST_PATH"
+fi
 
 # Selective install (#366): build the selected set, then plan against it.
 SELECTED_FILE="$(mktemp -t aris-selected.XXXX)"
@@ -1270,7 +1600,7 @@ log ""
 log "Selection: $N_SELECTED of $N_UPSTREAM upstream skills"
 
 PLAN_FILE="$(mktemp -t aris-plan.XXXX)"
-compute_plan "$SELECTED_UPSTREAM" "$MANIFEST_DATA" "$PLAN_FILE"
+compute_plan "$SELECTED_UPSTREAM" "$MANIFEST_DATA" "$PLAN_FILE" "$INSTALLED_REPO_ROOT"
 print_plan "$PLAN_FILE"
 
 # Conflict resolution
@@ -1302,10 +1632,19 @@ if (( N_CONFLICT > 0 )); then
     fi
 fi
 
+REQUIRES_LEAF_AGENT=false
+if grep -Eq '^(idea-creator|research-lit|proof-checker)$' "$SELECTED_FILE"; then
+    REQUIRES_LEAF_AGENT=true
+fi
+compute_leaf_agent_state "$REQUIRES_LEAF_AGENT"
+
 if $DRY_RUN; then
+    [[ "$LEGACY_KIND" == "none" ]] || migrate_legacy
     # #174 preview: print the planned `.aris/tools` symlink action (function
     # is idempotent + DRY_RUN-aware, so it just logs in this mode)
     ensure_tools_symlink
+    prepare_leaf_agent
+    finalize_leaf_agent
     # F5 preview: print planned agent profile symlinks.
     ensure_agent_profiles
     log ""
@@ -1319,14 +1658,19 @@ if (( N_CHANGES > 0 )) && ! $QUIET; then
     prompt "Apply these $N_CHANGES changes?" || { log "aborted"; exit 0; }
 fi
 
+[[ "$LEGACY_KIND" == "none" ]] || migrate_legacy
+
 # Apply
 MANIFEST_TMP="$MANIFEST_PATH.tmp.$$"   # S12: same dir as destination
 mkdir -p "$PROJECT_ARIS_DIR"
 write_manifest_tmp "$PLAN_FILE" "$MANIFEST_TMP"
 log ""
 log "Applying:"
+prepare_leaf_agent
 apply_plan "$PLAN_FILE" "$MANIFEST_TMP"
 commit_manifest "$MANIFEST_TMP"
+SKILL_MANIFEST_COMMITTED=true
+finalize_leaf_agent
 
 # #174 Phase 0: ensure project-local .aris/tools symlink (purely additive).
 # Runs after manifest commit so a failure here doesn't roll back skill links.

@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'skills/**'
+      - 'agents/**'
       - 'docs/SKILLS_CATALOG.md'
       - 'README.md'
       - 'README_CN.md'
@@ -12,6 +13,7 @@ on:
       - 'docs/ARIS_INTRO.html'
       - 'tools/check_skills_inventory.py'
       - 'tests/test_codex_skill_mirror.py'
+      - 'tests/test_bounded_fanout_contract.py'
       - '.github/workflows/check-skills-inventory.yml'
   workflow_dispatch:
 
@@ -28,5 +30,7 @@ jobs:
         run: python -m pip install pytest
       - name: Check skill inventory drift
         run: python tools/check_skills_inventory.py
+      - name: Check bounded fan-out contract
+        run: python -m pytest tests/test_bounded_fanout_contract.py -q
       - name: Check Codex skill mirror semantics
         run: python -m pytest tests/test_codex_skill_mirror.py -q

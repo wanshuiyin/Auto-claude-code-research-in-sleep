@@ -13,6 +13,42 @@ must not, change *who renders the verdict*. The verdict stays a single,
 heterogeneous, cross-model step — identical whether you fanned out across
 8 parallel workers or ran one shard at a time on a slow night.
 
+## Bounded execution contract
+
+Every ARIS fan-out uses the same machine-readable limits:
+
+```yaml
+ARIS_FANOUT_AGENT_TYPE: aris-fanout-leaf
+ARIS_FANOUT_MAX_SHARDS: 8
+ARIS_FANOUT_MAX_CONCURRENCY: 4
+ARIS_FANOUT_SHARD_MAX_TURNS: 8
+ARIS_FANOUT_ALLOW_RECURSION: false
+ARIS_FANOUT_REQUIRE_COVERAGE_RECEIPT: true
+```
+
+On Claude Code, every Tier-1/2 shard MUST select the installed
+`aris-fanout-leaf` custom agent. The leaf's tool allowlist excludes delegation,
+shell, and mutation tools, making it a real leaf rather than a prompt-only
+request. If the leaf is unavailable, use the Tier-3 sequential fallback; never
+substitute `general-purpose`, `Explore`, `Plan`, or another recursively capable
+worker.
+
+Before dispatch, freeze the complete unit list and partition it into at most
+`max_shards: 8`. Launch waves of at most `max_concurrency: 4`; each leaf is
+bounded by `max_turns: 8`. A failed, malformed, or timed-out shard gets at most
+one executor-side **sequential fallback**. That fallback must not launch a
+replacement Agent.
+
+After collection and fallback, the executor emits a **coverage receipt** with
+planned/completed/failed shard IDs, planned/covered/uncovered unit IDs, and a
+mechanically computed `coverage_complete` boolean. This receipt proves execution
+coverage only; it never judges candidate quality, paper relevance, or proof
+validity.
+
+`max_turns` is a portable hard limit. Wall-clock cancellation is host-dependent:
+use it when the runtime exposes task cancellation, but do not claim that an
+elapsed-time deadline is universally enforced at Tier 2.
+
 ## Core principle: decouple FAN-OUT from JURY
 
 These are two different operations and they are governed by two different
@@ -113,32 +149,34 @@ attack axes, draft variants). Returns `candidates[]`:
 }
 ```
 
-**Extraction fan-out** — the shard *reads* a fixed input set and reports the
-units it finds (papers in a verified set, obligations in a proof). Returns
-`entries[]` with the same per-item keys, except `dedup_key` is the unit's
-**pre-existing canonical id** (assigned upstream), not a freshly normalized
-string:
+**Extraction fan-out** — the shard *reads* a fixed input set and reports
+`entries[]`. For identity-preserving extraction, such as papers in a verified
+set, `dedup_key` is the input's pre-existing canonical ID. For discovery
+extraction, such as proof obligations, the frozen coverage units are source
+units and each discovered entry receives a deterministic **post-extraction
+obligation ID** derived from its source-unit ID and stable ordinal or anchor.
+Discovered obligations are not planned coverage units.
 
 ```json
 {
-  "shard_id": "section:4.2",
+  "shard_id": "source-unit:section-4.2",
   "entries": [
     {
       "kind": "source | proof_obligation",
+      "source_unit_id": "section-4.2",
       "payload": "<the extracted record — domain fields may be inlined>",
-      "dedup_key": "<canonical id already assigned upstream: arXiv id / DOI / MC-17>"
+      "dedup_key": "<paper canonical ID, or post-extraction ID such as section-4.2:OB-003>"
     }
   ]
 }
 ```
 
 The `dedup_key` is what makes mechanical clustering possible without judgment:
-for generation, normalize titles / claim-stems / obligation-statements to a
-canonical string and cluster on string match / near-match; for extraction, the
-canonical id already identifies the unit. No model decides "are these the
-same?" by *taste* — the key decides by *normalization rule*. Domain-specific
-fields (an idea's hypothesis, a paper's method) may be inlined alongside these
-keys rather than buried in an opaque `payload`.
+for generation, normalize titles or claim stems; for identity-preserving
+extraction, retain the input ID; for discovery extraction, derive the key
+mechanically from the frozen source unit and source order. No model decides
+"are these the same?" by *taste*. Domain-specific fields may be inlined
+alongside these keys rather than buried in an opaque `payload`.
 
 ### Dedup discipline
 
@@ -236,19 +274,10 @@ the WB2 sweep had stripped the earlier vestigial grant. On a Tier-1 runtime
 the lenses run as Workflow shards; on Tier 3 they fall back to sequential
 enumeration with no grant needed.
 
-> ⚠️ **Known gap — idea-creator is an *aspirational* example here, not yet a clean one.**
-> Today `/idea-creator` Phase 3 (`skills/idea-creator/SKILL.md:159,175`)
-> does same-family *quick novelty check + feasibility gating* and
-> **eliminates ideas** before the Phase-4 cross-model jury ever sees them.
-> That is exactly the ❌ "executor pre-filters the jury's input with
-> same-family quality judgment" this doc forbids above — a Type-B
-> novelty/quality verdict made same-family (see
-> [`acceptance-gate.md`](acceptance-gate.md)). The fan-out refactor must
-> push all novelty/quality elimination INTO (or after) the Phase-4
-> cross-model jury; Phase 3 keeps only mechanical dedup + *objective*
-> feasibility (compute/time budget), and every non-duplicate idea reaches
-> the jury. Fixing this is part of fanning the skill out, not a separate
-> chore.
+> **Current state.** Phase 3 performs mechanical deduplication and objective
+> compute/data-availability gating only. Novelty, impact, and quality remain
+> annotations until the classified Phase-4 jury. Every feasible non-duplicate
+> candidate reaches the Phase-4 jury.
 
 ### `/research-lit` — per-source fan-out, deterministic gate as "jury"
 

@@ -3,6 +3,7 @@ name: Windows PowerShell installer tests
 on:
   pull_request:
     paths:
+      - 'agents/**'
       - 'tools/install_aris.ps1'
       - 'tests/test_install_aris_ps1.py'
       - '.github/workflows/test-install-aris-ps1.yml'

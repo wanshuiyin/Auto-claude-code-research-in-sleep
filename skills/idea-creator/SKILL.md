@@ -2,7 +2,7 @@
 name: idea-creator
 description: Generate and rank research ideas given a broad direction. Use when user says "找idea", "brainstorm ideas", "generate research ideas", "what can we work on", or wants to explore a research area for publishable directions.
 argument-hint: "[research-direction]"
-allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
+allowed-tools: Bash(*), Read, Write, Grep, Glob, WebSearch, WebFetch, Agent(aris-fanout-leaf), Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__manual_review__review, mcp__manual_review__review_reply
 ---
 
 # Research Idea Creator
@@ -200,40 +200,51 @@ same-family *acquittal* is not).
 `method-transfer` (works in domain A, untried in B) · `contradiction`
 (conflicting findings to resolve) · `untested-assumption` (everyone assumes,
 nobody tested) · `scaling-regime` (unexplored regime) · `diagnostic`
-(question nobody asked). This set is a floor, not a ceiling — add a
-domain-specific lens when the direction warrants.
+(question nobody asked). Freeze the full lens list before dispatch. A
+well-justified domain-specific lens may replace, combine, or extend the defaults,
+but the final list must fit `max_shards: 8`.
 
-**Tier-portable dispatch** (the Phase-4 jury downstream is identical on every tier):
-- **Tier 1** (Workflow available): spawn one **Claude subagent per lens**;
-  each runs the Phase-1 survey *through its lens* and the Phase-2 generation
-  prompt *restricted to that lens*, returning candidates as structured output.
-- **Tier 2** (Agent tool, no Workflow): spawn the same per-lens subagents via
-  the Agent tool.
-- **Tier 3** (no spawning): enumerate the lenses sequentially in one pass —
-  the original single-thread behavior, made explicit. No capability assumed.
+**Bounded tier-portable dispatch** (the Phase-4 jury is identical on every tier):
+- `max_shards: 8`, `max_concurrency: 4`, `max_turns: 8`.
+- **Tier 1** (Workflow available): dispatch frozen lens shards in waves of at
+  most four, explicitly selecting the read-only `aris-fanout-leaf` worker.
+- **Tier 2** (Agent tool, no Workflow): call only
+  `Agent(aris-fanout-leaf)`, again in waves of at most four. Never substitute
+  `general-purpose`, `Explore`, `Plan`, or another worker when the leaf is
+  unavailable.
+- **Tier 3** (no safe leaf): run the same frozen lens list sequentially in the
+  executor. This is the required **sequential fallback**.
+- A failed, malformed, or timed-out leaf gets at most one executor-side
+  sequential fallback. It never gets a replacement Agent, so recursion remains
+  `false` and the total launch count cannot grow dynamically.
 
 > **Why the lens shards are Claude, not Codex.** Generation is candidate
 > production, not a verdict, so same-family is safe — and Codex MCP is
-> **serial** (concurrent codex calls hang), so spending its scarce capacity
-> on parallel generation is both unsafe-to-parallelize and wasteful. Reserve
-> Codex for the one Phase-4 jury call. On Tier 1/2 the lens subagents are the
-> generators; the single Phase-2 codex brainstorm below still runs once as an
-> optional cross-model *seed* (a generator, not a judge), and its ideas join
-> the merged pool.
+> **serial** (concurrent codex calls hang). Reserve Codex for the one Phase-4
+> jury call. The leaf prompt must repeat the assigned `shard_id`, unit IDs,
+> output schema, no-delegation rule, read-only rule, and no-verdict rule because
+> subagents do not inherit this skill body.
 
 **Per-shard output** (the generation-fan-out schema from
-[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md) — `shard_id` +
-`candidates[]` + per-item `dedup_key`):
+[`fan-out-pattern.md`](../shared-references/fan-out-pattern.md)):
 ```json
-{"shard_id": "<lens id>", "candidates": [{"summary": "...", "hypothesis": "...",
-  "mve": "...", "contribution_type": "...", "risk": "...", "effort": "...",
-  "dedup_key": "<hypothesis slug — the mechanical-dedup identity>"}]}
+{"shard_id": "<lens id>", "assigned_unit_ids": ["<lens id>"],
+ "covered_unit_ids": ["<lens id>"], "status": "completed",
+ "candidates": [{"summary": "...", "hypothesis": "...", "mve": "...",
+   "contribution_type": "...", "risk": "...", "effort": "...",
+   "dedup_key": "<hypothesis slug — the mechanical-dedup identity>"}],
+ "errors": []}
 ```
 
-**Merge + mechanical dedup**: union all lenses' ideas; cluster near-identical
-ideas by hypothesis (mechanical similarity only — **never** drop one for being
-"weak"; weakness is a Phase-4 verdict, not a merge step). The deduped union is
-the candidate set that enters Phase 3.
+**Coverage receipt before merge:** mechanically record planned/completed/failed
+shard IDs, planned/covered/uncovered lens IDs, fallback attempts, and
+`coverage_complete`. Missing lenses remain explicit and are handed to the jury;
+they are never silently omitted.
+
+**Merge + mechanical dedup**: union all covered lenses' ideas; cluster
+near-identical ideas by hypothesis (mechanical similarity only — **never** drop
+one for being "weak"; weakness is a Phase-4 verdict, not a merge step). The
+coverage receipt and deduped union enter Phase 3 together.
 
 ### Phase 2: Idea Generation (brainstorm with external LLM)
 
