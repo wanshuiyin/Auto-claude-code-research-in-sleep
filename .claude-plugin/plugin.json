@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "aris",
+  "version": "1.0.0",
+  "description": "82-skill research workflow: literature review, idea discovery, experiment design, paper writing, rebuttal and slides.",
+  "author": {
+    "name": "wanshuiyin",
+    "url": "https://github.com/wanshuiyin"
+  },
+  "homepage": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep",
+  "repository": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep",
+  "license": "MIT",
+  "keywords": [
+    "research",
+    "paper",
+    "literature-review",
+    "skills",
+    "workflow"
+  ]
+}
