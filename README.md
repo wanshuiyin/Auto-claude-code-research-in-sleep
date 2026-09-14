@@ -1520,6 +1520,8 @@ Add `— reviewer: oracle-pro` to any reviewer-aware skill (`/proof-checker`, `/
 > 💡 **Recommended: project-local flat symlink install** (since 2026-04-20). Each ARIS skill is symlinked individually into `.claude/skills/<skill-name>`, so Claude Code's slash-command discovery picks them up. A manifest at `.aris/installed-skills.txt` tracks what ARIS installed — uninstall and reconcile only ever touch managed entries, never your own skills.
 >
 > 🤖 **Codex mirror route:** keep Claude on `install_aris.sh` / `smart_update.sh`. For Codex-native project installs, use `install_aris_codex.sh`; for copied Codex installs, use `smart_update_codex.sh`.
+>
+> 🧩 **Plugin route — the whole set in one command (Claude Code):** `claude plugin marketplace add wanshuiyin/Auto-claude-code-research-in-sleep`, then `claude plugin install aris@aris`. Installs all 82 skills at once — no clone, no per-skill symlinks, no group selection — and hands enable/disable and updates to the plugin manager. Use the installer above when you want selective groups, the `.aris/installed-skills.txt` manifest, or the Codex mirror.
 
 ```bash
 # 1. Clone ARIS once to a stable location

@@ -1344,6 +1344,8 @@ claude   # hooks 立即生效
 > 💡 **推荐：项目级扁平 symlink 安装**（2026-04-20 起）。每个 ARIS skill 独立 symlink 到 `.claude/skills/<skill-name>`，让 Claude Code 的 slash command 自动补全能直接发现。manifest 在 `.aris/installed-skills.txt` 跟踪 ARIS 装了什么——uninstall 和 reconcile 只动 manifest 里的条目，绝不碰你自己的 skill。
 >
 > 🤖 **Codex mirror 路线：** Claude 主线继续使用 `install_aris.sh` / `smart_update.sh`。Codex 原生项目安装请用 `install_aris_codex.sh`，Codex copy 安装更新请用 `smart_update_codex.sh`。
+>
+> 🧩 **插件路线——一条命令装全套（Claude Code）：** 先 `claude plugin marketplace add wanshuiyin/Auto-claude-code-research-in-sleep`，再 `claude plugin install aris@aris`。一次性装齐 82 个 skill——不用克隆、不用逐个 symlink、也不做分组选择——启用/禁用与后续更新交给插件管理器。若你需要分组选择、`.aris/installed-skills.txt` manifest 或 Codex mirror，仍用上面的安装器。
 
 ```bash
 # 1. 克隆 ARIS 一次到稳定位置
