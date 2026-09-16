@@ -22,23 +22,21 @@
       name: 'dsh-aris/scope-limits'
       disabled: true
 
-    # The independent reviewer. Model and reasoning effort come from the host
-    # Codex installation (~/.codex/config.toml) — that file is the reviewer
-    # posture contract, and dsh deliberately does not override it.
+    # The independent reviewer: ARIS's own codex-exec bridge as the `codex` MCP
+    # server (codex-cli 0.154 removed `codex mcp-server`). The module resolves
+    # the bridge shipped in this package. Model and reasoning effort still come
+    # from the host Codex installation (~/.codex/config.toml) — that file is the
+    # reviewer posture contract, and dsh deliberately does not override it.
     - id: aris-codex
-      name: '@deepseek-ai/dsh-mcp-client'
+      name: 'dsh-aris/codex'
       config:
-        transport: stdio
-        serverName: codex
-        command: codex
-        args: [mcp-server]
         # Pinned to a directory that outlives the run. Inheriting the Harness's
         # launch directory makes every review depend on it still existing:
         # remove or rename it and Codex fails to load its own configuration,
         # which ARIS survives by degrading to a transport that cannot attest
         # reviewer identity. Review prompts address artifacts absolutely.
         cwd: !!js process.env.HOME
-        # dsh defaults to 60s and Codex's progress notifications do not extend it.
-        # 20 minutes is ARIS's own threshold for calling a review hung.
+        # dsh defaults to 60s and the bridge's progress notifications do not
+        # extend it. 20 minutes is ARIS's own threshold for calling a review hung.
         toolCallTimeoutMs: 1200000
         failOnStartupError: true

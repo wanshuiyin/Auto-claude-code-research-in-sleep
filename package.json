@@ -1,6 +1,6 @@
 {
   "name": "dsh-aris",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "ARIS research-workflow skills as a DeepSeek Harness bundle: 82 skills plus cross-model adversarial review through Codex.",
   "license": "MIT",
   "type": "module",
@@ -23,6 +23,7 @@
     ".": "./dsh/index.mjs",
     "./client": "./dsh/client.js",
     "./scope-limits": "./dsh/scope-limits.mjs",
+    "./codex": "./dsh/codex.mjs",
     "./cordis.patch.yml": "./dsh/cordis.patch.yml",
     "./checkout.patch.yml": "./dsh/checkout.patch.yml",
     "./package.json": "./package.json"

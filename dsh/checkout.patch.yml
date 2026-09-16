@@ -31,8 +31,9 @@
       config:
         transport: stdio
         serverName: codex
-        command: codex
-        args: [mcp-server]
+        command: python3
+        # The bridge in the clone; ARIS_REPO is already required above.
+        args: !!js "[process.env.ARIS_REPO + '/mcp-servers/codex-exec/server.py']"
         cwd: !!js process.env.HOME
         toolCallTimeoutMs: 1200000
         failOnStartupError: true

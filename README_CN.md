@@ -4,6 +4,8 @@
 
 > 这是 `dsh-aris` 发行分支。完整的 ARIS 项目——全部工作流、文档、其他宿主的适配——在 [`main`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep) 上。
 
+❗ **codex-cli 升到 0.154 或更高了？** 装 `dsh-aris` 0.1.1：`dsh plugin --profile web add dsh-aris@latest`，然后重启 profile。0.154 删掉了 `codex mcp-server`，0.1.0 启动的正是它，所以那个 profile 起不来了。0.1.1 改用 ARIS 自带的桥接，0.153 上同样能用。
+
 在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 里跑 ARIS 研究工作流：82 个技能全部进入原生技能目录，审稿仍由 Codex 跨模型独立执行。
 
 技能文件零改动。这个 bundle 只是一层配置加一个简短适配器——不打补丁改 Harness 代码，也不 fork。
@@ -18,22 +20,24 @@ dsh plugin --profile web add dsh-aris
 
 `dsh plugin` 会调用 **pnpm**，而 Harness 不自带它。PATH 上没有 pnpm，安装会直接退出、什么都不做。
 
-这条命令从 npm registry 解析包。碰不到 npm 的话，改装 [GitHub Release](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/tag/dsh-aris-v0.1.0) 上的同一份 tarball——版本钉死在 URL 里，`dsh plugin update` 对它无效：
+这条命令从 npm registry 解析包。碰不到 npm 的话，改装 [GitHub Release](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/tag/dsh-aris-v0.1.1) 上的同一份 tarball——版本钉死在 URL 里，`dsh plugin update` 对它无效：
 
 ```sh
-dsh plugin --profile web add https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/dsh-aris-v0.1.0/dsh-aris-0.1.0.tgz
+dsh plugin --profile web add https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/dsh-aris-v0.1.1/dsh-aris-0.1.1.tgz
 ```
 
 ## 前置条件
 
-**已安装并登录的 Codex CLI。** 它就是那位独立审稿人。本 bundle 启动 `codex mcp-server`，且从不覆盖它的模型和推理档位——**`~/.codex/config.toml` 就是审稿人姿态契约**。ARIS 要求非 DeepSeek 家族、xhigh 档：
+**已安装并登录的 Codex CLI。** 它就是那位独立审稿人。本 bundle 通过 ARIS 自带的桥接 `mcp-servers/codex-exec/server.py`（随包发布）接入它，每次调用跑一个 `codex exec`：codex-cli 0.154 删掉了 `codex mcp-server`，桥接已在 codex-cli 0.153.4 和 0.154.0 上验证。这里没有任何东西覆盖模型和推理档位：调用没指定就用 `~/.codex/config.toml`，技能指定了就钉在整条线程上。**`~/.codex/config.toml` 就是审稿人姿态契约**。ARIS 要求非 DeepSeek 家族、xhigh 档：
 
 ```toml
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 ```
 
-Codex 起不来时，Harness 直接启动失败，而不是跑一个没有审稿人的组合。这是刻意的：**没有独立审稿人的 ARIS 不是 ARIS**。
+桥接起不来（没有 `python3`）时，Harness 直接启动失败，而不是跑一个没有审稿人的组合。这是刻意的：**没有独立审稿人的 ARIS 不是 ARIS**。Codex 没装或没登录则要到第一次审稿调用才暴露：返回一个带 Codex 原始报错的错误结果。
+
+**PATH 上有 `python3`，3.9 或更新**，桥接用它跑。macOS 系统自带的就够，不装任何包。
 
 **一个 DeepSeek API key**，通过 Harness 的 Models 页面或 `DEEPSEEK_API_KEY` 提供。
 
@@ -50,7 +54,7 @@ Codex 起不来时，Harness 直接启动失败，而不是跑一个没有审稿
 dsh --profile web --dump-config | grep -A2 aris-
 ```
 
-然后在会话里敲 `/`，技能菜单会列出 ARIS 技能。要验最关键的那一环：让模型用一个简单 prompt 调 `mcp__codex__codex`，报出它看到的 `threadId`，再用 `mcp__codex__codex-reply` 续接一次。**能看见 `threadId`，多轮审稿才成立。**
+然后在会话里敲 `/`，技能菜单会列出 ARIS 技能。要验最关键的那一环：让模型用一个简单 prompt 调 `mcp__codex__codex`，报出它看到的 `threadId`，再用 `mcp__codex__codex-reply` 续接一次。**能看见 `threadId`，多轮审稿才成立。** 桥接在 `~/.codex/state/codex-exec/threads/` 下为每条线程存一份记录，所以 Harness 重启后线程仍能续上。
 
 ## ARIS 标签页
 
@@ -68,7 +72,7 @@ Web UI 的会话里会在「对话」「轨迹」旁边多出一个 **ARIS** 标
 |---|---|
 | `agent-default-model` | 执行者换成 `deepseek-v4-pro` |
 | `aris-skills` | 挂载 82 个技能、发布 `ARIS_REPO`、补回 Codex 的 `threadId`、提供 ARIS 标签页 |
-| `aris-codex` | 经 MCP 接入 `codex mcp-server`，单次调用预算 20 分钟，工作目录钉死在稳定位置 |
+| `aris-codex` | codex-exec 桥接作为 `codex` MCP 服务器，单次调用预算 20 分钟，工作目录钉死在稳定位置；线程跨 Harness 重启可续 |
 
 技能语料挂在 bundled 档（最低优先级），所以项目级或用户级的同名技能永远优先。执行者模型是部署默认值而非锁定值：已保存的模型设置或会话内选择都会覆盖它。
 
@@ -88,6 +92,5 @@ ARIS_REPO=/absolute/path/to/aris NODE_USE_ENV_PROXY=1 \
 - **跟随某一个 Harness 版本。** DeepSeek Harness 处于技术预览；本 bundle 已针对 `0.1.1-rc.1` 验证。它用到的每一个接口面从 rc.5 到 0.1.1-rc.1 都未变，但这不构成对下一个版本的承诺。
 - **不把任何 dsh 包声明为 npm 依赖。** 内置包由宿主提供，通过 profile 的模块回退从 Harness 安装目录解析。Harness 自己的规约就要求 `@deepseek-ai/dsh-*` 不进 `dependencies`；而且这些子包与 CLI **锁步发版**，本 bundle 无论钉哪个范围，都会和用户已装的版本打架。
 - **`web_fetch` 关闭。** 原版 dsh 默认关闭它，本 bundle 也不打开——打开就意味着依赖一个 provider 包。需要联网的技能改用 `web_search`，或用 `bash` 跑 `curl`。
-- **审稿线程连续性是进程内的。** Harness 重启、或任何一次 MCP 重连替换了 Codex 子进程，已保存的 `threadId` 都会失效，之后的轮次从新线程开始；无论如何 `review-stage/REVIEWER_MEMORY.md` 都是持久记录。
 - **Codex 自己的推理过程不进 Harness 日志。** 返回的只有判词。调用参数和判词都会落日志，审稿人的中间工作留在 Codex 那侧。
 - **超过 50 KB 的判词会被落盘**，上下文里只留预览。审稿普遍很长的话，调高 `spill-policy` 行的 `maxInlineBytes`。

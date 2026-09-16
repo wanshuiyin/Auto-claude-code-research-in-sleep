@@ -4,6 +4,8 @@ English | [中文](https://github.com/wanshuiyin/Auto-claude-code-research-in-sl
 
 > The `dsh-aris` distribution branch. The full ARIS project — every workflow, the docs, and the other host adaptations — lives on [`main`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep).
 
+❗ **Updated codex-cli to 0.154 or later?** Get `dsh-aris` 0.1.1: `dsh plugin --profile web add dsh-aris@latest`, then restart the profile. 0.154 removed `codex mcp-server`, which 0.1.0 spawned, so that profile no longer starts. 0.1.1 ships ARIS's own bridge instead; it works on 0.153 too.
+
 Runs the ARIS research workflow inside [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): all 82 skills in the native skill catalog, with cross-model adversarial review through Codex.
 
 The skills are unmodified. This bundle is one configuration layer plus a short adapter — it patches no Harness code and forks nothing.
@@ -18,22 +20,24 @@ Restart the profile afterwards; plugin code loads at startup, so reloading the p
 
 `dsh plugin` shells out to **pnpm**, which the Harness does not bundle. Without it on `PATH` the install exits before doing anything.
 
-The command resolves the package from the npm registry. Without npm access, install the same tarball from the [GitHub Release](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/tag/dsh-aris-v0.1.0) instead — pinned to this version, and `dsh plugin update` does not apply to it:
+The command resolves the package from the npm registry. Without npm access, install the same tarball from the [GitHub Release](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/tag/dsh-aris-v0.1.1) instead — pinned to this version, and `dsh plugin update` does not apply to it:
 
 ```sh
-dsh plugin --profile web add https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/dsh-aris-v0.1.0/dsh-aris-0.1.0.tgz
+dsh plugin --profile web add https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/download/dsh-aris-v0.1.1/dsh-aris-0.1.1.tgz
 ```
 
 ## Prerequisites
 
-**Codex CLI, installed and authenticated.** It is the independent reviewer. The bundle spawns `codex mcp-server` and never overrides its model or reasoning effort — **`~/.codex/config.toml` is the reviewer posture contract**. ARIS expects a non-DeepSeek family at `xhigh`:
+**Codex CLI, installed and authenticated.** It is the independent reviewer. The bundle reaches it through ARIS's own bridge, `mcp-servers/codex-exec/server.py` (shipped in the package), which runs each call as `codex exec`: codex-cli 0.154 removed `codex mcp-server`, verified on codex-cli 0.153.4 and 0.154.0. Nothing here overrides the model or reasoning effort. A call that names neither uses `~/.codex/config.toml`; a skill that names them pins them for the whole thread. **`~/.codex/config.toml` is the reviewer posture contract**. ARIS expects a non-DeepSeek family at `xhigh`:
 
 ```toml
-model = "gpt-5.6-sol"
+model = "gpt-6-astra"
 model_reasoning_effort = "xhigh"
 ```
 
-If Codex cannot start, the Harness fails to boot rather than running a composition with no reviewer. That is deliberate: ARIS without an independent reviewer is not ARIS.
+If the bridge cannot start — no `python3` — the Harness fails to boot rather than running a composition with no reviewer. That is deliberate: ARIS without an independent reviewer is not ARIS. A Codex that is missing or logged out surfaces later, on the first reviewer call, as an error result carrying Codex's own message.
+
+**Python 3.9 or newer on `PATH` as `python3`**, for the bridge. macOS's system Python qualifies; no packages are installed.
 
 **A DeepSeek API key**, through the Harness Models page or `DEEPSEEK_API_KEY`.
 
@@ -50,7 +54,7 @@ If Codex cannot start, the Harness fails to boot rather than running a compositi
 dsh --profile web --dump-config | grep -A2 aris-
 ```
 
-Then, in a session, type `/` — the skill menu lists the ARIS skills. To check the part that matters, ask the model to call `mcp__codex__codex` with a trivial prompt, report the `threadId` it can see, then continue that thread once with `mcp__codex__codex-reply`. A visible `threadId` is what makes multi-round review work.
+Then, in a session, type `/` — the skill menu lists the ARIS skills. To check the part that matters, ask the model to call `mcp__codex__codex` with a trivial prompt, report the `threadId` it can see, then continue that thread once with `mcp__codex__codex-reply`. A visible `threadId` is what makes multi-round review work. The bridge keeps one record per thread under `~/.codex/state/codex-exec/threads/`, so a thread continues after a Harness restart.
 
 ## The ARIS tab
 
@@ -79,7 +83,7 @@ cap — never that the work was acquitted.
 |---|---|
 | `agent-default-model` | executor becomes `deepseek-v4-pro` |
 | `aris-skills` | mounts the 82-skill corpus, publishes `ARIS_REPO`, restores Codex's `threadId`, serves the ARIS tab |
-| `aris-codex` | `codex mcp-server` over MCP, 20-minute call budget, pinned to a stable working directory |
+| `aris-codex` | the codex-exec bridge as the `codex` MCP server, 20-minute call budget, pinned to a stable working directory; threads resume across Harness restarts |
 
 The corpus mounts at the bundled rank, so a project or user skill of the same name wins. The executor default is a deployment default, not a lock: a saved model setting or a per-session choice overrides it.
 
@@ -99,6 +103,5 @@ This overlay is **not** equivalent to the installed bundle: it cannot restore Co
 - **Tracks one Harness release.** DeepSeek Harness is a developer preview; this bundle is verified against `0.1.1-rc.1`. Every surface it uses survived rc.5 → 0.1.1-rc.1 unchanged, but that is not a promise about the next one.
 - **No dsh packages are declared as npm dependencies.** In-box packages are host-provided and resolve from the Harness installation through the profile module fallback. The Harness's own rule keeps `@deepseek-ai/dsh-*` out of `dependencies`, and the packages version in lockstep with the CLI, so any range this bundle pinned would fight the version the user already has installed.
 - **`web_fetch` is off.** Stock dsh ships it disabled and this bundle does not enable it, which would mean depending on a provider package. Skills that reach the web use `web_search`, or `bash` with `curl`.
-- **Reviewer thread continuity is process-local.** A Harness restart, or any MCP reconnect that replaces the Codex child, loses saved `threadId`s. Rounds after that start fresh; `review-stage/REVIEWER_MEMORY.md` remains the durable record either way.
 - **Codex's own reasoning is not in the Harness log.** Only the verdict returns. The call arguments and the verdict are logged; the reviewer's intermediate work stays on the Codex side.
 - **A verdict over 50 KB is spilled** to a file with a preview left in context. Raise `maxInlineBytes` on the `spill-policy` row if your reviews run longer.
