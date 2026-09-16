@@ -1,7 +1,7 @@
 {
   "name": "dsh-aris",
   "version": "0.1.1",
-  "description": "ARIS research-workflow skills as a DeepSeek Harness bundle: 82 skills plus cross-model adversarial review through Codex.",
+  "description": "ARIS research-workflow skills as a DeepSeek Harness bundle: 83 skills plus cross-model adversarial review through Codex.",
   "license": "MIT",
   "type": "module",
   "engines": {

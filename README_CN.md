@@ -6,7 +6,7 @@
 
 ❗ **codex-cli 升到 0.154 或更高了？** 装 `dsh-aris` 0.1.1：`dsh plugin --profile web add dsh-aris@latest`，然后重启 profile。0.154 删掉了 `codex mcp-server`，0.1.0 启动的正是它，所以那个 profile 起不来了。0.1.1 改用 ARIS 自带的桥接，0.153 上同样能用。
 
-在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 里跑 ARIS 研究工作流：82 个技能全部进入原生技能目录，审稿仍由 Codex 跨模型独立执行。
+在 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 里跑 ARIS 研究工作流：83 个技能全部进入原生技能目录，审稿仍由 Codex 跨模型独立执行。
 
 技能文件零改动。这个 bundle 只是一层配置加一个简短适配器——不打补丁改 Harness 代码，也不 fork。
 
@@ -71,7 +71,7 @@ Web UI 的会话里会在「对话」「轨迹」旁边多出一个 **ARIS** 标
 | 配置行 | 作用 |
 |---|---|
 | `agent-default-model` | 执行者换成 `deepseek-v4-pro` |
-| `aris-skills` | 挂载 82 个技能、发布 `ARIS_REPO`、补回 Codex 的 `threadId`、提供 ARIS 标签页 |
+| `aris-skills` | 挂载 83 个技能、发布 `ARIS_REPO`、补回 Codex 的 `threadId`、提供 ARIS 标签页 |
 | `aris-codex` | codex-exec 桥接作为 `codex` MCP 服务器，单次调用预算 20 分钟，工作目录钉死在稳定位置；线程跨 Harness 重启可续 |
 
 技能语料挂在 bundled 档（最低优先级），所以项目级或用户级的同名技能永远优先。执行者模型是部署默认值而非锁定值：已保存的模型设置或会话内选择都会覆盖它。

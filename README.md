@@ -6,7 +6,7 @@ English | [中文](https://github.com/wanshuiyin/Auto-claude-code-research-in-sl
 
 ❗ **Updated codex-cli to 0.154 or later?** Get `dsh-aris` 0.1.1: `dsh plugin --profile web add dsh-aris@latest`, then restart the profile. 0.154 removed `codex mcp-server`, which 0.1.0 spawned, so that profile no longer starts. 0.1.1 ships ARIS's own bridge instead; it works on 0.153 too.
 
-Runs the ARIS research workflow inside [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): all 82 skills in the native skill catalog, with cross-model adversarial review through Codex.
+Runs the ARIS research workflow inside [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): all 83 skills in the native skill catalog, with cross-model adversarial review through Codex.
 
 The skills are unmodified. This bundle is one configuration layer plus a short adapter — it patches no Harness code and forks nothing.
 
@@ -82,7 +82,7 @@ cap — never that the work was acquitted.
 | Row | Effect |
 |---|---|
 | `agent-default-model` | executor becomes `deepseek-v4-pro` |
-| `aris-skills` | mounts the 82-skill corpus, publishes `ARIS_REPO`, restores Codex's `threadId`, serves the ARIS tab |
+| `aris-skills` | mounts the 83-skill corpus, publishes `ARIS_REPO`, restores Codex's `threadId`, serves the ARIS tab |
 | `aris-codex` | the codex-exec bridge as the `codex` MCP server, 20-minute call budget, pinned to a stable working directory; threads resume across Harness restarts |
 
 The corpus mounts at the bundled rank, so a project or user skill of the same name wins. The executor default is a deployment default, not a lock: a saved model setting or a per-session choice overrides it.
