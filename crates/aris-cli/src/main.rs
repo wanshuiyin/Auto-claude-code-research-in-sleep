@@ -1463,9 +1463,13 @@ fn run_repl(
     let history_path = history::history_path();
     editor.load_history_from(&history_path);
 
-    // Install Ctrl+C handler: set runtime interrupt flag instead of killing the process
+    // Install Ctrl+C handler: set runtime interrupt flag instead of killing the process.
+    // v0.4.25 (#430): also latch the signal for the REPL itself — the runtime
+    // and the stream adapter clear their flag before returning "interrupted",
+    // so the outer loop could not tell a cancelled turn from an ordinary one.
     let _ = ctrlc::set_handler(|| {
         runtime::set_interrupt();
+        INTERRUPT_LATCH.store(true, std::sync::atomic::Ordering::SeqCst);
     });
 
     println!("{}", cli.startup_banner());
@@ -1494,6 +1498,7 @@ fn run_repl(
                     editor.push_history(input);
                     // Clear interrupt flag before command
                     runtime::clear_interrupt();
+                    INTERRUPT_LATCH.store(false, std::sync::atomic::Ordering::SeqCst);
                     match cli.handle_repl_command(command) {
                         Ok(persist) => {
                             if persist {
@@ -1509,6 +1514,7 @@ fn run_repl(
                             runtime::clear_interrupt();
                         }
                     }
+                    discard_input_after_interrupt(&mut editor);
                     continue;
                 }
                 // v0.4.16 Track A: persist the submitted entry to disk in
@@ -1526,6 +1532,7 @@ fn run_repl(
                 println!("\x1b[38;5;240m{sep}\x1b[0m");
                 // Clear interrupt flag before starting
                 runtime::clear_interrupt();
+                INTERRUPT_LATCH.store(false, std::sync::atomic::Ordering::SeqCst);
                 if let Err(e) = cli.run_turn(&trimmed) {
                     if runtime::is_interrupted() {
                         eprintln!("\n\x1b[38;5;208m● Interrupted\x1b[0m");
@@ -1535,6 +1542,7 @@ fn run_repl(
                     runtime::clear_interrupt();
                     // Don't exit REPL — let user retry or switch model
                 }
+                discard_input_after_interrupt(&mut editor);
             }
             input::ReadOutcome::Cancel => {}
             input::ReadOutcome::Exit => {
@@ -1545,6 +1553,21 @@ fn run_repl(
     }
 
     Ok(())
+}
+
+/// v0.4.25 (#430): set by the Ctrl+C handler alongside the runtime flag and
+/// consumed once at the REPL's turn/command boundary — whether the turn ended
+/// in an error, or finished after the signal landed.
+static INTERRUPT_LATCH: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// After a turn that saw Ctrl+C, drop whatever console input queued up behind
+/// it (on Windows the rest of a pasted block — each line used to start the
+/// next turn) and any events the editor was holding back.
+fn discard_input_after_interrupt(editor: &mut input::LineEditor) {
+    if INTERRUPT_LATCH.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        input::drain_console_input();
+        editor.clear_pending();
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -3603,7 +3626,6 @@ fn render_repl_help() -> String {
         "  Up/Down              Navigate prompt history".to_string(),
         "  Tab                  Complete slash commands".to_string(),
         "  Ctrl-C               Clear input (or exit on empty prompt)".to_string(),
-        "  Shift+Enter/Ctrl+J   Insert a newline".to_string(),
         String::new(),
         render_slash_command_help(),
     ]
@@ -9083,11 +9105,13 @@ mod tests {
         assert_eq!(converted[2].role, "user");
     }
     #[test]
-    fn repl_help_mentions_history_completion_and_multiline() {
+    fn repl_help_mentions_history_and_completion_only() {
         let help = render_repl_help();
         assert!(help.contains("Up/Down"));
         assert!(help.contains("Tab"));
-        assert!(help.contains("Shift+Enter/Ctrl+J"));
+        // v0.4.25: the editor is single-line; no branch ever implemented a
+        // newline shortcut, so the help no longer promises one.
+        assert!(!help.contains("Shift+Enter") && !help.contains("Ctrl+J"));
     }
 
     #[test]

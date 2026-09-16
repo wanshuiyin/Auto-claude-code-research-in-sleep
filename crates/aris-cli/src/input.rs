@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use std::io::{self, IsTerminal, Write};
+use std::time::Duration;
 
 use crossterm::{
     cursor,
@@ -90,6 +92,103 @@ pub struct LineEditor {
     prompt: String,
     completions: Vec<(String, String)>,
     history: Vec<String>,
+    /// v0.4.25 (#430): console events already pulled off the OS queue while
+    /// collecting a Windows paste burst but not part of it (a control key, an
+    /// arrow…). Every editor read consumes these before asking the OS again,
+    /// so nothing typed or pasted is lost or reordered.
+    pending: VecDeque<Event>,
+}
+
+/// v0.4.25 (#430): idle window used on Windows to decide that a burst of
+/// console records (a multi-line paste) has finished arriving. `poll(0)` is
+/// not enough: a modifier-only record or the first half of a UTF-16 surrogate
+/// pair yields no event, so crossterm's poll returns `false` while records are
+/// still queued behind it.
+const PASTE_BURST_IDLE_MS: u64 = 20;
+
+/// v0.4.25 (#430): the merge of one paste burst — what becomes input text and
+/// the events that must be replayed unchanged afterwards.
+#[derive(Debug, Default, PartialEq)]
+pub(crate) struct BurstMerge {
+    pub inserted: Vec<char>,
+    pub leftover: Vec<Event>,
+}
+
+/// v0.4.25 (#430): fold a burst of key events into single-line input text.
+/// Printable characters (plain or shifted) are kept, Enter and Tab become a
+/// space (exactly what `normalize_paste_text` does for a bracketed paste),
+/// key releases / resize / focus events are skipped. Anything else — a
+/// control chord, an arrow, Backspace, Esc, a real `Event::Paste` — ends the
+/// burst; it and everything after it are handed back as `leftover`, in order.
+pub(crate) fn merge_paste_burst(events: &[Event]) -> BurstMerge {
+    let mut merged = BurstMerge::default();
+    for (index, event) in events.iter().enumerate() {
+        match event {
+            Event::Key(KeyEvent {
+                kind: KeyEventKind::Release,
+                ..
+            })
+            | Event::Resize(..)
+            | Event::FocusGained
+            | Event::FocusLost => {}
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(c),
+                modifiers,
+                ..
+            }) if *modifiers == KeyModifiers::NONE || *modifiers == KeyModifiers::SHIFT => {
+                merged.inserted.push(*c);
+            }
+            Event::Key(
+                KeyEvent {
+                    code: KeyCode::Enter,
+                    modifiers: KeyModifiers::NONE,
+                    ..
+                }
+                | KeyEvent {
+                    code: KeyCode::Tab, ..
+                },
+            ) => merged.inserted.push(' '),
+            _ => {
+                merged.leftover = events[index..].to_vec();
+                break;
+            }
+        }
+    }
+    merged
+}
+
+/// Kill switch for the paste-burst heuristic: only an exact `0` disables it
+/// (`ARIS_PASTE_BURST=0` restores the pre-v0.4.25 behaviour).
+fn paste_burst_enabled_from(value: Option<&str>) -> bool {
+    value.is_none_or(|v| v.trim() != "0")
+}
+
+/// Whether this build/host collects paste bursts at all: Windows only (its
+/// console never delivers `Event::Paste`, so a paste is a run of key records;
+/// on Unix bracketed paste already arrives as one event).
+fn paste_burst_collection_active(windows: bool, env_value: Option<&str>) -> bool {
+    windows && paste_burst_enabled_from(env_value)
+}
+
+/// Pull every console event that is already queued (Windows only), waiting a
+/// short idle window between records. Used after an Enter (is this Enter the
+/// end of a pasted line?) and to clear typed-ahead lines after Ctrl+C.
+fn collect_queued_console_events() -> io::Result<Vec<Event>> {
+    let mut out = Vec::new();
+    if !paste_burst_collection_active(cfg!(windows), std::env::var("ARIS_PASTE_BURST").ok().as_deref()) {
+        return Ok(out);
+    }
+    while event::poll(Duration::from_millis(PASTE_BURST_IDLE_MS))? {
+        out.push(event::read()?);
+    }
+    Ok(out)
+}
+
+/// v0.4.25 (#430): discard console input that arrived while a turn was
+/// running (the rest of a pasted block after Ctrl+C). Windows only; a no-op
+/// elsewhere. Best effort.
+pub fn drain_console_input() {
+    let _ = collect_queued_console_events();
 }
 
 impl LineEditor {
@@ -99,6 +198,21 @@ impl LineEditor {
             prompt: prompt.into(),
             completions,
             history: Vec::new(),
+            pending: VecDeque::new(),
+        }
+    }
+
+    /// Forget events held back from an earlier paste burst (after Ctrl+C).
+    pub fn clear_pending(&mut self) {
+        self.pending.clear();
+    }
+
+    /// The next editor event: a held-back event first, else the OS. The flag
+    /// says which, so an Enter that was part of a paste burst never submits.
+    fn next_event(&mut self) -> io::Result<(Event, bool)> {
+        match self.pending.pop_front() {
+            Some(event) => Ok((event, true)),
+            None => Ok((event::read()?, false)),
         }
     }
 
@@ -189,7 +303,7 @@ impl LineEditor {
         )?;
 
         loop {
-            let ev = event::read()?;
+            let (ev, from_pending) = self.next_event()?;
 
             // Handle terminal resize
             if let Event::Resize(..) = ev {
@@ -255,6 +369,11 @@ impl LineEditor {
             match (code, modifiers) {
                 // ── Exit / Cancel ──────────────────────────────────────────
                 (KeyCode::Char('c'), KeyModifiers::CONTROL) => {
+                    // v0.4.25 (#430): whatever else was pasted or typed behind
+                    // this Ctrl+C is abandoned with the line, not fed to the
+                    // next prompt one line at a time.
+                    let _ = collect_queued_console_events();
+                    self.pending.clear();
                     self.clear_and_restore(&mut stdout, &mut render, &buf, cursor_pos)?;
                     if buf.is_empty() {
                         return Ok(ReadOutcome::Exit);
@@ -269,6 +388,47 @@ impl LineEditor {
 
                 // ── Submit ─────────────────────────────────────────────────
                 (KeyCode::Enter, KeyModifiers::NONE) => {
+                    // v0.4.25 (#430): on Windows a multi-line paste arrives as
+                    // key records with an Enter between lines. If more input
+                    // is already queued behind this Enter, it is a pasted
+                    // newline: merge the burst into the buffer as text (a
+                    // burst is never auto-submitted — the user presses Enter
+                    // again). An Enter replayed from `pending` is likewise a
+                    // newline, never a submit.
+                    let burst = if from_pending {
+                        Vec::new()
+                    } else {
+                        collect_queued_console_events()?
+                    };
+                    let merged = merge_paste_burst(&burst);
+                    if from_pending || !merged.inserted.is_empty() {
+                        let mut inserted = vec![' '];
+                        inserted.extend(merged.inserted);
+                        let inserted_len = inserted.len();
+                        buf.splice(cursor_pos..cursor_pos, inserted);
+                        cursor_pos += inserted_len;
+                        sel = 0;
+                        history_idx = None;
+                        saved_buf = None;
+                        self.pending.extend(merged.leftover);
+                    } else {
+                        // Only releases / resizes (or nothing) followed the
+                        // Enter: a normal submit. Keep any control event that
+                        // ended the (empty) burst for the next read.
+                        self.pending.extend(merged.leftover);
+                        if !matches.is_empty() {
+                            let (name, _) = &self.completions[matches[sel]];
+                            let result = name.clone();
+                            self.accept_and_clear(&mut stdout, &mut render, &result)?;
+                            return Ok(ReadOutcome::Submit(result));
+                        }
+                        self.accept_and_clear(&mut stdout, &mut render, &line)?;
+                        return Ok(ReadOutcome::Submit(line));
+                    }
+                }
+
+                // ── (unreachable placeholder kept for diff locality) ────────
+                (KeyCode::Enter, KeyModifiers::ALT) if false => {
                     if !matches.is_empty() {
                         let (name, _) = &self.completions[matches[sel]];
                         let result = name.clone();
@@ -484,22 +644,24 @@ impl LineEditor {
     /// shrink query; Ctrl+R again → step to the next older match; Enter → Accept
     /// the matched entry into the buffer; Esc / Ctrl+C / Ctrl+G → Cancel; other
     /// keys ignored. Non-TTY callers never reach here (fallback skips raw loop).
-    fn reverse_search(&self, stdout: &mut io::Stdout) -> io::Result<ReverseSearchResult> {
+    fn reverse_search(&mut self, stdout: &mut io::Stdout) -> io::Result<ReverseSearchResult> {
         let mut query: Vec<char> = Vec::new();
         // The scan anchor is always the newest entry on a query change; Ctrl+R
         // steps from the current match minus one. We don't keep it as a
         // persistent local because every branch recomputes the anchor it needs.
-        let newest = || self.history.len().saturating_sub(1);
+        // history does not change inside the submode; a plain value avoids
+        // holding a borrow of `self` across `next_event`.
+        let newest = self.history.len().saturating_sub(1);
         let mut matched: Option<usize> = if self.history.is_empty() {
             None
         } else {
-            reverse_search_match(&self.history, &query, newest())
+            reverse_search_match(&self.history, &query, newest)
         };
 
         self.draw_reverse_search(stdout, &query, matched)?;
 
         loop {
-            let ev = event::read()?;
+            let (ev, _) = self.next_event()?;
 
             // Ignore resize/paste inside the submode (keep the prompt as-is);
             // a resize just redraws the single prompt line.
@@ -562,7 +724,7 @@ impl LineEditor {
                 // Shrink the query.
                 (KeyCode::Backspace, _) => {
                     query.pop();
-                    matched = reverse_search_match(&self.history, &query, newest());
+                    matched = reverse_search_match(&self.history, &query, newest);
                     self.draw_reverse_search(stdout, &query, matched)?;
                 }
 
@@ -571,7 +733,7 @@ impl LineEditor {
                     if mods == KeyModifiers::NONE || mods == KeyModifiers::SHIFT =>
                 {
                     query.push(c);
-                    matched = reverse_search_match(&self.history, &query, newest());
+                    matched = reverse_search_match(&self.history, &query, newest);
                     self.draw_reverse_search(stdout, &query, matched)?;
                 }
 
@@ -1454,5 +1616,114 @@ mod tests {
             super::reverse_search_match(&ed.history, &q, ed.history.len() - 1),
             Some(1)
         );
+    }
+
+    // ── v0.4.25 (#430): Windows paste-burst merge ────────────────────────────
+
+    fn key(code: KeyCode, modifiers: KeyModifiers) -> Event {
+        Event::Key(KeyEvent::new(code, modifiers))
+    }
+
+    /// The shape Windows delivers for a pasted block: one key record per
+    /// character, `\n` as Enter, `\t` as Tab (no `Event::Paste` ever).
+    fn windows_paste_events(text: &str) -> Vec<Event> {
+        text.chars()
+            .map(|c| match c {
+                '\n' => key(KeyCode::Enter, KeyModifiers::NONE),
+                '\t' => key(KeyCode::Tab, KeyModifiers::NONE),
+                c if c.is_uppercase() => key(KeyCode::Char(c), KeyModifiers::SHIFT),
+                c => key(KeyCode::Char(c), KeyModifiers::NONE),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn merge_paste_burst_folds_newlines_and_tabs_to_spaces() {
+        let merged = super::merge_paste_burst(&windows_paste_events("b\nc\tD"));
+        assert_eq!(merged.inserted, chars("b c D"));
+        assert!(merged.leftover.is_empty());
+    }
+
+    #[test]
+    fn merge_paste_burst_matches_normalize_paste_text() {
+        // The Windows path and the bracketed-paste path agree on the text.
+        let text = "one\ntwo\tthree\nfour";
+        let merged = super::merge_paste_burst(&windows_paste_events(text));
+        assert_eq!(merged.inserted, super::normalize_paste_text(text));
+    }
+
+    #[test]
+    fn merge_paste_burst_stops_at_control_keys_and_keeps_the_rest_in_order() {
+        let mut events = windows_paste_events("ab\n");
+        events.push(key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        events.extend(windows_paste_events("cd\n"));
+        let merged = super::merge_paste_burst(&events);
+        assert_eq!(merged.inserted, chars("ab "));
+        assert_eq!(merged.leftover.len(), 4);
+        assert_eq!(merged.leftover[0], key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        assert_eq!(merged.leftover[3], key(KeyCode::Enter, KeyModifiers::NONE));
+
+        // arrows, Backspace, Esc and a real Paste event end the burst too
+        for stop in [
+            key(KeyCode::Left, KeyModifiers::NONE),
+            key(KeyCode::Backspace, KeyModifiers::NONE),
+            key(KeyCode::Esc, KeyModifiers::NONE),
+            Event::Paste("x".to_string()),
+        ] {
+            let mut events = windows_paste_events("q");
+            events.push(stop.clone());
+            let merged = super::merge_paste_burst(&events);
+            assert_eq!(merged.inserted, chars("q"));
+            assert_eq!(merged.leftover, vec![stop]);
+        }
+    }
+
+    #[test]
+    fn merge_paste_burst_skips_release_resize_and_focus_events() {
+        let mut events = vec![Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ))];
+        events.extend(windows_paste_events("a"));
+        events.push(Event::Resize(80, 24));
+        events.push(Event::FocusLost);
+        events.extend(windows_paste_events("b"));
+        let merged = super::merge_paste_burst(&events);
+        assert_eq!(merged.inserted, chars("ab"));
+        assert!(merged.leftover.is_empty());
+
+        // an Enter followed only by its release is NOT a burst: nothing to
+        // insert, so the caller submits normally
+        let only_release = vec![Event::Key(KeyEvent::new_with_kind(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+            KeyEventKind::Release,
+        ))];
+        assert_eq!(super::merge_paste_burst(&only_release), super::BurstMerge::default());
+    }
+
+    #[test]
+    fn paste_burst_is_windows_only_and_honours_the_kill_switch() {
+        assert!(super::paste_burst_enabled_from(None));
+        assert!(super::paste_burst_enabled_from(Some("1")));
+        assert!(!super::paste_burst_enabled_from(Some("0")));
+        assert!(!super::paste_burst_enabled_from(Some(" 0 ")));
+        assert!(super::paste_burst_collection_active(true, None));
+        assert!(!super::paste_burst_collection_active(true, Some("0")));
+        // Unix keeps bracketed paste; the heuristic never runs there
+        assert!(!super::paste_burst_collection_active(false, None));
+    }
+
+    #[test]
+    fn pending_events_are_consumed_before_the_os_queue() {
+        let mut ed = super::LineEditor::new("> ", Vec::new());
+        ed.pending.push_back(key(KeyCode::Char('z'), KeyModifiers::NONE));
+        let (ev, from_pending) = ed.next_event().unwrap();
+        assert!(from_pending);
+        assert_eq!(ev, key(KeyCode::Char('z'), KeyModifiers::NONE));
+        ed.pending.push_back(key(KeyCode::Char('y'), KeyModifiers::NONE));
+        ed.clear_pending();
+        assert!(ed.pending.is_empty());
     }
 }
