@@ -2709,13 +2709,24 @@ impl LiveCli {
         // it doesn't (no runtime at all, or a runtime that predates this write /
         // where codex failed to spawn), tell the user to restart.
         if new_config.reviewer_provider.as_deref() == Some("codex-mcp") {
+            // v0.4.25: a trust change on the built-in bridge applies now; the
+            // legacy entry's own `trust` (if any) still counts.
+            if let Some(mcp) = self.mcp.as_ref() {
+                let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+                let entry_config = ConfigLoader::default_for(&cwd).load().ok();
+                let trusted = config::codex_bridge_trusted(
+                    entry_config.as_ref().and_then(config::user_scope_codex_entry),
+                    new_config.codex_bridge_trust,
+                );
+                mcp.borrow_mut().refresh_codex_bridge_trust(trusted);
+            }
             let codex_in_catalog = self
                 .mcp
                 .as_ref()
                 .is_some_and(|m| m.borrow().catalog_has_server("codex"));
             if !codex_in_catalog {
                 println!(
-                    "  \x1b[33mRestart aris to activate the Codex MCP server (MCP servers are spawned at startup).\x1b[0m"
+                    "  \x1b[33mRestart aris to activate the codex reviewer (MCP servers and the built-in codex bridge are discovered at startup).\x1b[0m"
                 );
             }
         }
@@ -4493,11 +4504,12 @@ fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Ve
          chain is DISABLED for that call — surface the capability error instead of substituting \
          a different model; the user owns an explicit choice. ARIS's /reviewer command is NOT \
          such an override — it controls the HTTP fallback exclusively and never disables this \
-         chain. On every FRESH `mcp__codex__codex` call also pass \
-         `approval-policy: \"never\"` and an explicit `sandbox` (default \"read-only\" for review; \
-         wider only when the skill needs writes) — ARIS cannot service Codex's interactive \
-         escalation requests, so an approval prompt would stall the call. `mcp__codex__codex-reply` \
-         takes ONLY the thread id and prompt (it inherits the thread's model/effort).";
+         chain. On every FRESH `mcp__codex__codex` call pass an explicit `sandbox` (default \
+         \"read-only\" for review; wider only when the skill needs writes). ARIS's codex bridge \
+         runs `codex exec`, which is non-interactive: an `approval-policy` argument is accepted \
+         and ignored, so never require it. `mcp__codex__codex-reply` takes ONLY the thread id \
+         (the `threadId:` line at the top of the previous result) and the prompt; the bridge \
+         re-applies the thread's model/effort/sandbox/cwd.";
 
     if reviewer_provider == "codex-mcp" {
         match fallback.filter(|s| !s.trim().is_empty()) {
@@ -4780,6 +4792,9 @@ struct McpRuntime {
     /// on the executor) so it survives `build_runtime` rebuilds (plan-mode
     /// switches reuse the same `SharedMcpRuntime`).
     session_approved: HashSet<String>,
+    /// v0.4.25: whether server `codex` is served by the built-in exec bridge
+    /// (built-in or migrated legacy entry) — its trust then follows ARIS config.
+    codex_bridge_active: bool,
 }
 
 type SharedMcpRuntime = Rc<RefCell<McpRuntime>>;
@@ -4808,7 +4823,7 @@ impl McpRuntime {
     /// MUST be called from outside any tokio runtime context (the handle's
     /// internal `block_on` would panic otherwise) — the CLI's `fn main` is not
     /// `#[tokio::main]`, so this holds (SPIKE-A).
-    fn discover(config: &runtime::RuntimeConfig) -> io::Result<Self> {
+    fn discover(config: &runtime::RuntimeConfig, codex_backend: &config::CodexBackend) -> io::Result<Self> {
         // RW5: surface (but do not truncate) catalogues large enough to crowd a
         // provider's tool array / token budget. Deferred advertising is a
         // v0.5.0 item; for now we just warn.
@@ -4841,7 +4856,21 @@ impl McpRuntime {
             }
         }
 
-        let user_manager = runtime::McpServerManager::from_servers(&user_scope);
+        // v0.4.25: the built-in `codex exec` bridge (or a migrated legacy
+        // `codex mcp-server` entry) is trusted through ARIS's own config;
+        // a user-supplied entry keeps its own `trust` (handled above).
+        config::drop_unspawnable_legacy_codex(&mut user_scope, codex_backend);
+        let codex_bridge_active = codex_backend.bridge().is_some();
+        if codex_bridge_active
+            && config::codex_bridge_trusted(
+                user_scope.get("codex").map(|s| &s.config),
+                config::ArisConfig::load().codex_bridge_trust,
+            )
+        {
+            trusted_servers.insert("codex".to_string());
+        }
+        let user_manager =
+            runtime::McpServerManager::from_servers_with_codex(&user_scope, codex_backend.bridge());
         let mut handle = runtime::McpManagerHandle::from_manager(user_manager)?;
         let discovered_tools = handle.discover_tools().unwrap_or_else(|error| {
             eprintln!("aris mcp: tool discovery failed, continuing without MCP tools: {error}");
@@ -4862,7 +4891,23 @@ impl McpRuntime {
             catalog,
             trusted_servers,
             session_approved: HashSet::new(),
+            codex_bridge_active,
         })
+    }
+
+    /// v0.4.25: inline `/setup` changed `codex_bridge_trust`; apply it to the
+    /// live trust set so the change takes effect this session (the bridge is
+    /// already in the catalog, so no restart is involved). A user-supplied
+    /// `mcpServers.codex` entry keeps its own trust and is not touched.
+    fn refresh_codex_bridge_trust(&mut self, trusted: bool) {
+        if !self.codex_bridge_active {
+            return;
+        }
+        if trusted {
+            self.trusted_servers.insert("codex".to_string());
+        } else {
+            self.trusted_servers.remove("codex");
+        }
     }
 
     /// The advertisable MCP specs (cloned) for appending onto a provider's
@@ -4888,11 +4933,26 @@ impl McpRuntime {
 /// (no handle, no extra advertised tools, no dispatch branch taken).
 fn build_shared_mcp_runtime() -> Option<SharedMcpRuntime> {
     let cwd = env::current_dir().ok()?;
-    let config = ConfigLoader::default_for(&cwd).load().ok()?;
-    if config.mcp().servers().is_empty() {
+    let config = match ConfigLoader::default_for(&cwd).load() {
+        Ok(config) => config,
+        Err(error) => {
+            // Same message class as setup/doctor: the reviewer is not there
+            // until settings.json loads.
+            eprintln!("aris mcp: could not load MCP settings, continuing without MCP tools: {error}");
+            return None;
+        }
+    };
+    // v0.4.25: the built-in codex bridge needs no settings entry, so "no MCP
+    // servers configured" alone no longer means "no MCP runtime".
+    let codex_backend = config::resolve_codex_backend(
+        config::user_scope_codex_entry(&config),
+        &config::probe_codex(),
+        env::var("ARIS_CODEX_BRIDGE").ok().as_deref(),
+    );
+    if config.mcp().servers().is_empty() && !matches!(codex_backend, config::CodexBackend::Builtin(_)) {
         return None;
     }
-    match McpRuntime::discover(&config) {
+    match McpRuntime::discover(&config, &codex_backend) {
         Ok(mcp) => Some(Rc::new(RefCell::new(mcp))),
         Err(error) => {
             eprintln!(
@@ -6376,6 +6436,21 @@ fn mcp_result_text(
             text = structured.to_string();
         }
     }
+    // v0.4.25: the codex reviewer (built-in bridge, the Python bridge and the
+    // removed `codex mcp-server` alike) returns the review as the text block
+    // and the thread id ONLY in `structuredContent.threadId`. Content-first
+    // flattening therefore never showed the model the id it needs for
+    // `codex-reply`. Surface it as a leading line; every other server's result
+    // is byte-identical (no `threadId` key → no change).
+    if let Some(thread_id) = structured
+        .and_then(|value| value.get("threadId"))
+        .and_then(serde_json::Value::as_str)
+        .filter(|id| !id.is_empty())
+    {
+        if !text.contains(thread_id) {
+            text = format!("threadId: {thread_id}\n\n{text}");
+        }
+    }
     text
 }
 
@@ -6758,14 +6833,12 @@ fn mcp_doctor_section(servers: &[McpDoctorServer]) -> Option<String> {
         "    Note: only user-scope servers are spawned at startup; tool CALLS are \
          approval-gated (trusted servers skip the prompt).\n",
     );
-    // v0.4.17 (T10/P2 / RW7 step ③, deliberately updated): make the path
-    // mismatch between the legacy "Codex MCP" check and the runtime's
-    // ConfigLoader scope user-visible (previously this was only a source
-    // comment). The "Codex MCP" line above reads ~/.claude.json; the runtime
-    // (and this per-server section) reads mcpServers from settings.json.
+    // v0.4.25: the built-in codex bridge appears here as `codex` even without a
+    // settings.json entry (it is advertised at startup like any user-scope
+    // server); `aris doctor`'s "Codex reviewer" line says which backend it is.
     out.push_str(
-        "    Note: legacy ~/.claude.json is checked separately for Codex MCP; \
-         mcpServers used at runtime live in <config_home>/settings.json.",
+        "    Note: mcpServers used at runtime live in <config_home>/settings.json; the \
+         built-in codex bridge needs no entry.",
     );
     Some(out)
 }
@@ -6775,12 +6848,64 @@ fn mcp_doctor_section(servers: &[McpDoctorServer]) -> Option<String> {
 /// as scope-skipped without spawning; user-scope servers are spawned once and
 /// reported as discovered (with tool count) or failed. Best-effort: a hard
 /// config/handle error yields an empty list rather than failing `aris doctor`.
-fn collect_mcp_doctor_servers(cwd: &std::path::Path) -> Vec<McpDoctorServer> {
+/// v0.4.25: make the doctor's per-server rows agree with startup about the
+/// `codex` slot — drop a legacy entry nothing can spawn, add a row for the
+/// built-in bridge, and apply the shared effective-trust rule.
+/// Returns `true` when the `codex` row was excluded from discovery (its
+/// status is final and must not be overwritten by the discovery pass).
+fn adjust_codex_doctor_rows(
+    rows: &mut Vec<McpDoctorServer>,
+    user_scope: &mut BTreeMap<String, runtime::ScopedMcpServerConfig>,
+    codex_backend: &config::CodexBackend,
+) -> bool {
+    let mut codex_excluded = false;
+    if matches!(codex_backend, config::CodexBackend::NoCodex(_)) && user_scope.contains_key("codex") {
+        config::drop_unspawnable_legacy_codex(user_scope, codex_backend);
+        if !user_scope.contains_key("codex") {
+            codex_excluded = true;
+            for row in rows.iter_mut() {
+                if row.name == "codex" && row.scope == ConfigSource::User {
+                    row.status = McpDoctorStatus::Failed {
+                        reason: "legacy `codex mcp-server` entry; no spawnable codex — see the Codex reviewer line".to_string(),
+                    };
+                }
+            }
+        }
+    }
+    if matches!(codex_backend, config::CodexBackend::Builtin(_)) && !user_scope.contains_key("codex") {
+        rows.push(McpDoctorServer {
+            name: "codex".to_string(),
+            scope: ConfigSource::User,
+            trusted: false,
+            status: McpDoctorStatus::Failed {
+                reason: "not discovered".to_string(),
+            },
+        });
+    }
+    if codex_backend.bridge().is_some() {
+        let trusted = config::codex_bridge_trusted(
+            user_scope.get("codex").map(|s| &s.config),
+            config::ArisConfig::load().codex_bridge_trust,
+        );
+        for row in rows.iter_mut() {
+            if row.name == "codex" && row.scope == ConfigSource::User {
+                row.trusted = trusted;
+            }
+        }
+    }
+    codex_excluded
+}
+
+fn collect_mcp_doctor_servers(
+    cwd: &std::path::Path,
+    codex_backend: &config::CodexBackend,
+) -> Vec<McpDoctorServer> {
     let Ok(config) = runtime::ConfigLoader::default_for(cwd).load() else {
         return Vec::new();
     };
     let servers = config.mcp().servers();
-    if servers.is_empty() {
+    let builtin_codex = matches!(codex_backend, config::CodexBackend::Builtin(_));
+    if servers.is_empty() && !builtin_codex {
         return Vec::new();
     }
 
@@ -6816,8 +6941,11 @@ fn collect_mcp_doctor_servers(cwd: &std::path::Path) -> Vec<McpDoctorServer> {
         }
     }
 
-    if !user_scope.is_empty() {
-        let manager = runtime::McpServerManager::from_servers(&user_scope);
+    let codex_excluded = adjust_codex_doctor_rows(&mut rows, &mut user_scope, codex_backend);
+
+    if !user_scope.is_empty() || builtin_codex {
+        let manager =
+            runtime::McpServerManager::from_servers_with_codex(&user_scope, codex_backend.bridge());
         if let Ok(mut handle) = runtime::McpManagerHandle::from_manager(manager) {
             let discovered = handle.discover_tools().unwrap_or_default();
             // Tools per server name.
@@ -6841,6 +6969,10 @@ fn collect_mcp_doctor_servers(cwd: &std::path::Path) -> Vec<McpDoctorServer> {
                 .collect();
             for row in &mut rows {
                 if row.scope != ConfigSource::User {
+                    continue;
+                }
+                if codex_excluded && row.name == "codex" {
+                    // not part of this discovery pass; its status is final
                     continue;
                 }
                 row.status = if let Some(transport) = unsupported.get(&row.name) {
@@ -6980,32 +7112,43 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     // directly, so a shim must not read as a clean "OK". v0.4.22 (B6/Δ4-6):
     // soft version + stale-entry notes; neither flips all_ok.
     print!("  Codex CLI:    ");
-    match config::probe_codex() {
+    let probe = config::probe_codex();
+    match &probe {
         config::CodexProbe::NativeExe(path) => {
             println!("OK ({})", path.display());
-            if let Some(note) = codex_version_note(&path) {
+            if let Some(note) = codex_version_note(path) {
                 println!("                NOTE: {note}");
             }
         }
         config::CodexProbe::ScriptShim(path) => {
             println!("FOUND AS SCRIPT SHIM ({})", path.display());
-            println!(
-                "                NOTE: ARIS's MCP client spawns `codex` directly and cannot \
-                 spawn a .cmd/.bat shim in v0.4.22 — install the native codex binary if \
-                 `mcp__codex__codex` fails to start."
-            );
+            println!("                NOTE: {}", config::CODEX_NATIVE_INSTALL_HINT);
         }
         config::CodexProbe::Missing => {
             println!("NOT FOUND (optional)");
         }
     }
-    if let Some(note) = stale_codex_entry_note() {
-        println!("                NOTE: {note}");
+
+    // v0.4.25: which backend actually serves `mcp__codex__codex` — the same
+    // decision startup discovery and `aris setup` make.
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let (runtime_config, settings_error) = match runtime::ConfigLoader::default_for(&cwd).load() {
+        Ok(config) => (Some(config), None),
+        Err(error) => (None, Some(error.to_string())),
+    };
+    let codex_backend = config::resolve_codex_backend(
+        runtime_config.as_ref().and_then(config::user_scope_codex_entry),
+        &probe,
+        std::env::var("ARIS_CODEX_BRIDGE").ok().as_deref(),
+    );
+    match &settings_error {
+        // Same as startup: no MCP runtime at all until settings.json loads.
+        Some(error) => println!("  Codex reviewer: NOT AVAILABLE — MCP settings failed to load: {error}"),
+        None => println!("  Codex reviewer: {}", codex_backend.describe()),
     }
 
     // Check 4 (v0.4.12 #238): Sandbox effective config
     print!("  Sandbox:      ");
-    let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
     let sandbox_config = runtime::ConfigLoader::default_for(&cwd)
         .load()
         .map(|rc| rc.sandbox().clone())
@@ -7033,48 +7176,9 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    // Check 5: Codex MCP in config
-    print!("  Codex MCP:    ");
-    let home = runtime::home_dir();
-    let config_path = PathBuf::from(&home).join(".claude.json");
-    if config_path.exists() {
-        if let Ok(content) = fs::read_to_string(&config_path) {
-            if let Ok(config) = serde_json::from_str::<serde_json::Value>(&content) {
-                if config
-                    .get("mcpServers")
-                    .and_then(|s| s.as_object())
-                    .map_or(false, |s| s.contains_key("codex"))
-                {
-                    println!("OK (configured in ~/.claude.json)");
-                } else {
-                    println!("NOT CONFIGURED (edit ~/.claude.json by hand or via Claude Code's own `claude mcp add`)");
-                }
-            } else {
-                println!("ERROR (invalid ~/.claude.json)");
-            }
-        } else {
-            println!("ERROR (cannot read ~/.claude.json)");
-        }
-    } else {
-        println!("NOT CONFIGURED (no ~/.claude.json)");
-    }
-    // v0.4.17 (T10/P2): user-visible disclosure of the path mismatch (was only a
-    // source comment). Always printed so it shows even when no settings.json MCP
-    // servers exist (the per-server section below is omitted in that case).
-    println!(
-        "                note: legacy ~/.claude.json is checked for Codex MCP; \
-         mcpServers used at runtime live in <config_home>/settings.json"
-    );
-
-    // Check 6 (v0.4.17 RW7 step ③): real per-server MCP status.
-    //
-    // Disclosure (plan RW7): the "Codex MCP" check above reads `~/.claude.json`
-    // directly, which is NOT the same path set the runtime `ConfigLoader`
-    // resolves (user `~/.claude/settings.json` + project `.claude/settings.json`
-    // + local `.claude/settings.local.json`). The section below uses the
-    // ConfigLoader-resolved `mcpServers`, so a codex server declared only in
-    // `~/.claude.json` may show under "Codex MCP" but not here, and vice versa.
-    // This is surfaced rather than reconciled (no path refactor this version).
+    // Check 6 (v0.4.17 RW7 step ③): real per-server MCP status, over the
+    // ConfigLoader-resolved `mcpServers` (user `~/.claude/settings.json` +
+    // project/local `.claude/settings*.json`) plus the built-in codex bridge.
     //
     // We do a one-shot discovery pass over USER-scope servers (the same scope
     // gate as `McpRuntime::discover`): project/local servers are reported as
@@ -7082,7 +7186,7 @@ fn run_doctor() -> Result<(), Box<dyn std::error::Error>> {
     // own `discover_tools` (per-server `requestTimeoutSecs`), so a hung server
     // can't wedge the doctor. Discovery is best-effort: any hard error degrades
     // to an empty/partial section rather than failing the whole command.
-    let doctor_servers = collect_mcp_doctor_servers(&cwd);
+    let doctor_servers = collect_mcp_doctor_servers(&cwd, &codex_backend);
     if let Some(section) = mcp_doctor_section(&doctor_servers) {
         println!();
         println!("{section}");
@@ -7183,50 +7287,6 @@ fn codex_version_support_note(raw: &str) -> Option<String> {
         None
     } else {
         Some(format!("codex-cli {token} < 0.144.1: {UPGRADE_HINT}"))
-    }
-}
-
-/// v0.4.22 (B6, gate round-2): does this `mcpServers.codex` entry carry the
-/// v0.4.18 xhigh server floor? Pure over the JSON entry so both failure
-/// shapes are covered: (a) args MISSING or not an array — the classic
-/// pre-v0.4.18 entry, which the first cut wrongly skipped via `?`; (b) args
-/// present but pinning a DIFFERENT effort (e.g. "medium"), which a bare
-/// `contains("model_reasoning_effort")` wrongly accepted as the floor.
-fn codex_entry_has_xhigh_floor(entry: &serde_json::Value) -> bool {
-    entry
-        .get("args")
-        .and_then(serde_json::Value::as_array)
-        .is_some_and(|args| {
-            args.iter().any(|a| {
-                a.as_str().is_some_and(|s| {
-                    s.contains("model_reasoning_effort") && s.contains("xhigh")
-                })
-            })
-        })
-}
-
-/// v0.4.22 (B6): pre-v0.4.18 `mcpServers.codex` entries were written without
-/// the `-c model_reasoning_effort="xhigh"` server floor and are never migrated
-/// (the option-10 merge is deliberately non-clobbering). Reads the SAME
-/// settings.json that option 10 writes and the runtime reads
-/// (`CLAUDE_CONFIG_HOME` or `~/.claude`) — NOT the legacy `~/.claude.json`. Soft
-/// note only; absent file/entry → None.
-fn stale_codex_entry_note() -> Option<String> {
-    let path = config::claude_config_home().join("settings.json");
-    let content = fs::read_to_string(path).ok()?;
-    let json: serde_json::Value = serde_json::from_str(&content).ok()?;
-    let entry = json.get("mcpServers")?.get("codex")?;
-    if codex_entry_has_xhigh_floor(entry) {
-        None
-    } else {
-        Some(
-            "your mcpServers.codex entry predates v0.4.18 and lacks the \
-             `-c model_reasoning_effort=\"xhigh\"` server floor — bare codex calls may run \
-             below xhigh. Edit settings.json to add args [\"mcp-server\", \"-c\", \
-             \"model_reasoning_effort=\\\"xhigh\\\"\"] or remove the entry and re-run \
-             `aris setup` (option 10)."
-                .to_string(),
-        )
     }
 }
 
@@ -7424,33 +7484,6 @@ mod tests {
             adopt_wizard_config(old, None).executor_model(),
             Some("stale-model")
         );
-    }
-
-    // v0.4.22 (B6, gate round-2): the xhigh-floor predicate covers BOTH stale
-    // shapes — args missing entirely (the classic pre-v0.4.18 entry) and args
-    // pinning a different effort.
-    #[test]
-    fn codex_entry_xhigh_floor_predicate() {
-        use super::codex_entry_has_xhigh_floor;
-        // Real v0.4.18+ entry → has the floor.
-        assert!(codex_entry_has_xhigh_floor(&json!({
-            "command": "codex",
-            "args": ["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""]
-        })));
-        // Pre-v0.4.18 entry: NO args at all → lacks the floor (the first cut
-        // returned None here via `?` and never noted exactly this case).
-        assert!(!codex_entry_has_xhigh_floor(&json!({ "command": "codex" })));
-        // args present but a DIFFERENT effort pinned → lacks the xhigh floor
-        // (a bare contains("model_reasoning_effort") wrongly passed this).
-        assert!(!codex_entry_has_xhigh_floor(&json!({
-            "command": "codex",
-            "args": ["mcp-server", "-c", "model_reasoning_effort=\"medium\""]
-        })));
-        // args not an array → lacks the floor.
-        assert!(!codex_entry_has_xhigh_floor(&json!({
-            "command": "codex",
-            "args": "mcp-server"
-        })));
     }
 
     // v0.4.22 (Δ4-3, gate round-2): the /reviewer command's four states.
@@ -8433,7 +8466,7 @@ mod tests {
         // is now user-visible (was source-comment only). It names the legacy
         // ~/.claude.json check and the runtime settings.json path.
         assert!(
-            section.contains("legacy ~/.claude.json is checked separately for Codex MCP")
+            section.contains("built-in codex bridge needs no entry")
                 && section.contains("settings.json"),
             "doctor section must disclose the legacy-vs-settings.json path mismatch: {section}"
         );
@@ -8545,6 +8578,46 @@ mod tests {
         );
     }
 
+    /// v0.4.25: the codex reviewer's `structuredContent.threadId` reaches the
+    /// model even when the text block is non-empty (the previous content-first
+    /// rule dropped it, so `codex-reply` never had an id to continue). Results
+    /// without a `threadId` key are byte-identical to before; a text that
+    /// already carries the id (the structured-JSON fallback) is not prefixed
+    /// twice; the raw error text stays intact after the leading line.
+    #[test]
+    fn mcp_result_text_surfaces_codex_thread_id() {
+        use runtime::McpToolCallContent;
+        let mut review = McpToolCallContent {
+            kind: "text".to_string(),
+            data: std::collections::BTreeMap::new(),
+        };
+        review.data.insert("text".to_string(), json!("VERDICT: GO"));
+        let structured = json!({"threadId": "019a-thread", "content": "VERDICT: GO"});
+        assert_eq!(
+            super::mcp_result_text(std::slice::from_ref(&review), Some(&structured)),
+            "threadId: 019a-thread\n\nVERDICT: GO"
+        );
+        // empty text → structured JSON already contains the id → no prefix
+        let fallback = super::mcp_result_text(&[], Some(&structured));
+        assert!(fallback.starts_with('{') && fallback.contains("019a-thread"));
+        // no threadId key → unchanged
+        assert_eq!(
+            super::mcp_result_text(std::slice::from_ref(&review), Some(&json!({"a": 1}))),
+            "VERDICT: GO"
+        );
+        // error text stays matchable for the skills' capability fallback
+        let mut error = McpToolCallContent {
+            kind: "text".to_string(),
+            data: std::collections::BTreeMap::new(),
+        };
+        error.data.insert("text".to_string(), json!("The model `gpt-9` does not exist"));
+        let text = super::mcp_result_text(
+            &[error],
+            Some(&json!({"threadId": "t", "content": "The model `gpt-9` does not exist"})),
+        );
+        assert!(text.contains("The model `gpt-9` does not exist"));
+    }
+
     fn fake_mcp_echo_server_script() -> std::path::PathBuf {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -8642,6 +8715,7 @@ mod tests {
             catalog,
             trusted_servers,
             session_approved: std::collections::HashSet::new(),
+            codex_bridge_active: false,
         }))
     }
 
@@ -9515,15 +9589,18 @@ mod tests {
                 && line.contains("never send an unknown `reasoning` field"),
             "must translate the legacy shorthand instead of forwarding it, got: {line}"
         );
-        // Approval/sandbox on every FRESH call; reply inherits.
+        // v0.4.25: sandbox on every FRESH call; approval-policy is accepted
+        // but never required (the exec bridge cannot honour it); reply carries
+        // the thread id + prompt and the bridge restores the thread settings.
         assert!(
-            line.contains("approval-policy: \"never\"")
-                && line.contains("explicit `sandbox`")
-                && line.contains("FRESH `mcp__codex__codex` call"),
-            "must pin approval-policy/sandbox on fresh calls, got: {line}"
+            line.contains("explicit `sandbox`")
+                && line.contains("FRESH `mcp__codex__codex` call")
+                && line.contains("`approval-policy` argument is accepted")
+                && line.contains("never require it"),
+            "must pin sandbox on fresh calls and stop demanding approval-policy, got: {line}"
         );
         assert!(
-            line.contains("ONLY the thread id and prompt"),
+            line.contains("ONLY the thread id"),
             "codex-reply must carry only thread id + prompt, got: {line}"
         );
         // Gate round-2 BLOCKER: an explicit call-level model override must

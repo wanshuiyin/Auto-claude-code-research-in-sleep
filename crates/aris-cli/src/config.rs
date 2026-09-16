@@ -5,8 +5,7 @@
 
 use std::fs;
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -72,6 +71,13 @@ pub struct ArisConfig {
     /// `reviewer_api_key` / `reviewer_base_url` / `reviewer_model` fields.
     #[serde(default)]
     pub reviewer_fallback_provider: Option<String>,
+    /// v0.4.25: whether the built-in `codex exec` reviewer bridge is
+    /// pre-trusted (skips the per-call MCP approval prompt). Set by `aris setup`
+    /// option 10; replaces the `trust: true` that used to be written onto the
+    /// `mcpServers.codex` settings.json entry. A user-supplied `mcpServers.codex`
+    /// entry keeps carrying its own `trust` and ignores this field.
+    #[serde(default)]
+    pub codex_bridge_trust: Option<bool>,
     /// "cn" or "en"
     #[serde(default)]
     pub language: Option<String>,
@@ -96,6 +102,7 @@ const KNOWN_CONFIG_KEYS: &[&str] = &[
     "reviewer_base_url",
     "reviewer_model",
     "reviewer_fallback_provider",
+    "codex_bridge_trust",
     "language",
     "meta_logging",
 ];
@@ -1016,96 +1023,66 @@ fn default_reviewer_choice(provider: Option<&str>) -> &'static str {
 fn configure_codex_mcp_reviewer(config: &mut ArisConfig) -> io::Result<()> {
     println!("\n  \x1b[1mCodex MCP reviewer\x1b[0m");
 
-    // Step 1: detect the codex CLI. v0.4.22 (Δ4-4/C6): three-state — a native
-    // executable, a script shim `where` resolves but the MCP client cannot
-    // spawn, or missing entirely.
-    match probe_codex() {
-        CodexProbe::NativeExe(_) => {
-            println!("  \x1b[2m✓ found `codex` on PATH (native executable)\x1b[0m");
+    // Step 1 (v0.4.25): which backend will serve `mcp__codex__codex`? The
+    // same decision the runtime makes at startup — the built-in `codex exec`
+    // bridge replaced the settings.json entry that spawned `codex mcp-server`
+    // (removed in codex-cli 0.154), so setup no longer writes MCP settings.
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let runtime_config = match runtime::ConfigLoader::default_for(&cwd).load() {
+        Ok(config) => config,
+        Err(error) => {
+            // Same outcome as startup (which then runs without MCP): do not
+            // announce a reviewer that will not be there.
+            println!("  \x1b[31m✗ could not load MCP settings: {error}\x1b[0m");
+            println!("  \x1b[2mFix settings.json, then re-run setup; reviewer unchanged.\x1b[0m");
+            return Ok(());
         }
-        CodexProbe::ScriptShim(path) => {
-            // Deliberately NO checkmark: the resolved candidate is a .cmd/.bat
-            // script shim. ARIS's MCP client spawns `codex` as a plain command
-            // (mcp_stdio.rs) and cannot spawn a script shim directly in
-            // v0.4.22, so the configured server would fail to start.
-            // (Making the MCP spawn shim-aware is deferred.)
+    };
+    let user_codex = user_scope_codex_entry(&runtime_config);
+    let backend = resolve_codex_backend(
+        user_codex,
+        &probe_codex(),
+        std::env::var("ARIS_CODEX_BRIDGE").ok().as_deref(),
+    );
+    match &backend {
+        CodexBackend::Builtin(_) | CodexBackend::Legacy(_) | CodexBackend::Custom { .. } | CodexBackend::Disabled => {
+            println!("  \x1b[2m✓ {}\x1b[0m", backend.describe());
+        }
+        CodexBackend::NoCodex(CodexProbe::ScriptShim(path)) => {
+            // Deliberately NO checkmark: only an npm `.cmd`/`.bat` shim resolved.
+            // ARIS spawns `codex exec` as a plain command and cannot launch a
+            // script shim, so there is nothing to enable yet.
             println!(
                 "  \x1b[33m⚠ found `codex` only as a script shim ({}).\x1b[0m",
                 path.display()
             );
-            println!(
-                "  \x1b[2mARIS's MCP client spawns `codex` directly and cannot launch a .cmd/.bat\x1b[0m"
-            );
-            println!(
-                "  \x1b[2mshim in v0.4.22 — install the native `codex` binary (e.g. Homebrew or a\x1b[0m"
-            );
-            println!("  \x1b[2mGitHub release), then re-run setup.\x1b[0m");
-            let go_on = prompt_with_default("  Write the Codex MCP config anyway? [y/N]", "n")?;
-            if !go_on.trim().eq_ignore_ascii_case("y") {
-                println!("  \x1b[2mSkipped Codex MCP config; reviewer unchanged.\x1b[0m");
-                // Leave reviewer_provider untouched (do NOT set codex-mcp
-                // without a spawnable server, which would advertise a reviewer
-                // that can't run).
-                return Ok(());
-            }
+            println!("  \x1b[2m{CODEX_NATIVE_INSTALL_HINT}\x1b[0m");
+            println!("  \x1b[2mSkipped; reviewer unchanged. Re-run setup after installing the native binary.\x1b[0m");
+            return Ok(());
         }
-        CodexProbe::Missing => {
+        CodexBackend::NoCodex(_) => {
             println!("  \x1b[33m⚠ `codex` not found on PATH.\x1b[0m");
             println!(
                 "  \x1b[2mInstall it with `npm i -g @openai/codex` (or your platform's package),\x1b[0m"
             );
-            println!("  \x1b[2mthen sign in once with `codex` so the MCP server can start.\x1b[0m");
-            let go_on = prompt_with_default("  Write the MCP config anyway? [Y/n]", "y")?;
+            println!("  \x1b[2mthen sign in once with `codex`. ARIS picks it up at the next start.\x1b[0m");
+            let go_on = prompt_with_default("  Select the Codex reviewer anyway? [Y/n]", "y")?;
             if go_on.trim().eq_ignore_ascii_case("n") {
-                println!("  \x1b[2mSkipped Codex MCP config; reviewer unchanged.\x1b[0m");
-                // Leave reviewer_provider untouched (do NOT set codex-mcp without a
-                // server entry, which would advertise a reviewer that can't run).
+                println!("  \x1b[2mSkipped; reviewer unchanged.\x1b[0m");
                 return Ok(());
             }
         }
     }
 
-    // Step 3 (asked before the write so we know whether to set trust): trust.
-    let trust_ans = prompt_with_default(
-        "  Trust this server? (skip per-call approval) [Y/n]",
-        "y",
-    )?;
-    let trust = !trust_ans.trim().eq_ignore_ascii_case("n");
-
-    // Step 2: write into the ConfigLoader user-scope settings file.
-    let claude_dir = claude_config_home();
-    let settings_display = claude_dir.join("settings.json");
-    let settings_display = settings_display.display();
-    match merge_codex_mcp_into_settings(&claude_dir, trust) {
-        Ok(true) => {
-            let trust_note = if trust { " (trusted)" } else { "" };
-            println!("  \x1b[2m✓ added mcpServers.codex to {settings_display}{trust_note}\x1b[0m");
-        }
-        Ok(false) => {
-            println!(
-                "  \x1b[2mmcpServers.codex already exists in {settings_display} — left unchanged.\x1b[0m"
-            );
-        }
-        Err(e) => {
-            // v0.4.17 (T10/P1.1): the settings write FAILED. If we continued
-            // and set reviewer_provider="codex-mcp", the system-prompt gate +
-            // LlmReview override would switch to the MCP path even though
-            // mcpServers.codex never landed in settings.json — an unrecoverable
-            // bad state (restart can't fix a server that isn't configured).
-            // So abort the ENTIRE option-10 branch: report the error, leave the
-            // previous reviewer config completely untouched, and tell the user
-            // how to recover. `config` is unmodified up to here, so returning
-            // now preserves their old reviewer exactly.
-            println!("  \x1b[31m✗ could not write MCP config: {e}\x1b[0m");
-            println!(
-                "  \x1b[33mAborting Codex MCP setup; your previous reviewer config is unchanged.\x1b[0m"
-            );
-            println!(
-                "  \x1b[2mCheck write permissions on {settings_display}, then re-run setup — \
-                 or add mcpServers.codex to that file by hand.\x1b[0m"
-            );
-            return Ok(());
-        }
+    // Step 2: trust (skip the per-call approval prompt). Stored in ARIS's own
+    // config for the built-in bridge; a user-supplied mcpServers.codex entry
+    // carries its own `trust` flag and is left alone.
+    if !matches!(backend, CodexBackend::Custom { .. }) {
+        let trust_ans = prompt_with_default(
+            "  Trust the codex reviewer? (skip per-call approval) [Y/n]",
+            "y",
+        )?;
+        config.codex_bridge_trust = Some(!trust_ans.trim().eq_ignore_ascii_case("n"));
     }
 
     // Step 4: optional API reviewer fallback.
@@ -1185,23 +1162,6 @@ fn configure_codex_mcp_reviewer(config: &mut ArisConfig) -> io::Result<()> {
     Ok(())
 }
 
-/// v0.4.17 (T10): resolve the user-scope config directory the runtime
-/// `ConfigLoader` reads `mcpServers` from. Mirrors `ConfigLoader::default_for`
-/// exactly: honor `CLAUDE_CONFIG_HOME` if set, else `$HOME/.claude`
-/// (`$USERPROFILE/.claude` on Windows), else `.claude`. This is what makes the
-/// `setup` write land in the SAME file the runtime later reads (otherwise a
-/// `CLAUDE_CONFIG_HOME` user would get a config written where it's never read).
-pub(crate) fn claude_config_home() -> PathBuf {
-    std::env::var_os("CLAUDE_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .or_else(|| std::env::var_os("USERPROFILE"))
-                .map(|home| PathBuf::from(home).join(".claude"))
-        })
-        .unwrap_or_else(|| PathBuf::from(".claude"))
-}
-
 /// v0.4.22 (Δ4-4/C6): three-state result of probing for the `codex` CLI.
 ///
 /// The old bool `which_codex()` conflated "found a native executable" with
@@ -1279,137 +1239,155 @@ pub(crate) fn probe_codex() -> CodexProbe {
     }
 }
 
-/// v0.4.17 (T10): the JSON object written for `mcpServers.codex`.
-///
-/// v0.4.22 (B2): the v0.4.18 server-level `-c model_reasoning_effort="xhigh"`
-/// pin stays, as the xhigh FLOOR (`-c` is parsed as TOML by `codex
-/// mcp-server`, so the value must be a quoted TOML string) — independent of
-/// the user's `~/.codex/config.toml`, even a bare `mcp__codex__codex` call
-/// that omits a per-call `config` arg reviews at xhigh. ARIS skills now
-/// explicitly pin `model: gpt-5.6-sol` plus a per-call effort on every fresh
-/// call (deep audits "ultra", regular review "xhigh"), and per-call `config`
-/// overrides the server `-c` upward (v0.4.18-verified precedence) — so the
-/// two-tier doctrine is satisfied WITHOUT a server-level model pin. Do not
-/// add one: a `-c model=` pin here would hard-break codex-cli < 0.144.1
-/// (which does not know gpt-5.6-sol). Only NEW setups get this entry (the
-/// merge is idempotent and never clobbers an existing `mcpServers.codex`).
-fn codex_mcp_server_entry(trust: bool) -> serde_json::Value {
-    let mut obj = serde_json::Map::new();
-    obj.insert("command".into(), serde_json::Value::String("codex".into()));
-    obj.insert(
-        "args".into(),
-        serde_json::Value::Array(vec![
-            serde_json::Value::String("mcp-server".into()),
-            serde_json::Value::String("-c".into()),
-            serde_json::Value::String("model_reasoning_effort=\"xhigh\"".into()),
-        ]),
-    );
-    if trust {
-        obj.insert("trust".into(), serde_json::Value::Bool(true));
-    }
-    serde_json::Value::Object(obj)
+/// v0.4.25 (#428): the official native installer for Windows users who only
+/// have the npm `.cmd` shim, which ARIS cannot spawn.
+pub(crate) const CODEX_NATIVE_INSTALL_HINT: &str = "ARIS spawns `codex` directly and cannot \
+    launch a .cmd/.bat shim. Install the native binary and re-run setup — on Windows: \
+    powershell -ExecutionPolicy ByPass -c \"irm https://chatgpt.com/codex/install.ps1 | iex\" \
+    (macOS/Linux: Homebrew or a GitHub release).";
+
+/// v0.4.25: which backend serves the `codex` reviewer tools. One decision
+/// shared by startup discovery, `aris setup` option 10 and `aris doctor` so
+/// the three never disagree about what will actually run.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CodexBackend {
+    /// No `mcpServers.codex` entry and a native `codex` on PATH: the built-in
+    /// `codex exec` bridge, no settings needed.
+    Builtin(runtime::CodexExecBridge),
+    /// A user-scope `mcpServers.codex` entry that still launches the removed
+    /// `codex mcp-server`: migrated in memory onto the bridge (its env, `-c`
+    /// defaults, timeout and trust carry over; the file is not touched).
+    Legacy(runtime::CodexExecBridge),
+    /// Any other explicit `mcpServers.codex` entry (for example the Python
+    /// bridge): honoured exactly as configured, whether or not it starts.
+    Custom { command: String },
+    /// `ARIS_CODEX_BRIDGE=0`: v0.4.24 behaviour, settings entries only.
+    Disabled,
+    /// No entry and no spawnable `codex` (missing, or only a script shim).
+    NoCodex(CodexProbe),
 }
 
-/// v0.4.17 (T10): idempotently merge `mcpServers.codex` into the user-scope
-/// settings file `<home>/.claude/settings.json` — the file the runtime
-/// `ConfigLoader` resolves as `ConfigSource::User` for `mcpServers` (NOT
-/// `~/.claude.json`, which the doctor "Codex MCP" check reads; that path
-/// mismatch is disclosed in `run_doctor`).
-///
-/// `claude_dir` is the resolved config home (e.g. `~/.claude` or
-/// `$CLAUDE_CONFIG_HOME`) — see [`claude_config_home`]; `settings.json` lives
-/// directly inside it.
-///
-/// Returns `Ok(true)` if it ADDED the entry, `Ok(false)` if `mcpServers.codex`
-/// already existed (left untouched — never clobbered). Reuses the same
-/// safety mechanism as `deploy_meta_opt_hooks_to`: read-or-`{}`, refuse to
-/// clobber a malformed file, back up the existing file to
-/// `settings.json.bak.<millis>`, then atomically write via tempfile + rename.
-fn merge_codex_mcp_into_settings(claude_dir: &Path, trust: bool) -> Result<bool, String> {
-    fs::create_dir_all(claude_dir)
-        .map_err(|e| format!("create_dir_all({}): {e}", claude_dir.display()))?;
-    let settings_path = claude_dir.join("settings.json");
-
-    let (mut settings, had_existing) = match fs::read_to_string(&settings_path) {
-        Ok(text) => {
-            let trimmed = text.trim();
-            if trimmed.is_empty() {
-                (serde_json::json!({}), true)
-            } else {
-                let parsed: serde_json::Value = serde_json::from_str(trimmed).map_err(|e| {
-                    format!(
-                        "parse {}: {e} (refusing to clobber malformed user settings)",
-                        settings_path.display()
-                    )
-                })?;
-                if !parsed.is_object() {
-                    return Err(format!(
-                        "{} is not a JSON object (top-level must be {{...}})",
-                        settings_path.display()
-                    ));
-                }
-                (parsed, true)
-            }
+impl CodexBackend {
+    /// The exec bridge to hand the MCP manager, if this backend runs one.
+    pub(crate) fn bridge(&self) -> Option<&runtime::CodexExecBridge> {
+        match self {
+            Self::Builtin(bridge) | Self::Legacy(bridge) => Some(bridge),
+            Self::Custom { .. } | Self::Disabled | Self::NoCodex(_) => None,
         }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => (serde_json::json!({}), false),
-        Err(e) => return Err(format!("read {}: {e}", settings_path.display())),
-    };
-
-    // Idempotency: never clobber an existing codex entry.
-    let mcp_servers = settings
-        .as_object_mut()
-        .expect("settings is a JSON object (checked above / freshly created)")
-        .entry("mcpServers")
-        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
-    let Some(mcp_obj) = mcp_servers.as_object_mut() else {
-        return Err(format!(
-            "{}: `mcpServers` is not a JSON object",
-            settings_path.display()
-        ));
-    };
-    if mcp_obj.contains_key("codex") {
-        return Ok(false);
-    }
-    mcp_obj.insert("codex".into(), codex_mcp_server_entry(trust));
-
-    // Backup existing file (hard-fail if backup fails), then atomic rewrite.
-    if had_existing {
-        let backup_suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis())
-            .unwrap_or(0);
-        let backup_path = claude_dir.join(format!("settings.json.bak.{backup_suffix}"));
-        fs::copy(&settings_path, &backup_path).map_err(|e| {
-            format!(
-                "backup {} → {} failed: {e}; aborting to protect existing settings",
-                settings_path.display(),
-                backup_path.display()
-            )
-        })?;
     }
 
-    let pretty = serde_json::to_string_pretty(&settings)
-        .map_err(|e| format!("serialize settings.json: {e}"))?;
-    let body = format!("{pretty}\n");
-    let temp_path = claude_dir.join(format!(
-        "settings.json.tmp.{}",
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos())
-            .unwrap_or(0)
-    ));
-    fs::write(&temp_path, body)
-        .map_err(|e| format!("write tempfile {}: {e}", temp_path.display()))?;
-    fs::rename(&temp_path, &settings_path).map_err(|e| {
-        let _ = fs::remove_file(&temp_path);
-        format!(
-            "atomic rename {} → {}: {e}",
-            temp_path.display(),
-            settings_path.display()
-        )
-    })?;
+    /// One line for setup / doctor.
+    pub(crate) fn describe(&self) -> String {
+        match self {
+            Self::Builtin(bridge) => format!(
+                "built-in `codex exec` bridge ({}) — no MCP settings entry needed",
+                bridge.codex_bin.display()
+            ),
+            Self::Legacy(bridge) => format!(
+                "built-in `codex exec` bridge ({}); your settings.json mcpServers.codex still \
+                 names `codex mcp-server`, which codex-cli 0.154 removed — ARIS keeps that \
+                 entry's env, -c defaults, requestTimeoutSecs and trust and runs `codex exec` \
+                 instead (no edit needed)",
+                bridge.codex_bin.display()
+            ),
+            Self::Custom { command } => format!(
+                "your own mcpServers.codex entry ({command}); its trust and requestTimeoutSecs \
+                 apply (set requestTimeoutSecs to 1800 for deep audits)"
+            ),
+            Self::Disabled => "built-in bridge disabled (ARIS_CODEX_BRIDGE=0); only a \
+                 mcpServers.codex entry in settings.json can serve reviews"
+                .to_string(),
+            Self::NoCodex(CodexProbe::ScriptShim(path)) => format!(
+                "not available — `codex` found only as a script shim ({}). {CODEX_NATIVE_INSTALL_HINT}",
+                path.display()
+            ),
+            Self::NoCodex(_) => "not available — `codex` not on PATH (npm i -g @openai/codex, \
+                 then `codex login`)"
+                .to_string(),
+        }
+    }
+}
 
-    Ok(true)
+/// v0.4.25: with no spawnable `codex` (backend `NoCodex`) a legacy
+/// `codex mcp-server` entry must not be spawned as a plain stdio server either
+/// — that is the removed subcommand. Drop it from the spawn set; the caller
+/// prints the backend line so the user sees why.
+pub(crate) fn drop_unspawnable_legacy_codex(
+    user_scope: &mut std::collections::BTreeMap<String, runtime::ScopedMcpServerConfig>,
+    backend: &CodexBackend,
+) {
+    if !matches!(backend, CodexBackend::NoCodex(_)) {
+        return;
+    }
+    let legacy = matches!(
+        user_scope.get("codex").map(|s| &s.config),
+        Some(runtime::McpServerConfig::Stdio(stdio)) if runtime::is_legacy_codex_mcp_server(stdio)
+    );
+    if legacy {
+        user_scope.remove("codex");
+    }
+}
+
+/// Effective trust for the `codex` server when the exec bridge serves it: the
+/// settings entry's own `trust` (legacy entry) OR ARIS's `codex_bridge_trust`.
+/// One rule for startup, doctor and inline `/setup`.
+pub(crate) fn codex_bridge_trusted(
+    user_codex: Option<&runtime::McpServerConfig>,
+    aris_trust: Option<bool>,
+) -> bool {
+    let entry_trust = matches!(user_codex, Some(runtime::McpServerConfig::Stdio(s)) if s.trust() == Some(true));
+    entry_trust || aris_trust == Some(true)
+}
+
+/// The user-scope `mcpServers.codex` entry, if any (project/local scopes are
+/// never spawned, so they cannot decide the reviewer backend either).
+pub(crate) fn user_scope_codex_entry(
+    config: &runtime::RuntimeConfig,
+) -> Option<&runtime::McpServerConfig> {
+    config
+        .mcp()
+        .servers()
+        .get("codex")
+        .filter(|scoped| scoped.scope == runtime::ConfigSource::User)
+        .map(|scoped| &scoped.config)
+}
+
+/// Pure decision over (user entry, probe, escape hatch). Precedence: the
+/// escape hatch, then an explicit non-legacy entry, then a legacy entry, then
+/// the built-in bridge when a native `codex` exists.
+pub(crate) fn resolve_codex_backend(
+    user_codex: Option<&runtime::McpServerConfig>,
+    probe: &CodexProbe,
+    bridge_env: Option<&str>,
+) -> CodexBackend {
+    if bridge_env.is_some_and(|v| v.trim() == "0") {
+        return CodexBackend::Disabled;
+    }
+    let native = match probe {
+        CodexProbe::NativeExe(path) => Some(path.clone()),
+        CodexProbe::ScriptShim(_) | CodexProbe::Missing => None,
+    };
+    match user_codex {
+        Some(runtime::McpServerConfig::Stdio(stdio)) if runtime::is_legacy_codex_mcp_server(stdio) => {
+            // A bare `codex` command needs a spawnable native binary just like
+            // the built-in does; a pinned path is the user's explicit choice.
+            let bare_command = !stdio.command.contains('/') && !stdio.command.contains('\\');
+            if bare_command && native.is_none() {
+                return CodexBackend::NoCodex(probe.clone());
+            }
+            CodexBackend::Legacy(runtime::CodexExecBridge::from_legacy_entry(stdio, native))
+        }
+        Some(runtime::McpServerConfig::Stdio(stdio)) => CodexBackend::Custom {
+            command: stdio.command.clone(),
+        },
+        Some(_) => CodexBackend::Custom {
+            command: "remote transport".to_string(),
+        },
+        None => match native {
+            Some(bin) => CodexBackend::Builtin(runtime::CodexExecBridge::new(bin)),
+            None => CodexBackend::NoCodex(probe.clone()),
+        },
+    }
 }
 
 /// Print a provider-specific list of known-working third-party proxy URLs
@@ -2207,8 +2185,8 @@ mod tests {
     // ── v0.4.17 (T10): Codex MCP reviewer setup integration ──────────────────
 
     fn codex_mcp_test_root() -> PathBuf {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
             .expect("time after epoch")
             .as_nanos();
         let pid = std::process::id();
@@ -2418,161 +2396,94 @@ mod tests {
         assert_eq!(default_reviewer_choice(Some("something-else")), "8");
     }
 
+    // v0.4.25: the reviewer backend decision shared by startup / setup / doctor.
+    fn stdio_entry(command: &str, args: &[&str]) -> runtime::McpServerConfig {
+        runtime::McpServerConfig::Stdio(runtime::McpStdioServerConfig {
+            command: command.to_string(),
+            args: args.iter().map(|a| (*a).to_string()).collect(),
+            env: std::collections::BTreeMap::new(),
+            request_timeout_secs: Some(1200),
+            trust: Some(true),
+        })
+    }
+
     #[test]
-    fn codex_mcp_server_entry_has_command_args_and_optional_trust() {
-        let trusted = codex_mcp_server_entry(true);
-        assert_eq!(trusted["command"], "codex");
-        // v0.4.18: args pin xhigh reasoning on the spawned server.
+    fn codex_backend_selection_and_migration() {
+        let native = CodexProbe::NativeExe(PathBuf::from("/opt/homebrew/bin/codex"));
+
+        // no entry + native codex → built-in bridge on the resolved path
+        match resolve_codex_backend(None, &native, None) {
+            CodexBackend::Builtin(bridge) => {
+                assert_eq!(bridge.codex_bin, PathBuf::from("/opt/homebrew/bin/codex"));
+            }
+            other => panic!("expected Builtin, got {other:?}"),
+        }
+
+        // legacy `codex mcp-server` entry → migrated: native path wins over the
+        // bare `codex` command, the explicit timeout and `-c` default carry over
+        let legacy = stdio_entry("codex", &["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""]);
+        match resolve_codex_backend(Some(&legacy), &native, None) {
+            CodexBackend::Legacy(bridge) => {
+                assert_eq!(bridge.codex_bin, PathBuf::from("/opt/homebrew/bin/codex"));
+                assert_eq!(bridge.timeout, std::time::Duration::from_mins(20));
+                assert_eq!(bridge.default_config[0].0, "model_reasoning_effort");
+            }
+            other => panic!("expected Legacy, got {other:?}"),
+        }
+
+        // an explicit Python-bridge entry is honoured even though a native
+        // codex exists (never silently replaced)
+        let custom = stdio_entry("python3", &["/aris/mcp-servers/codex-exec/server.py"]);
         assert_eq!(
-            trusted["args"],
-            serde_json::json!(["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""])
+            resolve_codex_backend(Some(&custom), &native, None),
+            CodexBackend::Custom {
+                command: "python3".to_string()
+            }
         );
-        assert_eq!(trusted["trust"], serde_json::json!(true));
 
-        let untrusted = codex_mcp_server_entry(false);
-        // Absent (not false) — matches the "absent => untrusted" parser default.
-        assert!(untrusted.get("trust").is_none());
-    }
+        // escape hatch beats everything
+        assert_eq!(resolve_codex_backend(None, &native, Some("0")), CodexBackend::Disabled);
+        assert_eq!(resolve_codex_backend(Some(&legacy), &native, Some("0")), CodexBackend::Disabled);
 
-    /// Fresh write: no settings.json yet → creates it with mcpServers.codex,
-    /// returns true (added), writes trust:true, and leaves no backup (nothing
-    /// to back up).
-    #[test]
-    fn merge_codex_mcp_creates_settings_when_absent() {
-        let root = codex_mcp_test_root();
-        let home = root.join("home");
-        let claude_dir = home.join(".claude");
-        let added = merge_codex_mcp_into_settings(&claude_dir, true).expect("write should succeed");
-        assert!(added, "first write must report it ADDED the entry");
-
-        let settings_path = claude_dir.join("settings.json");
-        let body = fs::read_to_string(&settings_path).expect("settings written");
-        let parsed: serde_json::Value = serde_json::from_str(&body).expect("valid JSON");
-        assert_eq!(parsed["mcpServers"]["codex"]["command"], "codex");
+        // no entry + shim / missing → not available (nothing to spawn)
+        let shim = CodexProbe::ScriptShim(PathBuf::from("C:\\npm\\codex.cmd"));
+        assert_eq!(resolve_codex_backend(None, &shim, None), CodexBackend::NoCodex(shim.clone()));
         assert_eq!(
-            parsed["mcpServers"]["codex"]["args"],
-            serde_json::json!(["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""])
+            resolve_codex_backend(None, &CodexProbe::Missing, None),
+            CodexBackend::NoCodex(CodexProbe::Missing)
         );
-        assert_eq!(parsed["mcpServers"]["codex"]["trust"], serde_json::json!(true));
-
-        // No backups created when there was no prior file.
-        let backups: Vec<_> = fs::read_dir(&claude_dir)
-            .expect("read .claude dir")
-            .filter_map(|e| e.ok())
-            .filter(|e| e.file_name().to_string_lossy().contains("settings.json.bak."))
-            .collect();
-        assert!(backups.is_empty(), "no backup expected on fresh write");
-
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    /// Idempotent: a second call with an existing mcpServers.codex must NOT
-    /// clobber it and must report `false` (not added).
-    #[test]
-    fn merge_codex_mcp_is_idempotent_and_never_clobbers() {
-        let root = codex_mcp_test_root();
-        let home = root.join("home");
-        let claude_dir = home.join(".claude");
-        // First: add it untrusted.
-        assert!(merge_codex_mcp_into_settings(&claude_dir, false).expect("first add"));
-        // Second: try to add trusted — must be a no-op (existing entry kept).
-        let added = merge_codex_mcp_into_settings(&claude_dir, true).expect("second call");
-        assert!(!added, "second call must report it did NOT add (already exists)");
-
-        let settings_path = claude_dir.join("settings.json");
-        let parsed: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).expect("read")).expect("json");
-        // Still the ORIGINAL untrusted entry (no trust flag) — not clobbered.
-        assert!(
-            parsed["mcpServers"]["codex"].get("trust").is_none(),
-            "existing entry must not be overwritten with trust:true"
-        );
-
-        // The no-op second call returns early (before any write), so it makes
-        // NO backup — idempotency means zero side effects on disk.
-        let had_backup = fs::read_dir(&claude_dir)
-            .expect("read dir")
-            .filter_map(|e| e.ok())
-            .any(|e| e.file_name().to_string_lossy().contains("settings.json.bak."));
-        assert!(
-            !had_backup,
-            "a no-op (already-exists) call must not write a backup"
-        );
-
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    /// Existing unrelated settings + another MCP server are PRESERVED when we
-    /// merge codex in, and a backup is written.
-    #[test]
-    fn merge_codex_mcp_preserves_existing_settings_and_backs_up() {
-        let root = codex_mcp_test_root();
-        let home = root.join("home");
-        let claude_dir = home.join(".claude");
-        fs::create_dir_all(&claude_dir).expect("mkdir .claude");
-        let existing = serde_json::json!({
-            "language": "cn",
-            "mcpServers": { "other": { "command": "foo", "args": ["bar"] } }
-        });
-        let settings_path = claude_dir.join("settings.json");
-        fs::write(
-            &settings_path,
-            format!("{}\n", serde_json::to_string_pretty(&existing).unwrap()),
-        )
-        .expect("seed settings");
-
-        let added = merge_codex_mcp_into_settings(&claude_dir, true).expect("merge");
-        assert!(added);
-
-        let parsed: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&settings_path).expect("read")).expect("json");
-        // Unrelated keys preserved.
-        assert_eq!(parsed["language"], "cn");
-        // Sibling MCP server preserved.
-        assert_eq!(parsed["mcpServers"]["other"]["command"], "foo");
-        // Codex added.
-        assert_eq!(parsed["mcpServers"]["codex"]["command"], "codex");
-
-        // Backup of the prior file exists and parses to the ORIGINAL content.
-        let backup = fs::read_dir(&claude_dir)
-            .expect("read dir")
-            .filter_map(|e| e.ok())
-            .find(|e| e.file_name().to_string_lossy().contains("settings.json.bak."))
-            .expect("a backup file");
-        let backup_body = fs::read_to_string(backup.path()).expect("read backup");
-        let backup_parsed: serde_json::Value =
-            serde_json::from_str(&backup_body).expect("backup json");
-        assert!(
-            backup_parsed["mcpServers"].get("codex").is_none(),
-            "backup must be the pre-merge content (no codex yet)"
-        );
-
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    /// A malformed settings.json must be REFUSED (never clobbered).
-    #[test]
-    fn merge_codex_mcp_refuses_malformed_settings() {
-        let root = codex_mcp_test_root();
-        let home = root.join("home");
-        let claude_dir = home.join(".claude");
-        fs::create_dir_all(&claude_dir).expect("mkdir");
-        let settings_path = claude_dir.join("settings.json");
-        fs::write(&settings_path, "{ this is : not json").expect("seed garbage");
-
-        let err = merge_codex_mcp_into_settings(&claude_dir, true)
-            .expect_err("malformed settings must be rejected");
-        assert!(
-            err.contains("refusing to clobber"),
-            "error should explain it refused to clobber: {err}"
-        );
-        // Original garbage untouched.
+        // a legacy entry with a bare `codex` command and no native binary is
+        // as unavailable as no entry (setup then shows the installer hint
+        // instead of announcing a bridge that cannot spawn)
         assert_eq!(
-            fs::read_to_string(&settings_path).expect("read"),
-            "{ this is : not json"
+            resolve_codex_backend(Some(&legacy), &CodexProbe::Missing, None),
+            CodexBackend::NoCodex(CodexProbe::Missing)
         );
+        assert_eq!(resolve_codex_backend(Some(&legacy), &shim, None), CodexBackend::NoCodex(shim));
+        // a pinned path is the user's explicit choice and stays, probe or not
+        let pinned = stdio_entry("/opt/pinned/codex", &["mcp-server"]);
+        match resolve_codex_backend(Some(&pinned), &CodexProbe::Missing, None) {
+            CodexBackend::Legacy(bridge) => assert_eq!(bridge.codex_bin, PathBuf::from("/opt/pinned/codex")),
+            other => panic!("expected Legacy, got {other:?}"),
+        }
+    }
 
-        let _ = fs::remove_dir_all(&root);
+    #[test]
+    fn codex_bridge_trust_is_entry_or_aris_config() {
+        let trusted_entry = stdio_entry("codex", &["mcp-server"]); // trust: Some(true)
+        assert!(codex_bridge_trusted(Some(&trusted_entry), None));
+        assert!(codex_bridge_trusted(None, Some(true)));
+        assert!(!codex_bridge_trusted(None, None));
+        assert!(!codex_bridge_trusted(None, Some(false)));
+    }
+
+    #[test]
+    fn codex_backend_describe_names_the_fix() {
+        let shim = CodexBackend::NoCodex(CodexProbe::ScriptShim(PathBuf::from("codex.cmd")));
+        assert!(shim.describe().contains("install.ps1"));
+        let legacy = CodexBackend::Legacy(runtime::CodexExecBridge::new("codex"));
+        assert!(legacy.describe().contains("codex mcp-server"));
+        assert!(CodexBackend::Disabled.describe().contains("ARIS_CODEX_BRIDGE=0"));
     }
 
     /// apply_to_env with reviewer_provider="codex-mcp" and NO api key must set

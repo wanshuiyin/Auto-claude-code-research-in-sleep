@@ -4,6 +4,7 @@ include!(concat!(env!("OUT_DIR"), "/bundled_skills.rs"));
 mod bash;
 mod bootstrap;
 mod cache;
+mod codex_exec;
 mod compact;
 mod config;
 mod conversation;
@@ -27,6 +28,10 @@ mod usage;
 pub use bash::{execute_bash, BashCommandInput, BashCommandOutput};
 pub use bootstrap::{BootstrapPhase, BootstrapPlan};
 pub use cache::{extract_bundle, extraction_report, ExtractionError, ExtractionReport};
+pub use codex_exec::{
+    is_legacy_codex_mcp_server, CallSpec as CodexCallSpec, CodexExecBridge,
+    CODEX_EXEC_DEFAULT_TIMEOUT_SECS,
+};
 pub use compact::{
     compact_session, estimate_session_tokens, format_compact_summary,
     get_compact_continuation_message, should_compact, CompactionConfig, CompactionResult,

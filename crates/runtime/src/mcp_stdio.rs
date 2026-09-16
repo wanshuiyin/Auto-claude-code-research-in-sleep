@@ -8,8 +8,9 @@ use serde_json::Value as JsonValue;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 
-use crate::config::{McpTransport, RuntimeConfig, ScopedMcpServerConfig};
-use crate::mcp::mcp_tool_name;
+use crate::codex_exec::{is_legacy_codex_mcp_server, CodexExecBridge};
+use crate::config::{McpServerConfig, McpTransport, RuntimeConfig, ScopedMcpServerConfig};
+use crate::mcp::{mcp_tool_name, mcp_tool_prefix, normalize_name_for_mcp};
 use crate::mcp_client::{McpClientBootstrap, McpClientTransport, McpStdioTransport};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -307,6 +308,10 @@ struct ManagedMcpServer {
     bootstrap: McpClientBootstrap,
     process: Option<McpStdioProcess>,
     initialized: bool,
+    /// v0.4.25: when set, this slot is backed by the built-in `codex exec`
+    /// bridge instead of a spawned stdio process — `process` / `initialized`
+    /// stay unused. One catalog, one dispatch path; only the transport differs.
+    exec: Option<CodexExecBridge>,
 }
 
 impl ManagedMcpServer {
@@ -315,7 +320,35 @@ impl ManagedMcpServer {
             bootstrap,
             process: None,
             initialized: false,
+            exec: None,
         }
+    }
+
+    fn exec(bootstrap: McpClientBootstrap, bridge: CodexExecBridge) -> Self {
+        Self {
+            bootstrap,
+            process: None,
+            initialized: false,
+            exec: Some(bridge),
+        }
+    }
+}
+
+/// Bootstrap record for the built-in `codex` server (no config entry backs
+/// it). The stdio transport is descriptive only — the exec backend never
+/// spawns through it.
+fn codex_exec_bootstrap(server_name: &str, bridge: &CodexExecBridge) -> McpClientBootstrap {
+    McpClientBootstrap {
+        server_name: server_name.to_string(),
+        normalized_name: normalize_name_for_mcp(server_name),
+        tool_prefix: mcp_tool_prefix(server_name),
+        signature: None,
+        transport: McpClientTransport::Stdio(McpStdioTransport {
+            command: bridge.codex_bin.to_string_lossy().into_owned(),
+            args: vec!["exec".to_string(), "--json".to_string()],
+            env: bridge.env.clone(),
+            request_timeout_secs: None,
+        }),
     }
 }
 
@@ -339,12 +372,45 @@ impl McpServerManager {
 
     #[must_use]
     pub fn from_servers(servers: &BTreeMap<String, ScopedMcpServerConfig>) -> Self {
+        Self::from_servers_with_codex(servers, None)
+    }
+
+    /// v0.4.25: like [`from_servers`](Self::from_servers), plus the built-in
+    /// `codex exec` backend. With `builtin = Some(bridge)`:
+    /// - a `codex` entry that still launches the removed `codex mcp-server` is
+    ///   migrated in memory onto the exec backend (keeping its executable
+    ///   unless the bridge resolved a native path, its env, `-c` defaults and
+    ///   explicit timeout — see [`CodexExecBridge::from_legacy_entry`]);
+    /// - no `codex` entry at all ⇒ the bridge is registered as server `codex`;
+    /// - any other explicit `codex` entry (e.g. the Python bridge) wins and
+    ///   spawns as configured, whether or not it later discovers cleanly.
+    ///
+    /// With `builtin = None` behaviour is byte-identical to v0.4.24.
+    #[must_use]
+    pub fn from_servers_with_codex(
+        servers: &BTreeMap<String, ScopedMcpServerConfig>,
+        builtin: Option<&CodexExecBridge>,
+    ) -> Self {
+        const CODEX_SERVER: &str = "codex";
         let mut managed_servers = BTreeMap::new();
         let mut unsupported_servers = Vec::new();
 
         for (server_name, server_config) in servers {
             if server_config.transport() == McpTransport::Stdio {
                 let bootstrap = McpClientBootstrap::from_scoped_config(server_name, server_config);
+                if let (Some(bridge), McpServerConfig::Stdio(stdio)) =
+                    (builtin, &server_config.config)
+                {
+                    if server_name == CODEX_SERVER && is_legacy_codex_mcp_server(stdio) {
+                        let migrated =
+                            CodexExecBridge::from_legacy_entry(stdio, Some(bridge.codex_bin.clone()));
+                        managed_servers.insert(
+                            server_name.clone(),
+                            ManagedMcpServer::exec(bootstrap, migrated),
+                        );
+                        continue;
+                    }
+                }
                 managed_servers.insert(server_name.clone(), ManagedMcpServer::new(bootstrap));
             } else {
                 unsupported_servers.push(UnsupportedMcpServer {
@@ -358,6 +424,15 @@ impl McpServerManager {
             }
         }
 
+        if let Some(bridge) = builtin {
+            if !managed_servers.contains_key(CODEX_SERVER) {
+                managed_servers.insert(
+                    CODEX_SERVER.to_string(),
+                    ManagedMcpServer::exec(codex_exec_bootstrap(CODEX_SERVER, bridge), bridge.clone()),
+                );
+            }
+        }
+
         Self {
             servers: managed_servers,
             unsupported_servers,
@@ -365,6 +440,13 @@ impl McpServerManager {
             tool_index: BTreeMap::new(),
             next_request_id: 1,
         }
+    }
+
+    /// v0.4.25: the exec bridge backing `server_name`, if that slot runs on
+    /// the built-in `codex exec` backend (built-in or migrated legacy entry).
+    #[must_use]
+    pub fn codex_exec_backend(&self, server_name: &str) -> Option<&CodexExecBridge> {
+        self.servers.get(server_name).and_then(|s| s.exec.as_ref())
     }
 
     #[must_use]
@@ -431,6 +513,27 @@ impl McpServerManager {
         &mut self,
         server_name: &str,
     ) -> Result<Vec<ManagedMcpTool>, McpServerManagerError> {
+        if self.server_mut(server_name)?.exec.is_some() {
+            self.clear_routes_for_server(server_name);
+            let mut discovered_tools = Vec::new();
+            for tool in CodexExecBridge::tools() {
+                let qualified_name = mcp_tool_name(server_name, &tool.name);
+                self.tool_index.insert(
+                    qualified_name.clone(),
+                    ToolRoute {
+                        server_name: server_name.to_string(),
+                        raw_name: tool.name.clone(),
+                    },
+                );
+                discovered_tools.push(ManagedMcpTool {
+                    server_name: server_name.to_string(),
+                    qualified_name,
+                    raw_name: tool.name.clone(),
+                    tool,
+                });
+            }
+            return Ok(discovered_tools);
+        }
         self.ensure_server_ready(server_name).await?;
         self.clear_routes_for_server(server_name);
 
@@ -511,6 +614,11 @@ impl McpServerManager {
             .ok_or_else(|| McpServerManagerError::UnknownTool {
                 qualified_name: qualified_tool_name.to_string(),
             })?;
+
+        if let Some(bridge) = self.server_mut(&route.server_name)?.exec.clone() {
+            let request_id = self.take_request_id();
+            return Ok(bridge.call(request_id, &route.raw_name, arguments).await);
+        }
 
         self.ensure_server_ready(&route.server_name).await?;
         let request_id = self.take_request_id();
@@ -4136,5 +4244,66 @@ mod tests {
             manager.shutdown().await.expect("shutdown");
             cleanup_script(&script_path);
         });
+    }
+
+    // ─── v0.4.25: built-in `codex exec` backend selection in the manager ───
+
+    fn codex_entry(command: &str, args: &[&str]) -> ScopedMcpServerConfig {
+        ScopedMcpServerConfig {
+            scope: ConfigSource::User,
+            config: McpServerConfig::Stdio(McpStdioServerConfig {
+                command: command.to_string(),
+                args: args.iter().map(|a| (*a).to_string()).collect(),
+                env: BTreeMap::from([("CODEX_HOME".to_string(), "/legacy-home".to_string())]),
+                request_timeout_secs: Some(900),
+                trust: Some(true),
+            }),
+        }
+    }
+
+    #[test]
+    fn manager_registers_builtin_codex_when_no_entry_and_discovers_two_tools() {
+        let bridge = crate::CodexExecBridge::new("/opt/codex");
+        let manager = McpServerManager::from_servers_with_codex(&BTreeMap::new(), Some(&bridge));
+        assert_eq!(manager.codex_exec_backend("codex"), Some(&bridge));
+
+        let mut handle = McpManagerHandle::from_manager(manager).unwrap();
+        let tools = handle.discover_tools().unwrap();
+        let names: Vec<&str> = tools.iter().map(|t| t.qualified_name.as_str()).collect();
+        assert_eq!(names, vec!["mcp__codex__codex", "mcp__codex__codex-reply"]);
+        assert!(handle.discovery_failures().is_empty());
+        // no process was spawned for discovery, so shutdown is a no-op
+        handle.shutdown().unwrap();
+    }
+
+    #[test]
+    fn manager_migrates_legacy_codex_entry_in_memory() {
+        let servers = BTreeMap::from([(
+            "codex".to_string(),
+            codex_entry("codex", &["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""]),
+        )]);
+        let bridge = crate::CodexExecBridge::new("/opt/codex");
+        let manager = McpServerManager::from_servers_with_codex(&servers, Some(&bridge));
+        let migrated = manager.codex_exec_backend("codex").expect("legacy entry migrated");
+        assert_eq!(migrated.codex_bin, PathBuf::from("/opt/codex"));
+        assert_eq!(migrated.env.get("CODEX_HOME").map(String::as_str), Some("/legacy-home"));
+        assert_eq!(migrated.timeout, std::time::Duration::from_mins(15));
+
+        // without the built-in enabled, the same entry is a plain stdio server
+        // (v0.4.24 behaviour, the ARIS_CODEX_BRIDGE=0 escape hatch)
+        let plain = McpServerManager::from_servers(&servers);
+        assert_eq!(plain.codex_exec_backend("codex"), None);
+    }
+
+    #[test]
+    fn manager_keeps_custom_codex_entry_over_builtin() {
+        let servers = BTreeMap::from([(
+            "codex".to_string(),
+            codex_entry("python3", &["/aris/mcp-servers/codex-exec/server.py"]),
+        )]);
+        let bridge = crate::CodexExecBridge::new("/opt/codex");
+        let manager = McpServerManager::from_servers_with_codex(&servers, Some(&bridge));
+        assert_eq!(manager.codex_exec_backend("codex"), None);
+        assert_eq!(manager.servers.len(), 1);
     }
 }
