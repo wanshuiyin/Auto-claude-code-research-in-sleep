@@ -2,7 +2,7 @@
 name: figure-spec
 description: "Generate deterministic publication-quality architecture, workflow, and pipeline diagrams from structured JSON (FigureSpec) into editable SVG. Use when user says \"架构图\", \"workflow 图\", \"pipeline 图\", \"确定性矢量图\", \"figure spec\", \"draw architecture\", or needs precise, editable, publication-ready vector diagrams. Preferred over AI illustration for formal architecture/workflow figures."
 argument-hint: "[description-of-diagram]"
-allowed-tools: Bash(*), Read, Write, Edit
+allowed-tools: Bash(*), Read, Write, Edit, mcp__codex__codex
 ---
 
 # FigureSpec: Deterministic JSON → SVG Figure Generation
@@ -171,7 +171,7 @@ For paper architecture figures, invoke cross-model review:
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     Review this SVG figure for a technical paper (architecture / workflow diagram).

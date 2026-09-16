@@ -160,7 +160,7 @@ judgment:
 
 Required ordering: **dedup BEFORE jury, on the merged union.** This is
 not just hygiene — it is a cost-control invariant. The jury backend
-(codex GPT-5.6-Sol / Gemini / oracle-pro) is the rate-limited,
+(codex GPT-6-Astra / Gemini / oracle-pro) is the rate-limited,
 token-expensive resource. Sending it 40 candidates of which 25 are
 near-duplicate is a waste of the scarce cross-model budget and invites
 rate-limit failure mid-verdict. Mechanical dedup on the cheap
@@ -212,7 +212,7 @@ in series — Thread 1 writes the strongest 200-word rejection memo; Thread
 rejection points and adjudicates each. There is **no `Agent` tool** in
 its `allowed-tools`; the "fan" is the decomposition into per-point
 obligations, run sequentially with context reset between threads. The
-jury here is cross-model by construction — both threads are GPT-5.6-Sol
+jury here is cross-model by construction — both threads are GPT-6-Astra
 adjudicating a Claude-executor's paper, and **the skill code computes the
 final verdict from per-point counts; the codex thread is forbidden from
 emitting the top-level verdict** (`Verdict is computed by the skill, not
@@ -229,7 +229,7 @@ these lenses run as parallel shards; on Tier 3 they are enumerated in one
 pass. After fan-out the merged set should be **mechanically deduped only**
 (cluster near-identical ideas; never drop one for being "weak"). The
 **jury** is the already-existing Phase-4 cross-model devil's-advocate
-pass: GPT-5.6-Sol via Codex MCP surfaces the strongest reviewer objection per
+pass: GPT-6-Astra via Codex MCP surfaces the strongest reviewer objection per
 idea and ranks for a top venue. `/idea-creator` declares the `Agent` tool — re-granted (per the re-grant
 rule in **Allowed-tools hygiene**) when the lens fan-out was wired, after
 the WB2 sweep had stripped the earlier vestigial grant. On a Tier-1 runtime
@@ -287,7 +287,7 @@ Two invariants keep a fan-out from manufacturing or laundering errors:
 ## Cross-references
 
 - **`reviewer-routing.md`** — jury backend selection. The cross-model
-  jury step routes through Codex MCP (`gpt-5.6-sol`, at the call's tier — deep-audit `ultra` / regular `xhigh`) by default, or
+  jury step routes through Codex MCP (`gpt-6-astra`, at the call's tier — deep-audit `ultra` / regular `xhigh`) by default, or
   Oracle MCP (`gpt-5.5-pro`) under `— reviewer: oracle-pro`. Fan-out
   tier never changes the jury backend.
 - **`reviewer-independence.md`** — the jury call receives **file paths

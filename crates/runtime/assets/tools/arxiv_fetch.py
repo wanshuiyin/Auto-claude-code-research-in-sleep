@@ -34,6 +34,16 @@ _API_BASE = "http://export.arxiv.org/api/query"
 _MIN_PDF_BYTES = 10_240
 
 
+def _validate_pdf(size_bytes: int, first_bytes: bytes) -> None:
+    """Reject truncated downloads and non-PDF response bodies."""
+    if size_bytes < _MIN_PDF_BYTES:
+        raise ValueError(
+            f"Downloaded file is only {size_bytes} bytes - likely an error page, not a PDF"
+        )
+    if b"%PDF-" not in first_bytes[:1024]:
+        raise ValueError("Downloaded file has no PDF header - likely an error page, not a PDF")
+
+
 def _arxiv_user_agent() -> str:
     """Descriptive User-Agent for arXiv API calls.
 
@@ -170,10 +180,21 @@ def download(arxiv_id: str, output_dir: str = "papers") -> dict:
     dest = dest_dir / f"{safe_id}.pdf"
 
     if dest.exists():
+        size_bytes = dest.stat().st_size
+        with dest.open("rb") as cached_file:
+            first_bytes = cached_file.read(1024)
+        try:
+            _validate_pdf(size_bytes, first_bytes)
+        except ValueError:
+            # Poisoned cache entry (e.g. an HTML error page saved as .pdf by an
+            # older version): drop it so the next call re-downloads instead of
+            # failing forever.
+            dest.unlink()
+            raise
         return {
             "id": clean_id,
             "path": str(dest),
-            "size_kb": dest.stat().st_size // 1024,
+            "size_kb": size_bytes // 1024,
             "skipped": True,
         }
 
@@ -199,10 +220,7 @@ def download(arxiv_id: str, output_dir: str = "papers") -> dict:
     else:
         raise RuntimeError(f"Failed to download {pdf_url} after 3 attempts")
 
-    if len(data) < _MIN_PDF_BYTES:
-        raise ValueError(
-            f"Downloaded file is only {len(data)} bytes - likely an error page, not a PDF"
-        )
+    _validate_pdf(len(data), data)
 
     dest.write_bytes(data)
     return {

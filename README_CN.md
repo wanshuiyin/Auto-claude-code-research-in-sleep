@@ -112,7 +112,7 @@
 - 🔍 **Reviewer**（审查者）：独立 LLM，通过 `LlmReview` 工具对 Executor 的输出进行对抗性审查
 - 🔄 **迭代精进**：Executor 写 → Reviewer 批 → Executor 修 → 循环直至高质量
 
-内置 **81 个研究技能**（Skills），覆盖从选题到投稿的完整研究流水线。
+内置 **83 个研究技能**（Skills），覆盖从选题到投稿的完整研究流水线。
 
 ---
 
@@ -216,7 +216,7 @@ sudo mv aris /usr/local/bin/aris
 # 直接调用 LlmReview 工具
 ```
 
-### 2. 📚 81 个内置研究技能
+### 2. 📚 83 个内置研究技能
 
 通过 `/skills` 命令查看所有可用技能：
 
@@ -231,14 +231,14 @@ sudo mv aris /usr/local/bin/aris
 /run-experiment    — 远程 GPU 实验部署
 /peer-review       — 同行评审模拟
 /rebuttal          — 投稿 Rebuttal 生成
-...（共 81 个）
+...（共 83 个）
 ```
 
 **技能三级优先级**（高优先覆盖低优先）：
 ```
 ~/.config/aris/skills/   [用户自定义，最高优先]
 ~/.claude/skills/        [Claude Code 兼容]
-内置 bundled skills      [81 个开箱即用]
+内置 bundled skills      [83 个开箱即用]
 ```
 
 ### 3. 🖥️ REPL 交互命令
@@ -258,7 +258,7 @@ sudo mv aris /usr/local/bin/aris
 | `/version` | 版本信息 |
 | `/research-review` | 直接调用 review 技能 |
 | `/paper-write` | 直接调用写作技能 |
-| `...` | 以及全部 81 个技能命令 |
+| `...` | 以及全部 83 个技能命令 |
 
 ### 4. 🌐 多语言支持
 
@@ -399,7 +399,7 @@ sudo mv aris /usr/local/bin/aris
 - [x] Phase 0：Rust fork 基础架构（基于 claw-code）
 - [x] Phase 1：多 Provider 支持（Anthropic/OpenAI/Gemini/GLM/MiniMax）
 - [x] Phase 1：LlmReview 对抗审查工具
-- [x] Phase 1：研究技能内置（首发 42 个，现 81 个）
+- [x] Phase 1：研究技能内置（首发 42 个，现 83 个）
 - [x] Phase 1：语言偏好与防幻觉系统提示
 - [ ] Phase 2：Skills 系统完善（三级优先级 UI）
 - [ ] Phase 2：Web UI 仪表盘

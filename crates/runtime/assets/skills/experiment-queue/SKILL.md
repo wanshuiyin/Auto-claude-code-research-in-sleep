@@ -96,7 +96,7 @@ jobs:
 pending → running → completed
                  ↘ failed_oom → pending (after delay) [retry up to N]
                  ↘ failed_other → stuck (needs manual inspection)
-stale_screen_detected → cleaned → pending
+stale screen (process gone, screen lingering) → failed_other → stuck
 ```
 
 > **Operator note on `stuck` (the agent's move, not the queue's):** the queue
@@ -228,6 +228,11 @@ LOCAL_RUN_DIR="/abs/path/to/project/experiment_queue/<existing-run-ts>"   # the 
 # Then re-run Step 3d verbatim. Do NOT re-run Step 3c (would overwrite manifest.json + state.json).
 ```
 
+A `queue_state.json` written before the 2026-08 scheduler fix records jobs the old code
+mis-judged as failed. Resuming it parks those jobs as `stuck` — they are not retried, so a
+state file whose jobs are all `failed_other` finishes with nothing launched. Delete that
+state file and re-run the manifest from Step 3c.
+
 The scheduler:
 - Reads manifest
 - Loops: for each pending job, assign to free GPU, launch via `screen`
@@ -283,20 +288,22 @@ phases:
       N: [384, 512]
     template:
       cmd: python run_train.py --direction c --backbone softmax --n_hidden ${N} ...
-      output_check: checkpoints/transformer/teacher_L96_K500_N${N}.pt
+      expected_output: checkpoints/transformer/teacher_L96_K500_N${N}.pt
   
   - name: distill_students
-    depends_on: train_teachers
+    depends_on: [train_teachers]        # must be a LIST, even for a single dependency
     grid:
       N: [384, 512]
       seed: [42, 200, 201]
     template:
       cmd: python run_distill.py --n_hidden ${N} --seed ${seed} ...
-      output_check: figures/distill_sw_N${N}_*_seed${seed}.json
+      expected_output: figures/distill_sw_N${N}_*_seed${seed}.json
 ```
 
-Scheduler enforces `depends_on`: `distill_students` jobs stay `pending` until all
-`train_teachers` jobs are `completed`.
+Scheduler enforces `depends_on`: `distill_students` jobs stay `pending` until every
+`train_teachers` job is terminal — `completed` **or** `stuck`. A failed teacher does not
+hold its students back, so check `queue_state.json` for `stuck` jobs before trusting a
+dependent wave.
 
 ## OOM Handling
 
@@ -379,7 +386,10 @@ If scheduler crashes / is killed:
 - **Idempotent scheduler** — safe to restart; picks up from state file
 - **Expected-output-based completion** — don't trust screen state alone; verify output file exists
 - **Bounded retry** — max N OOM retries, then mark `stuck` and alert
-- **Dependencies enforced at launch** — never launch student before teacher checkpoint exists
+- **Dependencies enforced at launch** — a wave launches only after every job in the phases it
+  depends on has reached a terminal state. Note "terminal" includes `stuck`: if a teacher job
+  fails, the phase still completes and its students launch against a missing checkpoint. Check
+  `queue_state.json` for `stuck` jobs before trusting a dependent wave's results.
 
 ## Known Failure Modes
 

@@ -26,7 +26,7 @@ In this hybrid pack, the pipeline itself is unchanged, but `paper-plan` and `pap
 
 - **VENUE = `ICLR`** — Target venue. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_JOURNAL` (IEEE Transactions / Letters), `IEEE_CONF` (IEEE conferences). Affects style file, page limit, citation format.
 - **MAX_IMPROVEMENT_ROUNDS = 2** — Number of review→fix→recompile rounds in the improvement loop.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via Codex MCP for plan review, figure review, writing review, and improvement loop.
+- **REVIEWER_MODEL = `gpt-6-astra`** — Model used via Codex MCP for plan review, figure review, writing review, and improvement loop.
 - **AUTO_PROCEED = true** — Auto-continue between phases. Set `false` to pause and wait for user approval after each phase.
 - **HUMAN_CHECKPOINT = false** — When `true`, the improvement loop (Phase 5) pauses after each round's review to let you see the score and provide custom modification instructions. When `false` (default), the loop runs fully autonomously. Passed through to `/auto-paper-improvement-loop`.
 - **ILLUSTRATION = `figurespec`** — Architecture/illustration generator for Phase 2b: `figurespec` (default, deterministic JSON→SVG via `/figure-spec`, best for architecture/workflow/topology), `gemini` (AI-generated via `/paper-illustration`, best for qualitative method illustrations; needs `GEMINI_API_KEY`), `codex-image2` (AI-generated via `/paper-illustration-image2` through the local Codex native image bridge — no external API key, uses your ChatGPT Plus/Pro quota; experimental), `mermaid` (Mermaid syntax via `/mermaid-diagram`, free, best for flowcharts), or `false` (skip Phase 2b, manual only).
@@ -156,7 +156,7 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 - Design section structure (5-8 sections depending on paper type)
 - Plan figure/table placement with data sources
 - Scaffold citation structure
-- GPT-5.6-Sol reviews the plan for completeness
+- GPT-6-Astra reviews the plan for completeness
 
 **Output:** `PAPER_PLAN.md` with section plan, figure plan, citation scaffolding.
 
@@ -198,7 +198,7 @@ contract is what gets graded.)
 
    ```
    mcp__codex__codex:
-     model: gpt-5.6-sol
+     model: gpt-6-astra
      config: {"model_reasoning_effort": "xhigh"}
      prompt: |
        You are negotiating the acceptance contract for a paper BEFORE it is
@@ -215,6 +215,30 @@ contract is what gets graded.)
        satisfy — flag now, not after writing. End with exactly one line:
        CONTRACT_ACCEPTED: yes    or    CONTRACT_ACCEPTED: no
        followed by your numbered revision demands if no.
+
+       === SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+       Report anything that is actually wrong here — including a rare-looking case, if
+       this repo actually produces it. Then keep the fix in scope:
+       1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+          welcome; over-defense is not. Assume a cooperating operator on their own
+          machine — a malicious local user is NOT in the threat model.
+       2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+          Reporting a real defect in hashing code that already exists is fine.
+       3. NO speculative machinery: do not add feature flags, migration frameworks,
+          compat layers, wrappers, pins, or similar mechanisms unless evidence shows
+          a current repo defect they fix or an explicit existing invariant they must
+          preserve. "Load-bearing", "compatibility", and "not scaffolding" are labels,
+          not evidence. Point to the failing path/artifact or invariant, and check the
+          proposal's factual premises, such as whether a named package version exists.
+       4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+          millisecond races are out of scope unless you can show the case arises here.
+       5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+          judgement. A clear sentence a human reads beats a scored table nobody
+          maintains.
+       Exception: code that runs remote commands, starts a network service, or installs
+       an MCP server runs on the user's machine with their credentials — trust-boundary
+       findings there are in scope and the default is strict.
+       Say plainly when something is correct. Do not manufacture findings.
    ```
 
    A reply with a missing or malformed `CONTRACT_ACCEPTED:` line is treated as
@@ -260,7 +284,7 @@ Invoke `/paper-figure` to generate data-driven plots and tables:
 - Generate matplotlib/seaborn plots from JSON/CSV data
 - Generate LaTeX comparison tables
 - Create `figures/latex_includes.tex` for easy insertion
-- GPT-5.6-Sol reviews figure quality and captions
+- GPT-6-Astra reviews figure quality and captions
 
 **Output:** `figures/` directory with PDFs, generation scripts, and LaTeX snippets.
 
@@ -335,6 +359,17 @@ These are complementary, not mutually exclusive: you can run multiple generators
 [If all auto]: Shall I proceed with LaTeX writing?
 ```
 
+> **Writing invariant (every drafting and revision step):** calibrate each
+> claim to its evidence and state it directly; generic caveats live in the
+> Limitations section only; writing instructions are never manuscript content
+> ("do not mention X" means omit X, not "we do not address X"); tone edits
+> never change what the paper knows; the paper is a launch, not a progress
+> report — organize around the strongest advantage, give every experiment an
+> argumentative duty, keep unfavorable numbers in the tables and explain them
+> as tradeoffs only where the evidence supports that, never narrating
+> defeats. `/paper-write` carries the full CONFIDENT PROSE, HONEST LIMITS
+> contract.
+
 ### Phase 3: LaTeX Writing
 
 Invoke `/paper-write` to generate section-by-section LaTeX:
@@ -352,7 +387,7 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 - Clean stale files from previous section structures
 - Automated bib cleaning (remove uncited entries)
 - De-AI polish (remove "delve", "pivotal", "landscape"...)
-- GPT-5.6-Sol reviews each section for quality
+- GPT-6-Astra reviews each section for quality
 
 **Output:** `paper/` directory with `main.tex`, `sections/*.tex`, `references.bib`, `math_commands.tex`.
 
@@ -405,7 +440,7 @@ Shall I proceed with the improvement loop?
 ```
 if paper contains \begin{theorem} or \begin{lemma} or \begin{proof}:
     Run /proof-checker "paper/"
-    This invokes GPT-5.6-Sol xhigh to:
+    This invokes GPT-6-Astra xhigh to:
     - Verify all proof steps (hypothesis discharge, interchange justification, etc.)
     - Check for logic gaps, quantifier errors, missing domination conditions
     - Attempt counterexamples on key lemmas
@@ -450,15 +485,17 @@ If `— style-ref: <source>` was passed in `$ARGUMENTS` and the helper succeeded
 
 **What this does (2 rounds):**
 
-**Round 1:** GPT-5.6-Sol xhigh reviews the full paper → identifies CRITICAL/MAJOR/MINOR issues → Claude Code implements fixes → recompile → save `main_round1.pdf`
+**Round 1:** GPT-6-Astra xhigh reviews the full paper → identifies CRITICAL/MAJOR/MINOR issues → Claude Code implements fixes → recompile → save `main_round1.pdf`
 
-**Round 2:** GPT-5.6-Sol xhigh re-reviews with conversation context → identifies remaining issues → Claude Code implements fixes → recompile → save `main_round2.pdf`
+**Round 2:** GPT-6-Astra xhigh re-reviews the recompiled draft cold (fresh review — no fix summaries, no conversation carry-over) → identifies remaining issues → Claude Code implements fixes → recompile → save `main_round2.pdf`
 
-**Typical improvements:**
+**Typical improvements (calibration cuts both ways):**
 - Fix assumption-model mismatches
-- Soften overclaims to match evidence
+- Narrow genuine overclaims to the supported scope — and state supported claims
+  directly, removing redundant hedges
+- Consolidate scattered generic caveats into Limitations
 - Add missing interpretations and notation
-- Strengthen limitations section
+- Make Limitations more specific (only when a material limit is missing — never pad)
 - Add theory-aligned experiments if needed
 
 **Output:** Three PDFs for comparison + `PAPER_IMPROVEMENT_LOG.md`.
@@ -531,7 +568,7 @@ After the final paper-claim-audit passes, run `/citation-audit` to verify every 
 ```
 if paper/references.bib (or paper.bib) exists and contains entries cited from sec/*.tex:
     Run /citation-audit "paper/"
-    Fresh cross-family reviewer (gpt-5.6-sol via Codex MCP) with web/DBLP/arXiv lookup
+    Fresh cross-family reviewer (gpt-6-astra via Codex MCP) with web/DBLP/arXiv lookup
     verifies each entry:
       (i)   EXISTENCE — paper resolves at claimed arXiv ID / DOI / venue
       (ii)  METADATA — author names, year, venue, title match canonical sources
@@ -591,11 +628,18 @@ not silently skip the default-ON gate):
   citations → `/citation-audit`; proof → `/proof-checker`; scope/baseline/
   eval-design → `/auto-review-loop` as reviewer input, or the human.
 - Close obligations ONLY via `forensics_gate.py resolve` (typed, hashed
-  evidence) or a human `waive`. **Never edit the paper with the objective
-  "make the sweep stop flagging"** — a vanished-but-unresolved finding keeps
-  the gate closed (`UNRESOLVED_DISAPPEARANCE`).
+  evidence) or a human `waive`. Since 2026-08 upstream reports every proposal an
+  auditor made rather than deciding which ones do not count, so expect more
+  obligations and expect some to be proposals you judge wrong — `waive` with a
+  reason is the normal disposition for those, not a last resort. **Never edit the
+  paper with the objective "make the sweep stop flagging"** — a
+  vanished-but-unresolved finding keeps the gate closed
+  (`UNRESOLVED_DISAPPEARANCE`).
 - `WARN` (SOFT_FLAGS / open non-critical obligations): proceed, but the Final
-  Report must list them under `Forensics`.
+  Report must list them under `Forensics` — including the dimensions the sweep
+  never ran, which `evaluate` and `fresh` both print. A WARN can sit on top of an
+  incomplete sweep: upstream folds incompleteness into the verdict only when it
+  would otherwise read clean.
 - Zero-weight AIS style impressions: FYI only — may feed
   `/auto-paper-improvement-loop` context, never gate.
 

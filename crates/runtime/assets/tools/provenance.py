@@ -28,19 +28,23 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-# Model-name → family. Vendor words match as substrings ("gpt5" → openai); the
-# short, ambiguous o-series needles (_SHORT) match only as EXACT tokens, so they
-# can't substring-bleed into an unrelated name. ARIS routes oracle-pro to a
-# GPT-Pro tier, so `oracle` is the OPENAI family (NOT a separate one) — getting
-# this wrong would let oracle "cross-check" a GPT executor.
+# Model-name → family. Match model/vendor needles at token boundaries so wrapper
+# or provider names cannot substring-bleed into unrelated families (for example,
+# ``ollama/deepseek-r1`` must be DeepSeek only, not DeepSeek + Llama). Version
+# suffixes remain supported. ARIS routes oracle-pro to a GPT-Pro tier, so
+# `oracle` is the OPENAI family (NOT a separate one) — getting this wrong would
+# let oracle "cross-check" a GPT executor.
 _FAMILY = [
     ("anthropic", ("claude", "opus", "sonnet", "haiku")),
     ("openai", ("gpt", "codex", "oracle", "chatgpt", "o1", "o3", "o4")),
     ("google", ("gemini", "palm", "bard")),
     ("deepseek", ("deepseek",)),
+    ("zhipu", ("glm", "zhipu")),
     ("minimax", ("minimax", "abab")),
     ("moonshot", ("kimi", "moonshot")),
     ("qwen", ("qwen", "tongyi")),
+    ("xiaomi", ("mimo", "xiaomi")),
+    ("bytedance", ("doubao", "bytedance", "volcengine")),
     ("xai", ("grok",)),
     ("meta", ("llama",)),
     ("mistral", ("mistral", "mixtral")),
@@ -62,11 +66,14 @@ def model_family(name: str) -> str:
     n = (name or "").strip().lower()
     if n.startswith("deterministic:") or n == "deterministic":
         return "deterministic"
-    tokens = set(re.split(r"[^a-z0-9.]+", n))
     matched = set()
     for fam, needles in _FAMILY:
-        if any((k in tokens) if k in _SHORT else (k in n) for k in needles):
-            matched.add(fam)
+        for needle in needles:
+            suffix = "" if needle in _SHORT else r"[0-9.]*"
+            pattern = rf"(^|[^a-z0-9]){re.escape(needle)}{suffix}([^a-z0-9]|$)"
+            if re.search(pattern, n):
+                matched.add(fam)
+                break
     return next(iter(matched)) if len(matched) == 1 else "unknown"
 
 

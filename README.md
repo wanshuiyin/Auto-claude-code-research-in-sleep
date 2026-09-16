@@ -112,7 +112,7 @@
 - 🔍 **Reviewer**: An independent LLM that adversarially critiques the Executor's output via the `LlmReview` tool
 - 🔄 **Iterate**: Executor writes → Reviewer critiques → Executor revises → loop until quality converges
 
-With **81 bundled research skills**, ARIS covers the full pipeline from idea discovery to paper submission.
+With **83 bundled research skills**, ARIS covers the full pipeline from idea discovery to paper submission.
 
 ---
 
@@ -216,7 +216,7 @@ User input
 # Direct LlmReview tool invocation
 ```
 
-### 2. 📚 81 Bundled Research Skills
+### 2. 📚 83 Bundled Research Skills
 
 Use `/skills` to list all available skills:
 
@@ -231,14 +231,14 @@ Use `/skills` to list all available skills:
 /run-experiment      — Remote GPU deployment
 /peer-review         — Conference reviewer simulation
 /rebuttal            — Submission rebuttal generation
-...  (81 total)
+...  (83 total)
 ```
 
 **Three-tier skill priority** (higher overrides lower):
 ```
 ~/.config/aris/skills/   [user custom — highest priority]
 ~/.claude/skills/        [Claude Code compatible]
-bundled skills           [81 out-of-the-box skills]
+bundled skills           [83 out-of-the-box skills]
 ```
 
 ### 3. 🖥️ REPL Commands
@@ -258,7 +258,7 @@ bundled skills           [81 out-of-the-box skills]
 | `/version` | Version info |
 | `/research-review` | Invoke research review skill directly |
 | `/paper-write` | Invoke paper writing skill directly |
-| `...` | All 81 skill slash commands |
+| `...` | All 83 skill slash commands |
 
 ### 4. 🌐 Language Preference
 
@@ -414,7 +414,7 @@ The easiest way to set this up is `aris setup` → reviewer option 10
 - [x] Phase 0: Rust fork foundation (based on claw-code)
 - [x] Phase 1: Multi-provider support (Anthropic / OpenAI / Gemini / GLM / MiniMax)
 - [x] Phase 1: LlmReview adversarial critique tool
-- [x] Phase 1: Bundled research skills (42 at launch, 81 today)
+- [x] Phase 1: Bundled research skills (42 at launch, 83 today)
 - [x] Phase 1: Language preference & anti-hallucination system prompt
 - [ ] Phase 2: Skills system polish (three-tier priority UI)
 - [ ] Phase 2: Web UI dashboard

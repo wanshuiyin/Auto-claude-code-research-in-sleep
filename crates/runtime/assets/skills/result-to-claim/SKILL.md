@@ -116,7 +116,7 @@ Send the collected results to Codex for objective evaluation. Include ONLY claim
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "ultra"}
   prompt: |
     RESULT-TO-CLAIM EVALUATION
@@ -303,7 +303,7 @@ if research-wiki/ exists:
 - Do not inflate claims beyond what the data supports. If Codex says "partial", do not round up to "yes".
 - A single positive result on one dataset does not support a general claim. Be honest about scope.
 - If `confidence` is low, treat the judgment as inconclusive and add experiments rather than committing to a claim.
-- **Fail closed if the reviewer is unavailable.** If the Codex call fails, first walk the capability fallback chain in `shared-references/reviewer-routing.md` (`gpt-5.6-sol`+`ultra` → `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh`, capability errors only). If no allowed pair succeeds: write `CLAIMS_FROM_RESULTS.md` containing ONLY the first line `verdict: REVIEW_UNAVAILABLE` (a machine-checkable gate for pipeline callers), record the same in findings.md, and STOP — CC never substitutes its own claim judgment (a loop can drive, never acquit; `acceptance-gate.md`). Downstream steps (wiki `add_experiment` edges, ablation-planner, paper claims) must not consume a run without a Codex verdict. Exception: the deterministic evidence pre-check (Step 1.5) may still terminally mark a claim `claim_supported: no` for hallucinated evidence — a deterministic rejection needs no reviewer; only SUPPORTIVE or ambiguous outcomes require one.
+- **Fail closed if the reviewer is unavailable.** If the Codex call fails, first walk the capability fallback chain in `shared-references/reviewer-routing.md` (`gpt-6-astra`+`ultra` → `gpt-6-astra`+`xhigh` → `gpt-5.5`+`xhigh`, capability errors only). If no allowed pair succeeds: write `CLAIMS_FROM_RESULTS.md` containing ONLY the first line `verdict: REVIEW_UNAVAILABLE` (a machine-checkable gate for pipeline callers), record the same in findings.md, and STOP — CC never substitutes its own claim judgment (a loop can drive, never acquit; `acceptance-gate.md`). Downstream steps (wiki `add_experiment` edges, ablation-planner, paper claims) must not consume a run without a Codex verdict. Exception: the deterministic evidence pre-check (Step 1.5) may still terminally mark a claim `claim_supported: no` for hallucinated evidence — a deterministic rejection needs no reviewer; only SUPPORTIVE or ambiguous outcomes require one.
 - Always record the verdict and reasoning in findings.md, regardless of outcome.
 
 ## Review Tracing

@@ -50,6 +50,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 import urllib.request
 import urllib.error
 import xml.etree.ElementTree as ET
@@ -93,14 +94,29 @@ def _arxiv_user_agent() -> str:
 
 
 def slugify(title: str, author_last: str = "", year: int = 0) -> str:
-    """Generate a canonical slug: author_last + year + keyword."""
-    # Extract first meaningful word from title
+    """Generate a canonical slug: author_last + year + keyword.
+
+    Letters outside ASCII are kept. Stripping them used to collapse every
+    Chinese paper to `<year>_untitled`, so two different papers by the same
+    author in the same year produced the same slug and the second was silently
+    dropped as a duplicate. ASCII titles and authors slugify exactly as before.
+    """
     stop_words = {"a", "an", "the", "of", "for", "in", "on", "with", "via", "and", "to", "by"}
-    words = re.sub(r"[^a-z0-9\s]", "", title.lower()).split()
+    # `[^\w\s]|_` keeps letters/digits in any script while still dropping the
+    # underscore that \w would otherwise let through (ASCII behavior unchanged).
+    normalized_title = unicodedata.normalize("NFC", title.lower())
+    words = re.sub(r"[^\w\s]|_", "", normalized_title, flags=re.UNICODE).split()
     keywords = [w for w in words if w not in stop_words and len(w) > 2]
     keyword = "_".join(keywords[:3]) if keywords else "untitled"
+    # Scripts without spaces yield one long token; cap it so the filename stays sane.
+    if not keyword.isascii():
+        keyword = keyword[:48]
 
-    author = re.sub(r"[^a-z]", "", author_last.lower()) if author_last else "unknown"
+    if author_last:
+        normalized_author = unicodedata.normalize("NFC", author_last.lower())
+        author = "".join(ch for ch in normalized_author if ch.isalpha())
+    else:
+        author = "unknown"
     yr = str(year) if year else "0000"
     return f"{author}{yr}_{keyword}"
 
@@ -117,18 +133,18 @@ def init_wiki(wiki_root: str):
         path = root / f
         if not path.exists():
             if f == "index.md":
-                path.write_text("# Research Wiki Index\n\n_Auto-generated. Do not edit._\n")
+                path.write_text("# Research Wiki Index\n\n_Auto-generated. Do not edit._\n", encoding="utf-8")
             elif f == "log.md":
-                path.write_text("# Research Wiki Log\n\n_Append-only timeline._\n")
+                path.write_text("# Research Wiki Log\n\n_Append-only timeline._\n", encoding="utf-8")
             elif f == "gap_map.md":
-                path.write_text("# Gap Map\n\n_Field gaps with stable IDs._\n")
+                path.write_text("# Gap Map\n\n_Field gaps with stable IDs._\n", encoding="utf-8")
             elif f == "query_pack.md":
-                path.write_text("# Query Pack\n\n_Auto-generated for /idea-creator. Max 8000 chars._\n")
+                path.write_text("# Query Pack\n\n_Auto-generated for /idea-creator. Max 8000 chars._\n", encoding="utf-8")
 
     # Create empty edges file
     edges_path = root / "graph" / "edges.jsonl"
     if not edges_path.exists():
-        edges_path.write_text("")
+        edges_path.write_text("", encoding="utf-8")
 
     append_log(wiki_root, "Wiki initialized")
     print(f"Research wiki initialized at {root}")
@@ -153,7 +169,7 @@ def add_edge(wiki_root: str, from_id: str, to_id: str, edge_type: str, evidence:
     # Dedup check
     existing_edges = []
     if edges_path.exists():
-        for line in edges_path.read_text().strip().split("\n"):
+        for line in _read_wiki_text(edges_path).strip().split("\n"):
             if line.strip():
                 try:
                     existing_edges.append(json.loads(line))
@@ -197,7 +213,7 @@ def add_edge(wiki_root: str, from_id: str, to_id: str, edge_type: str, evidence:
         "added": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
-    with open(edges_path, "a") as f:
+    with open(edges_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(edge, ensure_ascii=False) + "\n")
 
     print(f"Edge added: {from_id} --{edge_type}--> {to_id}")
@@ -214,7 +230,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     # Deterministic, no LLM.
     brief_path = root.parent / "RESEARCH_BRIEF.md"
     if brief_path.exists():
-        raw = brief_path.read_text()
+        raw = _read_wiki_text(brief_path)
 
         # Parse ## sections from the brief
         sections_map: dict[str, str] = {}
@@ -276,7 +292,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     # 2. Gap map (1200 chars)
     gap_path = root / "gap_map.md"
     if gap_path.exists():
-        gaps = gap_path.read_text()[:1200]
+        gaps = _read_wiki_text(gap_path)[:1200]
         if gaps.strip() and gaps.strip() != "# Gap Map\n\n_Field gaps with stable IDs._":
             sections.append(f"## Open Gaps\n{gaps}\n")
 
@@ -290,7 +306,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
             # `pending` idea whose body discusses an "outcome: negative" failure mode
             # must NOT be banlisted.
             if meta.get("outcome") in ("negative", "mixed"):
-                content = f.read_text()
+                content = _read_wiki_text(f)
                 lines = content.split("\n")
                 title = meta.get("title", "")
                 failure = ""
@@ -309,7 +325,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     if papers_dir.exists():
         paper_summaries = []
         for f in sorted(papers_dir.glob("*.md")):
-            content = f.read_text()
+            content = _read_wiki_text(f)
             # Extract one-line thesis and key fields
             node_id = ""
             title = ""
@@ -319,10 +335,13 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
                     node_id = line.split(":", 1)[1].strip()
                 if line.startswith("title:"):
                     title = line.split(":", 1)[1].strip().strip('"')
-                if line.startswith("# One-line thesis"):
+                if line.startswith("## One-line thesis"):
                     idx = content.split("\n").index(line)
                     next_lines = content.split("\n")[idx+1:idx+3]
-                    thesis = " ".join(l for l in next_lines if l.strip() and not l.startswith("#"))
+                    # skip the scaffold placeholder an un-enriched page still carries
+                    thesis = " ".join(l for l in next_lines
+                                      if l.strip() and not l.startswith("#")
+                                      and not l.strip().startswith("_TODO"))
             if title:
                 suffix = f": {thesis[:150]}" if thesis.strip() else ""
                 paper_summaries.append(f"- [{node_id}] {title}{suffix}")
@@ -335,7 +354,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
     edges_path = root / "graph" / "edges.jsonl"
     if edges_path.exists():
         edges = []
-        for line in edges_path.read_text().strip().split("\n"):
+        for line in _read_wiki_text(edges_path).strip().split("\n"):
             if line.strip():
                 try:
                     edges.append(json.loads(line))
@@ -382,7 +401,7 @@ def rebuild_query_pack(wiki_root: str, max_chars: int = 8000):
             )
 
     pack_path = root / "query_pack.md"
-    pack_path.write_text(pack)
+    pack_path.write_text(pack, encoding="utf-8")
     print(f"query_pack.md rebuilt: {len(pack)} chars")
 
 
@@ -414,7 +433,7 @@ def get_stats(wiki_root: str):
     edges_path = root / "graph" / "edges.jsonl"
     edge_count = 0
     if edges_path.exists():
-        edge_count = sum(1 for line in edges_path.read_text().strip().split("\n") if line.strip())
+        edge_count = sum(1 for line in _read_wiki_text(edges_path).strip().split("\n") if line.strip())
 
     print(f"📚 Research Wiki Stats")
     print(f"Papers:      {papers}")
@@ -596,11 +615,28 @@ def _last_name(full_name: str) -> str:
     return parts[-1] if parts else ""
 
 
+def _read_wiki_text(path: Path) -> str:
+    """Read a wiki file as UTF-8, naming the file if it was written in a legacy codepage.
+
+    A wiki produced by an older ARIS on a non-UTF-8 locale (e.g. cp936) would
+    otherwise surface as a bare UnicodeDecodeError traceback. Silently replacing
+    bytes is not an option here: this store exists to accumulate faithfully.
+    """
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise SystemExit(
+            f"ERROR: {path} is not valid UTF-8.\n"
+            "  This wiki was likely written by an older ARIS on a non-UTF-8 locale.\n"
+            "  Convert the file to UTF-8 (back it up first), then re-run."
+        )
+
+
 def _load_paper_frontmatter(path: Path) -> dict:
     """Parse the YAML-ish frontmatter of a wiki paper page. Returns {} on failure."""
     if not path.exists():
         return {}
-    text = path.read_text()
+    text = _read_wiki_text(path)
     m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
     if not m:
         return {}
@@ -618,7 +654,7 @@ def _find_existing_page_by_arxiv(wiki_root: Path, arxiv_id: str) -> Path | None:
     if not papers.exists():
         return None
     for p in papers.glob("*.md"):
-        text = p.read_text()
+        text = _read_wiki_text(p)
         # Match either the frontmatter line or a URL reference
         if re.search(r'arxiv:\s*["\']?' + re.escape(arxiv_id) + r'["\']?', text):
             return p
@@ -803,7 +839,7 @@ def ingest_paper(wiki_root: str, *, arxiv_id: str = "", title: str = "",
             was_update = False
 
     rendered = _render_paper_page(meta, slug, thesis, tags)
-    page_path.write_text(rendered)
+    page_path.write_text(rendered, encoding="utf-8")
 
     # Rebuild derived artifacts
     rebuild_index(str(root))
@@ -971,7 +1007,7 @@ def add_claim(wiki_root: str, slug: str, name: str, *, description: str = "",
 
     rendered = _render_claim_page(slug, name, description, status, provenance,
                                   statement, scope, evidence, tags)
-    page_path.write_text(rendered)
+    page_path.write_text(rendered, encoding="utf-8")
 
     # Wire edges. Reuse add_edge so dedup, evidence quarantine, and the JSONL
     # format are all identical to paper/idea edges.
@@ -1000,7 +1036,7 @@ def add_claim(wiki_root: str, slug: str, name: str, *, description: str = "",
         elif kind == "gap":
             gm = root / "gap_map.md"
             exists = gm.exists() and re.search(
-                rf"\b{re.escape(rest)}\b", gm.read_text(encoding="utf-8"))
+                rf"\b{re.escape(rest)}\b", _read_wiki_text(gm))
         if not exists:
             print(f"⚠️  add_claim: edge target {nid} not found in this wiki "
                   f"(dangling edge recorded — create the node or fix the id).",
@@ -1204,7 +1240,7 @@ def upsert_idea(wiki_root: str, slug: str, title: str, *, description: str = "",
         elif kind == "gap":
             gm = root / "gap_map.md"
             exists = gm.exists() and re.search(
-                rf"\b{re.escape(rest)}\b", gm.read_text(encoding="utf-8"))
+                rf"\b{re.escape(rest)}\b", _read_wiki_text(gm))
         if not exists:
             print(f"⚠️  upsert_idea: edge target {nid} not found in this wiki "
                   f"(dangling edge recorded — create the node or fix the id).",
@@ -1215,7 +1251,7 @@ def upsert_idea(wiki_root: str, slug: str, title: str, *, description: str = "",
 
     rendered = _render_idea_page(slug, title, description, stage, outcome, thesis,
                                  risks, based_on_ids, target_gap_ids, tags)
-    page_path.write_text(rendered)
+    page_path.write_text(rendered, encoding="utf-8")
 
     # Wire edges (reuse add_edge so dedup + JSONL format match paper/claim edges).
     for nid in based_on_ids:
@@ -1357,7 +1393,7 @@ def add_experiment(wiki_root: str, slug: str, *, title: str = "", idea: str = ""
     rendered = _render_experiment_page(slug, title, idea_id, verdict, confidence,
                                        date, hardware, duration, metrics, reasoning,
                                        provenance, tags)
-    page_path.write_text(rendered)
+    page_path.write_text(rendered, encoding="utf-8")
 
     # Wire the idea --tested_by--> exp edge (idea side owns it, per the schema).
     if idea_id:
@@ -1436,7 +1472,7 @@ def rebuild_index(wiki_root: str) -> None:
             lines.extend(entries)
             lines.append("")
 
-    (root / "index.md").write_text("\n".join(lines) + "\n")
+    (root / "index.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def append_log(wiki_root: str, message: str):
@@ -1446,10 +1482,10 @@ def append_log(wiki_root: str, message: str):
     entry = f"- `{ts}` {message}\n"
 
     if log_path.exists():
-        with open(log_path, "a") as f:
+        with open(log_path, "a", encoding="utf-8") as f:
             f.write(entry)
     else:
-        log_path.write_text(f"# Research Wiki Log\n\n{entry}")
+        log_path.write_text(f"# Research Wiki Log\n\n{entry}", encoding="utf-8")
 
 
 def main():
@@ -1657,7 +1693,7 @@ def main():
             if not fp.exists():
                 print(f"--from-file not found: {fp}", file=sys.stderr)
                 sys.exit(2)
-            for line in fp.read_text().splitlines():
+            for line in fp.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
                 if line and not line.startswith("#"):
                     ids.append(line)

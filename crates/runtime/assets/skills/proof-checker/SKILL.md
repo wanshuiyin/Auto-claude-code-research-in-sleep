@@ -22,7 +22,7 @@ Systematically verify a mathematical proof via cross-model adversarial review, f
 ## Constants
 
 - MAX_REVIEW_ROUNDS = 3
-- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier; capability fallback `gpt-5.6-sol`+`xhigh` → `gpt-5.5`+`xhigh` per `shared-references/reviewer-routing.md`, capability errors only — never below `xhigh`). Manual backend uses whatever model the user chooses, **but it must be a non-Claude model** — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
+- REVIEWER_MODEL = `gpt-6-astra` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier; capability fallback `gpt-6-astra`+`xhigh` → `gpt-5.5`+`xhigh` per `shared-references/reviewer-routing.md`, capability errors only — never below `xhigh`). Manual backend uses a model the user chooses, **but it must be a non-Claude model ARIS can classify** (OpenAI, Google, DeepSeek, Moonshot/Kimi, Qwen) — the executor is Claude, so routing the proof review into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 
 ## Reviewer Calling Convention
@@ -31,18 +31,18 @@ When calling the reviewer, branch on REVIEWER_BACKEND:
 
 **If REVIEWER_BACKEND = `codex`:**
   Use `mcp__codex__codex` for new review threads
-  (`model: gpt-5.6-sol`, `config: {"model_reasoning_effort": "ultra"}`).
+  (`model: gpt-6-astra`, `config: {"model_reasoning_effort": "ultra"}`).
   Use `mcp__codex__codex-reply` for follow-up rounds (reuse threadId).
 
 **If REVIEWER_BACKEND = `manual`:**
   Use `mcp__manual_review__review` for new review threads with:
     prompt: [exact same prompt that would go to Codex]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
   Save the returned `threadId`.
   Use `mcp__manual_review__review_reply` for follow-up rounds with:
     threadId: [saved manual-review threadId]
     prompt: [follow-up prompt]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
 
 Prompt fidelity: the manual prompt must be exactly the same text that Codex would receive.
 Review tracing applies equally to both backends.
@@ -253,7 +253,7 @@ Flag any statement where limit order is ambiguous or uniformity is unclear.
 
 Submit the **complete proof content** with the checklist below, using the selected backend.
 
-For `codex`, call `mcp__codex__codex`. For `manual`, call `mcp__manual_review__review`. Always pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` (deep-audit tier).
+For `codex`, call `mcp__codex__codex` and always pin `model: gpt-6-astra` + `config: {"model_reasoning_effort": "ultra"}` (deep-audit tier). For `manual`, call `mcp__manual_review__review` with the identity-bearing config from the Reviewer Calling Convention above — `model`, `sandbox` and `cwd` are Codex-only.
 
 Use this exact prompt for both backends:
 
@@ -352,6 +352,13 @@ If the user passed `--deep-fix` on invocation, append the following block to the
     NOT add a deep-fix-only category (e.g. UNCLEAR_DEEP_FIX) into the
     standard issue list, since that contaminates default-call output.
 ```
+  A verdict-bearing manual response MUST begin with
+  `Reviewer-Model: <exact-model-id>` — pass the model THIS session is actually
+  running as in `executor_model`. Missing, unknown, or same-family identity
+  cannot acquit; emit `REVIEW_UNAVAILABLE` rather than guessing. If the executor
+  model cannot be named, manual review's cross-family claim is unprovable — say
+  so in the report instead of asserting it.
+
 
 **Save the threadId.** Parse into structured issue list. Write to `PROOF_AUDIT.md`.
 
@@ -450,7 +457,7 @@ The blind review prompt:
 ```
 [Codex:]
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "ultra"}
   prompt: |
     Blind review of the following proof section. You have NOT seen any prior
@@ -727,7 +734,7 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/proof-checker/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-6-astra)>",
   "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {

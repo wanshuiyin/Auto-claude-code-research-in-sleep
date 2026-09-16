@@ -19,7 +19,7 @@ Get a multi-round critical review of research work from the selected external re
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-5.6-sol` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier). Must be an OpenAI model (e.g., `gpt-5.6-sol`, `gpt-5.5`, `o3`). Manual backend uses whatever model the user chooses.
+- REVIEWER_MODEL = `gpt-6-astra` — Default model for the Codex backend, reasoning effort `ultra` (deep-audit tier). Must be an OpenAI model (e.g., `gpt-6-astra`, `gpt-5.5`, `o3`). Manual backend uses a model the user chooses — it must be a recognized model from a different family (OpenAI, Anthropic, Google, DeepSeek, Moonshot/Kimi, Qwen).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (ultra). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 
 ## Reviewer Calling Convention
@@ -33,12 +33,12 @@ When calling the reviewer, branch on REVIEWER_BACKEND:
 **If REVIEWER_BACKEND = `manual`:**
   Use `mcp__manual_review__review` for new review threads with:
     prompt: [exact same prompt that would go to Codex]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
   Save the returned `threadId`.
   Use `mcp__manual_review__review_reply` for follow-up rounds with:
     threadId: [saved manual-review threadId]
     prompt: [follow-up prompt]
-    config: {"model_reasoning_effort": "xhigh"}
+    config: {"model_reasoning_effort": "xhigh", "executor_model": "<actual executor model>", "require_reviewer_model": true}
 
 Content fidelity: the manual reviewer should see the same substantive review
 brief Codex would read. If the manual UI supports file upload / attachment,
@@ -52,7 +52,7 @@ equally to both backends.
 
 - **Codex MCP Server** configured in Claude Code:
   ```bash
-  claude mcp add codex -s user -- codex mcp-server
+  claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"   # your ARIS clone's path
   ```
 - This gives Claude Code access to `mcp__codex__codex` and `mcp__codex__codex-reply` tools
 
@@ -73,7 +73,7 @@ the `codex` backend, keep the MCP payload short: write the full briefing to
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "ultra"}
   prompt: |
     Read the review brief at <absolute path to RESEARCH_REVIEW_REQUEST.md>.
@@ -87,7 +87,32 @@ mcp__codex__codex:
     2. Missing experiments that would strengthen the story
     3. Narrative weaknesses
     4. Whether the contribution is sufficient for a top venue
-    Please be brutally honest.
+
+    === SCOPE LIMITS (these bound what you PROPOSE, never what you look for) ===
+    Report anything that is actually wrong here — including a rare-looking case, if
+    this repo actually produces it. Then keep the fix in scope:
+    1. This is a RESEARCH-WORKFLOW tool, not a security paper. Verification is
+       welcome; over-defense is not. Assume a cooperating operator on their own
+       machine — a malicious local user is NOT in the threat model.
+    2. Do NOT propose SHA / hash / content-fingerprint / digest-binding schemes.
+       Reporting a real defect in hashing code that already exists is fine.
+    3. NO speculative machinery: do not add feature flags, migration frameworks,
+       compat layers, wrappers, pins, or similar mechanisms unless evidence shows
+       a current repo defect they fix or an explicit existing invariant they must
+       preserve. "Load-bearing", "compatibility", and "not scaffolding" are labels,
+       not evidence. Point to the failing path/artifact or invariant, and check the
+       proposal's factual premises, such as whether a named package version exists.
+    4. NO corner-case obsession: exotic encodings, symlink races, RTL text and
+       millisecond races are out of scope unless you can show the case arises here.
+    5. Where a rubric or checklist is genuinely needed, do not over-mechanize
+       judgement. A clear sentence a human reads beats a scored table nobody
+       maintains.
+    Exception: code that runs remote commands, starts a network service, or installs
+    an MCP server runs on the user's machine with their credentials — trust-boundary
+    findings there are in scope and the default is strict.
+    Say plainly when something is correct. Do not manufacture findings.
+    Be brutally honest. If, after genuinely trying to break it, the work
+    holds up and is ready, say so clearly.
 ```
 
 The review brief should contain the full research context, the specific
@@ -109,7 +134,7 @@ only the path:
 ```text
 mcp__codex__codex-reply:
   threadId: [saved reviewer threadId from Step 2]
-  # replies inherit the thread's model/effort (gpt-5.6-sol ultra)
+  # replies inherit the thread's model/effort (gpt-6-astra ultra)
   prompt: |
     Read the updated review brief at <absolute path to
     RESEARCH_REVIEW_ROUND_2.md>.
@@ -159,7 +184,8 @@ Update project memory/notes with key review conclusions.
 
 ## Key Rules
 
-- ALWAYS pin `model: gpt-5.6-sol` + `config: {"model_reasoning_effort": "ultra"}` for reviews (deep-audit tier; capability fallback per `reviewer-routing.md`, never below `xhigh`)
+- ALWAYS pin `model: gpt-6-astra` + `config: {"model_reasoning_effort": "ultra"}` for reviews (deep-audit tier; capability fallback per `reviewer-routing.md`, never below `xhigh`)
+- That pin is the **Codex** backend's. For `manual`, use the identity-bearing config from the Reviewer Calling Convention above; `model`, `sandbox` and `cwd` are Codex-only
 - Put comprehensive context in the review brief. Codex can read local files
   when you pass an absolute path; manual reviewers usually cannot, so attach or
   paste the same brief there.
@@ -189,3 +215,9 @@ Update project memory/notes with key review conclusions.
 ## Review Tracing
 
 After each reviewer call (`mcp__codex__codex`, `mcp__codex__codex-reply`, `mcp__manual_review__review`, or `mcp__manual_review__review_reply`), save the trace following `shared-references/review-tracing.md` (Policy C — forensic; never silently skip). Use `save_trace.sh` (resolved per the chain in `shared-references/integration-contract.md` §2) or write files directly to `.aris/traces/<skill>/<date>_run<NN>/`. Respect the `--- trace:` parameter (default: `full`).
+  A verdict-bearing manual response MUST begin with
+  `Reviewer-Model: <exact-model-id>` — pass the model THIS session is actually
+  running as in `executor_model`. Missing, unknown, or same-family identity
+  cannot acquit; emit `REVIEW_UNAVAILABLE` rather than guessing. If the executor
+  model cannot be named, manual review's cross-family claim is unprovable — say
+  so in the report instead of asserting it.

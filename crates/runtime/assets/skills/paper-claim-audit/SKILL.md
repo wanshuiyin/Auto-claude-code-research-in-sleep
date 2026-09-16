@@ -84,13 +84,13 @@ NARRATIVE_REPORT.md, PAPER_PLAN.md, findings.md
 Any .md file that is an executor-written summary
 ```
 
-### Step 2: Fresh Reviewer Audit (GPT-5.6-Sol — NEW thread, no reply)
+### Step 2: Fresh Reviewer Audit (GPT-6-Astra — NEW thread, no reply)
 
 **CRITICAL: Use `mcp__codex__codex` (new thread), NEVER `mcp__codex__codex-reply`.** Every run must be a fresh context.
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "ultra"}
   prompt: |
     You are a paper-to-evidence auditor. You have ZERO prior context about
@@ -171,7 +171,7 @@ Parse the reviewer's response and write `PAPER_CLAIM_AUDIT.md`:
 # Paper Claim Audit Report
 
 **Date**: [today]
-**Auditor**: GPT-5.6-Sol ultra (fresh zero-context thread)
+**Auditor**: GPT-6-Astra ultra (fresh zero-context thread)
 **Paper**: [paper title from tex]
 
 ## Overall Verdict: [PASS | WARN | FAIL]
@@ -292,7 +292,7 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/paper-claim-audit/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_model":   "<resolved — the model that actually ran (target: gpt-6-astra)>",
   "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at":     "<UTC ISO-8601>",
   "details": {

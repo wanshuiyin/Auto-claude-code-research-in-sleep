@@ -36,12 +36,16 @@ never silently apply:
 1. **The human named THIS patch.** Apply only patches the user listed (`/meta-apply 1,3`
    or `all`); default to applying nothing.
 2. **Fresh cross-model jury PASS, obtained now.** Run `mcp__codex__codex` (fresh thread,
-   NOT codex-reply; `model: gpt-5.6-sol`, `config: {"model_reasoning_effort": "ultra"}`, `sandbox: read-only`,
+   NOT codex-reply; `model: gpt-6-astra`, `config: {"model_reasoning_effort": "ultra"}`, `sandbox: read-only`,
    paths-only per [`reviewer-independence.md`](../shared-references/reviewer-independence.md))
    on the staged `.diff` + its target. Ask: *does this change improve the harness without
-   regressions; PASS or KILL + one-line reason.* **KILL ⇒ refuse.** The human cannot
-   override a KILL — they may only pick among jury-PASSED survivors. (A loop can DRIVE;
-   only the cross-model jury can ACQUIT.)
+   regressions; PASS or KILL + one-line reason.* Include the scope-limits block from
+   [`review-scope-limits.md`](../shared-references/review-scope-limits.md) in that prompt:
+   this jury judges ARIS's own mechanism, so an over-defensive KILL permanently blocks a
+   good patch. Note the block bans *proposing new* hash binding — it is not a reason to
+   KILL a patch that touches the existing provenance stamp. **KILL ⇒ refuse.** The human
+   cannot override a KILL — they may only pick among jury-PASSED survivors. (A loop can
+   DRIVE; only the cross-model jury can ACQUIT.)
 3. **Author ≠ reviewer family.** The author is the producer's executor model; the reviewer
    is the codex model that just judged it. Run `provenance.py assert_cross_family` — if it
    raises (same family / unknown), refuse. (Here it always holds: producer=Claude,

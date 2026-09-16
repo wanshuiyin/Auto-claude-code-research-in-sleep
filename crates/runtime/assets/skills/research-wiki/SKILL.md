@@ -454,6 +454,7 @@ The system suggests but does not auto-trigger. User decides.
 - **query_pack.md is hard-budgeted** at 8000 chars. Deterministic generation, not open-ended summarization.
 - **Append to log.md for every mutation.** The log is the audit trail.
 - **Reviewer independence applies.** When the wiki is read by cross-model review skills, pass file paths only — do not summarize wiki content for the reviewer.
+- **The wiki is UTF-8.** All wiki files are read and written as UTF-8 so a `research-wiki/` stays portable across platforms and collaborators. A wiki created by an older ARIS on a non-UTF-8 locale (e.g. cp936 on Chinese Windows) must be converted to UTF-8 once — back it up first; the helper reports the offending file by name instead of guessing.
 
 ## Acknowledgements
 

@@ -13,7 +13,7 @@ This is the most critical skill in the patent pipeline. Claims define the legal 
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.6-sol` — External examiner for claim quality review
+- `REVIEWER_MODEL = gpt-6-astra` — External examiner for claim quality review
 - `MAX_CLAIM_REVISION_ROUNDS = 3` — Maximum revision iterations
 - `CLAIM_STYLE = "auto"` — `US` (Jepson or open), `EP` (two-part mandatory), `CN` (two-part), `auto` (detect from jurisdiction)
 - `MIN_INDEPENDENT_CLAIMS = 2` — Typically method + system. For utility model (实用新型): apparatus/device only, NO method claims.
@@ -136,7 +136,7 @@ Call `REVIEWER_MODEL` via `mcp__codex__codex` with xhigh reasoning:
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are a senior patent examiner at the [USPTO/CNIPA/EPO].

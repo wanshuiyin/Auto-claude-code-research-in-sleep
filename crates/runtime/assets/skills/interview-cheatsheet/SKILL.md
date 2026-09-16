@@ -1,7 +1,7 @@
 ---
 name: interview-cheatsheet
 description: "Generate a long-form Chinese interview-prep cheat sheet on a specific ML/LLM topic — formulas with derivations, from-scratch PyTorch code, comparison tables, and 25 高频面试题 (L1 必会 / L2 进阶 / L3 顶级 lab). Use when the user says '写面试 cheat sheet', '写一份 X 教程', '帮我准备 Y 面试题', '出一份 X 速查', or wants a 600-1000 line Chinese tutorial on a specific ML topic."
-argument-hint: <topic> [--effort balanced|max] [--byline "Name (姓名), Affiliation"] [--commit false]
+argument-hint: '<topic> [--effort balanced|max] [--byline "Name (姓名), Affiliation"] [--commit false]'
 allowed-tools: Bash(*), Read, Write, Edit, mcp__codex__codex
 ---
 
@@ -74,9 +74,9 @@ If the topic is too broad to fit in one cheat sheet, **stop and ask the user to 
 
 Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide. Length target: 600 lines (balanced) or 1000 lines (max), ±20%.
 
-### Step 3 — Cross-model math/code review (codex gpt-5.6-sol xhigh, FRESH thread)
+### Step 3 — Cross-model math/code review (codex gpt-6-astra xhigh, FRESH thread)
 
-Invoke `mcp__codex__codex` with `model: gpt-5.6-sol`, `config: {model_reasoning_effort: xhigh}`, `sandbox: read-only`, fresh thread (never `codex-reply`).
+Invoke `mcp__codex__codex` with `model: gpt-6-astra`, `config: {model_reasoning_effort: xhigh}`, `sandbox: read-only`, fresh thread (never `codex-reply`).
 
 Reviewer prompt:
 
@@ -209,7 +209,7 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 
 | Invariant | How it's enforced |
 |---|---|
-| Executor != reviewer family | Claude drafts; gpt-5.6-sol reviews (math/code stage); gpt-5.6-sol reviews again (render stage) |
+| Executor != reviewer family | Claude drafts; gpt-6-astra reviews (math/code stage); gpt-6-astra reviews again (render stage) |
 | Fresh thread per reviewer call | Step 3 + render's own gate both use `mcp__codex__codex` not `codex-reply` |
 | Codex reasoning = xhigh | Hardcoded in Step 3 reviewer config |
 | Personal info redaction | Both math/code reviewer and render reviewer check; banlist in style guide |

@@ -630,6 +630,78 @@ mod tests {
         );
     }
 
+    /// v0.4.25: the three helpers added to the whitelist must actually RUN
+    /// from the extracted cache with nothing else present (no main checkout,
+    /// no ARIS_REPO). `review_gate.py --native-evidence` forces its lazy
+    /// sibling import of `copilot_native_evidence.py`; if that import failed
+    /// the gate would answer "copilot_native_evidence.py is unavailable
+    /// beside review_gate.py" — the exact failure a CLI-only user would hit.
+    #[test]
+    fn synced_helpers_run_from_extracted_cache() {
+        let Ok(python) = std::process::Command::new("python3").arg("--version").output() else {
+            eprintln!("python3 not on PATH; skipping");
+            return;
+        };
+        if !python.status.success() {
+            eprintln!("python3 unusable; skipping");
+            return;
+        }
+        let tmp = std::env::temp_dir().join(format!("aris-test-{}", rand_suffix()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        try_extract_to(&tmp).expect("bundle extracts");
+        let tools = tmp.join("tools");
+        for helper in ["review_gate.py", "copilot_native_evidence.py", "idea_discovery_gate.py"] {
+            assert!(tools.join(helper).is_file(), "{helper} missing from the extracted cache");
+        }
+
+        // A plain codex round through the transition table.
+        let plain = std::process::Command::new("python3")
+            .arg(tools.join("review_gate.py"))
+            .args(["--round-backend", "codex", "--score", "9", "--verdict", "ready"])
+            .env_remove("ARIS_REPO")
+            .current_dir(&tmp)
+            .output()
+            .expect("run review_gate.py");
+        let stdout = String::from_utf8_lossy(&plain.stdout);
+        assert!(plain.status.success(), "review_gate.py failed: {stdout} {}", String::from_utf8_lossy(&plain.stderr));
+        assert!(stdout.contains("\"decision\": \"stop\""), "unexpected transition: {stdout}");
+
+        // The lazy sibling import: a missing evidence file must be reported as
+        // such, never as an unavailable sibling module.
+        let native = std::process::Command::new("python3")
+            .arg(tools.join("review_gate.py"))
+            .args([
+                "--round-backend",
+                "copilot-native",
+                "--score",
+                "9",
+                "--verdict",
+                "ready",
+                "--native-evidence",
+            ])
+            .arg(tmp.join("no-such-evidence.json"))
+            .env_remove("ARIS_REPO")
+            .current_dir(&tmp)
+            .output()
+            .expect("run review_gate.py with native evidence");
+        let stdout = String::from_utf8_lossy(&native.stdout);
+        assert!(native.status.success(), "{stdout} {}", String::from_utf8_lossy(&native.stderr));
+        assert!(
+            !stdout.contains("is unavailable beside review_gate.py"),
+            "sibling import of copilot_native_evidence.py failed: {stdout}"
+        );
+        assert!(stdout.contains("review_unavailable"), "unexpected: {stdout}");
+
+        let idea = std::process::Command::new("python3")
+            .arg(tools.join("idea_discovery_gate.py"))
+            .arg("--help")
+            .current_dir(&tmp)
+            .output()
+            .expect("run idea_discovery_gate.py");
+        assert!(idea.status.success(), "{}", String::from_utf8_lossy(&idea.stderr));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
     /// v0.4.22: the vendored posterly MIT license text must ship with the
     /// vendored paper-poster-html scripts (its NOTICE.md points at this
     /// path). Guards the build.rs ALLOWED_EXTS "txt" addition — without it
