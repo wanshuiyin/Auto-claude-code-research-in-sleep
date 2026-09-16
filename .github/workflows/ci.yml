@@ -163,3 +163,12 @@ jobs:
           cargo test -p aris-cli --bin aris classify_codex -- --test-threads=1 2>&1 | tee classify_codex.log
           # Non-zero-executed guard: require "test result: ok." with >=1 passed.
           grep -E "test result: ok\. [1-9][0-9]* passed" classify_codex.log
+
+      # v0.4.25 (#430): the Windows paste-burst reducer / kill switch / pending
+      # queue tests are pure and must also pass on the platform they exist for.
+      - name: cargo test (windows-targeted, input editor / #430)
+        shell: bash
+        run: |
+          cargo test -p aris-cli --bin aris input::tests:: -- --test-threads=1 2>&1 | tee input_tests.log
+          # Non-zero-executed guard: require "test result: ok." with >=1 passed.
+          grep -E "test result: ok\. [1-9][0-9]* passed" input_tests.log

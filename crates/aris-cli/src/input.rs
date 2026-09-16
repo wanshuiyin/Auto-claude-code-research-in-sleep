@@ -157,6 +157,42 @@ pub(crate) fn merge_paste_burst(events: &[Event]) -> BurstMerge {
     merged
 }
 
+/// What an Enter keypress means once the events queued behind it are known.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EnterDecision {
+    /// Plain Enter: submit the line.
+    Submit,
+    /// Text and/or edit keys followed the Enter (or the Enter itself was
+    /// replayed from a burst): it is a pasted newline — insert, stay in the
+    /// editor, replay the leftover events afterwards.
+    InsertAsNewline,
+    /// A Ctrl+C was queued right behind the Enter: cancel the input now.
+    CancelInput,
+    /// A Ctrl+D was queued right behind the Enter: leave the editor now.
+    ExitEditor,
+}
+
+/// Pure decision for the Enter arm (v0.4.25 #430). Cancellation queued behind
+/// the Enter wins over everything so it can never be deferred until after a
+/// submitted turn; anything else left over keeps the editor active.
+pub(crate) fn enter_decision(from_pending: bool, merged: &BurstMerge) -> EnterDecision {
+    match merged.leftover.first() {
+        Some(Event::Key(KeyEvent {
+            code: KeyCode::Char('c'),
+            modifiers: KeyModifiers::CONTROL,
+            ..
+        })) => EnterDecision::CancelInput,
+        Some(Event::Key(KeyEvent {
+            code: KeyCode::Char('d'),
+            modifiers: KeyModifiers::CONTROL,
+            ..
+        })) => EnterDecision::ExitEditor,
+        Some(_) => EnterDecision::InsertAsNewline,
+        None if from_pending || !merged.inserted.is_empty() => EnterDecision::InsertAsNewline,
+        None => EnterDecision::Submit,
+    }
+}
+
 /// Kill switch for the paste-burst heuristic: only an exact `0` disables it
 /// (`ARIS_PASTE_BURST=0` restores the pre-v0.4.25 behaviour).
 fn paste_burst_enabled_from(value: Option<&str>) -> bool {
@@ -401,42 +437,42 @@ impl LineEditor {
                         collect_queued_console_events()?
                     };
                     let merged = merge_paste_burst(&burst);
-                    if from_pending || !merged.inserted.is_empty() {
-                        let mut inserted = vec![' '];
-                        inserted.extend(merged.inserted);
-                        let inserted_len = inserted.len();
-                        buf.splice(cursor_pos..cursor_pos, inserted);
-                        cursor_pos += inserted_len;
-                        sel = 0;
-                        history_idx = None;
-                        saved_buf = None;
-                        self.pending.extend(merged.leftover);
-                    } else {
-                        // Only releases / resizes (or nothing) followed the
-                        // Enter: a normal submit. Keep any control event that
-                        // ended the (empty) burst for the next read.
-                        self.pending.extend(merged.leftover);
-                        if !matches.is_empty() {
-                            let (name, _) = &self.completions[matches[sel]];
-                            let result = name.clone();
-                            self.accept_and_clear(&mut stdout, &mut render, &result)?;
-                            return Ok(ReadOutcome::Submit(result));
+                    match enter_decision(from_pending, &merged) {
+                        decision @ (EnterDecision::CancelInput | EnterDecision::ExitEditor) => {
+                            // Cancellation queued right behind the Enter: the
+                            // user is cancelling, not submitting — and the rest
+                            // of the queue goes with it.
+                            let exit = decision == EnterDecision::ExitEditor || buf.is_empty();
+                            self.pending.clear();
+                            self.clear_and_restore(&mut stdout, &mut render, &buf, cursor_pos)?;
+                            return Ok(if exit {
+                                ReadOutcome::Exit
+                            } else {
+                                ReadOutcome::Cancel
+                            });
                         }
-                        self.accept_and_clear(&mut stdout, &mut render, &line)?;
-                        return Ok(ReadOutcome::Submit(line));
+                        EnterDecision::InsertAsNewline => {
+                            let mut inserted = vec![' '];
+                            inserted.extend(merged.inserted);
+                            let inserted_len = inserted.len();
+                            buf.splice(cursor_pos..cursor_pos, inserted);
+                            cursor_pos += inserted_len;
+                            sel = 0;
+                            history_idx = None;
+                            saved_buf = None;
+                            self.pending.extend(merged.leftover);
+                        }
+                        EnterDecision::Submit => {
+                            if !matches.is_empty() {
+                                let (name, _) = &self.completions[matches[sel]];
+                                let result = name.clone();
+                                self.accept_and_clear(&mut stdout, &mut render, &result)?;
+                                return Ok(ReadOutcome::Submit(result));
+                            }
+                            self.accept_and_clear(&mut stdout, &mut render, &line)?;
+                            return Ok(ReadOutcome::Submit(line));
+                        }
                     }
-                }
-
-                // ── (unreachable placeholder kept for diff locality) ────────
-                (KeyCode::Enter, KeyModifiers::ALT) if false => {
-                    if !matches.is_empty() {
-                        let (name, _) = &self.completions[matches[sel]];
-                        let result = name.clone();
-                        self.accept_and_clear(&mut stdout, &mut render, &result)?;
-                        return Ok(ReadOutcome::Submit(result));
-                    }
-                    self.accept_and_clear(&mut stdout, &mut render, &line)?;
-                    return Ok(ReadOutcome::Submit(line));
                 }
 
                 // ── Tab: accept first/selected match ───────────────────────
@@ -1713,6 +1749,32 @@ mod tests {
         assert!(!super::paste_burst_collection_active(true, Some("0")));
         // Unix keeps bracketed paste; the heuristic never runs there
         assert!(!super::paste_burst_collection_active(false, None));
+    }
+
+    #[test]
+    fn enter_decision_cancels_before_it_ever_submits() {
+        use super::{enter_decision, merge_paste_burst, EnterDecision};
+        // Ctrl+C is the FIRST thing queued behind the Enter → cancel now,
+        // never "submit, then exit later from a saved Ctrl+C".
+        let merged = merge_paste_burst(&[key(KeyCode::Char('c'), KeyModifiers::CONTROL)]);
+        assert_eq!(enter_decision(false, &merged), EnterDecision::CancelInput);
+        let merged = merge_paste_burst(&[key(KeyCode::Char('d'), KeyModifiers::CONTROL)]);
+        assert_eq!(enter_decision(false, &merged), EnterDecision::ExitEditor);
+        // pasted text then Ctrl+C: nothing is submitted — the burst is
+        // discarded with the line and the editor cancels immediately
+        let mut events = windows_paste_events("ab\n");
+        events.push(key(KeyCode::Char('c'), KeyModifiers::CONTROL));
+        let merged = merge_paste_burst(&events);
+        assert_eq!(enter_decision(false, &merged), EnterDecision::CancelInput);
+        // an edit key behind the Enter keeps the editor active
+        let merged = merge_paste_burst(&[key(KeyCode::Left, KeyModifiers::NONE)]);
+        assert_eq!(enter_decision(false, &merged), EnterDecision::InsertAsNewline);
+        // pasted lines → insert; an Enter replayed from a burst → insert
+        let merged = merge_paste_burst(&windows_paste_events("second line"));
+        assert_eq!(enter_decision(false, &merged), EnterDecision::InsertAsNewline);
+        assert_eq!(enter_decision(true, &super::BurstMerge::default()), EnterDecision::InsertAsNewline);
+        // nothing (or only releases) behind the Enter → a plain submit
+        assert_eq!(enter_decision(false, &super::BurstMerge::default()), EnterDecision::Submit);
     }
 
     #[test]
