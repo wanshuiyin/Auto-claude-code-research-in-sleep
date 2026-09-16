@@ -290,7 +290,7 @@ def test_strict_manual_reviewer_identity_gate():
         "Score: 7/10", strict_openai
     )
     assert "different model family" in srv.validate_reviewer_identity(
-        "Reviewer-Model: gpt-5.6-sol\n\nScore: 7/10", strict_openai
+        "Reviewer-Model: gpt-6-astra\n\nScore: 7/10", strict_openai
     )
     assert "model family" in srv.validate_reviewer_identity(
         "Reviewer-Model: mystery-model\n\nScore: 7/10", strict_openai

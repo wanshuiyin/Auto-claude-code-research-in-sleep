@@ -22,24 +22,14 @@ claude --version   # 验证安装
 
 Codex CLI 是 OpenAI 的 CLI 工具，ARIS 通过它调用 GPT 作为跨模型审稿人。安装方式见 [Codex CLI 官方文档](https://developers.openai.com/codex)。
 
-安装完成后，先做一次性 ChatGPT 登录（浏览器流程），再把 Codex CLI 注册成 Claude Code 的 MCP server：
+安装完成后，先做一次性 ChatGPT 登录（浏览器流程）：
 
 ```bash
 codex --version   # 验证安装
 codex login       # 一次性 ChatGPT 登录（已登录可跳过）
-claude mcp add codex -s user -- codex mcp-server
 ```
 
-- `codex`（add 后面）— 注册名称。ARIS 的 skill 硬编码了这个名字，**不要改**
-- `-s user` — 全局生效，所有项目都能用
-- `codex mcp-server` — Codex CLI 内置的子命令，启动 MCP 服务模式
-
-注册后需要**重启 Claude Code** 才会生效。验证：
-
-```bash
-claude mcp list | grep codex
-# 应显示: codex: codex mcp-server - ✓ Connected
-```
+让 Claude Code 能调用 Codex 的 MCP 注册在 [Step 3.1](#31-安装-skills) 的最后一步——它需要 ARIS 的 clone，这时还没有。
 
 > **⚠️ 重要提示**：注册或修改任何 MCP server 后，**必须重启 Claude Code** 才能生效。MCP 配置在启动时加载。如需为其他模型组合注册额外的 MCP server，请参见 [3.2 注册 MCP 服务（可选）](#32-注册-mcp-服务可选)。
 
@@ -91,6 +81,21 @@ bash ~/aris_repo/tools/install_aris.sh --skills paper-writing         # 按 skil
 # 其他常用：
 bash ~/aris_repo/tools/install_aris.sh --dry-run        # 预览安装计划，不实际执行
 bash ~/aris_repo/tools/install_aris.sh --uninstall      # 按安装清单卸载，不影响其他文件
+
+# 3. 在 Claude Code 里注册 ARIS 的 Codex MCP server（一次，全局）：
+claude mcp remove codex -s user 2>/dev/null   # 有旧的 `codex mcp-server` 注册就先删掉
+claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"
+```
+
+- `codex`（add 后面）— 注册名称。ARIS 的 skill 硬编码了这个名字，**不要改**
+- `-s user` — 全局生效，所有项目都能用
+- `python3 .../mcp-servers/codex-exec/server.py` — ARIS 自带的 Codex MCP server，底下跑的是 `codex exec`，写你 clone 的绝对路径。codex-cli 0.154 删掉了内置的 `codex mcp-server`；0.153 及更早版本上这个桥接同样能用，不管什么版本都注册它
+
+注册后重启 Claude Code，然后验证：
+
+```bash
+claude mcp list | grep codex
+# 应显示: codex: python3 .../codex-exec/server.py - ✓ Connected
 ```
 
 脚本会显示安装计划并要求确认（输入 `y`），详见 [`install_aris.sh`](tools/install_aris.sh)：
@@ -122,7 +127,7 @@ bash ~/aris_repo/tools/install_aris.sh
 
 | MCP 服务 | 注册到 | 适用场景 | 注册方式 |
 |---|---|---|---|
-| `codex` | Claude Code | 默认配置（Claude + GPT 审稿） | `claude mcp add codex -s user -- codex mcp-server`（Step 1.2 已完成） |
+| `codex` | Claude Code | 默认配置（Claude + GPT 审稿） | `claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"`（Step 3.1 已完成） |
 | `claude-review` | Codex CLI | 使用 Codex 作为执行者、Claude 作为审稿人 | `codex mcp add claude-review -- python3 ~/.codex/mcp-servers/claude-review/server.py`（详见 `mcp-servers/claude-review/README.md`） |
 | `gemini-review` | Codex CLI | 使用 Codex 作为执行者、Gemini 作为审稿人 | `codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api -- python3 ~/.codex/mcp-servers/gemini-review/server.py`（详见 `mcp-servers/gemini-review/README.md`） |
 | `llm-chat` | Claude Code | 使用任意 OpenAI 兼容 API 作为审稿人 | `claude mcp add llm-chat -s user -- python3 /path/to/aris_repo/mcp-servers/llm-chat/server.py`（详见 `docs/LLM_API_MIX_MATCH_GUIDE.md`） |

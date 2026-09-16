@@ -40,7 +40,7 @@ Workflow 4:   rebuttal (post-submission external reviews)
 
 - **VENUE = `ICML`** — Default venue. Override if needed.
 - **RESPONSE_MODE = `TEXT_ONLY`** — v1 default.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Used via Codex MCP for internal stress-testing.
+- **REVIEWER_MODEL = `gpt-6-astra`** — Used via Codex MCP for internal stress-testing.
 - **REVIEWER_BACKEND = `codex`** — Default: Codex xhigh stress tester. Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and fall back to Codex xhigh. See `../shared-references/reviewer-routing.md`.
 - **MAX_INTERNAL_DRAFT_ROUNDS = 2** — draft → lint → revise.
 - **MAX_STRESS_TEST_ROUNDS = 1** — One Codex MCP critique round.
@@ -216,7 +216,7 @@ Run all lints:
 
 ```
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh
   message: |
     Stress-test this rebuttal draft:

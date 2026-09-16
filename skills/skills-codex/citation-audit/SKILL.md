@@ -43,7 +43,7 @@ The dangerous citation problems are **not** wildly fake citations — those are 
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Fresh Codex reviewer with web access; same-family provisional in the base mirror.
+- **REVIEWER_MODEL = `gpt-6-astra`** — Fresh Codex reviewer with web access; same-family provisional in the base mirror.
 - **CONTEXT_POLICY = `fresh`** — Each audit run uses a new reviewer thread (REVIEWER_BIAS_GUARD). Continue only with `send_input` when explicitly resuming the same audit.
 - **WEB_SEARCH = required** — The reviewer must perform real web/DBLP/arXiv lookups, not pattern-match from memory.
 - **OUTPUT = `CITATION_AUDIT.md`** — Human-readable per-entry verdict report.
@@ -84,7 +84,7 @@ For each **cited** bib entry — i.e., each key in `cited_keys` with at least on
 
 ```
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh
   message: |
     You are auditing a bibliographic entry. Use web/DBLP/arXiv search.
@@ -419,9 +419,9 @@ The artifact conforms to the schema in `shared-references/assurance-contract.md`
   },
   "trace_path":       ".aris/traces/citation-audit/<date>_run<NN>/",
   "thread_id":        "<codex mcp thread id>",
-  "executor_model":   "codex-gpt-5.6-sol",
+  "executor_model":   "codex-gpt-6-astra",
   "executor_family":  "openai",
-  "reviewer_model":   "gpt-5.6-sol",
+  "reviewer_model":   "gpt-6-astra",
   "reviewer_family":  "openai",
   "review_independence": "same-family",
   "acceptance_status": "provisional",

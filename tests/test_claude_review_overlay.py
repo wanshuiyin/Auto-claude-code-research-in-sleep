@@ -20,7 +20,7 @@ FORBIDDEN = [
     "mcp__codex__",           # codex MCP tools
     "spawn_agent",            # codex-native reviewer spawn
     "send_input",             # codex-native follow-up
-    "gpt-5.6-sol",            # OpenAI model pin (any case)
+    "gpt-6-astra",            # OpenAI model pin (any case)
     "gpt-5.5",                # incl. old default; gpt-5.5-pro Oracle refs are fine -> checked below
     "model_reasoning_effort", # OpenAI effort knob
     "reasoning_effort",       # spawn-form effort knob

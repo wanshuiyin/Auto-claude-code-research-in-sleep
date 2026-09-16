@@ -104,7 +104,7 @@ human-readable Markdown sibling). The JSON must contain at minimum:
   "thread_id":  "019dae73-fc12-4ab8-...",
   "executor_model": "claude-opus-4-8",
   "executor_family": "anthropic",
-  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_model": "gpt-6-astra",
   "reviewer_family": "openai",
   "review_independence": "cross-family",
   "acceptance_status": "accepted",

@@ -36,7 +36,7 @@ Audit target: **$ARGUMENTS**
   deterministic-only run working, otherwise delete it whenever convenient.
 - **NO REVIEWER KNOBS.** This launcher exposes no reviewer model/effort
   parameters and never maps ARIS `— effort:` onto upstream settings. The
-  pinned upstream runs exactly what it pins (`gpt-5.6-sol` + `xhigh`, its own
+  pinned upstream runs exactly what it pins (`gpt-6-astra` + `xhigh`, its own
   design decision). Overriding upstream review policy from a launcher would
   create a second, unauditable configuration surface.
 - **GATE_HELPER = `forensics_gate.py`** — resolved via the canonical chain

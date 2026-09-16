@@ -35,7 +35,7 @@ Existing skills cover adjacent territory but none of this exact composition: `/r
 
 ## Constants
 
-- **REVIEWER_MODEL** = inherits from `/auto-paper-improvement-loop`'s default (`gpt-5.6-sol` via Codex MCP) unless the user passes `— reviewer-model: gpt-5.4` (legacy) or another OpenAI model. Codex reasoning effort is fixed at `xhigh` for all reviewer calls per the existing skill convention.
+- **REVIEWER_MODEL** = inherits from `/auto-paper-improvement-loop`'s default (`gpt-6-astra` via Codex MCP) unless the user passes `— reviewer-model: gpt-5.4` (legacy) or another OpenAI model. Codex reasoning effort is fixed at `xhigh` for all reviewer calls per the existing skill convention.
 - **ROUNDS** = 2 (default; matches `/auto-paper-improvement-loop`'s diminishing-returns line). A 3rd round only fires if Phase 2 reports non-convergence AND the user explicitly approves at the round-2 checkpoint.
 - **EFFORT** = `max` (default for resubmit; resubmit is high-stakes). The user can override with `— effort: balanced` if time is extremely tight.
 - **EDIT_WHITELIST_PATH** = `<paper-base-dir>/../<NewVenue>/.aris/edit_whitelist.yaml` (auto-generated in Phase 0; user can override with a custom path).
@@ -52,7 +52,7 @@ Three mandatory inputs:
 
 Optional:
 
-- **`— reviewer-model: gpt-5.4`** — override the default reviewer (`gpt-5.6-sol`); use this for legacy reproducibility or to consume the older quota tier.
+- **`— reviewer-model: gpt-5.4`** — override the default reviewer (`gpt-6-astra`); use this for legacy reproducibility or to consume the older quota tier.
 - **`— rounds: <int>`** — override default 2.
 - **`— assurance: draft`** — relax MANDATORY gates (default `submission`).
 - **`— effort: balanced`** — relax `max` if time is critical.
@@ -203,7 +203,7 @@ The load-bearing phase. `/auto-paper-improvement-loop` is invoked with **two saf
    rationale: "Resubmit mode: text-only microedits, paper structure frozen by user constraint."
    ```
 
-2. **Per-round diff gate via auto-loop's HUMAN_CHECKPOINT** — `/auto-paper-improvement-loop` does not accept `--rounds`, `--reviewer-model`, or `--resume-after-round-checkpoint` flags (those are not in its CLI). It uses the `MAX_ROUNDS = 2` constant and `REVIEWER_MODEL = gpt-5.6-sol` defaults, with an existing `HUMAN_CHECKPOINT` mechanism for round gating. Resubmit-pipeline therefore invokes the loop **once** with `HUMAN_CHECKPOINT = true` so each round pauses for the orchestrator to inspect the diff:
+2. **Per-round diff gate via auto-loop's HUMAN_CHECKPOINT** — `/auto-paper-improvement-loop` does not accept `--rounds`, `--reviewer-model`, or `--resume-after-round-checkpoint` flags (those are not in its CLI). It uses the `MAX_ROUNDS = 2` constant and `REVIEWER_MODEL = gpt-6-astra` defaults, with an existing `HUMAN_CHECKPOINT` mechanism for round gating. Resubmit-pipeline therefore invokes the loop **once** with `HUMAN_CHECKPOINT = true` so each round pauses for the orchestrator to inspect the diff:
 
    ```bash
    # Snapshot the new venue dir BEFORE auto-loop runs (for diff baseline,
@@ -268,7 +268,7 @@ The load-bearing phase. `/auto-paper-improvement-loop` is invoked with **two saf
 
 `/kill-argument $NEW_VENUE_DIR/`
 
-**No `--difficulty` parameter exists** in `/kill-argument` — earlier proposal drafts referenced a non-existent flag. The skill always uses Codex `gpt-5.6-sol` + `ultra` (deep-audit tier) and runs the standard 2-thread Attack-Adjudication protocol; the `assurance` level (set to `submission` for resubmit) determines whether `FAIL` blocks the final report.
+**No `--difficulty` parameter exists** in `/kill-argument` — earlier proposal drafts referenced a non-existent flag. The skill always uses Codex `gpt-6-astra` + `ultra` (deep-audit tier) and runs the standard 2-thread Attack-Adjudication protocol; the `assurance` level (set to `submission` for resubmit) determines whether `FAIL` blocks the final report.
 
 The kill-argument output is **residual-risk reporting**, not auto-rewrite directives. A hostile reviewer may demand framework changes the user banned; the adjudication step exists to **triage** which findings are text-fixable vs need user escalation.
 

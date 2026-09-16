@@ -17,7 +17,7 @@ def test_model_family_mapping():
     assert pv.model_family("claude-opus-4-8") == "anthropic"
     assert pv.model_family("Sonnet") == "anthropic"
     assert pv.model_family("gpt-5.5") == "openai"
-    assert pv.model_family("gpt-5.6-sol") == "openai"     # current default reviewer (2026-07)
+    assert pv.model_family("gpt-6-astra") == "openai"     # current default reviewer (2026-07)
     assert pv.model_family("codex") == "openai"
     # CRITICAL: oracle-pro routes to GPT-Pro → it is the OPENAI family, not its own.
     assert pv.model_family("oracle-pro") == "openai"
@@ -214,7 +214,7 @@ def test_spoofed_sidecar_status_cannot_authorize_curation():
     with tempfile.TemporaryDirectory() as d:
         art = Path(d) / "skill.md"
         art.write_text("x\n", encoding="utf-8")
-        pv.stamp_provisional(str(art), "codex-gpt-5.6-sol", "gpt-5.6-sol", verdict_id="agent:1")
+        pv.stamp_provisional(str(art), "codex-gpt-6-astra", "gpt-6-astra", verdict_id="agent:1")
         sc = Path(str(art) + ".provenance.json")
         rec = _json.loads(sc.read_text())
         # attack 1: flip the status field to accepted
@@ -236,7 +236,7 @@ def test_stale_stamp_after_edit_is_not_curatable():
     with tempfile.TemporaryDirectory() as d:
         art = Path(d) / "skill.md"
         art.write_text("x\n", encoding="utf-8")
-        pv.stamp(str(art), "claude-opus-4-8", "gpt-5.6-sol", verdict_id="t1")
+        pv.stamp(str(art), "claude-opus-4-8", "gpt-6-astra", verdict_id="t1")
         assert pv.is_auto_curatable(str(art)) is True
         art.write_text("x edited after acceptance\n", encoding="utf-8")
         assert pv.is_auto_curatable(str(art)) is False   # hash no longer matches
@@ -246,9 +246,9 @@ def test_provisional_cannot_overwrite_accepted():
     with tempfile.TemporaryDirectory() as d:
         art = Path(d) / "skill.md"
         art.write_text("x\n", encoding="utf-8")
-        pv.stamp(str(art), "claude-opus-4-8", "gpt-5.6-sol", verdict_id="t1")
+        pv.stamp(str(art), "claude-opus-4-8", "gpt-6-astra", verdict_id="t1")
         try:
-            pv.stamp_provisional(str(art), "codex-gpt-5.6-sol", "gpt-5.6-sol", verdict_id="agent:2")
+            pv.stamp_provisional(str(art), "codex-gpt-6-astra", "gpt-6-astra", verdict_id="agent:2")
             assert False, "provisional must not silently replace accepted"
         except ValueError:
             pass
@@ -266,7 +266,7 @@ def test_legitimate_deterministic_stamp_still_curatable():
         import json as _json
         sc = Path(str(art) + ".provenance.json")
         rec = _json.loads(sc.read_text())
-        rec["reviewer_model"] = "gpt-5.6-sol"
+        rec["reviewer_model"] = "gpt-6-astra"
         rec["review_independence"] = "deterministic"
         sc.write_text(_json.dumps(rec))
         assert pv.is_auto_curatable(str(art)) is False

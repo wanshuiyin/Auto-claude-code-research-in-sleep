@@ -62,8 +62,8 @@ codex login
 2) Configure MCP in Trae  
 Go to `Settings → MCP → Manual Add`, then add:
 - Name: `codex`
-- Command: `codex`
-- Args: `mcp-server`
+- Command: `python3`
+- Args: `/ABSOLUTE/PATH/TO/aris_repo/mcp-servers/codex-exec/server.py` (ARIS's bridge over `codex exec`; codex-cli 0.154 removed `codex mcp-server`)
 
 If your Trae version supports workspace MCP config files, use:
 
@@ -71,8 +71,8 @@ If your Trae version supports workspace MCP config files, use:
 {
   "mcpServers": {
     "codex": {
-      "command": "codex",
-      "args": ["mcp-server"]
+      "command": "python3",
+      "args": ["/ABSOLUTE/PATH/TO/aris_repo/mcp-servers/codex-exec/server.py"]
     }
   }
 }
@@ -255,7 +255,7 @@ Each stage reads output files from the previous stage, so context can be passed 
 
 | ARIS MCP tool | Purpose | Required MCP server |
 |---|---|---|
-| `mcp__codex__codex` | Send review prompt to GPT-5.6-Sol | codex |
+| `mcp__codex__codex` | Send review prompt to GPT-6-Astra | codex |
 | `mcp__codex__codex-reply` | Continue review thread | codex |
 | `mcp__llm-chat__chat` | Send prompt to OpenAI-compatible models | llm-chat |
 

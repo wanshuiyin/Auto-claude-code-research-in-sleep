@@ -140,7 +140,7 @@ def start_run(root: str, run_id: str, phases: list[str], executor: Optional[str]
     """Create a run with ordered phases, all `pending` (idempotent: won't clobber).
 
     ``claude`` is the historical mainline executor default. Codex-native callers
-    must record ``--executor codex-gpt-5.6-sol`` (or their actual executor) so a
+    must record ``--executor codex-gpt-6-astra`` (or their actual executor) so a
     same-family review cannot be misclassified as independent acceptance.
     ``provisional_advances`` is the per-run policy that lets a same-family
     provisional verdict close a phase for RESUME purposes (Codex-native mirror:

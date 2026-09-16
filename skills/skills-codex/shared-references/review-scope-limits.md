@@ -62,7 +62,7 @@ default is strict — that code runs on a user's GPU box with their credentials.
 ## Why this exists
 
 Not a style preference. Measured over one day of real maintenance review
-(2026-08-10, ~10 rounds of gpt-5.6-sol at xhigh/ultra), every discarded proposal
+(2026-08-10, ~10 rounds of gpt-6-astra at xhigh/ultra), every discarded proposal
 fell in these categories: adding hash binding to a gate that already had four
 layers, adding a lint to mechanize a rule the corpus deliberately keeps as prose,
 adding a dual-spelling compatibility layer for what was a typo, and hardening a

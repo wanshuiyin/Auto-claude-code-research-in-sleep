@@ -47,6 +47,11 @@
 #                          (default: refuse)
 #   --clear-stale-lock     remove stale lock dir from a crashed prior run
 #                          (host+PID metadata is verified before removal)
+#   --no-agent-profiles    never put Copilot reviewer profiles into the
+#                          project's .github/agents/ (remembered in .aris/;
+#                          undo with --agent-profiles). Without either flag
+#                          the profiles are deployed only while
+#                          auto-review-loop is installed.
 #
 # Safety rules enforced:
 #   S1  Never delete a path that is not a symlink.
@@ -89,6 +94,8 @@ BLOCK_END="<!-- ARIS:END -->"
 SAFE_NAME_REGEX='^[A-Za-z0-9][A-Za-z0-9._-]*$'
 SUPPORT_NAMES=("shared-references")
 AGENT_PROFILES_SRC=".github/agents"  # Copilot agent profiles deployed alongside skills (F5)
+AGENT_PROFILES_OPT_OUT_NAME="agent-profiles-opt-out"  # #431: remembered --no-agent-profiles
+AGENT_PROFILES_FLAG=""  # "off" (--no-agent-profiles) | "on" (--agent-profiles) | "" (remembered choice)
 EXCLUDE_TOP_NAMES=("skills-codex" "skills-codex.bak")  # not skills, not symlinked
 
 # ─── Argument parsing ─────────────────────────────────────────────────────────
@@ -160,6 +167,8 @@ while [[ $# -gt 0 ]]; do
         --from-old)          FORWARDED_ARGS+=("$1"); FROM_OLD=true; CLAUDE_ONLY_FLAGS_USED+=("--from-old"); shift ;;
         --migrate-copy)      FORWARDED_ARGS+=("$1" "${2:?--migrate-copy requires keep-user|prefer-upstream}"); MIGRATE_COPY="$2"; CLAUDE_ONLY_FLAGS_USED+=("--migrate-copy"); shift 2 ;;
         --clear-stale-lock)  FORWARDED_ARGS+=("$1"); CLEAR_STALE_LOCK=true; shift ;;
+        --no-agent-profiles) FORWARDED_ARGS+=("$1"); AGENT_PROFILES_FLAG="off"; CLAUDE_ONLY_FLAGS_USED+=("--no-agent-profiles"); shift ;;
+        --agent-profiles)    FORWARDED_ARGS+=("$1"); AGENT_PROFILES_FLAG="on"; CLAUDE_ONLY_FLAGS_USED+=("--agent-profiles"); shift ;;
         --adopt-existing)    FORWARDED_ARGS+=("$1" "${2:?--adopt-existing requires NAME}"); ADOPT_NAMES+=("$2"); CLAUDE_ONLY_FLAGS_USED+=("--adopt-existing"); shift 2 ;;
         --replace-link)      FORWARDED_ARGS+=("$1" "${2:?--replace-link requires NAME}"); REPLACE_LINK_NAMES+=("$2"); shift 2 ;;
         --groups)            FORWARDED_ARGS+=("$1" "${2:?--groups requires A,B,...}"); SELECT_GROUPS="${SELECT_GROUPS:+$SELECT_GROUPS,}$2"; shift 2 ;;
@@ -646,6 +655,7 @@ PROJECT_ARIS_DIR="$PROJECT_PATH/$ARIS_DIR_NAME"
 MANIFEST_PATH="$PROJECT_ARIS_DIR/$MANIFEST_NAME"
 MANIFEST_PREV="$PROJECT_ARIS_DIR/$MANIFEST_PREV_NAME"
 AGENT_MANIFEST_PATH="$PROJECT_ARIS_DIR/$AGENT_MANIFEST_NAME"
+AGENT_PROFILES_OPT_OUT_PATH="$PROJECT_ARIS_DIR/$AGENT_PROFILES_OPT_OUT_NAME"
 LOCK_DIR="$PROJECT_ARIS_DIR/$LOCK_DIR_NAME"
 DOC_FILE="$PROJECT_PATH/$DOC_FILE_NAME"
 CATALOG_PATH="$ARIS_REPO/$CATALOG_REL"
@@ -1105,6 +1115,40 @@ remove_agent_profiles() {
     fi
 }
 
+# #431: the profiles only serve auto-review-loop's Copilot backend, and
+# .github/ is the user's namespace — so deploy them only while that skill is
+# installed, and let the user say no outright. The opt-out is remembered in
+# .aris/ so a later reconcile does not bring the links back.
+agent_profiles_wanted() {  # $1 = selected file
+    case "$AGENT_PROFILES_FLAG" in
+        off) return 1 ;;
+        on)  ;;
+        *)   [[ ! -f "$AGENT_PROFILES_OPT_OUT_PATH" ]] || return 1 ;;
+    esac
+    in_file "auto-review-loop" "$1"
+}
+
+persist_agent_profiles_choice() {
+    $DRY_RUN && return 0
+    case "$AGENT_PROFILES_FLAG" in
+        off) mkdir -p "$PROJECT_ARIS_DIR"; : > "$AGENT_PROFILES_OPT_OUT_PATH" ;;
+        on)  rm -f "$AGENT_PROFILES_OPT_OUT_PATH" ;;
+    esac
+}
+
+sync_agent_profiles() {  # $1 = selected file
+    if agent_profiles_wanted "$1"; then
+        ensure_agent_profiles
+    elif [[ -f "$AGENT_MANIFEST_PATH" ]]; then
+        if [[ "$AGENT_PROFILES_FLAG" == "off" || -f "$AGENT_PROFILES_OPT_OUT_PATH" ]]; then
+            log "  Copilot profiles opted out — removing the ones this installer created"
+        else
+            log "  auto-review-loop not installed — removing the Copilot profiles this installer created"
+        fi
+        remove_agent_profiles
+    fi
+}
+
 commit_manifest() {
     local manifest_tmp="$1"
     if $DRY_RUN; then log "  (dry-run) would commit manifest"; return; fi
@@ -1306,8 +1350,8 @@ if $DRY_RUN; then
     # #174 preview: print the planned `.aris/tools` symlink action (function
     # is idempotent + DRY_RUN-aware, so it just logs in this mode)
     ensure_tools_symlink
-    # F5 preview: print planned agent profile symlinks.
-    ensure_agent_profiles
+    # F5 preview: print planned agent profile symlinks (or their removal).
+    sync_agent_profiles "$SELECTED_FILE"
     log ""
     log "(dry-run) no changes made"
     exit 0
@@ -1331,8 +1375,10 @@ commit_manifest "$MANIFEST_TMP"
 # #174 Phase 0: ensure project-local .aris/tools symlink (purely additive).
 # Runs after manifest commit so a failure here doesn't roll back skill links.
 ensure_tools_symlink
-# F5: deploy Copilot agent profiles from <aris-repo>/.github/agents/ (purely additive).
-ensure_agent_profiles
+# F5 / #431: Copilot agent profiles from <aris-repo>/.github/agents/ — only
+# while auto-review-loop is installed and not opted out; otherwise clean ours up.
+persist_agent_profiles_choice
+sync_agent_profiles "$SELECTED_FILE"
 
 
 # #366: persist declined skills + global repo pointer (both best-effort,

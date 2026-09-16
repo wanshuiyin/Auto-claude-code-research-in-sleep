@@ -13,7 +13,7 @@ Adapted from the refinement pattern in `/research-refine` for patent invention d
 
 ## Constants
 
-- `REVIEWER_MODEL = gpt-5.6-sol` — External reviewer for invention decomposition validation
+- `REVIEWER_MODEL = gpt-6-astra` — External reviewer for invention decomposition validation
 - `MAX_REFINEMENT_ROUNDS = 3` — Maximum structuring iterations
 
 ## Inputs
@@ -114,7 +114,7 @@ Call `REVIEWER_MODEL` via `mcp__codex__codex` with xhigh reasoning:
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "xhigh"}
   prompt: |
     You are a patent attorney reviewing an invention disclosure.

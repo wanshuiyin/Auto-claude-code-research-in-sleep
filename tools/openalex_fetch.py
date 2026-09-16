@@ -181,7 +181,7 @@ class OpenAlexClient:
             "venue": venue,
             "venue_type": source.get("type"),
             "cited_by_count": work.get("cited_by_count", 0),
-            "is_oa": work.get("is_oa", False),
+            "is_oa": oa_info.get("is_oa", False),
             "oa_status": oa_status,
             "oa_url": oa_url,
             "abstract": abstract,

@@ -78,6 +78,23 @@ mcp__gemini-review__review_start:
   prompt: |
     You are reviewing a [VENUE] paper. Please provide a detailed, structured review.
 
+    Judge claim calibration in BOTH directions. Recommend narrowing only when the
+    current scope or modality exceeds the evidence; do not ask for extra hedges
+    around a supported result. Flag stacked hedges, self-defence ("we do not
+    claim"), instruction confessions ("we do not address X"), and generic caveats
+    outside Limitations as writing defects to remove. Tone fixes must never alter
+    facts, negation, modality, scope, comparison direction, or numbers.
+    Also flag narrative defects: a progress-report structure ("we first tried
+    A, then B"), a story built on a metric the method loses, results narrated
+    as defeats ("underperforms", "fails to surpass") instead of explained as a
+    goal difference or tradeoff, experiments with no argumentative duty, an
+    abstract or introduction that opens on background or implementation
+    instead of problem -> gap -> idea -> strongest result, and a conclusion
+    that ends on new self-negation. The fix is reframing and cutting where
+    the evidence supports the reframing; a genuine weakness is stated
+    neutrally and kept in Limitations. Never delete unfavorable numbers from
+    tables, and never dress a weakness as a tradeoff.
+
     ## Full Paper Text:
     [paste concatenated sections]
 
@@ -128,12 +145,20 @@ Parse the review and implement fixes by severity:
 2. MAJOR fixes (overclaims, missing content, notation issues)
 3. MINOR fixes (if time permits)
 
+**Before applying any fix:** calibrate claims to evidence and state them
+directly; generic caveats belong in Limitations only; writing instructions are
+never manuscript content; tone edits never change what the paper knows.
+
 **Common fix patterns:**
 
 | Issue | Fix Pattern |
 |-------|-------------|
 | Assumption-model mismatch | Rewrite assumption to match the model, add formal proposition bridging the gap |
-| Overclaims | Soften language: "validate" → "demonstrate practical relevance", "comparable" → "qualitatively competitive" |
+| Genuine overclaim | Narrow the claim itself to the supported scope/modality — never substitute a softer-sounding synonym for fixing scope, comparison, or aggregation |
+| Supported claim wrapped in caution | Remove the redundant hedges; keep any scope qualifier that makes the claim true |
+| Scattered generic caveats | Consolidate into Limitations and delete the duplicates |
+| Story built on a losing metric, or results narrated as defeats | Reframe around the contest the paper wins; explain the gap as a goal difference or tradeoff when the evidence supports that, otherwise state it neutrally and narrow the claim; keep every number in the table |
+| Experiment with no argumentative duty | Cut, shorten, move to the appendix, or redesign it so it proves the method, the mechanism, the target-scenario value, or rules out an alternative |
 | Missing metrics | Add quantitative table with honest parameter counts and caveats |
 | Theorem not self-contained | Add "Interpretation" paragraph listing all dependencies |
 | Notation confusion | Rename conflicting symbols globally, add Notation paragraph |
@@ -151,20 +176,38 @@ Verify: 0 undefined references, 0 undefined citations.
 
 ### Step 5: Round 2 Review
 
-Use `mcp__gemini-review__review_reply_start` with the saved completed `threadId`:
+Start a **fresh** `mcp__gemini-review__review_start` — do not reuse the Round 1
+thread, do not send fix summaries. The reviewer re-reads the recompiled paper
+cold; executor notes are not evidence, and "since your last review, we
+implemented..." is exactly the self-report path that lets fixes be graded on
+their description instead of their substance:
 
 ```
-mcp__gemini-review__review_reply_start:
-  threadId: [saved from Round 1]
+mcp__gemini-review__review_start:
   prompt: |
-    [Round 2 update]
+    You are reviewing a [VENUE] paper (Round 2 — fresh read of the current
+    manuscript; judge only what is on the page).
 
-    Since your last review, we have implemented:
-    1. [Fix 1]: [description]
-    2. [Fix 2]: [description]
-    ...
+    Judge claim calibration in BOTH directions. Recommend narrowing only when the
+    current scope or modality exceeds the evidence; do not ask for extra hedges
+    around a supported result. Flag stacked hedges, self-defence ("we do not
+    claim"), instruction confessions ("we do not address X"), and generic caveats
+    outside Limitations as writing defects to remove. Tone fixes must never alter
+    facts, negation, modality, scope, comparison direction, or numbers.
+    Also flag narrative defects: a progress-report structure ("we first tried
+    A, then B"), a story built on a metric the method loses, results narrated
+    as defeats ("underperforms", "fails to surpass") instead of explained as a
+    goal difference or tradeoff, experiments with no argumentative duty, an
+    abstract or introduction that opens on background or implementation
+    instead of problem -> gap -> idea -> strongest result, and a conclusion
+    that ends on new self-negation. The fix is reframing and cutting where
+    the evidence supports the reframing; a genuine weakness is stated
+    neutrally and kept in Limitations. Never delete unfavorable numbers from
+    tables, and never dress a weakness as a tradeoff.
 
-    Please re-score and re-assess. Same format:
+    [full current paper text]
+
+    Please provide the same structured format:
     Score, Summary, Strengths, Weaknesses, Actionable fixes, Verdict.
 ```
 
@@ -178,9 +221,11 @@ After this start call, immediately save the returned `jobId` and poll `mcp__gemi
 
 Same process as Step 3. Typical Round 2 fixes:
 - Add controlled synthetic experiments validating theory
-- Further soften any remaining overclaims
+- Re-check calibration in both directions: narrow genuine overclaims, state
+  supported claims directly, consolidate scattered generic caveats into
+  Limitations — and do not re-soften claims the evidence already supports
 - Formalize informal arguments (e.g., truncation → formal proposition)
-- Strengthen limitations section
+- Make Limitations more specific only when a material limit is missing
 
 ### Step 7: Recompile Round 2
 
@@ -314,8 +359,8 @@ paper/
 - **Use `mcp__gemini-review__review_reply_start` plus `mcp__gemini-review__review_status`** for Round 2 to maintain conversation context
 - **Always recompile after fixes** — verify 0 errors before proceeding
 - **Do not fabricate experimental results** — synthetic validation must describe methodology, not invent numbers
-- **Respect the paper's claims** — soften overclaims rather than adding unsupported new claims
-- **Global consistency** — when renaming notation or softening claims, check ALL files (abstract, intro, method, experiments, theory sections, conclusion, tables, figure captions)
+- **Respect the paper's claims** — narrow genuine overclaims rather than adding unsupported new claims, and state supported claims directly rather than wrapping them in fresh hedges
+- **Global consistency** — when renaming notation or changing a claim's scope, keep every restatement semantically consistent across ALL files (abstract, intro, method, experiments, theory sections, conclusion, tables, figure captions); consistency means matching scope, not copying disclaimer sentences everywhere
 
 ## Typical Score Progression
 

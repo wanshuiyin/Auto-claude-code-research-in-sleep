@@ -87,7 +87,7 @@ Scan project directory for:
 Based on the selected reviewer backend (see Reviewer Calling Convention), pass ONLY file paths and the audit checklist to the reviewer. The reviewer reads everything directly.
 
 For `codex`, call `mcp__codex__codex` with:
-- `model: gpt-5.6-sol`
+- `model: gpt-6-astra`
 - `config: {"model_reasoning_effort": "ultra"}`
 - `sandbox: read-only`
 - `cwd: [project directory]`

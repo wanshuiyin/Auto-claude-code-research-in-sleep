@@ -74,7 +74,7 @@ Send the collected results to a secondary Codex agent for objective evaluation:
 
 ```text
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: ultra
   message: |
     RESULT-TO-CLAIM EVALUATION
@@ -231,7 +231,7 @@ if research-wiki/ exists:
 - A single positive result on one dataset does not support a general claim. Be honest about scope.
 - If `confidence` is low, treat the judgment as inconclusive and add experiments rather than committing to a claim.
 - **Fail closed if the reviewer is unavailable.** Follow the capability fallback
-  in `reviewer-routing.md` (`gpt-5.6-sol` + `ultra` → `gpt-5.6-sol` + `xhigh`
+  in `reviewer-routing.md` (`gpt-6-astra` + `ultra` → `gpt-6-astra` + `xhigh`
   → `gpt-5.5` + `xhigh`), and never downgrade on timeout, rate-limit, auth,
   transport, server, or context errors. If no allowed pair succeeds, write a
   traced `BLOCKED` review record with the unavailable route and evidence paths, write

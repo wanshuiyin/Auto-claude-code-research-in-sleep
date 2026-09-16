@@ -22,24 +22,14 @@ claude --version   # verify installation
 
 Codex CLI is OpenAI's CLI tool — ARIS uses it to call GPT as a cross-model reviewer. See the [Codex CLI docs](https://developers.openai.com/codex) for installation.
 
-After installing, authenticate Codex (one-time, opens a browser to log in to ChatGPT) and register it as a Claude Code MCP server:
+After installing, authenticate Codex (one-time, opens a browser to log in to ChatGPT):
 
 ```bash
 codex --version   # verify installation
 codex login       # one-time ChatGPT auth (skip if already logged in)
-claude mcp add codex -s user -- codex mcp-server
 ```
 
-- `codex` (after `add`) — the registered name. ARIS skills hardcode this name, **do not change it**
-- `-s user` — applies globally to all projects
-- `codex mcp-server` — built-in subcommand that starts the MCP server mode
-
-Restart Claude Code after registration. Verify:
-
-```bash
-claude mcp list | grep codex
-# should show: codex: codex mcp-server - ✓ Connected
-```
+The MCP registration that lets Claude Code call Codex is the last line of [Step 3.1](#31-install-skills) — it needs the ARIS clone, which does not exist yet.
 
 > **⚠️ Important**: After registering or modifying any MCP server, you **must restart Claude Code** for the change to take effect. MCP configurations are loaded at startup. For additional MCP servers needed by alternative model combinations, see [Step 3.2](#32-register-mcp-servers-optional).
 
@@ -91,6 +81,21 @@ bash ~/aris_repo/tools/install_aris.sh --skills paper-writing         # by skill
 # Other useful flags:
 bash ~/aris_repo/tools/install_aris.sh --dry-run        # preview install plan, no changes
 bash ~/aris_repo/tools/install_aris.sh --uninstall      # uninstall per manifest, leaves other files intact
+
+# 3. Register ARIS's Codex MCP server in Claude Code (once, global):
+claude mcp remove codex -s user 2>/dev/null   # drop an older `codex mcp-server` registration, if you have one
+claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"
+```
+
+- `codex` (after `add`) — the registered name. ARIS skills hardcode this name, **do not change it**
+- `-s user` — applies globally to all projects
+- `python3 .../mcp-servers/codex-exec/server.py` — ARIS's own MCP server for Codex, driving `codex exec` underneath; use the absolute path of your clone. codex-cli 0.154 removed the built-in `codex mcp-server`; on 0.153 or older this bridge works the same way, so register it regardless of version
+
+Restart Claude Code after registration, then verify:
+
+```bash
+claude mcp list | grep codex
+# should show: codex: python3 .../codex-exec/server.py - ✓ Connected
 ```
 
 The script shows an install plan and asks for confirmation (type `y`). See [`install_aris.sh`](tools/install_aris.sh):
@@ -122,7 +127,7 @@ Depending on your model combination, you may need to register additional MCP ser
 
 | MCP Server | Registered Into | Required When | Registration Method |
 |---|---|---|---|
-| `codex` | Claude Code | Default setup (Claude + GPT review) | `claude mcp add codex -s user -- codex mcp-server` (already done in Step 1.2) |
+| `codex` | Claude Code | Default setup (Claude + GPT review) | `claude mcp add codex -s user -- python3 "$HOME/aris_repo/mcp-servers/codex-exec/server.py"` (already done in Step 3.1) |
 | `claude-review` | Codex CLI | Using Codex as executor with Claude as reviewer | `codex mcp add claude-review -- python3 ~/.codex/mcp-servers/claude-review/server.py` (see `mcp-servers/claude-review/README.md`) |
 | `gemini-review` | Codex CLI | Using Codex as executor with Gemini as reviewer | `codex mcp add gemini-review --env GEMINI_REVIEW_BACKEND=api -- python3 ~/.codex/mcp-servers/gemini-review/server.py` (see `mcp-servers/gemini-review/README.md`) |
 | `llm-chat` | Claude Code | Using arbitrary OpenAI-compatible API as reviewer | `claude mcp add llm-chat -s user -- python3 /path/to/aris_repo/mcp-servers/llm-chat/server.py` (see `docs/LLM_API_MIX_MATCH_GUIDE.md`) |

@@ -1,6 +1,6 @@
 ---
 name: experiment-audit
-description: "Audit experiment integrity before claiming results. Uses fresh-agent GPT-5.6-Sol review (same-family provisional in the base Codex mirror) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
+description: "Audit experiment integrity before claiming results. Uses fresh-agent GPT-6-Astra review (same-family provisional in the base Codex mirror) to check for fake ground truth, score normalization fraud, phantom results, and insufficient scope. Use when user says \"审计实验\", \"check experiment integrity\", \"audit results\", \"实验诚实度\", or after experiments complete before writing claims."
 argument-hint: "[experiment-dir-or-results-path]"
 allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob
 ---
@@ -52,13 +52,13 @@ Scan project directory for:
 
 **DO NOT summarize, interpret, or explain any file content.** Only collect paths.
 
-### Step 2: Send to Reviewer (GPT-5.6-Sol via Codex MCP)
+### Step 2: Send to Reviewer (GPT-6-Astra via Codex MCP)
 
 Pass ONLY file paths and the audit checklist to the reviewer. The reviewer reads everything directly.
 
 ```text
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: ultra
   message: |
     You are an experiment integrity auditor. Start from the assumption that the
@@ -140,7 +140,7 @@ Parse the reviewer's response and write `EXPERIMENT_AUDIT.md`:
 # Experiment Audit Report
 
 **Date**: [today]
-**Auditor**: GPT-5.6-Sol ultra (fresh same-family agent, read-only, provisional)
+**Auditor**: GPT-6-Astra ultra (fresh same-family agent, read-only, provisional)
 **Project**: [project name]
 
 ## Overall Verdict: [PASS | WARN | FAIL]
@@ -187,16 +187,16 @@ Also write `EXPERIMENT_AUDIT.json` for machine consumption:
   "trace_path": ".aris/traces/experiment-audit/2026-04-10_run01/",
   "agent_id": "agent_019f...",
   "verdict_id": "agent_019f...",
-  "executor_model": "codex-gpt-5.6-sol",
+  "executor_model": "codex-gpt-6-astra",
   "executor_family": "openai",
-  "reviewer_model": "gpt-5.6-sol",
+  "reviewer_model": "gpt-6-astra",
   "reviewer_family": "openai",
   "reviewer_reasoning": "ultra",
   "review_independence": "same-family",
   "acceptance_status": "provisional",
   "generated_at": "2026-04-10T00:00:00Z",
   "date": "2026-04-10",
-  "auditor": "gpt-5.6-sol-ultra",
+  "auditor": "gpt-6-astra-ultra",
   "overall_verdict": "warn",
   "integrity_status": "warn",
   "checks": {

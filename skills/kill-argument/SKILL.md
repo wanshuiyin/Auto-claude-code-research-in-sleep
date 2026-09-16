@@ -51,7 +51,7 @@ This skill is most valuable for **theory papers** with ≥5 theorem-class enviro
 
 ## Constants
 
-- **REVIEWER_MODEL** = `gpt-5.6-sol` (default; `gpt-5.5` is the capability fallback, `gpt-5.4` only as an explicit legacy override).  Reviewer reasoning effort = `ultra` for the attack / defense / adjudication threads (deep-audit tier; capability fallback per `shared-references/reviewer-routing.md`, never below `xhigh`).  Beast-mode axis probes stay at `xhigh`.
+- **REVIEWER_MODEL** = `gpt-6-astra` (default; `gpt-5.5` is the capability fallback, `gpt-5.4` only as an explicit legacy override).  Reviewer reasoning effort = `ultra` for the attack / defense / adjudication threads (deep-audit tier; capability fallback per `shared-references/reviewer-routing.md`, never below `xhigh`).  Beast-mode axis probes stay at `xhigh`.
 - **CONTEXT_POLICY** = `fresh` (REVIEWER_BIAS_GUARD).  Each thread is a fresh `mcp__codex__codex` call.  **Never** use `mcp__codex__codex-reply`.  No prior review summary, fix list, or executor explanation enters either prompt.
 - **ATTACK_LENGTH** = approximately 200 words (do not exceed 250).  Single coherent argument, not a list.
 - **DEFENSE_DECOMPOSITION** = 3-7 atomic rejection points extracted from the attack memo.  Each gets its own classification.
@@ -88,7 +88,7 @@ Invoke `mcp__codex__codex` (NOT `codex-reply`) with the following prompt structu
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "ultra"}
   sandbox: read-only
   cwd: <paper directory>
@@ -188,7 +188,7 @@ Invoke a second `mcp__codex__codex` call (still NOT `codex-reply` — Thread 2 i
 
 ```
 mcp__codex__codex:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   config: {"model_reasoning_effort": "ultra"}
   sandbox: read-only
   cwd: <paper directory>
@@ -272,7 +272,7 @@ Compose the human-readable report `<paper-dir>/KILL_ARGUMENT.md`:
 # Kill Argument Report — <paper title>
 
 **Date**: <YYYY-MM-DD>
-**Reviewer model**: <resolved pair that actually ran — target gpt-5.6-sol ultra>, fresh threads (no codex-reply)
+**Reviewer model**: <resolved pair that actually ran — target gpt-6-astra ultra>, fresh threads (no codex-reply)
 **Attack thread**: <threadId 1>
 **Adjudicator thread**: <threadId 2>
 **Verdict**: <PASS / WARN / FAIL / NOT_APPLICABLE / BLOCKED / ERROR> (`reason_code: <...>`)
@@ -318,7 +318,7 @@ ARIS Audit Artifact Schema (`shared-references/assurance-contract.md`):
   },
   "trace_path": ".aris/traces/kill-argument/<date>_run<NN>/",
   "thread_id": "<defense threadId — primary; attack threadId in details>",
-  "reviewer_model": "<resolved — the model that actually ran (target: gpt-5.6-sol)>",
+  "reviewer_model": "<resolved — the model that actually ran (target: gpt-6-astra)>",
   "reviewer_reasoning": "<resolved — the effort that actually ran (target: ultra)>",
   "generated_at": "<UTC ISO-8601>",
   "details": {

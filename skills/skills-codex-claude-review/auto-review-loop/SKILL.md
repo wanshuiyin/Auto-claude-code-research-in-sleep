@@ -134,6 +134,9 @@ Send comprehensive context to the external reviewer:
 
 ```
 mcp__claude-review__review_start:
+  # the bridge grants the reviewer no tools by default; this prompt passes
+  # artifact paths, so it has to ask for read-only access explicitly
+  tools: "Read,Grep,Glob"
   prompt: |
     [Round N/MAX_ROUNDS of autonomous review loop]
 
@@ -142,7 +145,7 @@ mcp__claude-review__review_start:
     - Claims / paper draft: <path>
     - Methods / code under review: <path(s)>
     - Raw results (verbatim files, not a summary): <path(s)>
-    - Changed since last round: <changed-file paths> — read the diff, not my description
+    - Changed since last round: <changed-file paths>, plus the saved diff (`git diff > changes.patch`): <path> — read the diff, not my description
 
     Please act as a senior ML reviewer (NeurIPS/ICML level). Start from the
     assumption that the work is broken somewhere — your job is to find where.
@@ -434,6 +437,9 @@ When loop ends (positive assessment or max rounds):
 
 ```
 mcp__claude-review__review_reply_start:
+  # the bridge grants the reviewer no tools by default; this prompt passes
+  # artifact paths, so it has to ask for read-only access explicitly
+  tools: "Read,Grep,Glob"
   threadId: [saved from round 1]
   # inherits the agent's model/effort — do not re-send
   prompt: |
@@ -442,7 +448,7 @@ mcp__claude-review__review_reply_start:
     Since your last review these files changed — read them yourself; do not
     take my word for what changed or whether it worked:
     - Changed files: <paths>
-    - Raw diff: <path, or the `git diff` range>
+    - Raw diff: <path to a saved diff file — you can read files but cannot run `git diff`>
     - Updated raw results: <result-file paths> (verbatim files, not a pasted table)
 
     Please re-score and re-assess. Are the remaining concerns addressed?

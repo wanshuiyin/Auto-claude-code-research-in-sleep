@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -134,3 +136,62 @@ def test_search_works_surfaces_rate_limit_error(monkeypatch, capsys):
         client.search_works("rate limited")
 
     assert "Rate limit exceeded" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        ({"open_access": {"is_oa": True, "oa_status": "gold"}}, True),
+        ({"open_access": {"is_oa": False, "oa_status": "closed"}}, False),
+        ({"open_access": {}}, False),
+        ({"open_access": None}, False),
+        ({}, False),
+    ],
+)
+def test_parse_work_preserves_open_access_flag(metadata, expected):
+    openalex_fetch = load_module()
+    work = {"id": "https://openalex.org/W123", **metadata}
+
+    assert openalex_fetch.OpenAlexClient()._parse_work(work)["is_oa"] is expected
+
+
+@pytest.mark.parametrize("command", ["search", "work"])
+@pytest.mark.parametrize("json_output", [False, True])
+def test_cli_reports_open_access_from_work_metadata(
+    monkeypatch, capsys, command, json_output
+):
+    openalex_fetch = load_module()
+    work = {
+        "id": "https://openalex.org/W123",
+        "display_name": "An open access paper",
+        "open_access": {
+            "is_oa": True,
+            "oa_status": "gold",
+            "oa_url": "https://example.test/paper.pdf",
+        },
+    }
+
+    def fake_get(self, url, params, timeout):
+        payload = {"results": [work]} if command == "search" else work
+        return FakeResponse(openalex_fetch, payload)
+
+    monkeypatch.setattr(openalex_fetch.requests.Session, "get", fake_get)
+    argv = [str(MODULE_PATH), command, "W123"]
+    if command == "search":
+        argv.append("--open-access")
+    if json_output:
+        argv.append("--json")
+    monkeypatch.setattr(sys, "argv", argv)
+
+    openalex_fetch.main()
+
+    output = capsys.readouterr().out
+    if json_output:
+        result = json.loads(output)
+        parsed = result[0] if command == "search" else result
+        assert parsed["is_oa"] is True
+        assert parsed["oa_status"] == "gold"
+        assert parsed["oa_url"] == work["open_access"]["oa_url"]
+    else:
+        assert "OA: Yes" in output
+        assert "OA: No" not in output

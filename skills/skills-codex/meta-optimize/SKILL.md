@@ -188,11 +188,11 @@ For each optimization target, generate a concrete diff:
 
 ### Step 4: Fresh-Agent Review of Patches (same-family provisional)
 
-Send each patch to GPT-5.6-Sol xhigh for adversarial review:
+Send each patch to GPT-6-Astra xhigh for adversarial review:
 
 ```text
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh
   message: |
     You are reviewing a proposed optimization to an ARIS SKILL.md file.

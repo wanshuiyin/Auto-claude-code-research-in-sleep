@@ -298,7 +298,7 @@ def test_codex_finalizer_positive_stops_but_identity_remains_declared() -> None:
         verdict="ready",
         requires_external_acquittal=True,
         executor_model="claude-sonnet-4.5",
-        reviewer_model="gpt-5.6-sol",
+        reviewer_model="gpt-6-astra",
     )
 
     assert transition.decision == "stop"
@@ -313,7 +313,7 @@ def test_same_family_finalizer_fails_closed() -> None:
         verdict="ready",
         requires_external_acquittal=True,
         executor_model="gpt-5.4",
-        reviewer_model="gpt-5.6-sol",
+        reviewer_model="gpt-6-astra",
     )
 
     assert transition.decision == "review_unavailable"
@@ -350,7 +350,7 @@ def test_explicit_manual_positive_still_rejects_same_family() -> None:
         score=7,
         verdict="ready",
         executor_model="gpt-5.4",
-        reviewer_model="gpt-5.6-sol",
+        reviewer_model="gpt-6-astra",
         manual_identity_reported=True,
     )
 

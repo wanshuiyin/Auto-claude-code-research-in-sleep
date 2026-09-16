@@ -20,11 +20,11 @@ End-to-end autonomous research workflow for: **$ARGUMENTS**
 - **ARXIV_DOWNLOAD = false** — When `true`, `/research-lit` downloads the top relevant arXiv PDFs during literature survey. When `false` (default), only fetches metadata via arXiv API. Passed through to `/idea-discovery` → `/research-lit`.
 - **HUMAN_CHECKPOINT = false** — When `true`, the auto-review loops (Stage 3) pause after each round's review to let you see the score and provide custom modification instructions before fixes are implemented. When `false` (default), loops run fully autonomously. Passed through to `/auto-review-loop`.
 - **REVIEWER_DIFFICULTY = medium** — How adversarial the reviewer is. `medium` (default): standard MCP review. `hard`: adds **Reviewer Memory** + **Debate Protocol**. `nightmare`: GPT reads repo directly via `codex exec` + memory + debate. Passed through to `/auto-review-loop`.
-- **CODE_REVIEW = true** — GPT-5.6-Sol xhigh reviews experiment code before deployment. Catches logic bugs before wasting GPU hours. Set `false` to skip. Passed through to `/experiment-bridge`.
+- **CODE_REVIEW = true** — GPT-6-Astra xhigh reviews experiment code before deployment. Catches logic bugs before wasting GPU hours. Set `false` to skip. Passed through to `/experiment-bridge`.
 - **BASE_REPO = false** — GitHub repo URL to use as base codebase. When set, `/experiment-bridge` clones the repo first and implements experiments on top of it. When `false` (default), writes code from scratch or reuses existing project files. Passed through to `/experiment-bridge`.
 - **COMPACT = false** — When `true`, generates compact summary files for short-context models and session recovery. Passed through to `/idea-discovery` and `/experiment-bridge`.
-- **AUTO_WRITE = false** — When `true`, automatically invoke Workflow 3 (`/paper-writing`) after Stage 4. Requires `VENUE` to be set. When `false` (default), Stage 4 generates `NARRATIVE_REPORT.md` and stops — user invokes `/paper-writing` manually.
-- **VENUE = ICLR** — Target venue for paper writing (Stage 5). Only used when `AUTO_WRITE=true`. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_CONF`, `IEEE_JOURNAL`.
+- **AUTO_WRITE = false** — When `true`, automatically invoke Workflow 3 (`/paper-writing`) after Stage 4. `VENUE` is needed only when Stage 5 begins — a missing venue defers paper writing; it never blocks Stages 1-4. When `false` (default), Stage 4 generates `NARRATIVE_REPORT.md` and stops — user invokes `/paper-writing` manually.
+- **VENUE = (unset)** — Target venue for paper writing; bound only when Stage 5 begins. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_CONF`, `IEEE_JOURNAL`. No default: a missing venue defers paper writing — it never blocks Stages 1-4 and is never guessed.
 - **RENDER_HTML = true** — When `true` (default), auto-render `NARRATIVE_REPORT.md` to HTML at Stage 4 completion via `/render-html`. Uses `--no-review` because Stage 3 already produced a traced same-family provisional review. Set `false` to skip. Rendering failure is non-blocking.
 - **RESUMABLE = true** — Record per-stage state under `.aris/runs/` and resume
   from the first non-terminal phase. Same-family Codex review produces
@@ -87,10 +87,10 @@ WATCHDOG=""
 Warn-and-skip state tracking if `RUN_STATE` cannot be resolved; never pretend it
 was persisted. Phases are `idea-discovery,experiment-bridge,auto-review-loop,summary,paper-writing`.
 
-- New run: `python3 "$RUN_STATE" start . "$RUN_ID" --executor codex-gpt-5.6-sol --provisional-advances --phases "idea-discovery,experiment-bridge,auto-review-loop,summary,paper-writing"` (the `--provisional-advances` policy is what lets a same-family provisional verdict close a phase for resume — without it, mainline semantics apply and provisional phases stay open).
+- New run: `python3 "$RUN_STATE" start . "$RUN_ID" --executor codex-gpt-6-astra --provisional-advances --phases "idea-discovery,experiment-bridge,auto-review-loop,summary,paper-writing"` (the `--provisional-advances` policy is what lets a same-family provisional verdict close a phase for resume — without it, mainline semantics apply and provisional phases stay open).
 - Resume: `python3 "$RUN_STATE" resume . "$RUN_ID"`; restart the returned phase.
 - Each phase: mark `running`, then `done --artifact <path>`.
-- A fresh Codex reviewer PASS uses `mark-provisional --reviewer gpt-5.6-sol
+- A fresh Codex reviewer PASS uses `mark-provisional --reviewer gpt-6-astra
   --verdict-id <trace-or-agent-id>`. This is terminal for resume but not accepted.
 - A cross-family overlay or deterministic verifier uses `accept`.
 - If `AUTO_WRITE=false`, mark `paper-writing` as `skipped` after summary.
@@ -168,7 +168,7 @@ Once the idea is selected (automatically or by the user), delegate implementatio
 **What this does (fully autonomous):**
 1. Parses `refine-logs/EXPERIMENT_PLAN.md` — extracts milestones, run order, compute budget
 2. Implements experiment code — extends pilot to full scale, follows existing codebase conventions
-3. **Fresh-agent code review** — GPT-5.6-Sol xhigh reviews the implementation in a new context; base result is same-family provisional
+3. **Fresh-agent code review** — GPT-6-Astra xhigh reviews the implementation in a new context; base result is same-family provisional
 4. **Sanity check** — runs the smallest experiment first to verify the environment; auto-debugs failures (up to 3 attempts, with `/codex:rescue` fallback)
 5. Deploys full experiments — auto-routes by job count (≤5 → `/run-experiment`, ≥10 → `/experiment-queue` with OOM retry, wave gating, crash-safe state)
 6. Collects initial results — parses outputs, updates `refine-logs/EXPERIMENT_TRACKER.md`, runs `/training-check` if W&B is configured
@@ -196,7 +196,7 @@ Once initial results are in, start the autonomous improvement loop:
 ```
 
 **What this does (up to 4 rounds):**
-1. GPT-5.6-Sol xhigh reviews the work (score, weaknesses, minimum fixes)
+1. GPT-6-Astra xhigh reviews the work (score, weaknesses, minimum fixes)
 2. Claude Code implements fixes (code changes, new experiments, reframing)
 3. Deploy fixes, collect new results
 4. Re-review → repeat until score ≥ 6/10 or 4 rounds reached
@@ -255,7 +255,7 @@ This is the **Stage 6: Paper Writing** handoff in the broader research lifecycle
 
 ```
 📝 Research complete. To write the paper:
-/paper-writing "NARRATIVE_REPORT.md" — venue: ICLR, AUTO_PROCEED: $AUTO_PROCEED
+/paper-writing "NARRATIVE_REPORT.md" — venue: <VENUE>, AUTO_PROCEED: $AUTO_PROCEED
 ```
 
 **If `AUTO_WRITE=true`:**
@@ -273,9 +273,15 @@ This is the **Stage 6: Paper Writing** handoff in the broader research lifecycle
 Proceeding with paper writing...
 ```
 
-Checks before proceeding:
-- If `VENUE` is missing → stop and ask. Do NOT silently use a default venue.
-- If manual figures are required → pause and list them. Wait for user to add them.
+Checks before proceeding (venue binds HERE — Stages 1-4 are venue-independent):
+- If `VENUE` is missing: with `AUTO_PROCEED=false`, ask now. With
+  `AUTO_PROCEED=true`, do not guess and do not wait — stamp
+  "VENUE NOT SPECIFIED — paper writing deferred" in the report and checkpoint,
+  leave the paper-writing phase pending, and finish the run cleanly for a later
+  resume. Never silently pick a venue.
+- If manual figures are required: with `AUTO_PROCEED=false`, pause and list
+  them. With `AUTO_PROCEED=true`, record "paper writing deferred (manual
+  figures: <list>)" and finish cleanly the same way.
 
 Then invoke:
 

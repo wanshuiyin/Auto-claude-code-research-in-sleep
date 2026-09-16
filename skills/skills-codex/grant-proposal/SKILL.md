@@ -32,7 +32,7 @@ Grant proposals argue for **future work** (feasibility + potential), not complet
 
 - **GRANT_TYPE = `KAKENHI`** — Default grant type. Supported: `KAKENHI`, `NSF`, `NSFC`, `ERC`, `DFG`, `SNSF`, `ARC`, `NWO`, `GENERIC`. Override via argument (e.g., `/grant-proposal "topic — NSF"`).
 - **GRANT_SUBTYPE = `auto`** — Sub-type within the grant agency. Examples: KAKENHI `Start-up`/`Wakate`/`Kiban-B`; NSFC `Youth`/`Excellent-Youth`/`Distinguished`/`Overseas`/`Key`; NSF `CAREER`/`CRII`/`Standard`. Auto-detected from argument or defaults to the most common sub-type.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Model used via a secondary Codex agent for proposal review. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`).
+- **REVIEWER_MODEL = `gpt-6-astra`** — Model used via a secondary Codex agent for proposal review. Must be an OpenAI model (e.g., `gpt-6-astra`, `o3`, `gpt-4o`).
 - **OUTPUT_FORMAT = `markdown`** — Output format. Supported: `markdown`, `latex`. LaTeX uses grant-specific templates when available.
 - **MAX_REVIEW_ROUNDS = 2** — Maximum external review-revise cycles before finalizing.
 - **OUTPUT_DIR = `grant-proposal/`** — Directory for generated proposal files.
@@ -288,7 +288,7 @@ Timeline: [timeline]
 ```
 
 **What this does:**
-- GPT-5.6-Sol xhigh acts as a grant review panelist (not a paper reviewer)
+- GPT-6-Astra xhigh acts as a grant review panelist (not a paper reviewer)
 - Evaluates aims independence, narrative arc, risk identification, timeline realism
 - Identifies the single biggest reviewer concern
 - Provides actionable fixes ranked by severity
@@ -304,7 +304,7 @@ Apply structural feedback before proceeding to drafting.
 - Aim 2: [title] — Risk: MEDIUM
 - Aim 3: [title] — Risk: LOW
 - Timeline: [summary]
-- Reviewer feedback: [key points from GPT-5.6-Sol]
+- Reviewer feedback: [key points from GPT-6-Astra]
 
 Proceed to section drafting? Or adjust the structure?
 ```
@@ -417,7 +417,7 @@ Invoke `/research-review` on the complete draft for grant-type-specific evaluati
 ```
 
 **What this does:**
-- GPT-5.6-Sol xhigh acts as a grant review panelist
+- GPT-6-Astra xhigh acts as a grant review panelist
 - Scores each section 1-5 using agency-specific criteria
 - Identifies fatal flaws and recommends funding/revisions/rejection
 - Provides ranked action items for improvement
@@ -431,7 +431,7 @@ If `/research-review` is invoked (preferred), it handles the external review int
 
 ```
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh
   message: |
     Review this complete [GRANT_TYPE] [GRANT_SUBTYPE] proposal draft.
@@ -540,7 +540,7 @@ Before declaring done:
 - Language: [language]
 - Aims: [N] aims covering [summary]
 - Timeline: [N] years
-- Review score: [summary from GPT-5.6-Sol]
+- Review score: [summary from GPT-6-Astra]
 - Output: grant-proposal/GRANT_PROPOSAL.md
 
 Files saved to grant-proposal/. Please review and customize:
@@ -586,7 +586,7 @@ Parameters can be passed inline with `—` separator. They flow to sub-skills wh
 | `max review rounds` | 2 | External review cycles | — |
 | `sources` | all | Literature sources | → `/research-lit` |
 | `arxiv download` | false | Download arXiv PDFs | → `/research-lit` |
-| `reviewer model` | gpt-5.6-sol | Codex review model | → reviewer agent |
+| `reviewer model` | gpt-6-astra | Codex review model | → reviewer agent |
 | `auto proceed` | false | Skip checkpoints | — |
 
 ## Composing with Other Skills

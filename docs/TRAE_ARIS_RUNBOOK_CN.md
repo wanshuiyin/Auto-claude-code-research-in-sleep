@@ -62,8 +62,8 @@ codex login
 2) 在 Trae 中配置 MCP  
 进入 `Settings → MCP → 手动添加`，新增：
 - Name: `codex`
-- Command: `codex`
-- Args: `mcp-server`
+- Command: `python3`
+- Args: `/ABSOLUTE/PATH/TO/aris_repo/mcp-servers/codex-exec/server.py`（ARIS 自带的桥接，底下跑 `codex exec`；codex-cli 0.154 删掉了 `codex mcp-server`）
 
 如你的 Trae 版本支持工作区 MCP 文件，可用：
 
@@ -71,8 +71,8 @@ codex login
 {
   "mcpServers": {
     "codex": {
-      "command": "codex",
-      "args": ["mcp-server"]
+      "command": "python3",
+      "args": ["/ABSOLUTE/PATH/TO/aris_repo/mcp-servers/codex-exec/server.py"]
     }
   }
 }
@@ -255,7 +255,7 @@ Trae 通过 `SKILL.md` 中的 YAML `description` 字段自动发现 ARIS 技能�
 
 | ARIS MCP 工具 | 作用 | 需要的 MCP Server |
 |---|---|---|
-| `mcp__codex__codex` | 发审阅请求到 GPT-5.6-Sol | codex |
+| `mcp__codex__codex` | 发审阅请求到 GPT-6-Astra | codex |
 | `mcp__codex__codex-reply` | 续接审阅线程 | codex |
 | `mcp__llm-chat__chat` | 发请求到兼容 OpenAI API 模型 | llm-chat |
 

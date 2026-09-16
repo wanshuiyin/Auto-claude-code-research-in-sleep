@@ -71,7 +71,7 @@ def test_provenance_labeling_is_honest_per_executor():
     with tempfile.TemporaryDirectory() as d:
         _, g = _gate(d, "CLEAN_GIVEN_EVIDENCE", executor="claude-opus-4-8")
         assert g["proposal_provenance"] == "cross-family"
-        _, g = _gate(d, "CLEAN_GIVEN_EVIDENCE", executor="codex-gpt-5.6-sol")
+        _, g = _gate(d, "CLEAN_GIVEN_EVIDENCE", executor="codex-gpt-6-astra")
         assert g["proposal_provenance"] == "same-family"
 
 

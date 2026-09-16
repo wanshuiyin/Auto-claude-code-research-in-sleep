@@ -5,7 +5,7 @@
 All reviewer-heavy Codex base skills use the same default contract:
 
 - executor: current Codex main agent
-- reviewer: second Codex reviewer, model `gpt-5.6-sol` (GPT-5.6-Sol)
+- reviewer: second Codex reviewer, model `gpt-6-astra` (GPT-6-Astra)
 - reasoning effort: **two tiers** (since 2026-07-10; `ultra`/`max` need codex-cli ≥ 0.144.1) —
   **deep-audit** skills use `ultra` (`proof-checker`, `kill-argument` core threads, `research-review`,
   `experiment-audit`, `paper-claim-audit`, `result-to-claim`, `meta-apply`); **every other**
@@ -16,7 +16,7 @@ All reviewer-heavy Codex base skills use the same default contract:
 
 This is the base default for `skills/skills-codex/`. No ARIS `— effort:` level or unrelated parameter changes the tier (ARIS `— effort: max` ≠ `reasoning_effort: max` — pipeline workload vs reviewer reasoning are different axes).
 
-**Capability fallback (first spawn of each tier only):** if `spawn_agent` errors explicitly on the effort enum (older codex-cli — applies only to the deep tier's `ultra`; `xhigh` predates 0.144.1), retry `reasoning_effort: xhigh`; if it errors explicitly on the model being unknown/unavailable to this account, retry `model: gpt-5.5` + `xhigh`. NEVER downgrade on timeout / rate-limit / auth / transport / server / context-length errors (risk of double-running). Never run a verdict-bearing review below `xhigh`; if no allowed pair works, report `REVIEW_UNAVAILABLE` — never substitute the executor's own judgment.
+**Capability fallback (first spawn of each tier only):** if `spawn_agent` errors explicitly on the effort enum (older codex-cli — applies only to the deep tier's `ultra`; `xhigh` predates 0.144.1), retry `reasoning_effort: xhigh`; if it errors explicitly on the model being unknown/unavailable to this account, retry `model: gpt-5.6-sol` + `xhigh`, then `model: gpt-5.5` + `xhigh`. NEVER downgrade on timeout / rate-limit / auth / transport / server / context-length errors (risk of double-running). Never run a verdict-bearing review below `xhigh`; if no allowed pair works, report `REVIEW_UNAVAILABLE` — never substitute the executor's own judgment.
 
 > ⚠️ **Same-family by default — provisional, never accepted.** The executor here
 > is Codex (GPT family) and the reviewer is a fresh Codex agent from the same
@@ -40,7 +40,7 @@ Single-round review:
 
 ```text
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh   # deep-audit skills: ultra (see tier table above)
   message: |
     [role + task]
@@ -51,7 +51,7 @@ Multi-round review:
 
 ```text
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh   # deep-audit skills: ultra (see tier table above)
   message: |
     [initial review prompt]

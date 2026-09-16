@@ -25,7 +25,7 @@ git clone https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep.git
 
 ### 2.2 Set up Codex MCP in Cursor (for review skills)
 
-ARIS uses an external LLM (GPT-5.6-Sol via Codex) as a critical reviewer. To enable this in Cursor:
+ARIS uses an external LLM (GPT-6-Astra via Codex) as a critical reviewer. To enable this in Cursor:
 
 1. Install Codex CLI and authenticate:
    ```bash
@@ -38,8 +38,8 @@ ARIS uses an external LLM (GPT-5.6-Sol via Codex) as a critical reviewer. To ena
    {
      "mcpServers": {
        "codex": {
-         "command": "codex",
-         "args": ["mcp-server"]
+         "command": "python3",
+         "args": ["/ABSOLUTE/PATH/TO/aris_repo/mcp-servers/codex-exec/server.py"]
        }
      }
    }
@@ -221,7 +221,7 @@ ARIS skills reference MCP tools by name (e.g., `mcp__codex__codex`). Cursor supp
 
 | ARIS MCP tool | What it does | Required MCP server |
 |--------------|-------------|-------------------|
-| `mcp__codex__codex` | Send prompt to GPT-5.6-Sol | Codex |
+| `mcp__codex__codex` | Send prompt to GPT-6-Astra | Codex |
 | `mcp__codex__codex-reply` | Continue conversation thread | Codex |
 | `mcp__llm-chat__chat` | Send prompt to any OpenAI-compatible model | llm-chat |
 | `mcp__zotero__*` | Search Zotero library | zotero (name may vary by config) |

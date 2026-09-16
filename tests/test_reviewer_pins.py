@@ -3,7 +3,7 @@
 Reviewer-pin lint: every fresh Codex reviewer call block in a SKILL.md must pin
 BOTH the model and a reasoning effort at or above the review floor.
 
-Why: the catalog default effort for gpt-5.6-sol is `low`, and an unpinned model
+Why: the catalog default effort for gpt-6-astra is `low`, and an unpinned model
 silently runs whatever ~/.codex/config.toml says — so an unpinned call block
 defeats the routing contract (skills/shared-references/reviewer-routing.md).
 

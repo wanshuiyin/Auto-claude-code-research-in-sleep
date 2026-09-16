@@ -19,7 +19,7 @@ Given a broad research direction from the user, systematically generate, validat
 - **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill pilots exceeding 3 hours. Collect partial results if available.
 - **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
-- **REVIEWER_MODEL = `gpt-5.6-sol`** — Default model for the Codex backend. Must be an OpenAI model (e.g., `gpt-5.6-sol`, `o3`, `gpt-4o`). Manual backend uses a model the user chooses, **but it must be a non-Claude model ARIS can classify** (OpenAI, Google, DeepSeek, Moonshot/Kimi, Qwen) — the executor is Claude, so pasting into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
+- **REVIEWER_MODEL = `gpt-6-astra`** — Default model for the Codex backend. Must be an OpenAI model (e.g., `gpt-6-astra`, `o3`, `gpt-4o`). Manual backend uses a model the user chooses, **but it must be a non-Claude model ARIS can classify** (OpenAI, Google, DeepSeek, Moonshot/Kimi, Qwen) — the executor is Claude, so pasting into any Claude product makes Claude judge Claude and voids the cross-model invariant (see `shared-references/reviewer-routing.md`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex MCP (xhigh). Override with `— reviewer: oracle-pro` for Oracle MCP, or `— reviewer: manual` for Manual Review MCP. If manual-review MCP is unavailable, stop and print the install command; do not fall back to Codex. See `shared-references/reviewer-routing.md`.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 
@@ -252,6 +252,24 @@ mcp__codex__codex:
     idea-stage/codex_brainstorm_bundle.md> and follow all instructions in it.
 ```
 
+Run the bundle through **two reviewer models** and take the union — the two
+fail differently as generators, and the union keeps either model's taste from
+capping the pool:
+
+1. Once with the default reviewer model (`gpt-6-astra` today), as above.
+2. Once more with `model: "gpt-5.5"` — same `xhigh` effort, same bundle, a
+   fresh thread. Save both threadIds; Phase 4's triage follow-up goes to the
+   default-model thread.
+
+Tag each candidate with the model that produced it, then merge both sets the
+same way the lens shards merge: union, cluster near-identical ideas by
+hypothesis, and never drop a candidate for being "weak" — weakness is a
+Phase-4 verdict, not a merge step.
+
+If the second call errors (older codex-cli, or the model is unavailable on
+this account), print one WARN line and continue single-model. The union is an
+upgrade, not a new requirement.
+
 *For `manual` backend:* use `mcp__manual_review__review` with the same bundle
 contents. If the manual-review UI supports attachments, attach
 `idea-stage/codex_brainstorm_bundle.md`; otherwise paste the bundle contents
@@ -281,13 +299,26 @@ Bundle contents:
     Prioritize ideas that are:
     - Testable with moderate compute (8x RTX 3090 or less)
     - Likely to produce a clear positive OR negative result (both are publishable)
-    - Not "apply X to Y" unless the application reveals genuinely surprising insights
-    - Differentiated from the 10-15 papers above
+    - Simple at the core: one mechanism, few moving parts — an idea a colleague
+      could restate after hearing it once. If the novelty only appears once a
+      second module or an extra gate is added, that is packaging, not novelty.
+    - Aware of the 10-15 papers above — awareness, not avoidance. Differentiation
+      is the novelty check's job later, not a constraint on brainstorming.
 
-    Be creative but grounded. A great idea is one where the answer matters regardless of which way it goes.
+    "Apply X to Y" is legitimate when the application would reveal something
+    non-obvious — judge it by what it reveals, not by the template. A direct,
+    well-executed attack on a central problem is a valid idea when nobody has
+    executed it well; do not steer around crowded areas — proximity to strong
+    work is a sign the problem matters, not that it is taken.
+
+    Be genuinely creative: surprising connections, inverted assumptions,
+    questions nobody thought to ask. Creativity is a new angle on a problem
+    that matters — not an obscure corner nobody visits, and not extra modules
+    stacked until something looks new. Generate first, filter later — the
+    filters come after you, and they are strict enough. A bold, creative idea
+    with a named risk beats a hedged, complicated one with none. A great idea
+    is one where the answer matters regardless of which way it goes.
 ```
-
-Save the threadId for follow-up.
 
 ### Phase 3: Mechanical consolidation + objective feasibility gate
 
@@ -336,7 +367,9 @@ per-idea novelty search:
 
 1. **Cross-model triage (devil's advocate) — ranks ALL candidates first.**
    Use the selected reviewer backend (see Reviewer Calling Convention). For
-   `codex`, use `mcp__codex__codex-reply` (same thread). For `manual`, use
+   `codex`, use `mcp__codex__codex-reply` on the **default-model thread**
+   from Phase 2 (the triage bundle carries the full union, so no context is
+   lost from the second model's thread). For `manual`, use
    `mcp__manual_review__review_reply` with the saved threadId. For the
    `codex` backend, write the full annotated candidate set to
    `idea-stage/codex_triage_bundle.md` and send only a path-based follow-up:
@@ -350,14 +383,23 @@ per-idea novelty search:
    Here is the full annotated candidate set (deduped, budget-feasible):
    [write all candidates with their prior_work / so_what / effort_note notes]
 
-   For each, play devil's advocate:
+   For each, make the strongest case both ways:
+   - What is the best case FOR it — what would make this the paper people cite?
    - What's the strongest objection a reviewer would raise?
    - What's the most likely failure mode?
    - Is the prior_work note a real novelty problem, or differentiable?
-   - How would you rank these for a top venue submission?
+   - Rank by expected information and upside within the pilot budget — which results would matter most, whichever way they come out?
    - Which 2-3 would you actually work on, and why?
+
+   Rank; do not rewrite. An objection is answered or recorded as a named
+   risk on the idea — never absorbed by adding a module, a gate, or a
+   qualifier. A bold idea with a named risk outranks a hedged idea with
+   none, and complexity added since the brainstorm is a red flag, not
+   progress. And do not let your picks be uniformly the safest — if the
+   top set is all LOW-risk, name the high-upside idea that most deserves a
+   pilot slot and what result would convince you.
    ```
-   The reviewer's ranking is the authoritative quality verdict. The executor
+   The reviewer's ranking allocates the scarce pilot slots; it is not an elimination verdict — feasible ideas not selected remain candidates. The executor
    does not eliminate candidates on its own taste before or instead of this.
 
 2. **Novelty check — on the reviewer's top picks only.** Run the
@@ -377,7 +419,7 @@ Before committing to a full research effort, run cheap pilot experiments to get 
    - Single seed, small scale (e.g., small dataset subset, fewer epochs)
    - Target: 30 min - PILOT_MAX_HOURS per pilot on 1 GPU
    - **Estimate GPU-hours BEFORE launching.** If estimated time > PILOT_MAX_HOURS, reduce scale (fewer epochs, smaller subset) or flag as "needs manual pilot"
-   - Clear success metric defined upfront (e.g., "if metric improves by > 1%, signal is positive")
+   - Decision criterion defined upfront — including what a positive, negative, and null outcome would each teach. Metric improvement is not required for a diagnostic contribution.
 
 2. **Deploy in parallel**: Use `/run-experiment` to launch pilots on different GPUs simultaneously:
    ```
@@ -389,7 +431,7 @@ Before committing to a full research effort, run cheap pilot experiments to get 
 
 3. **Collect results**: Use `/monitor-experiment` to check progress. If any pilot exceeds PILOT_TIMEOUT_HOURS, kill it and collect partial results. Once all pilots complete (or timeout), compare:
    - Which ideas showed positive signal?
-   - Which showed null/negative results? (eliminate or deprioritize)
+   - Which showed null/negative results? Classify each: core-hypothesis refuted, informative negative (often publishable), or underpowered pilot — do not eliminate by sign alone.
    - Any surprising findings that suggest a pivot?
    - Total GPU-hours consumed (track against MAX_TOTAL_GPU_HOURS budget)
 
@@ -446,7 +488,7 @@ Write a structured report to `idea-stage/IDEA_REPORT.md`:
 | Idea 3 | GPU 2 | 1.5 hr | +0.8% CE | WEAK POSITIVE |
 
 ## Suggested Execution Order
-1. Start with Idea 1 (positive pilot signal, lowest risk)
+1. Start with Idea 1 (highest decision value after the pilot)
 2. Idea 3 as backup (weak signal, may need larger scale to confirm)
 3. Idea 2 eliminated by pilot — negative result documented
 
@@ -516,13 +558,13 @@ elif research-wiki/ exists AND [ -z "$WIKI_SCRIPT" ]:
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
 - The user provides a DIRECTION, not an idea. Your job is to generate the ideas.
-- Quantity first, quality second: brainstorm broadly, then filter ruthlessly.
+- Quantity first, quality second: brainstorm broadly, then narrow only to allocate pilot budget — annotate the rest, don't paper-kill them.
 - A good negative result is just as publishable as a positive one. Prioritize ideas where the answer matters regardless of direction.
-- Don't fall in love with any idea before validating it. Be willing to kill ideas.
+- Don't fall in love with any idea before validating it — but let evidence do the killing, not anticipated objections.
 - Always estimate compute cost. An idea that needs 1000 GPU-hours is not actionable for most researchers.
-- "Apply X to Y" is the lowest form of research idea. Push for deeper questions.
+- "Apply X to Y" is legitimate when Y can reveal a non-obvious interaction, failure mode, or finding — judge the revelation, not the template.
 - Include eliminated ideas in the report — they save future time by documenting dead ends.
-- **If the user's direction is too broad (e.g., "NLP", "computer vision", "reinforcement learning"), STOP and ask them to narrow it.** A good direction is 1-2 sentences specifying the problem, domain, and constraint — e.g., "factorized gap in discrete diffusion LMs" or "sample efficiency of offline RL with image observations". Without sufficient specificity, generated ideas will be too vague to run experiments on.
+- **If the user's direction is broad (e.g., "NLP"), use Phase 1 to derive 2-3 concrete frames and generate across them — ask the user only when a missing constraint would materially change the pilot slate.** A good direction is 1-2 sentences specifying the problem, domain, and constraint — e.g., "factorized gap in discrete diffusion LMs" or "sample efficiency of offline RL with image observations". Without sufficient specificity, generated ideas will be too vague to run experiments on.
 - **Anti-hallucination for cited papers.** When the landscape survey or novelty justification cites specific papers, every cited paper must pass pre-search verification (`verify_papers.py`, canonical name resolved per [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2; 3-layer arXiv / CrossRef / S2 fallback inside the helper itself). Policy D1 (primary + degraded-output fallback): if the helper is unresolved **or** its invocation fails, mark candidates `[UNVERIFIED]` and continue rather than dropping or guessing. Never fabricate arXiv IDs, DOIs, or titles from memory. Full protocol in [`shared-references/citation-discipline.md`](../shared-references/citation-discipline.md) § Pre-Search Verification Protocol.
 
 ## Composing with Other Skills

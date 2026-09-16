@@ -161,7 +161,7 @@ For paper architecture figures, invoke fresh-agent review (same-family provision
 
 ```text
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh
   message: |
     Review this SVG figure for a technical paper (architecture / workflow diagram).

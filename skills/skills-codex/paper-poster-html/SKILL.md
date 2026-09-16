@@ -73,7 +73,7 @@ paper (.tex / PDF) ──► content plan + claim→evidence audit (fresh review
 
   If unresolved, the install is broken: abort and tell the user to re-install (Policy A
   — the gates ARE the skill; never improvise replacements).
-- **REVIEWER_MODEL** = `gpt-5.6-sol`, reasoning effort `xhigh`, **fresh reviewer agent per
+- **REVIEWER_MODEL** = `gpt-6-astra`, reasoning effort `xhigh`, **fresh reviewer agent per
   review call** (a new `spawn_agent:` every time; never reuse a reviewer agent across
   review boundaries).
 - **CANVAS** — from the venue's official spec, looked up live in Phase 0. Never assume.
@@ -151,7 +151,7 @@ never reverted.
 
    ```text
    spawn_agent:
-     model: gpt-5.6-sol
+     model: gpt-6-astra
      reasoning_effort: xhigh
      message: |
        Audit a conference-poster content plan against its source paper.
@@ -292,7 +292,7 @@ executor framing:
 
 ```text
 spawn_agent:
-  model: gpt-5.6-sol
+  model: gpt-6-astra
   reasoning_effort: xhigh
   message: |
     Final print-readiness audit of a conference poster. Read these files yourself:

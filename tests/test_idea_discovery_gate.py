@@ -31,7 +31,7 @@ def _complete_run(
         root,
         run_id,
         list(gate.REQUIRED_PHASES),
-        executor="codex-gpt-5.6-sol" if is_provisional else "claude-sonnet-4.5",
+        executor="codex-gpt-6-astra" if is_provisional else "claude-sonnet-4.5",
         provisional_advances=is_provisional,
     )
     _write(
@@ -69,7 +69,7 @@ The reviewer recommends proceeding after one ablation.
                 run_id,
                 phase,
                 verdict_id=f"trace:{phase}:accepted",
-                reviewer="gpt-5.6-sol",
+                reviewer="gpt-6-astra",
             )
         elif review_status == "provisional":
             run_state.mark_provisional(
@@ -77,7 +77,7 @@ The reviewer recommends proceeding after one ablation.
                 run_id,
                 phase,
                 verdict_id=f"trace:{phase}:provisional",
-                reviewer="gpt-5.6-sol",
+                reviewer="gpt-6-astra",
             )
 
 
@@ -193,7 +193,7 @@ def test_gate_blocks_forged_same_family_acceptance():
         )
         # Make the executor/reviewer family fields internally coherent while
         # retaining the false `accepted`/`cross-family` claim.
-        phase["executor_model"] = "codex-gpt-5.6-sol"
+        phase["executor_model"] = "codex-gpt-6-astra"
         phase["executor_family"] = "openai"
 
         result = gate.evaluate(root, state)

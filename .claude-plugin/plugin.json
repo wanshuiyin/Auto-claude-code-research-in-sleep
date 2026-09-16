@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "aris",
+  "description": "ARIS research workflow as a Claude Code plugin: literature review, idea discovery, experiments, paper writing, rebuttal, slides — with a cross-model Codex reviewer. Run /aris:setup once after installing.",
+  "author": {
+    "name": "wanshuiyin",
+    "url": "https://github.com/wanshuiyin"
+  },
+  "homepage": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep",
+  "repository": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep",
+  "license": "MIT",
+  "keywords": [
+    "research",
+    "paper",
+    "literature-review",
+    "skills",
+    "workflow"
+  ]
+}

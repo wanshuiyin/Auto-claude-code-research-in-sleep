@@ -204,7 +204,7 @@ def test_provisional_advances_only_under_explicit_policy():
     with _tmp() as d:
         rs.start_run(d, "run-a", PHASES, executor="codex", provisional_advances=True)
         rs.set_status(d, "run-a", "W1", "done")
-        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-5.6-sol")
+        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-6-astra")
         assert rs.resume_point(d, "run-a")["phase"] == "W1.5"
         for phase in PHASES[1:]:
             rs.set_status(d, "run-a", phase, "skipped")
@@ -217,7 +217,7 @@ def test_provisional_does_not_advance_mainline_default():
     with _tmp() as d:
         rs.start_run(d, "run-a", PHASES, executor="codex")
         rs.set_status(d, "run-a", "W1", "done")
-        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-5.6-sol")
+        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-6-astra")
         assert rs.resume_point(d, "run-a")["phase"] == "W1"
 
 
@@ -226,7 +226,7 @@ def test_provisional_upgrades_to_accepted_by_cross_family():
     with _tmp() as d:
         rs.start_run(d, "run-a", PHASES, executor="codex")
         rs.set_status(d, "run-a", "W1", "done")
-        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-5.6-sol")
+        rs.mark_provisional(d, "run-a", "W1", "agent:1", "gpt-6-astra")
         st = rs.accept(d, "run-a", "W1", "claude:v1", "claude-opus-4-8")
         ph = next(p for p in st["phases"] if p["phase"] == "W1")
         assert ph["status"] == "accepted"

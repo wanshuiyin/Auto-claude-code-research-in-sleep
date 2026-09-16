@@ -1087,7 +1087,7 @@ def test_save_trace_default_codex_identity_is_advisory(tmp_path: Path) -> None:
     request, meta, run_meta = _save_trace_request(
         tmp_path,
         "--backend", "codex",
-        "--model", "gpt-5.6-sol",
+        "--model", "gpt-6-astra",
         "--effort", "xhigh",
     )
 

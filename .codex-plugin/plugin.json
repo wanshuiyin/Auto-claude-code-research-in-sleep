@@ -1,0 +1,18 @@
+{
+  "name": "aris",
+  "description": "ARIS research workflow for Codex CLI: literature review, idea discovery, experiments, paper writing, rebuttal, slides — the Codex-native skill mirror, with a fresh spawn_agent reviewer per review round.",
+  "author": {
+    "name": "wanshuiyin",
+    "url": "https://github.com/wanshuiyin"
+  },
+  "homepage": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep",
+  "repository": "https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep",
+  "license": "MIT",
+  "keywords": ["research", "paper", "literature-review", "skills", "workflow", "codex"],
+  "skills": "./skills/skills-codex/",
+  "interface": {
+    "displayName": "ARIS",
+    "shortDescription": "Auto research in sleep — overnight ML research with cross-model review",
+    "developerName": "wanshuiyin"
+  }
+}
