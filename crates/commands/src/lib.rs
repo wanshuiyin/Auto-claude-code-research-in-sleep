@@ -112,9 +112,15 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
         resume_supported: true,
     },
     SlashCommandSpec {
+        name: "since",
+        summary: "Replay what happened since your last input",
+        argument_hint: Some("[full]"),
+        resume_supported: true,
+    },
+    SlashCommandSpec {
         name: "resume",
         summary: "Load a saved session into the REPL",
-        argument_hint: Some("<session-path>"),
+        argument_hint: Some("[index|id-prefix|path]"),
         resume_supported: false,
     },
     SlashCommandSpec {
@@ -198,7 +204,7 @@ const SLASH_COMMAND_SPECS: &[SlashCommandSpec] = &[
     SlashCommandSpec {
         name: "session",
         summary: "List or switch managed local sessions",
-        argument_hint: Some("[list|switch <session-id>]"),
+        argument_hint: Some("[list|switch <index|id-prefix>]"),
         resume_supported: false,
     },
     SlashCommandSpec {
@@ -244,6 +250,10 @@ pub enum SlashCommand {
         confirm: bool,
     },
     Cost,
+    /// v0.4.25: replay everything after the user's last input (display only).
+    Since {
+        full: bool,
+    },
     Resume {
         session_path: Option<String>,
     },
@@ -326,6 +336,9 @@ impl SlashCommand {
                 confirm: parts.next() == Some("--confirm"),
             },
             "cost" => Self::Cost,
+            "since" => Self::Since {
+                full: parts.next() == Some("full"),
+            },
             "resume" => Self::Resume {
                 session_path: parts.next().map(ToOwned::to_owned),
             },
@@ -442,6 +455,7 @@ pub fn handle_slash_command(
             session: session.clone(),
         }),
         SlashCommand::Status
+        | SlashCommand::Since { .. }
         | SlashCommand::Bughunter { .. }
         | SlashCommand::Commit
         | SlashCommand::Pr { .. }
@@ -597,16 +611,17 @@ mod tests {
         assert!(help.contains("/permissions [read-only|workspace-write|danger-full-access]"));
         assert!(help.contains("/clear [--confirm]"));
         assert!(help.contains("/cost"));
-        assert!(help.contains("/resume <session-path>"));
+        assert!(help.contains("/resume [index|id-prefix|path]"));
+        assert!(help.contains("/since [full]"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/memory"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
         assert!(help.contains("/version"));
         assert!(help.contains("/export [file]"));
-        assert!(help.contains("/session [list|switch <session-id>]"));
-        assert_eq!(slash_command_specs().len(), 28);
-        assert_eq!(resume_supported_slash_commands().len(), 11);
+        assert!(help.contains("/session [list|switch <index|id-prefix>]"));
+        assert_eq!(slash_command_specs().len(), 29);
+        assert_eq!(resume_supported_slash_commands().len(), 12);
     }
 
     #[test]
@@ -705,5 +720,12 @@ mod tests {
         assert!(
             handle_slash_command("/session list", &session, CompactionConfig::default()).is_none()
         );
+    }
+
+    #[test]
+    fn parses_since_with_optional_full() {
+        assert_eq!(SlashCommand::parse("/since"), Some(SlashCommand::Since { full: false }));
+        assert_eq!(SlashCommand::parse("/since full"), Some(SlashCommand::Since { full: true }));
+        assert_eq!(SlashCommand::parse("/since  full"), Some(SlashCommand::Since { full: true }));
     }
 }

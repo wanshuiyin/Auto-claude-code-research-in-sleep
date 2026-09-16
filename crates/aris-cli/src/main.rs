@@ -1390,6 +1390,10 @@ fn run_resume_command(
                 message: Some(format_cost_report(usage)),
             })
         }
+        SlashCommand::Since { full } => Ok(ResumeCommandOutcome {
+            session: session.clone(),
+            message: Some(render_since_from_session(session, *full)),
+        }),
         SlashCommand::Config { section } => Ok(ResumeCommandOutcome {
             session: session.clone(),
             message: Some(render_config_report(section.as_deref())?),
@@ -1620,6 +1624,28 @@ struct LiveCli {
     /// than silently run). Threaded into every `build_runtime` so plan-mode
     /// rebuilds keep the same posture.
     may_prompt: bool,
+    /// v0.4.25 (`/since`): display-only record of the last turn. Kept by the
+    /// CLI because auto-compaction may replace the session inside the turn,
+    /// dropping exactly the long tool-heavy tail the user wants to re-read.
+    /// `RefCell` so the internal model commands (`&self`) can record too.
+    last_turn: RefCell<Option<LastTurnDisplay>>,
+    /// v0.4.25: the literal command the user typed when the turn's prompt is
+    /// generated text (a `/skill args` invocation); consumed by `run_turn`.
+    request_label: Option<String>,
+    /// v0.4.25 (#439): the session list as last printed, so `/resume 2` means
+    /// the second row the user is looking at even after a save re-sorts.
+    session_list_snapshot: Vec<ManagedSessionSummary>,
+}
+
+/// v0.4.25: what `/since` replays for the most recent turn.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct LastTurnDisplay {
+    /// The user's own input (or the literal `/skill` command).
+    request: String,
+    /// Assistant and tool messages in transcript order.
+    messages: Vec<ConversationMessage>,
+    /// The terminal error when the turn failed or was interrupted.
+    error: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -1700,6 +1726,9 @@ impl LiveCli {
             plan_mode: None,
             mcp,
             may_prompt,
+            last_turn: RefCell::new(None),
+            request_label: None,
+            session_list_snapshot: Vec::new(),
         };
         cli.persist_session()?;
         Ok(cli)
@@ -1924,6 +1953,17 @@ impl LiveCli {
             let result = self.runtime.run_turn(input, Some(&mut permission_prompter));
             match result {
                 Ok(summary) => {
+                    // v0.4.25 (`/since`): record the turn as displayed — the
+                    // literal request plus the assistant/tool messages in
+                    // order — before compaction or the next turn can touch it.
+                    let request = self.request_label.take().unwrap_or_else(|| input.to_string());
+                    let messages = interleave_turn_messages(&summary);
+                    let tool_calls = turn_tool_call_count(&messages);
+                    self.last_turn.replace(Some(LastTurnDisplay {
+                        request,
+                        messages,
+                        error: None,
+                    }));
                     let done_label = "\x1b[38;5;74m●\x1b[0m \x1b[2mDone\x1b[0m";
                     // v0.4.20 (#299): when the turn printed visible assistant
                     // text, finish WITHOUT clearing the current line (the reply
@@ -1950,6 +1990,7 @@ impl LiveCli {
                             format_auto_compaction_notice(event.removed_message_count)
                         );
                     }
+                    print_turn_hint(tool_calls);
                     self.persist_session()?;
                     return Ok(());
                 }
@@ -1983,6 +2024,20 @@ impl LiveCli {
                         TerminalRenderer::new().color_theme(),
                         &mut stdout,
                     )?;
+                    // v0.4.25 (`/since`): a failed or interrupted turn is
+                    // replayable too — from the (uncompacted) session suffix
+                    // the runtime appended, plus the error itself.
+                    let request = self.request_label.take().unwrap_or_else(|| input.to_string());
+                    let messages = retained_suffix(self.runtime.session())
+                        .map(|(_, tail)| tail.to_vec())
+                        .unwrap_or_default();
+                    let tool_calls = turn_tool_call_count(&messages);
+                    self.last_turn.replace(Some(LastTurnDisplay {
+                        request,
+                        messages,
+                        error: Some(error.to_string()),
+                    }));
+                    print_turn_hint(tool_calls);
                     return Err(Box::new(error));
                 }
             }
@@ -2168,6 +2223,10 @@ impl LiveCli {
                 self.print_cost();
                 false
             }
+            SlashCommand::Since { full } => {
+                self.print_since(full);
+                false
+            }
             SlashCommand::Resume { session_path } => self.resume_session(session_path)?,
             SlashCommand::Config { section } => {
                 Self::print_config(section.as_deref())?;
@@ -2213,6 +2272,11 @@ impl LiveCli {
                             "Use the Skill tool to invoke the skill named \"{name}\" with arguments: {args_hint}. Follow the skill instructions precisely."
                         )
                     };
+                    self.request_label = Some(if args_hint.is_empty() {
+                        format!("/{name}")
+                    } else {
+                        format!("/{name} {args_hint}")
+                    });
                     self.run_turn(&skill_prompt)?;
                     false
                 } else {
@@ -3005,6 +3069,7 @@ impl LiveCli {
         }
 
         self.session = create_managed_session_handle()?;
+        self.last_turn.replace(None);
         self.runtime = build_runtime(
             Session::new(),
             self.model.clone(),
@@ -3034,12 +3099,19 @@ impl LiveCli {
         &mut self,
         session_path: Option<String>,
     ) -> Result<bool, Box<dyn std::error::Error>> {
+        // v0.4.25 (#439): no argument → show the list the indices refer to.
         let Some(session_ref) = session_path else {
-            println!("Usage: /resume <session-path>");
+            self.print_session_list()?;
+            println!("Usage: /resume <index|id-prefix|path>");
             return Ok(false);
         };
 
-        let handle = resolve_session_reference(&session_ref)?;
+        let handle = resolve_session_reference_in(
+            &session_ref,
+            &sessions_dir()?,
+            &self.session_list_snapshot,
+            &list_managed_sessions()?,
+        )?;
         let session = Session::load_from_path(&handle.path)?;
         let message_count = session.messages.len();
         self.runtime = build_runtime(
@@ -3054,6 +3126,7 @@ impl LiveCli {
             self.may_prompt,
         )?;
         self.session = handle;
+        self.last_turn.replace(None);
         println!(
             "{}",
             format_resume_report(
@@ -3062,7 +3135,33 @@ impl LiveCli {
                 self.runtime.usage().turns(),
             )
         );
+        // v0.4.25 (#439): show where the conversation stopped instead of
+        // three lines of statistics.
+        println!("{}", render_since_from_session(self.runtime.session(), false));
         Ok(true)
+    }
+
+    /// v0.4.25 (`/since`): replay the last turn — the CLI's display record
+    /// when this session produced one, else the retained tail of the loaded
+    /// session (after `/resume`).
+    fn print_since(&self, full: bool) {
+        let cached = self.last_turn.borrow();
+        match cached.as_ref() {
+            Some(turn) => println!(
+                "{}",
+                render_turn_replay(&turn.request, &turn.messages, turn.error.as_deref(), full)
+            ),
+            None => println!("{}", render_since_from_session(self.runtime.session(), full)),
+        }
+    }
+
+    /// v0.4.25 (#439): print the session list and remember it, so a numeric
+    /// `/resume N` / `/session switch N` means the row the user just saw.
+    fn print_session_list(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let (text, listed) = render_session_list(&self.session.id)?;
+        self.session_list_snapshot = listed;
+        println!("{text}");
+        Ok(())
     }
 
     fn print_config(section: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
@@ -3105,15 +3204,20 @@ impl LiveCli {
     ) -> Result<bool, Box<dyn std::error::Error>> {
         match action {
             None | Some("list") => {
-                println!("{}", render_session_list(&self.session.id)?);
+                self.print_session_list()?;
                 Ok(false)
             }
             Some("switch") => {
                 let Some(target) = target else {
-                    println!("Usage: /session switch <session-id>");
+                    println!("Usage: /session switch <index|id-prefix>");
                     return Ok(false);
                 };
-                let handle = resolve_session_reference(target)?;
+                let handle = resolve_session_reference_in(
+                    target,
+                    &sessions_dir()?,
+                    &self.session_list_snapshot,
+                    &list_managed_sessions()?,
+                )?;
                 let session = Session::load_from_path(&handle.path)?;
                 let message_count = session.messages.len();
                 self.runtime = build_runtime(
@@ -3128,16 +3232,18 @@ impl LiveCli {
                     self.may_prompt,
                 )?;
                 self.session = handle;
+                self.last_turn.replace(None);
                 println!(
                     "Session switched\n  Active session   {}\n  File             {}\n  Messages         {}",
                     self.session.id,
                     self.session.path.display(),
                     message_count,
                 );
+                println!("{}", render_since_from_session(self.runtime.session(), false));
                 Ok(true)
             }
             Some(other) => {
-                println!("Unknown /session action '{other}'. Use /session list or /session switch <session-id>.");
+                println!("Unknown /session action '{other}'. Use /session list or /session switch <index|id-prefix>.");
                 Ok(false)
             }
         }
@@ -3363,6 +3469,7 @@ impl LiveCli {
 
     fn run_internal_prompt_text(
         &self,
+        label: &str,
         prompt: &str,
         enable_tools: bool,
     ) -> Result<String, Box<dyn std::error::Error>> {
@@ -3380,6 +3487,14 @@ impl LiveCli {
         )?;
         let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
         let summary = runtime.run_turn(prompt, Some(&mut permission_prompter))?;
+        // v0.4.25 (`/since`): an internal model command is a turn the user
+        // triggered; replaying an older turn after it would mislead.
+        let messages = interleave_turn_messages(&summary);
+        self.last_turn.replace(Some(LastTurnDisplay {
+            request: label.to_string(),
+            messages,
+            error: None,
+        }));
         Ok(final_assistant_text(&summary).trim().to_string())
     }
 
@@ -3388,7 +3503,7 @@ impl LiveCli {
         let prompt = format!(
             "You are /bughunter. Inspect {scope} and identify the most likely bugs or correctness issues. Prioritize concrete findings with file paths, severity, and suggested fixes. Use tools if needed."
         );
-        println!("{}", self.run_internal_prompt_text(&prompt, true)?);
+        println!("{}", self.run_internal_prompt_text("/bughunter", &prompt, true)?);
         Ok(())
     }
 
@@ -3397,7 +3512,7 @@ impl LiveCli {
         let prompt = format!(
             "You are /ultraplan. Produce a deep multi-step execution plan for {task}. Include goals, risks, implementation sequence, verification steps, and rollback considerations. Use tools if needed."
         );
-        println!("{}", self.run_internal_prompt_text(&prompt, true)?);
+        println!("{}", self.run_internal_prompt_text("/ultraplan", &prompt, true)?);
         Ok(())
     }
 
@@ -3430,7 +3545,7 @@ impl LiveCli {
             truncate_for_prompt(&staged_stat, 8_000),
             recent_user_context(self.runtime.session(), 6)
         );
-        let message = sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let message = sanitize_generated_message(&self.run_internal_prompt_text("/commit", &prompt, false)?);
         if message.trim().is_empty() {
             return Err("generated commit message was empty".into());
         }
@@ -3461,7 +3576,7 @@ impl LiveCli {
             context.unwrap_or("none"),
             truncate_for_prompt(&staged, 10_000)
         );
-        let draft = sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let draft = sanitize_generated_message(&self.run_internal_prompt_text("/pr", &prompt, false)?);
         let (title, body) = parse_titled_body(&draft)
             .ok_or_else(|| "failed to parse generated PR title/body".to_string())?;
 
@@ -3492,7 +3607,7 @@ impl LiveCli {
             context.unwrap_or("none"),
             truncate_for_prompt(&recent_user_context(self.runtime.session(), 10), 10_000)
         );
-        let draft = sanitize_generated_message(&self.run_internal_prompt_text(&prompt, false)?);
+        let draft = sanitize_generated_message(&self.run_internal_prompt_text("/issue", &prompt, false)?);
         let (title, body) = parse_titled_body(&draft)
             .ok_or_else(|| "failed to parse generated issue title/body".to_string())?;
 
@@ -3539,22 +3654,61 @@ fn generate_session_id() -> String {
     format!("session-{millis}")
 }
 
-fn resolve_session_reference(reference: &str) -> Result<SessionHandle, Box<dyn std::error::Error>> {
+/// v0.4.25 (#439): resolve what the user typed after `/resume` or
+/// `/session switch`, in this order: an existing path; an exact managed id;
+/// a 1-based index into the list as last printed (`snapshot`); a unique
+/// prefix of a managed id (an ambiguous prefix lists the candidates).
+fn resolve_session_reference_in(
+    reference: &str,
+    sessions_dir: &Path,
+    snapshot: &[ManagedSessionSummary],
+    listing: &[ManagedSessionSummary],
+) -> Result<SessionHandle, Box<dyn std::error::Error>> {
+    let reference = reference.trim();
     let direct = PathBuf::from(reference);
-    let path = if direct.exists() {
-        direct
-    } else {
-        sessions_dir()?.join(format!("{reference}.json"))
-    };
-    if !path.exists() {
-        return Err(format!("session not found: {reference}").into());
+    if direct.is_file() {
+        let id = direct
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or(reference)
+            .to_string();
+        return Ok(SessionHandle { id, path: direct });
     }
-    let id = path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .unwrap_or(reference)
-        .to_string();
-    Ok(SessionHandle { id, path })
+    let exact = sessions_dir.join(format!("{reference}.json"));
+    if exact.is_file() {
+        return Ok(SessionHandle {
+            id: reference.to_string(),
+            path: exact,
+        });
+    }
+    if let Ok(index) = reference.parse::<usize>() {
+        return match index.checked_sub(1).and_then(|i| snapshot.get(i)) {
+            Some(entry) => Ok(SessionHandle {
+                id: entry.id.clone(),
+                path: entry.path.clone(),
+            }),
+            None if snapshot.is_empty() => {
+                Err("no session list to index into — run /session list (or /resume) first".into())
+            }
+            None => Err(format!("no session #{index} in the last list (1-{})", snapshot.len()).into()),
+        };
+    }
+    let candidates: Vec<&ManagedSessionSummary> = listing
+        .iter()
+        .filter(|entry| entry.id.starts_with(reference))
+        .collect();
+    match candidates.as_slice() {
+        [single] => Ok(SessionHandle {
+            id: single.id.clone(),
+            path: single.path.clone(),
+        }),
+        [] => Err(format!("session not found: {reference}").into()),
+        many => Err(format!(
+            "ambiguous session prefix '{reference}': {}",
+            many.iter().map(|entry| entry.id.as_str()).collect::<Vec<_>>().join(", ")
+        )
+        .into()),
+    }
 }
 
 fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::error::Error>> {
@@ -3587,35 +3741,66 @@ fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::er
             message_count,
         });
     }
-    sessions.sort_by(|left, right| right.modified_epoch_secs.cmp(&left.modified_epoch_secs));
+    // Newest first; the id (a millisecond timestamp) breaks whole-second ties
+    // so the displayed order is stable between two prints.
+    sessions.sort_by(|left, right| {
+        right
+            .modified_epoch_secs
+            .cmp(&left.modified_epoch_secs)
+            .then_with(|| right.id.cmp(&left.id))
+    });
     Ok(sessions)
 }
 
-fn render_session_list(active_session_id: &str) -> Result<String, Box<dyn std::error::Error>> {
+/// v0.4.25 (#439): the list with a 1-based index per row and a relative age,
+/// returned together with the rows so the caller can remember what `N` meant.
+fn render_session_list(
+    active_session_id: &str,
+) -> Result<(String, Vec<ManagedSessionSummary>), Box<dyn std::error::Error>> {
     let sessions = list_managed_sessions()?;
+    let now_secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default();
     let mut lines = vec![
         "Sessions".to_string(),
         format!("  Directory         {}", sessions_dir()?.display()),
     ];
     if sessions.is_empty() {
         lines.push("  No managed sessions saved yet.".to_string());
-        return Ok(lines.join("\n"));
+        return Ok((lines.join("\n"), sessions));
     }
-    for session in sessions {
+    for (index, session) in sessions.iter().enumerate() {
         let marker = if session.id == active_session_id {
             "● current"
         } else {
             "○ saved"
         };
         lines.push(format!(
-            "  {id:<20} {marker:<10} msgs={msgs:<4} modified={modified} path={path}",
+            "  [{n}] {id:<20} {marker:<10} msgs={msgs:<4} {age:<8} path={path}",
+            n = index + 1,
             id = session.id,
             msgs = session.message_count,
-            modified = session.modified_epoch_secs,
+            age = format_relative_age(now_secs, session.modified_epoch_secs),
             path = session.path.display(),
         ));
     }
-    Ok(lines.join("\n"))
+    lines.push("  Resume with /resume <index|id-prefix|path>".to_string());
+    Ok((lines.join("\n"), sessions))
+}
+
+/// "just now" / "3m ago" / "2h ago" / "5d ago".
+fn format_relative_age(now_secs: u64, then_secs: u64) -> String {
+    let delta = now_secs.saturating_sub(then_secs);
+    if delta < 60 {
+        "just now".to_string()
+    } else if delta < 3600 {
+        format!("{}m ago", delta / 60)
+    } else if delta < 86_400 {
+        format!("{}h ago", delta / 3600)
+    } else {
+        format!("{}d ago", delta / 86_400)
+    }
 }
 
 fn render_repl_help() -> String {
@@ -4397,6 +4582,226 @@ fn render_version_report() -> String {
     format!(
         "ARIS (Auto Research in Sleep)\n  Version          {VERSION}\n  Git SHA          {git_sha}\n  Target           {target}\n  Build date       {BUILD_DATE}"
     )
+}
+
+// ── v0.4.25: `/since` — replay the last turn to the terminal ────────────────
+
+/// The assistant / tool messages of a turn in transcript order: the runtime
+/// stores one assistant message per API round and the round's tool results
+/// as one grouped `Tool` message right after it.
+fn interleave_turn_messages(summary: &runtime::TurnSummary) -> Vec<ConversationMessage> {
+    let mut messages = Vec::with_capacity(summary.assistant_messages.len() + summary.tool_results.len());
+    let mut results = summary.tool_results.iter();
+    for assistant in &summary.assistant_messages {
+        messages.push(assistant.clone());
+        let has_tool_use = assistant
+            .blocks
+            .iter()
+            .any(|block| matches!(block, ContentBlock::ToolUse { .. }));
+        if has_tool_use {
+            if let Some(result) = results.next() {
+                messages.push(result.clone());
+            }
+        }
+    }
+    messages.extend(results.cloned());
+    messages
+}
+
+/// Number of tool CALLS in a turn (`ToolUse` blocks), not result batches.
+fn turn_tool_call_count(messages: &[ConversationMessage]) -> usize {
+    messages
+        .iter()
+        .flat_map(|message| message.blocks.iter())
+        .filter(|block| matches!(block, ContentBlock::ToolUse { .. }))
+        .count()
+}
+
+/// The synthetic `User` message compaction writes in place of the removed
+/// history. It is not something the user typed and it embeds summarised
+/// thinking, so `/since` never treats it as a request or prints it.
+fn is_compaction_continuation(message: &ConversationMessage) -> bool {
+    message.role == MessageRole::User
+        && message.blocks.iter().any(|block| {
+            matches!(block, ContentBlock::Text { text }
+                if text.starts_with("This session is being continued from a previous conversation"))
+        })
+}
+
+/// The retained tail of a session: the last real user request and everything
+/// after it. `None` when the session has no user turn or its last user
+/// message is the compaction continuation (the real turn is gone).
+fn retained_suffix(session: &Session) -> Option<(String, &[ConversationMessage])> {
+    let index = session
+        .messages
+        .iter()
+        .rposition(|message| message.role == MessageRole::User)?;
+    let anchor = &session.messages[index];
+    if is_compaction_continuation(anchor) {
+        return None;
+    }
+    let request = anchor
+        .blocks
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::Text { text } => Some(text.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Some((request, &session.messages[index + 1..]))
+}
+
+/// `/since` over a stored session (after `/resume`, or in `--resume` batch
+/// mode): the retained tail, or a one-line notice when nothing is there.
+fn render_since_from_session(session: &Session, full: bool) -> String {
+    match retained_suffix(session) {
+        Some((request, messages)) => render_turn_replay(&request, messages, None, full),
+        None => "\x1b[2m── /since: no previous turn is retained in this session (nothing yet, or it was compacted away) ──\x1b[0m".to_string(),
+    }
+}
+
+const SINCE_HEADER_CHARS: usize = 80;
+
+/// Render one turn as the terminal showed it: the request line, then each
+/// assistant text block (markdown), each tool call header and each tool
+/// result — folded exactly like the live display by default, complete
+/// payloads with `full`. Thinking blocks are never printed. Spinner / Done
+/// lines are not part of the transcript and are not reproduced.
+fn render_turn_replay(
+    request: &str,
+    messages: &[ConversationMessage],
+    error: Option<&str>,
+    full: bool,
+) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let first_line = request.lines().next().unwrap_or("").trim();
+    let shown: String = if first_line.chars().count() > SINCE_HEADER_CHARS {
+        let mut cut: String = first_line.chars().take(SINCE_HEADER_CHARS).collect();
+        cut.push('…');
+        cut
+    } else {
+        first_line.to_string()
+    };
+    let mode = if full { " (full)" } else { "" };
+    let _ = writeln!(out, "\x1b[2m── /since{mode} ──\x1b[0m");
+    let _ = writeln!(out, "\x1b[38;5;74m❯\x1b[0m {shown}");
+    let renderer = TerminalRenderer::new();
+    for message in messages {
+        match message.role {
+            MessageRole::Assistant => {
+                for block in &message.blocks {
+                    match block {
+                        ContentBlock::Text { text } if !text.trim().is_empty() => {
+                            let ansi = renderer.markdown_to_ansi(text);
+                            out.push_str(&ansi);
+                            if !ansi.ends_with('\n') {
+                                out.push('\n');
+                            }
+                        }
+                        ContentBlock::ToolUse { name, input, .. } => {
+                            out.push_str(&format_tool_call_start(name, input));
+                            out.push('\n');
+                            if full {
+                                let _ = writeln!(out, "    \x1b[2minput:\x1b[0m {input}");
+                            }
+                        }
+                        // Thinking never reaches the terminal (two e2e
+                        // sentinels lock this for the live path).
+                        ContentBlock::Text { .. }
+                        | ContentBlock::Thinking { .. }
+                        | ContentBlock::ToolResult { .. } => {}
+                    }
+                }
+            }
+            MessageRole::Tool => {
+                for block in &message.blocks {
+                    if let ContentBlock::ToolResult {
+                        tool_name,
+                        output,
+                        is_error,
+                        ..
+                    } = block
+                    {
+                        if full {
+                            let icon = if *is_error {
+                                "\x1b[1;31m✗\x1b[0m"
+                            } else {
+                                "\x1b[1;32m✓\x1b[0m"
+                            };
+                            let _ = writeln!(
+                                out,
+                                "  \x1b[38;5;240m└\x1b[0m {icon} \x1b[38;5;245m{tool_name}\x1b[0m\n{}",
+                                full_payload_text(output)
+                            );
+                        } else {
+                            out.push_str(&format_tool_result(tool_name, output, *is_error));
+                            out.push('\n');
+                        }
+                    }
+                }
+            }
+            // A user message inside the tail only happens for internally
+            // generated prompts; the anchor is already the header line.
+            MessageRole::User | MessageRole::System => {}
+        }
+    }
+    if let Some(error) = error {
+        let _ = writeln!(out, "\x1b[38;5;203m● Error:\x1b[0m {error}");
+    }
+    out.push_str("\x1b[2m── end of /since ──\x1b[0m");
+    out
+}
+
+/// `/since full`: the complete stored tool result, readable. A JSON object
+/// result (bash / read / grep …) is shown field by field with its text fields
+/// unescaped; anything else is printed verbatim. Nothing is dropped.
+fn full_payload_text(output: &str) -> String {
+    let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(output) else {
+        return output.to_string();
+    };
+    use std::fmt::Write as _;
+    let mut text = String::new();
+    for (key, value) in &map {
+        match value {
+            serde_json::Value::String(inner) if !inner.is_empty() => {
+                let _ = writeln!(text, "\x1b[2m{key}:\x1b[0m\n{inner}");
+            }
+            serde_json::Value::String(_) => {}
+            other => {
+                let _ = writeln!(text, "\x1b[2m{key}:\x1b[0m {other}");
+            }
+        }
+    }
+    if text.is_empty() {
+        output.to_string()
+    } else {
+        text.trim_end().to_string()
+    }
+}
+
+/// v0.4.25: after a tool-heavy turn, one line telling the user how to re-read
+/// it. `ARIS_TURN_SUMMARY=0` is the single escape hatch.
+const TURN_HINT_MIN_TOOL_CALLS: usize = 8;
+
+fn turn_hint_enabled_from(value: Option<&str>) -> bool {
+    value.is_none_or(|v| v.trim() != "0")
+}
+
+fn format_turn_hint(tool_calls: usize) -> Option<String> {
+    (tool_calls >= TURN_HINT_MIN_TOOL_CALLS).then(|| {
+        format!("\x1b[2m── this turn: {tool_calls} tool calls · /since to review, /since full for complete output ──\x1b[0m")
+    })
+}
+
+fn print_turn_hint(tool_calls: usize) {
+    if !turn_hint_enabled_from(std::env::var("ARIS_TURN_SUMMARY").ok().as_deref()) {
+        return;
+    }
+    if let Some(hint) = format_turn_hint(tool_calls) {
+        println!("{hint}");
+    }
 }
 
 fn render_export_text(session: &Session) -> String {
@@ -8566,6 +8971,237 @@ mod tests {
         assert_eq!(parsed["data"], "base64==");
     }
 
+    // ── v0.4.25: `/since` replay, turn hint, session reference resolution ──
+    use super::{
+        format_relative_age, format_turn_hint, interleave_turn_messages, is_compaction_continuation,
+        render_since_from_session, render_turn_replay, resolve_session_reference_in,
+        retained_suffix, run_resume_command, turn_hint_enabled_from, turn_tool_call_count,
+        ManagedSessionSummary, SINCE_HEADER_CHARS,
+    };
+    use runtime::Session;
+    use std::fs;
+    use std::path::Path;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn msg(role: MessageRole, blocks: Vec<ContentBlock>) -> ConversationMessage {
+        ConversationMessage {
+            role,
+            blocks,
+            usage: None,
+        }
+    }
+
+    fn text(t: &str) -> ContentBlock {
+        ContentBlock::Text { text: t.to_string() }
+    }
+
+    fn tool_use(id: &str, name: &str, input: &str) -> ContentBlock {
+        ContentBlock::ToolUse {
+            id: id.to_string(),
+            name: name.to_string(),
+            input: input.to_string(),
+        }
+    }
+
+    fn tool_result(id: &str, name: &str, output: &str, is_error: bool) -> ContentBlock {
+        ContentBlock::ToolResult {
+            tool_use_id: id.to_string(),
+            tool_name: name.to_string(),
+            output: output.to_string(),
+            is_error,
+        }
+    }
+
+    fn strip_ansi(s: &str) -> String {
+        let mut out = String::new();
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                for n in chars.by_ref() {
+                    if n == 'm' {
+                        break;
+                    }
+                }
+            } else {
+                out.push(c);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn since_replay_keeps_transcript_order_folds_by_default_and_never_prints_thinking() {
+        let long_output = (1..=40).map(|i| format!("line {i}")).collect::<Vec<_>>().join("\n");
+        let bash_json = serde_json::json!({"stdout": long_output, "stderr": "", "exit_code": 0}).to_string();
+        let summary = runtime::TurnSummary {
+            assistant_messages: vec![
+                msg(
+                    MessageRole::Assistant,
+                    vec![
+                        ContentBlock::Thinking {
+                            thinking: "ARIS_THINKING_SENTINEL_XK9".to_string(),
+                            signature: String::new(),
+                        },
+                        text("Let me look."),
+                        tool_use("a", "bash", "{\"command\":\"ls\"}"),
+                        tool_use("b", "read_file", "{\"path\":\"x.md\"}"),
+                    ],
+                ),
+                msg(MessageRole::Assistant, vec![text("All done.")]),
+            ],
+            tool_results: vec![msg(
+                MessageRole::Tool,
+                vec![
+                    tool_result("a", "bash", &bash_json, false),
+                    tool_result("b", "read_file", "The model `gpt-9` does not exist — full error text here", true),
+                ],
+            )],
+            iterations: 2,
+            usage: TokenUsage::default(),
+            auto_compaction: None,
+        };
+        let messages = interleave_turn_messages(&summary);
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1].role, MessageRole::Tool);
+        assert_eq!(turn_tool_call_count(&messages), 2);
+
+        let folded = strip_ansi(&render_turn_replay("please check the repo", &messages, None, false));
+        let full = strip_ansi(&render_turn_replay("please check the repo", &messages, None, true));
+        for rendered in [&folded, &full] {
+            assert!(rendered.starts_with("── /since"), "{rendered}");
+            assert!(rendered.contains("❯ please check the repo"));
+            assert!(!rendered.contains("ARIS_THINKING_SENTINEL_XK9"), "thinking leaked: {rendered}");
+            // both calls precede both results, results precede the final text
+            let call_a = rendered.find("ls").unwrap();
+            let call_b = rendered.find("x.md").unwrap();
+            let result_a = rendered.find("line 1").unwrap();
+            let final_text = rendered.find("All done.").unwrap();
+            assert!(call_a < call_b && call_b < result_a && result_a < final_text, "{rendered}");
+        }
+        // default = the live fold (bash keeps head + tail, the middle folds);
+        // full = complete payload and untruncated error
+        assert!(folded.contains("more lines"), "{folded}");
+        assert!(!folded.contains("line 20"));
+        assert!(!full.contains("more lines"));
+        assert!(full.contains("line 20") && full.contains("line 40"));
+        assert!(full.contains("full error text here"));
+    }
+
+    #[test]
+    fn since_replay_reports_errors_and_truncates_only_the_header() {
+        let long_request = "x".repeat(200);
+        let rendered = strip_ansi(&render_turn_replay(&long_request, &[], Some("interrupted by user"), false));
+        assert!(rendered.contains(&format!("❯ {}…", "x".repeat(SINCE_HEADER_CHARS))));
+        assert!(rendered.contains("● Error: interrupted by user"));
+    }
+
+    #[test]
+    fn since_uses_the_retained_session_tail_but_never_a_compaction_summary() {
+        let mut session = Session::new();
+        session.messages.push(msg(MessageRole::User, vec![text("first question")]));
+        session.messages.push(msg(MessageRole::Assistant, vec![text("first answer")]));
+        session.messages.push(msg(MessageRole::User, vec![text("second question")]));
+        session.messages.push(msg(MessageRole::Assistant, vec![text("second answer")]));
+        let (request, tail) = retained_suffix(&session).expect("tail");
+        assert_eq!(request, "second question");
+        assert_eq!(tail.len(), 1);
+        let rendered = strip_ansi(&render_since_from_session(&session, false));
+        assert!(rendered.contains("second question") && rendered.contains("second answer"));
+        assert!(!rendered.contains("first answer"));
+
+        // compaction replaced the tail with its synthetic continuation
+        let continuation = runtime::get_compact_continuation_message("SUMMARY WITH ARIS_THINKING_SENTINEL_XK9", true, false);
+        let mut compacted = Session::new();
+        compacted.messages.push(msg(MessageRole::User, vec![text(&continuation)]));
+        assert!(is_compaction_continuation(&compacted.messages[0]));
+        assert!(retained_suffix(&compacted).is_none());
+        let notice = strip_ansi(&render_since_from_session(&compacted, true));
+        assert!(notice.contains("no previous turn is retained"));
+        assert!(!notice.contains("ARIS_THINKING_SENTINEL_XK9"));
+
+        // an empty session
+        assert!(retained_suffix(&Session::new()).is_none());
+    }
+
+    #[test]
+    fn since_is_available_in_resume_batch_mode() {
+        let mut session = Session::new();
+        session.messages.push(msg(MessageRole::User, vec![text("q")]));
+        session.messages.push(msg(MessageRole::Assistant, vec![text("a")]));
+        let outcome = run_resume_command(
+            Path::new("/nonexistent/session.json"),
+            &session,
+            &SlashCommand::Since { full: true },
+        )
+        .expect("since is resume-supported");
+        assert_eq!(outcome.session, session, "read-only: the session is untouched");
+        assert!(strip_ansi(outcome.message.as_deref().unwrap_or("")).contains("❯ q"));
+    }
+
+    #[test]
+    fn turn_hint_threshold_and_escape() {
+        let seven: Vec<ContentBlock> = (0..7).map(|i| tool_use(&i.to_string(), "bash", "{}")).collect();
+        let eight: Vec<ContentBlock> = (0..8).map(|i| tool_use(&i.to_string(), "bash", "{}")).collect();
+        // grouped results do not count; ToolUse blocks do
+        let seven_msgs = vec![
+            msg(MessageRole::Assistant, seven),
+            msg(MessageRole::Tool, vec![tool_result("0", "bash", "{}", false)]),
+        ];
+        assert_eq!(turn_tool_call_count(&seven_msgs), 7);
+        assert_eq!(format_turn_hint(7), None);
+        let hint = format_turn_hint(turn_tool_call_count(&[msg(MessageRole::Assistant, eight)])).expect("hint at 8");
+        assert!(strip_ansi(&hint).contains("8 tool calls") && hint.contains("/since"));
+        assert!(turn_hint_enabled_from(None));
+        assert!(turn_hint_enabled_from(Some("1")));
+        assert!(!turn_hint_enabled_from(Some("0")));
+    }
+
+    #[test]
+    fn session_reference_resolution_precedence() {
+        let dir = std::env::temp_dir().join(format!(
+            "aris-sessions-test-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        for id in ["session-1000", "session-1001", "session-2000"] {
+            Session::new().save_to_path(dir.join(format!("{id}.json"))).unwrap();
+        }
+        let summary = |id: &str, modified: u64| ManagedSessionSummary {
+            id: id.to_string(),
+            path: dir.join(format!("{id}.json")),
+            modified_epoch_secs: modified,
+            message_count: 0,
+        };
+        let listing = vec![summary("session-2000", 3), summary("session-1001", 2), summary("session-1000", 1)];
+        let snapshot = vec![summary("session-2000", 3), summary("session-1001", 2)];
+
+        // path
+        let by_path = resolve_session_reference_in(&dir.join("session-1000.json").to_string_lossy(), &dir, &snapshot, &listing).unwrap();
+        assert_eq!(by_path.id, "session-1000");
+        // exact id
+        assert_eq!(resolve_session_reference_in("session-1001", &dir, &snapshot, &listing).unwrap().id, "session-1001");
+        // index into the DISPLAYED snapshot (not the fresh listing)
+        assert_eq!(resolve_session_reference_in("2", &dir, &snapshot, &listing).unwrap().id, "session-1001");
+        assert!(resolve_session_reference_in("3", &dir, &snapshot, &listing).unwrap_err().to_string().contains("1-2"));
+        assert!(resolve_session_reference_in("1", &dir, &[], &listing).unwrap_err().to_string().contains("run /session list"));
+        // unique prefix vs ambiguous prefix
+        assert_eq!(resolve_session_reference_in("session-2", &dir, &snapshot, &listing).unwrap().id, "session-2000");
+        let err = resolve_session_reference_in("session-100", &dir, &snapshot, &listing).unwrap_err().to_string();
+        assert!(err.contains("ambiguous") && err.contains("session-1000") && err.contains("session-1001"), "{err}");
+        assert!(resolve_session_reference_in("nope", &dir, &snapshot, &listing).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn relative_age_labels() {
+        assert_eq!(format_relative_age(1000, 990), "just now");
+        assert_eq!(format_relative_age(1000, 1000 - 180), "3m ago");
+        assert_eq!(format_relative_age(100_000, 100_000 - 7200), "2h ago");
+        assert_eq!(format_relative_age(1_000_000, 1_000_000 - 5 * 86_400), "5d ago");
+        assert_eq!(format_relative_age(10, 50), "just now");
+    }
+
     /// v0.4.21 (#4): `mcp_result_text` falls back to `structuredContent` only
     /// when the flattened `content` text is empty. A spec-valid server returning
     /// ONLY structuredContent must not hand the model an empty result, while a
@@ -8824,14 +9460,15 @@ mod tests {
         assert!(help.contains("/permissions [read-only|workspace-write|danger-full-access]"));
         assert!(help.contains("/clear [--confirm]"));
         assert!(help.contains("/cost"));
-        assert!(help.contains("/resume <session-path>"));
+        assert!(help.contains("/resume [index|id-prefix|path]"));
+        assert!(help.contains("/since [full]"));
         assert!(help.contains("/config [env|hooks|model]"));
         assert!(help.contains("/memory"));
         assert!(help.contains("/init"));
         assert!(help.contains("/diff"));
         assert!(help.contains("/version"));
         assert!(help.contains("/export [file]"));
-        assert!(help.contains("/session [list|switch <session-id>]"));
+        assert!(help.contains("/session [list|switch <index|id-prefix>]"));
         assert!(help.contains("/exit"));
     }
 
@@ -8844,8 +9481,8 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "help", "status", "compact", "clear", "cost", "config", "memory", "init", "diff",
-                "version", "export",
+                "help", "status", "compact", "clear", "cost", "since", "config", "memory", "init",
+                "diff", "version", "export",
             ]
         );
     }
