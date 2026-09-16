@@ -1,5 +1,92 @@
 # ARIS-Code Changelog
 
+## v0.4.25 (2026-09-16)
+
+The **reviewer-bridge release**. codex-cli 0.154 removed `codex mcp-server`,
+the entry point every Codex review from ARIS-Code was spawned through — on an
+updated codex every review call died. The reviewer now runs over `codex exec`
+with nothing to register. The same release closes #428 and #439, ships the
+#430 fix pending Windows confirmation, adds `/since`, and syncs the skills
+bundle.
+
+### 🔴 Codex reviewer works on codex-cli ≥ 0.154 — built-in `codex exec` bridge
+
+- `mcp__codex__codex` / `mcp__codex__codex-reply` are served by a built-in
+  bridge that runs each call as `codex exec --json`. No `mcpServers.codex`
+  entry is needed; `aris doctor` shows the effective backend on one
+  `Codex reviewer:` line. Thread records share the ARIS Python bridge's
+  directory (`~/.codex/state/codex-exec/threads/`), so a thread started by
+  either can be continued by the other, with its model / effort / sandbox /
+  cwd re-applied on resume. `approval-policy` is accepted and ignored.
+- **Existing users need no edit**: a `settings.json` entry that still says
+  `codex mcp-server` is migrated in memory (its env, `-c` defaults,
+  `requestTimeoutSecs` and `trust` carry over). A different explicit entry
+  (for example the Python bridge) is used exactly as configured. Precedence:
+  a `settings.json` entry overrides a `claude mcp add codex -s user`
+  registration in `~/.claude.json` — to switch to your own bridge, replace
+  the `settings.json` entry. `ARIS_CODEX_BRIDGE=0` restores the pre-0.4.25
+  behaviour (configured entries only).
+- `aris setup` option 10 stops writing `settings.json`; trust is saved as
+  `codex_bridge_trust` in `~/.config/aris/config.json` and applies at once
+  from an inline `/setup`.
+- Found on the way: the model never received a Codex result's `threadId` (it
+  lives only in `structuredContent`), so `codex-reply` could not continue a
+  thread. Results now begin with a `threadId:` line.
+- Bridge timeout 1800 s (deep audits at `ultra` exceed the MCP transport's
+  300 s); Ctrl+C cancels the child and the thread stays resumable.
+- #428: the Windows `.cmd`-shim message carries the official native
+  installer one-liner.
+
+### 🆕 `/since` — back to your last input
+
+- `/since` replays your last input and everything after it, rendered like
+  the live display (tool output folded); `/since full` shows complete
+  payloads. Works after `/resume` and as `aris --resume <session> /since`.
+  Thinking is never printed. The replay is display-only — session files,
+  `--output-format json` and `/export` are unchanged.
+- After a turn with 8 or more tool calls, one dim line points at `/since`.
+  `ARIS_TURN_SUMMARY=0` turns the line off.
+
+### 🐛 #430 Windows: a multi-line paste no longer submits line by line
+
+- Windows consoles deliver no paste event; every pasted line arrived as its
+  own Enter and each became the next turn, and Ctrl+C could not stop the
+  cascade. Pasted lines are now merged into the input (Enter becomes a
+  space, as with bracketed paste on Unix) and never auto-submitted; Ctrl+C
+  discards the rest. `ARIS_PASTE_BURST=0` restores the old behaviour.
+  Inferred from crossterm's Windows source and unit-tested on Windows CI, not
+  yet reproduced on a Windows machine — please confirm on #430.
+
+### 🐛 #439 `/resume` lists sessions and shows where you stopped
+
+- `/resume` with no argument prints the sessions with `[n]` indices and
+  ages; `/resume 2`, a unique id prefix, or a path all resolve — same for
+  `/session switch`. After loading, the last turn is replayed. Session
+  rename is not in this release.
+
+### 📦 Bundled skills 81 → 83, reviewer GPT-6-Astra
+
+- Bundle synced to main `4734364`: `/proof-orchestrator`,
+  `/research-implement-feature`, refreshed doctrine (reviewer `gpt-6-astra`,
+  fallback gpt-5.6-sol → gpt-5.5), 32 helpers (+`review_gate.py`,
+  `copilot_native_evidence.py`, `idea_discovery_gate.py`) and the repo-root
+  `templates/` — all resolvable from the extracted cache without an ARIS
+  checkout.
+- The system prompt follows that doctrine: an explicit `— reviewer:`
+  directive wins, a skill's model pin never disables the capability chain,
+  and `LlmReview` results start with `reviewer_model:` (the model the
+  provider reported, else the requested name) so an HTTP round is reported to
+  `review_gate.py` as `llm-chat` and continued on LlmReview.
+  `gpt-6-astra` pricing tier $10 / $50 (cache write $12.50, read $1).
+
+### Tests
+
+- api 35 + 6 / aris-cli 225 + 4 e2e / runtime 252 / tools 71 / commands 6 /
+  compat-harness 3, all green. Live: `codex exec` fresh + resume roundtrip on
+  codex-cli 0.154.0. Codex MCP (gpt-6-astra): design gate at `ultra` (2
+  rounds), one `xhigh` implementation gate per step (5 + 2 + 2 + 2 rounds)
+  and a final whole-diff gate (2 rounds).
+
 ## v0.4.24 (2026-08-09)
 
 The **Claude 5 model refresh** ([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)):

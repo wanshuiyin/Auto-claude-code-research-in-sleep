@@ -29,6 +29,8 @@
 
 ## 📰 What's New
 
+> **v0.4.25** (2026-09-16) — **The reviewer-bridge release.** codex-cli 0.154 removed `codex mcp-server`, so every Codex review from ARIS-Code died on an updated codex. **🔴 Built-in `codex exec` bridge**: `mcp__codex__codex` runs over `codex exec` with nothing to register — no `mcpServers.codex` entry, an old `codex mcp-server` entry is migrated in memory (env, `-c` defaults, timeout, trust kept), thread records interoperate with ARIS's Python bridge, `aris doctor` shows the effective backend; `ARIS_CODEX_BRIDGE=0` restores the old path. Also fixed on the way: the model never saw a Codex result's `threadId`, so `codex-reply` could not continue a thread. **🆕 `/since`** replays your last input and everything after it (folded like the live display; `/since full` for complete payloads; also after `/resume`); a dim hint appears after turns with 8+ tool calls (`ARIS_TURN_SUMMARY=0`). **🐛 #430** (fix pending Windows confirmation) multi-line paste no longer submits line by line and Ctrl+C stops the cascade (`ARIS_PASTE_BURST=0`). **🐛 #439** `/resume` lists sessions with `[n]` indices, accepts an index / id prefix / path, and shows where you stopped. **#428** the Windows shim message carries the native installer one-liner. **📦 Skills 81 → 83** (+`/proof-orchestrator`, `/research-implement-feature`; doctrine and system prompt now name **GPT-6-Astra**, fallback gpt-5.6-sol → gpt-5.5; 32 helpers + repo-root templates bundled). Tests: api 35+6 / aris-cli 225 + 4 e2e / runtime 252 / tools 71 / commands 6, all green; live `codex exec` roundtrip on codex-cli 0.154.0. Codex MCP (gpt-6-astra): ultra design gate + xhigh implementation gate per step.
+
 > **v0.4.24** (2026-08-09) — **The Claude 5 model refresh** ([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)): first-class **Claude Opus 5** and **Claude Fable 5** (Mythos-class flagship) support. Explicit `--model claude-opus-5` / `claude-fable-5` already worked on every platform — this release makes them visible and priced right. **🆕 Default model → `claude-opus-5`** (same $5/$25 tier as Opus 4.8) for the main session, subagents, and `aris setup`; the availability fallback becomes an ordered **chain** — on the precise `404 not_found_error` a non-explicit session walks Opus 5 → Opus 4.8 → Opus 4.7, one step per failed request (explicit choices never silently change); the old single-hop latch would have stranded 4.7-only accounts and configs saved by v0.4.23's setup, a regression the cross-model review caught, now locked by an end-to-end mock-404 chain test. The `/model` picker adds Fable 5 / Opus 5 / Sonnet 5 (4.8 / 4.6 / Haiku stay selectable); aliases: `fable` → `claude-fable-5` (new), `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. **💰 New Mythos-class pricing tier** (verified 2026-08): `fable`/`mythos` = $10/$50 (cache write $12.50, read $1) — previously `claude-fable-5` matched no family substring and fell to the conservative unknown-model fallback ($15/$75), a 1.5× `/cost` over-estimate; Opus 5 was already priced right by the current-Opus branch and is now test-pinned. Tests: api 41 / aris-cli 213 + 4 e2e / runtime 226 / tools 70 / commands 5, all green; live smoke on `claude-opus-5`, `claude-fable-5`, and the `fable` alias end-to-end. Codex MCP (gpt-5.6-sol xhigh): implementation gate NO-GO (caught the fallback-chain regression + a pricing-history error) → GO after fixes.
 >
 > **v0.4.23** (2026-08-02) — **The output-folding release** — fixes the top real-user complaint: the CLI dumped the FULL content of every document it read (a 2000-line paper = 2000 lines on screen), every bash command's full stdout, and grep's full content blob. **🧹 Tool-output folding (display only)**: Read/Grep show the first 6 lines, Bash shows first 4 + last 4 per stream (stderr stays red), then one dim "… (+N more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)"; kept lines capped at 240 chars (minified-file case); the session, model context, `--output-format json` and `/export` always keep COMPLETE payloads. Thinking was verified to never print (the perception came from these dumps) — two new end-to-end sentinel tests lock that thinking/reasoning never reaches the terminal. **🐛 Bash timeout now kills the command** — previously a timed-out call reported interrupted while the command kept running and its side effects landed afterwards; `ARIS_BASH_KILL_ON_TIMEOUT=0` restores the old behavior. **📦 79→81 bundled skills**: `/integrity-forensics` (the Anti-Autoresearch SHA-pinned launcher: evidence ledger → GPT auditors → deterministic adjudicator → typed BLOCK/WARN gate) and `/web-debug-search`. Grep no longer shows a false "0 matches" in content mode; all local-mock tests are now proxy-immune (15 tests used to go red under a shell proxy). Tests: api 41 / aris-cli 212 + 3 e2e / runtime 225 / tools 69 / commands 5, all green **under a live proxy**. Codex MCP (gpt-5.6-sol ultra) adjudicated the fold design + scope (the cost/compaction package deliberately waits for v0.4.24 — the two fixes are coupled).
@@ -186,7 +188,7 @@ After setup you drop straight into the REPL. Run `/setup` at any time to reconfi
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
 
-> **Design note**: Anthropic Claude is Executor-only; all other providers can serve as both Executor and Reviewer. The classic pairing is **Claude Executor + GPT/GLM Reviewer** for true adversarial multi-agent research. Since v0.4.17 the recommended reviewer path is **Codex MCP** (`aris setup` → reviewer option 10 — runs on a ChatGPT subscription, no OpenAI API key), which prefers **GPT-5.6-Sol**; the API providers above remain available as the HTTP reviewer / fallback (default `gpt-5.5`).
+> **Design note**: Anthropic Claude is Executor-only; all other providers can serve as both Executor and Reviewer. The classic pairing is **Claude Executor + GPT/GLM Reviewer** for true adversarial multi-agent research. Since v0.4.17 the recommended reviewer path is **Codex MCP** (`aris setup` → reviewer option 10 — runs on a ChatGPT subscription, no OpenAI API key), which prefers **GPT-6-Astra**; the API providers above remain available as the HTTP reviewer / fallback (default `gpt-5.5`).
 
 ---
 
@@ -365,29 +367,44 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
 > the model as `mcp__<server>__<tool>`, and calls dispatch end-to-end —
 > on both Anthropic and OpenAI-family executors.
 
+**Codex reviewer — nothing to configure (v0.4.25).** With `codex` on PATH,
+`mcp__codex__codex` / `mcp__codex__codex-reply` are served by a built-in
+bridge that runs `codex exec` (codex-cli 0.154 removed `codex mcp-server`).
+`aris setup` → reviewer option 10 selects it and asks whether to trust it;
+`aris doctor` prints the effective backend on the `Codex reviewer:` line.
+An existing `mcpServers.codex` entry that still says `codex mcp-server` is
+migrated in memory — no edit needed. To run your own server instead, put an
+explicit entry in `settings.json` and it is used as configured. Precedence:
+that entry overrides a `claude mcp add codex -s user` registration in
+`~/.claude.json`, so replace the `settings.json` entry rather than adding a
+second registration:
+
 ```jsonc
 // <config_home>/settings.json  (config_home = $CLAUDE_CONFIG_HOME or ~/.claude)
 {
   "mcpServers": {
     "codex": {
       "type": "stdio",
-      "command": "codex",
-      "args": ["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""],
-      "trust": true,              // optional: skip per-call approval
-      "requestTimeoutSecs": 240   // optional: per-server timeout
+      "command": "python3",
+      "args": ["/path/to/aris_repo/mcp-servers/codex-exec/server.py"],
+      "trust": true,               // optional: skip per-call approval
+      "requestTimeoutSecs": 1800   // deep audits at `ultra` run long
     }
   }
 }
 ```
 
-The easiest way to set this up is `aris setup` → reviewer option 10
-(Codex MCP), which writes the entry for you. Notes:
+Notes:
 
-- Cross-model review through Codex MCP prefers **GPT-5.6-Sol** — skills
-  pin the model + reasoning effort explicitly per fresh call (deep audits
-  at `ultra`, floor `xhigh` for verdict-bearing review). The HTTP
-  reviewer (`/reviewer`, default `gpt-5.5`) serves only as the fallback
-  when the Codex channel is unavailable.
+- Cross-model review through Codex prefers **GPT-6-Astra** — skills pin the
+  model + reasoning effort explicitly per fresh call (deep audits at `ultra`,
+  floor `xhigh` for verdict-bearing review; fallback gpt-5.6-sol → gpt-5.5
+  on capability errors only). The HTTP reviewer (`/reviewer`, default
+  `gpt-5.5`) serves only as the fallback when the Codex channel is
+  unavailable.
+- `ARIS_CODEX_BRIDGE=0` disables the built-in bridge (pre-0.4.25 behaviour:
+  only a configured `codex` entry — `settings.json` or `~/.claude.json` — is
+  spawned, including a legacy `codex mcp-server` one).
 - Known limitation: a **same-transport endpoint override** (e.g. pointing
   `ANTHROPIC_BASE_URL` / a custom base URL at a different provider within
   the same family) can still carry a stale saved executor model — the

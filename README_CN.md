@@ -29,6 +29,8 @@
 
 ## 📰 最新动态
 
+> **v0.4.25** (2026-09-16) — **reviewer 桥接版。** codex-cli 0.154 删掉了 `codex mcp-server`,升级过 codex 的用户从 ARIS-Code 发起的每次 Codex 审稿都会失败。**🔴 内建 `codex exec` 桥接**:`mcp__codex__codex` 改走 `codex exec`,不需要任何注册 —— 不用 `mcpServers.codex` 条目,老的 `codex mcp-server` 条目在内存里自动迁移(env、`-c` 默认、超时、trust 保留),线程记录与 ARIS 的 Python 桥互通,`aris doctor` 显示实际后端;`ARIS_CODEX_BRIDGE=0` 回旧路径。顺带修掉一个老 bug:模型从来拿不到 Codex 结果里的 `threadId`,所以 `codex-reply` 一直续不上线程。**🆕 `/since`** 重放你上一次输入之后发生的一切(按现场显示折叠;`/since full` 看完整输出;`/resume` 之后也可用);工具调用 ≥8 次的回合结束时打一行提示(`ARIS_TURN_SUMMARY=0` 关闭)。**🐛 #430**(待 Windows 用户确认)多行粘贴不再逐行提交,Ctrl+C 能停住(`ARIS_PASTE_BURST=0`)。**🐛 #439** `/resume` 无参数列出会话并带 `[n]` 序号,接受序号 / id 前缀 / 路径,恢复后直接显示停在哪。**#428** Windows shim 的报错带上官方原生安装命令。**📦 skills 81 → 83**(+`/proof-orchestrator`、`/research-implement-feature`;教义与系统提示改为 **GPT-6-Astra**,回退 gpt-5.6-sol → gpt-5.5;32 个 helper + 仓库根 templates 一并打包)。测试:api 35+6 / aris-cli 225 + 4 e2e / runtime 252 / tools 71 / commands 6 全绿;codex-cli 0.154.0 上 `codex exec` 真机往返通过。Codex MCP(gpt-6-astra):ultra 设计 gate + 每步 xhigh 实现 gate。
+
 > **v0.4.24** (2026-08-09) — **Claude 5 模型刷新**([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)):**Claude Opus 5** 与 **Claude Fable 5**(Mythos 级旗舰)一等公民支持。显式 `--model claude-opus-5` / `claude-fable-5` 本来在所有平台就能透传使用 —— 这一版让它们进菜单、算对钱。**🆕 默认模型 → `claude-opus-5`**(与 Opus 4.8 同为 $5/$25 档),覆盖主会话、子代理与 `aris setup`;可用性 fallback 升级为有序**链**:非显式会话在精确的 `404 not_found_error` 上沿 Opus 5 → Opus 4.8 → Opus 4.7 逐步前进、每步警告一次(显式选择的模型永不静默更换);旧的单跳 latch 在新默认下会把仅有 4.7 权限的账号卡死在 4.8、并让 v0.4.23 setup 存下的配置彻底失去回落 —— 该回归被跨模型审当场抓住,现由端到端 mock-404 链测试锁死。`/model` 选择器新增 Fable 5 / Opus 5 / Sonnet 5(4.8 / 4.6 / Haiku 仍可选);别名:`fable` → `claude-fable-5`(新增)、`opus` → `claude-opus-5`、`sonnet` → `claude-sonnet-5`。**💰 新增 Mythos 级计价档**(2026-08 联网核实):`fable`/`mythos` = $10/$50(cache write $12.50、read $1)—— 此前 `claude-fable-5` 不含任何家族子串,落到保守的未知模型兜底档($15/$75),`/cost` 全项高估 1.5×;Opus 5 本就被现行 Opus 档算对,现加测试钉死。测试:api 41 / aris-cli 213 + 4 e2e / runtime 226 / tools 70 / commands 5 全绿;`claude-opus-5`、`claude-fable-5`、`fable` 别名三发真机冒烟端到端通过。Codex MCP(gpt-5.6-sol xhigh):实现 gate NO-GO(抓到 fallback 链回归 + 定价史实错误)→ 修复后 GO。
 >
 > **v0.4.23** (2026-08-02) — **输出折叠版** —— 修掉真实用户投诉第一名:CLI 会把读到的文档**全文** dump 到屏幕(2000 行论文=刷 2000 行)、bash 全量 stdout、grep 全量匹配内容。**🧹 工具输出折叠(仅显示层)**:Read/Grep 显示前 6 行,Bash 每流显示前 4 + 后 4(stderr 保持红色),然后一行暗色 "… (+N more lines — set ARIS_TOOL_OUTPUT_LINES=0 for full output)";保留行截 240 字符(防 minified 单行);session、模型上下文、`--output-format json` 和 `/export` 始终保留**完整**内容。经核实 thinking 本来就不打屏(体感来自上述 dump)—— 新增两个端到端 sentinel 测试锁死 thinking/reasoning 永不落终端。**🐛 bash 超时现在真杀进程** —— 此前超时报告了 interrupted 但命令还在跑、副作用事后落地;`ARIS_BASH_KILL_ON_TIMEOUT=0` 可回旧行为。**📦 内置 skills 79→81**:`/integrity-forensics`(Anti-Autoresearch SHA-pin 启动器:证据台账→GPT 审计→确定性裁决→BLOCK/WARN 门)与 `/web-debug-search`。grep content 模式不再误报 "0 matches";全部本地 mock 测试代理免疫(此前 shell 挂代理会红 15 个测试)。测试:api 41 / aris-cli 212 + 3 e2e / runtime 225 / tools 69 / commands 5,**真代理环境下**全绿。Codex MCP(gpt-5.6-sol ultra)裁定折叠设计与 scope(cost/压缩包刻意留到 v0.4.24 —— 两项耦合)。
@@ -186,7 +188,7 @@ sudo mv aris /usr/local/bin/aris
 | 🔶 Zhipu GLM | ✅ | ✅ | GLM-5, GLM-5-Turbo |
 | 🔷 MiniMax | ✅ | ✅ | MiniMax-M2.7, MiniMax-M2.7-highspeed |
 
-> **设计说明**：Anthropic Claude 仅作 Executor，其他四家可同时作 Executor 和 Reviewer。推荐经典搭配：**Claude Executor + GPT/GLM Reviewer**，构成真正的对抗多智能体。v0.4.17 起推荐的 reviewer 路径是 **Codex MCP**（`aris setup` → reviewer 选项 10 —— 用 ChatGPT 订阅即可，无需 OpenAI API key），优先使用 **GPT-5.6-Sol**；上表的 API 提供商仍可作为 HTTP reviewer / fallback（默认 `gpt-5.5`）。
+> **设计说明**：Anthropic Claude 仅作 Executor，其他四家可同时作 Executor 和 Reviewer。推荐经典搭配：**Claude Executor + GPT/GLM Reviewer**，构成真正的对抗多智能体。v0.4.17 起推荐的 reviewer 路径是 **Codex MCP**（`aris setup` → reviewer 选项 10 —— 用 ChatGPT 订阅即可，无需 OpenAI API key），优先使用 **GPT-6-Astra**；上表的 API 提供商仍可作为 HTTP reviewer / fallback（默认 `gpt-5.5`）。
 
 ---
 
@@ -356,28 +358,38 @@ sudo mv aris /usr/local/bin/aris
 > 会在启动时被 spawn,其工具以 `mcp__<server>__<tool>` 广告给模型,
 > 调用端到端分发 —— Anthropic 与 OpenAI-family executor 两条路径都支持。
 
+**Codex reviewer —— 不需要配置(v0.4.25)。** 只要 `codex` 在 PATH 上,
+`mcp__codex__codex` / `mcp__codex__codex-reply` 就由内建桥接经 `codex exec`
+提供(codex-cli 0.154 删掉了 `codex mcp-server`)。`aris setup` → reviewer
+选项 10 选中它并询问是否 trust;`aris doctor` 的 `Codex reviewer:` 一行显示
+实际后端。已有的、仍写着 `codex mcp-server` 的 `mcpServers.codex` 条目会在
+内存里自动迁移,不用改文件。要自己跑一个 server,在 `settings.json` 里写显式
+条目即可,按原样使用。优先级:该条目会盖过 `claude mcp add codex -s user` 写进
+`~/.claude.json` 的注册,所以请替换 `settings.json` 里的条目,而不是再加一份注册:
+
 ```jsonc
 // <config_home>/settings.json（config_home = $CLAUDE_CONFIG_HOME 或 ~/.claude）
 {
   "mcpServers": {
     "codex": {
       "type": "stdio",
-      "command": "codex",
-      "args": ["mcp-server", "-c", "model_reasoning_effort=\"xhigh\""],
-      "trust": true,              // 可选:跳过逐次确认
-      "requestTimeoutSecs": 240   // 可选:per-server 超时
+      "command": "python3",
+      "args": ["/path/to/aris_repo/mcp-servers/codex-exec/server.py"],
+      "trust": true,               // 可选:跳过逐次确认
+      "requestTimeoutSecs": 1800   // ultra 深度审计跑得久
     }
   }
 }
 ```
 
-最简单的配置方式是 `aris setup` → reviewer 选项 10(Codex MCP),
-它会自动写好这个条目。注意:
+注意:
 
-- 经 Codex MCP 的跨模型审优先用 **GPT-5.6-Sol** —— 各 skill 在每次
-  fresh call 上显式 pin 模型 + reasoning effort(深度审计用 `ultra`,
-  verdict 类审查下限 `xhigh`)。HTTP reviewer(`/reviewer`,默认
-  `gpt-5.5`)只在 Codex 通道不可用时作为 fallback。
+- 经 Codex 的跨模型审优先用 **GPT-6-Astra** —— 各 skill 在每次 fresh call
+  上显式 pin 模型 + reasoning effort(深度审计用 `ultra`,verdict 类审查下限
+  `xhigh`;仅在能力错误时回退 gpt-5.6-sol → gpt-5.5)。HTTP reviewer
+  (`/reviewer`,默认 `gpt-5.5`)只在 Codex 通道不可用时作为 fallback。
+- `ARIS_CODEX_BRIDGE=0` 关闭内建桥接(回到 0.4.25 之前:只 spawn 配置里的
+  `codex` 条目 —— `settings.json` 或 `~/.claude.json`,包括老的 `codex mcp-server`)。
 - 已知限制:**同 transport 的 endpoint 覆盖**(例如把 `ANTHROPIC_BASE_URL`
   / 自定义 base URL 指到同家族的另一个 provider)仍可能带着过期的 saved
   executor model —— v0.4.22 的 transport 家族门只拦跨家族泄漏。这种配置
