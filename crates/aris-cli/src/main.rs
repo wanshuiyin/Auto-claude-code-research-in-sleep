@@ -4825,10 +4825,10 @@ fn render_turn_replay(
 /// result (bash / read / grep …) is shown field by field with its text fields
 /// unescaped; anything else is printed verbatim. Nothing is dropped.
 fn full_payload_text(output: &str) -> String {
+    use std::fmt::Write as _;
     let Ok(serde_json::Value::Object(map)) = serde_json::from_str::<serde_json::Value>(output) else {
         return output.to_string();
     };
-    use std::fmt::Write as _;
     let mut text = String::new();
     for (key, value) in &map {
         match value {
@@ -5021,7 +5021,10 @@ fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Ve
          that model as `--reviewer-model` and your own model id (stated above) as \
          `--executor-model`. The gate then applies the HTTP contract: a positive verdict from \
          a reviewer of a different model family than yours stops the loop; a same-family \
-         reviewer or an inherited finalizer obligation cannot acquit.";
+         reviewer or an inherited finalizer obligation cannot acquit. When the gate answers \
+         `next_backend: llm-chat`, continue with LlmReview again, carrying the previous review \
+         exchange inside the new `prompt` — the `mcp__llm-chat__review` / `review_reply` tools \
+         do not exist in ARIS-Code and there is no thread id to resume.";
 
     if reviewer_provider == "codex-mcp" {
         match fallback.filter(|s| !s.trim().is_empty()) {
@@ -10456,6 +10459,12 @@ mod tests {
             assert!(
                 out[0].contains("never forward the skill's Codex"),
                 "provider {provider:?} must strip Codex params, got: {}",
+                out[0]
+            );
+            assert!(
+                out[0].contains("continue with LlmReview again")
+                    && out[0].contains("do not exist in ARIS-Code"),
+                "an llm-chat continuation must stay on LlmReview, got: {}",
                 out[0]
             );
             assert!(

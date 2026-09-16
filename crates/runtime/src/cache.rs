@@ -559,11 +559,12 @@ mod tests {
     }
 
     /// v0.4.22 exact-inventory drift test: the `tools/` slice of
-    /// BUNDLED_RESOURCES is EXACTLY the 32-helper whitelist that
-    /// tools/sync_main_skills.sh ships (29 through v0.4.23, +3 in v0.4.25). Set-equality (not subset) so BOTH
-    /// failure modes are caught: a helper missing after a sync (the
-    /// pre-v0.4.22 gap — the script's RUNTIME_HELPERS lagged what synced
-    /// SKILL.md files referenced) AND a stale 33rd file lingering in
+    /// `BUNDLED_RESOURCES` is EXACTLY the 32-helper whitelist that
+    /// `tools/sync_main_skills.sh` ships (29 through v0.4.23, +3 in v0.4.25).
+    /// Set-equality (not subset) so BOTH failure modes are caught: a helper
+    /// missing after a sync (the pre-v0.4.22 gap — the script's
+    /// `RUNTIME_HELPERS` lagged what synced `SKILL.md` files referenced) AND a
+    /// stale 33rd file lingering in
     /// assets/tools/ (the sync script never auto-prunes).
     #[test]
     fn bundled_tools_inventory_is_exactly_the_sync_whitelist() {
@@ -632,10 +633,10 @@ mod tests {
 
     /// v0.4.25: the three helpers added to the whitelist must actually RUN
     /// from the extracted cache with nothing else present (no main checkout,
-    /// no ARIS_REPO). `review_gate.py --native-evidence` forces its lazy
+    /// no `ARIS_REPO`). `review_gate.py --native-evidence` forces its lazy
     /// sibling import of `copilot_native_evidence.py`; if that import failed
-    /// the gate would answer "copilot_native_evidence.py is unavailable
-    /// beside review_gate.py" — the exact failure a CLI-only user would hit.
+    /// the gate would answer "`copilot_native_evidence.py` is unavailable
+    /// beside `review_gate.py`" — the exact failure a CLI-only user would hit.
     #[test]
     fn synced_helpers_run_from_extracted_cache() {
         let Ok(python) = std::process::Command::new("python3").arg("--version").output() else {
@@ -691,6 +692,30 @@ mod tests {
             "sibling import of copilot_native_evidence.py failed: {stdout}"
         );
         assert!(stdout.contains("review_unavailable"), "unexpected: {stdout}");
+
+        // LlmReview rounds are reported as `llm-chat`: a negative cross-family
+        // round continues on the same backend (the CLI keeps using LlmReview),
+        // a positive cross-family round stops, a same-family reviewer cannot
+        // acquit. This is the contract the reviewer nudge relies on.
+        let gate = |score: &str, verdict: &str, executor: &str, reviewer: &str| {
+            let out = std::process::Command::new("python3")
+                .arg(tools.join("review_gate.py"))
+                .args(["--round-backend", "llm-chat", "--score", score, "--verdict", verdict])
+                .args(["--executor-model", executor, "--reviewer-model", reviewer])
+                .env_remove("ARIS_REPO")
+                .current_dir(&tmp)
+                .output()
+                .expect("run review_gate.py (llm-chat)");
+            assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        };
+        let negative = gate("5", "not ready", "claude-opus-5", "gemini-2.5-pro");
+        assert!(!negative.contains("\"decision\": \"stop\""), "{negative}");
+        assert!(negative.contains("\"next_backend\": \"llm-chat\""), "{negative}");
+        let positive = gate("9", "ready", "claude-opus-5", "gemini-2.5-pro");
+        assert!(positive.contains("\"decision\": \"stop\""), "{positive}");
+        let same_family = gate("9", "ready", "gpt-5.5", "gpt-5.4");
+        assert!(same_family.contains("review_unavailable"), "{same_family}");
 
         let idea = std::process::Command::new("python3")
             .arg(tools.join("idea_discovery_gate.py"))

@@ -3896,7 +3896,7 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
             format!("{trimmed}/v1/chat/completions")
         };
         return call_openai_compat_reviewer(&key, &url, model, &input.prompt)
-            .map(|text| with_reviewer_model_line(model, &text));
+            .map(|(text, answered_by)| with_reviewer_model_line(&answered_by, &text));
     }
 
     // Anthropic-compatible reviewer mode (e.g., Claude via proxy, DeepSeek).
@@ -3928,7 +3928,7 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         let base = custom_base_url.unwrap_or_else(|| default_base.to_string());
         let endpoint = format!("{}/v1/messages", base.trim_end_matches('/'));
         return call_anthropic_compat_reviewer(&key, &endpoint, model, &input.prompt)
-            .map(|text| with_reviewer_model_line(model, &text));
+            .map(|(text, answered_by)| with_reviewer_model_line(&answered_by, &text));
     }
 
     // OpenAI-compat path: resolve model with fallback, then route to its endpoint.
@@ -3960,11 +3960,11 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         })?;
 
     call_openai_compat_reviewer(&key, &base_url, model, &input.prompt)
-        .map(|text| with_reviewer_model_line(model, &text))
+        .map(|(text, answered_by)| with_reviewer_model_line(&answered_by, &text))
 }
 
 /// v0.4.25: every `LlmReview` result starts with the model that actually
-/// answered. The executing model needs it to report an HTTP round truthfully
+/// answered (the provider-reported id when present, else the requested name). The executing model needs it to report an HTTP round truthfully
 /// to `review_gate.py` (`--round-backend llm-chat --reviewer-model <model>`);
 /// the tool used to return the bare review text, so the round could only be
 /// mis-labelled or rejected by the gate.
@@ -4130,7 +4130,7 @@ fn call_anthropic_compat_reviewer(
     endpoint: &str,
     model: &str,
     prompt: &str,
-) -> Result<String, String> {
+) -> Result<(String, String), String> {
     let body = serde_json::json!({
         "model": model,
         "max_tokens": 8192,
@@ -4152,12 +4152,14 @@ fn call_anthropic_compat_reviewer(
         .map_err(|e| format!("LlmReview response parse failed: {e}"))?;
 
     // Anthropic format: content[0].text
-    json.get("content")
+    let text = json
+        .get("content")
         .and_then(|c| c.get(0))
         .and_then(|b| b.get("text"))
         .and_then(|t| t.as_str())
         .map(ToOwned::to_owned)
-        .ok_or_else(|| format!("LlmReview: unexpected response format: {json}"))
+        .ok_or_else(|| format!("LlmReview: unexpected response format: {json}"))?;
+    Ok((text, reported_reviewer_model(&json, model)))
 }
 
 fn call_openai_compat_reviewer(
@@ -4165,7 +4167,7 @@ fn call_openai_compat_reviewer(
     base_url: &str,
     model: &str,
     prompt: &str,
-) -> Result<String, String> {
+) -> Result<(String, String), String> {
     let mut body = serde_json::json!({
         "model": model,
         "messages": [{"role": "user", "content": prompt}]
@@ -4188,13 +4190,28 @@ fn call_openai_compat_reviewer(
         .json()
         .map_err(|e| format!("LlmReview response parse failed: {e}"))?;
 
-    json.get("choices")
+    let text = json
+        .get("choices")
         .and_then(|c| c.get(0))
         .and_then(|c| c.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
         .map(ToOwned::to_owned)
-        .ok_or_else(|| format!("LlmReview: unexpected response format: {json}"))
+        .ok_or_else(|| format!("LlmReview: unexpected response format: {json}"))?;
+    Ok((text, reported_reviewer_model(&json, model)))
+}
+
+/// v0.4.25: the model that actually answered — the provider's `model` field
+/// when the response carries one (a routed alias or a custom name resolves
+/// to a concrete id there), else the name we requested.
+fn reported_reviewer_model(response: &serde_json::Value, requested: &str) -> String {
+    response
+        .get("model")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|m| !m.is_empty())
+        .unwrap_or(requested)
+        .to_string()
 }
 
 #[cfg(test)]
@@ -6810,6 +6827,12 @@ printf 'pwsh:%s' "$1"
         let out = super::with_reviewer_model_line("gemini-2.5-pro", "VERDICT: GO");
         assert_eq!(out, "reviewer_model: gemini-2.5-pro\n\nVERDICT: GO");
         assert_eq!(out.lines().next(), Some("reviewer_model: gemini-2.5-pro"));
+        // the provider's answer names the concrete model behind an alias /
+        // custom name; without one the requested name stands
+        let routed = json!({"model": "gpt-5.5-2026-06-01", "choices": []});
+        assert_eq!(super::reported_reviewer_model(&routed, "my-alias"), "gpt-5.5-2026-06-01");
+        assert_eq!(super::reported_reviewer_model(&json!({"model": "  "}), "my-alias"), "my-alias");
+        assert_eq!(super::reported_reviewer_model(&json!({"choices": []}), "gpt-5.5"), "gpt-5.5");
         assert!(reviewer_supports_reasoning_effort("xxgpt-5.6yy"));
         assert!(reviewer_supports_reasoning_effort("xxreasoneryy"));
         assert!(reviewer_supports_reasoning_effort("xxthinkingyy"));
