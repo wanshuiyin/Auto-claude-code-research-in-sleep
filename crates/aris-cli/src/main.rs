@@ -1635,6 +1635,9 @@ struct LiveCli {
     /// v0.4.25 (#439): the session list as last printed, so `/resume 2` means
     /// the second row the user is looking at even after a save re-sorts.
     session_list_snapshot: Vec<ManagedSessionSummary>,
+    /// v0.4.25: tool-call count of a successful internal command, printed as
+    /// the `/since` hint AFTER the caller has printed the answer.
+    pending_hint_calls: std::cell::Cell<usize>,
 }
 
 /// v0.4.25: what `/since` replays for the most recent turn.
@@ -1729,6 +1732,7 @@ impl LiveCli {
             last_turn: RefCell::new(None),
             request_label: None,
             session_list_snapshot: Vec::new(),
+            pending_hint_calls: std::cell::Cell::new(0),
         };
         cli.persist_session()?;
         Ok(cli)
@@ -1942,6 +1946,10 @@ impl LiveCli {
         // back, we rebuild from THIS pre-turn snapshot (not the polluted live
         // session) so the retry appends `input` exactly once — no duplicate.
         let pre_turn_session = self.runtime.session().clone();
+        // v0.4.25 (`/since`): the request as the user typed it (a `/skill`
+        // invocation sets `request_label`; consume it here so it can never
+        // attach to a later, unrelated turn whatever exit this turn takes).
+        let request = self.request_label.take().unwrap_or_else(|| input.to_string());
         loop {
             let mut spinner = Spinner::new();
             spinner.tick(
@@ -1956,11 +1964,10 @@ impl LiveCli {
                     // v0.4.25 (`/since`): record the turn as displayed — the
                     // literal request plus the assistant/tool messages in
                     // order — before compaction or the next turn can touch it.
-                    let request = self.request_label.take().unwrap_or_else(|| input.to_string());
                     let messages = interleave_turn_messages(&summary);
                     let tool_calls = turn_tool_call_count(&messages);
                     self.last_turn.replace(Some(LastTurnDisplay {
-                        request,
+                        request: request.clone(),
                         messages,
                         error: None,
                     }));
@@ -1990,7 +1997,9 @@ impl LiveCli {
                             format_auto_compaction_notice(event.removed_message_count)
                         );
                     }
-                    print_turn_hint(tool_calls);
+                    if self.may_prompt {
+                        print_turn_hint(tool_calls);
+                    }
                     self.persist_session()?;
                     return Ok(());
                 }
@@ -2000,7 +2009,10 @@ impl LiveCli {
                     // the runtime and the system-prompt model identity so they
                     // stay coherent — and retry (once per chain step) before
                     // surfacing the failure.
-                    if self.fall_back_default_model_if_needed(&error)? {
+                    let retry: Result<bool, Box<dyn std::error::Error>> = (|| {
+                        if !self.fall_back_default_model_if_needed(&error)? {
+                            return Ok(false);
+                        }
                         spinner.finish(
                             "\x1b[33m●\x1b[0m \x1b[2mretrying with the fallback model…\x1b[0m",
                             TerminalRenderer::new().color_theme(),
@@ -2017,7 +2029,21 @@ impl LiveCli {
                             self.mcp.clone(),
                             self.may_prompt,
                         )?;
-                        continue;
+                        Ok(true)
+                    })();
+                    match retry {
+                        Ok(true) => continue,
+                        Ok(false) => {}
+                        Err(retry_error) => {
+                            // v0.4.25 (`/since`): an infrastructure failure on
+                            // the fallback path is this turn's terminal
+                            // outcome too.
+                            let tool_calls = self.record_failed_turn(&request, &retry_error.to_string());
+                            if self.may_prompt {
+                                print_turn_hint(tool_calls);
+                            }
+                            return Err(retry_error);
+                        }
                     }
                     spinner.fail(
                         "\x1b[38;5;203m●\x1b[0m \x1b[1;31mRequest failed\x1b[0m",
@@ -2027,21 +2053,30 @@ impl LiveCli {
                     // v0.4.25 (`/since`): a failed or interrupted turn is
                     // replayable too — from the (uncompacted) session suffix
                     // the runtime appended, plus the error itself.
-                    let request = self.request_label.take().unwrap_or_else(|| input.to_string());
-                    let messages = retained_suffix(self.runtime.session())
-                        .map(|(_, tail)| tail.to_vec())
-                        .unwrap_or_default();
-                    let tool_calls = turn_tool_call_count(&messages);
-                    self.last_turn.replace(Some(LastTurnDisplay {
-                        request,
-                        messages,
-                        error: Some(error.to_string()),
-                    }));
-                    print_turn_hint(tool_calls);
+                    let tool_calls = self.record_failed_turn(&request, &error.to_string());
+                    if self.may_prompt {
+                        print_turn_hint(tool_calls);
+                    }
                     return Err(Box::new(error));
                 }
             }
         }
+    }
+
+    /// v0.4.25 (`/since`): record a failed / interrupted turn from whatever the
+    /// runtime appended after the request, plus the terminal error. Returns
+    /// the turn's tool-call count for the hint.
+    fn record_failed_turn(&self, request: &str, error: &str) -> usize {
+        let messages = retained_suffix(self.runtime.session())
+            .map(|(_, tail)| tail.to_vec())
+            .unwrap_or_default();
+        let tool_calls = turn_tool_call_count(&messages);
+        self.last_turn.replace(Some(LastTurnDisplay {
+            request: request.to_string(),
+            messages,
+            error: Some(error.to_string()),
+        }));
+        tool_calls
     }
 
     /// v0.4.18: when `error` is "model unavailable on this account" and the
@@ -3486,16 +3521,46 @@ impl LiveCli {
             self.may_prompt,
         )?;
         let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
-        let summary = runtime.run_turn(prompt, Some(&mut permission_prompter))?;
         // v0.4.25 (`/since`): an internal model command is a turn the user
-        // triggered; replaying an older turn after it would mislead.
+        // triggered; it is recorded whether it completes or fails, so `/since`
+        // never replays an older turn after it.
+        let summary = match runtime.run_turn(prompt, Some(&mut permission_prompter)) {
+            Ok(summary) => summary,
+            Err(error) => {
+                let messages = retained_suffix(runtime.session())
+                    .map(|(_, tail)| tail.to_vec())
+                    .unwrap_or_default();
+                let tool_calls = turn_tool_call_count(&messages);
+                self.last_turn.replace(Some(LastTurnDisplay {
+                    request: label.to_string(),
+                    messages,
+                    error: Some(error.to_string()),
+                }));
+                if self.may_prompt {
+                    print_turn_hint(tool_calls);
+                }
+                return Err(Box::new(error));
+            }
+        };
         let messages = interleave_turn_messages(&summary);
+        let tool_calls = turn_tool_call_count(&messages);
         self.last_turn.replace(Some(LastTurnDisplay {
             request: label.to_string(),
             messages,
             error: None,
         }));
+        // The caller prints the answer; the hint goes below it.
+        self.pending_hint_calls.set(tool_calls);
         Ok(final_assistant_text(&summary).trim().to_string())
+    }
+
+    /// Print the `/since` hint for the internal command whose answer was just
+    /// printed (REPL only).
+    fn flush_pending_hint(&self) {
+        let tool_calls = self.pending_hint_calls.replace(0);
+        if self.may_prompt {
+            print_turn_hint(tool_calls);
+        }
     }
 
     fn run_bughunter(&self, scope: Option<&str>) -> Result<(), Box<dyn std::error::Error>> {
@@ -3504,6 +3569,7 @@ impl LiveCli {
             "You are /bughunter. Inspect {scope} and identify the most likely bugs or correctness issues. Prioritize concrete findings with file paths, severity, and suggested fixes. Use tools if needed."
         );
         println!("{}", self.run_internal_prompt_text("/bughunter", &prompt, true)?);
+        self.flush_pending_hint();
         Ok(())
     }
 
@@ -3513,6 +3579,7 @@ impl LiveCli {
             "You are /ultraplan. Produce a deep multi-step execution plan for {task}. Include goals, risks, implementation sequence, verification steps, and rollback considerations. Use tools if needed."
         );
         println!("{}", self.run_internal_prompt_text("/ultraplan", &prompt, true)?);
+        self.flush_pending_hint();
         Ok(())
     }
 
