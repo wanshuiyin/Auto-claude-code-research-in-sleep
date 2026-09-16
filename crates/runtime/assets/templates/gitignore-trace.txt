@@ -1,0 +1,3 @@
+# ARIS Review Tracing — add these lines to your project's .gitignore
+# Traces contain full LLM prompts/responses and should stay project-local.
+.aris/traces/

@@ -4525,7 +4525,9 @@ fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Ve
          Every LlmReview result starts with a `reviewer_model:` line — when a skill's stop \
          condition runs `review_gate.py` for such a round, report `--round-backend llm-chat` with \
          that model as `--reviewer-model` and your own model id (stated above) as \
-         `--executor-model` (an HTTP reviewer drives the loop but never acquits on its own).";
+         `--executor-model`. The gate then applies the HTTP contract: a positive verdict from \
+         a reviewer of a different model family than yours stops the loop; a same-family \
+         reviewer or an inherited finalizer obligation cannot acquit.";
 
     if reviewer_provider == "codex-mcp" {
         match fallback.filter(|s| !s.trim().is_empty()) {
@@ -4548,8 +4550,10 @@ fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Ve
             "IMPORTANT: When a skill instructs you to use `mcp__codex__codex` or `mcp__codex__codex-reply` \
              for external LLM review, use the `LlmReview` tool instead. The LlmReview tool calls \
              Gemini or OpenAI directly (via GEMINI_API_KEY or OPENAI_API_KEY) without needing MCP. \
-             An explicit `— reviewer: manual` in the request still means STOP with \
-             REVIEW_UNAVAILABLE when no manual channel exists. {LLMREVIEW_RULES}"
+             Exceptions, in this order: an explicit `— reviewer: codex` in the request wins when \
+             `mcp__codex__codex` is in your tool list (then follow the skill's Codex routing); an \
+             explicit `— reviewer: manual` means STOP with REVIEW_UNAVAILABLE when no manual \
+             channel exists. {LLMREVIEW_RULES}"
         )]
     }
 }

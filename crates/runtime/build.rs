@@ -42,6 +42,23 @@ fn main() {
         bundle_tree(&tools_root, "tools", out_path, &mut resource_entries);
     }
 
+    // ------ Walk assets/templates/ → key = "templates/<rel>" (v0.4.25) ------
+    // Repo-root templates that SKILL.md files require on their default path
+    // (e.g. idea-discovery's RESEARCH_CONTRACT_TEMPLATE.md). Same key shape as
+    // the repo, so the resolver preamble's `$ARIS_CACHE_DIR/<bundle-key>` layer
+    // covers them without any skill-text change.
+    let templates_root = assets_dir.join("templates");
+    if templates_root.exists() {
+        let templates_meta =
+            fs::symlink_metadata(&templates_root).expect("symlink_metadata for assets/templates");
+        assert!(
+            !templates_meta.file_type().is_symlink(),
+            "assets/templates is a symlink, refusing to bundle: {}",
+            templates_root.display()
+        );
+        bundle_tree(&templates_root, "templates", out_path, &mut resource_entries);
+    }
+
     // ------ Walk assets/skills/ ------
     let skills_root = assets_dir.join("skills");
     if skills_root.exists() {

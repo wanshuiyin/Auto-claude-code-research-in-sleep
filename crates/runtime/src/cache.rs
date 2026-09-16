@@ -702,6 +702,40 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// v0.4.25: repo-root templates that SKILL.md files require on their
+    /// default path are bundled under `templates/<name>` (idea-discovery's
+    /// research contract was the reachable gap). Drift check: every
+    /// `templates/<NAME>.md` a non-mirror SKILL.md mentions must be bundled.
+    #[test]
+    fn skill_md_template_refs_resolve_to_bundled_templates() {
+        use std::collections::BTreeSet;
+        let bundled: BTreeSet<&str> = crate::BUNDLED_RESOURCES
+            .iter()
+            .map(|(k, _)| *k)
+            .filter(|k| k.starts_with("templates/"))
+            .collect();
+        assert!(
+            bundled.contains("templates/RESEARCH_CONTRACT_TEMPLATE.md"),
+            "the idea-discovery research contract template must be bundled; have: {bundled:?}"
+        );
+        let all_keys: BTreeSet<&str> = crate::BUNDLED_RESOURCES.iter().map(|(k, _)| *k).collect();
+        let re = regex::Regex::new(r"templates/([A-Z0-9_]+\.md)").unwrap();
+        let mut missing = Vec::new();
+        for (name, content) in crate::BUNDLED_SKILLS {
+            for cap in re.captures_iter(content) {
+                let key = format!("templates/{}", &cap[1]);
+                // a skill-local `templates/` dir ships under the skill itself
+                let local = format!("skills/{name}/{key}");
+                if !bundled.contains(key.as_str()) && !all_keys.contains(local.as_str()) {
+                    missing.push(format!("{name}: {key}"));
+                }
+            }
+        }
+        missing.sort();
+        missing.dedup();
+        assert!(missing.is_empty(), "SKILL.md references templates that are not bundled: {missing:?}");
+    }
+
     /// v0.4.22: the vendored posterly MIT license text must ship with the
     /// vendored paper-poster-html scripts (its NOTICE.md points at this
     /// path). Guards the build.rs ALLOWED_EXTS "txt" addition — without it

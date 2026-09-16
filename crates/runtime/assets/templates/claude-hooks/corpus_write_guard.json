@@ -1,0 +1,16 @@
+{
+  "_comment": "Merge this into your project's .claude/settings.json. Blocks the COMMON Bash shell-write patterns to the skill corpus (a regex blacklist, NOT a sandbox — a deliberately obfuscated write is not all caught; detection via provenance integrity is the backstop, not this regex). With a read-only producer (meta-optimize / corpus-audit) holding Bash but no Write/Edit, this removes the casual Bash-write path; it does not gate the Write/Edit tools. Adjust the path to corpus_write_guard.py for your checkout (or resolve via the canonical chain).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PROJECT_DIR}/templates/claude-hooks/corpus_write_guard.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -10,6 +10,8 @@
 # - Excludes skills-codex* mirror directories (codex agent install path,
 #   not user-facing). build.rs already excludes them via
 #   EXCLUDED_SKILL_PREFIXES; rsync exclude is double-defense.
+# - Bundles the repo-root templates/ (v0.4.25; skills read them on their
+#   default path, e.g. idea-discovery's RESEARCH_CONTRACT_TEMPLATE.md).
 # - Bundles 32 runtime helpers from tools/ (9 baseline refresh + 9 v0.4.11
 #   additions + 2 v0.4.13 meta_opt hooks + 8 v0.4.22 additions + 1 v0.4.23
 #   forensics gate + 3 v0.4.25 review/idea gates).
@@ -149,6 +151,18 @@ for d in "${SKILLS_CODEX_DIRS[@]}"; do
 done
 
 # ---------------------------------------------------------------
+# Step 5b (v0.4.25): repo-root templates/ — required inputs on some skills'
+# default path (idea-discovery reads templates/RESEARCH_CONTRACT_TEMPLATE.md).
+# Bundled under the same key so `$ARIS_CACHE_DIR/templates/<name>` resolves.
+# ---------------------------------------------------------------
+echo "==> Syncing templates/"
+mkdir -p "$REPO_ROOT/crates/runtime/assets/templates"
+rsync -av --delete \
+    --exclude='.DS_Store' \
+    "$WORKTREE/templates/" \
+    "$REPO_ROOT/crates/runtime/assets/templates/"
+
+# ---------------------------------------------------------------
 # Step 6: Tools selective rsync (FULL 32 runtime helpers — codex round-3 #1, v0.4.13 +2, v0.4.22 +8, v0.4.23 +1, v0.4.25 +3)
 # ---------------------------------------------------------------
 echo "==> Syncing 32 runtime helpers from tools/"
@@ -249,7 +263,7 @@ echo "==> Sync complete."
 echo
 echo "Next steps (run manually, in order):"
 echo "  1. cargo build --release"
-echo "     # confirm warning: Embedded 83 bundled skills, 115 helper resources"
+echo "     # confirm warning: Embedded 83 bundled skills, 136 helper resources"
 echo "     # (second number counts ALL bundled resources, not just assets/tools)"
 echo
 echo "  2. cargo test -p runtime --lib cache -- --test-threads=1"

@@ -1754,6 +1754,14 @@ fn inject_resolver_preamble(
     preamble.push_str(&format!(
         "{layer}. `<project_root>/tools/<helper>` (legacy compat with main-branch ARIS layouts)\n\n"
     ));
+    {
+        use std::fmt::Write as _;
+        let _ = write!(
+            preamble,
+            "Repo-root templates a SKILL.md asks for (e.g. `templates/RESEARCH_CONTRACT_TEMPLATE.md`) \
+             resolve the same way: `<project_root>/templates/<name>`, else `{cache_dir}/templates/<name>`.\n\n"
+        );
+    }
 
     if report.available_helpers.is_empty() {
         preamble.push_str("No bundled helpers extracted for this skill.\n");
@@ -3887,7 +3895,8 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         } else {
             format!("{trimmed}/v1/chat/completions")
         };
-        return call_openai_compat_reviewer(&key, &url, model, &input.prompt);
+        return call_openai_compat_reviewer(&key, &url, model, &input.prompt)
+            .map(|text| with_reviewer_model_line(model, &text));
     }
 
     // Anthropic-compatible reviewer mode (e.g., Claude via proxy, DeepSeek).
