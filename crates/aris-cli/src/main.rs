@@ -698,9 +698,9 @@ fn reviewer_display_for(
     if primary_provider == Some("codex-mcp") {
         match fallback_provider.filter(|s| !s.trim().is_empty()) {
             Some(provider) => format!(
-                "Codex MCP · gpt-5.6-sol preferred (HTTP fallback: {provider} · {http_reviewer_model})"
+                "Codex MCP · gpt-6-astra preferred (HTTP fallback: {provider} · {http_reviewer_model})"
             ),
-            None => "Codex MCP · gpt-5.6-sol preferred".to_string(),
+            None => "Codex MCP · gpt-6-astra preferred".to_string(),
         }
     } else {
         http_reviewer_model.to_string()
@@ -1569,7 +1569,7 @@ const BANNER_CENTER: [&str; 6] = [
     "\x1b[1;38;5;45m       A     R     I     S        \x1b[0m",
     "\x1b[38;5;45m      Auto Research in Sleep      \x1b[0m",
     "\x1b[2m    adversarial | multi-agent     \x1b[0m",
-    "  \x1b[38;5;45mClaude\x1b[0m x \x1b[38;5;71mGPT-5.6-Sol · tiered\x1b[0m   ",
+    "  \x1b[38;5;45mClaude\x1b[0m x \x1b[38;5;71mGPT-6-Astra · tiered\x1b[0m   ",
     "\x1b[2m  ──────────────────────────────  \x1b[0m",
 ];
 
@@ -2387,7 +2387,7 @@ impl LiveCli {
 
     fn set_reviewer(&mut self, model: Option<String>) -> Result<bool, Box<dyn std::error::Error>> {
         // v0.4.22 (Δ4-3): `/reviewer` controls the HTTP (LlmReview) reviewer
-        // ONLY. With Codex MCP as the primary, the skills pin gpt-5.6-sol per
+        // ONLY. With Codex MCP as the primary, the skills pin gpt-6-astra per
         // call — this command NEVER changes that, and it must say so instead
         // of pretending to switch the reviewer.
         let primary_provider = std::env::var("ARIS_REVIEWER_PROVIDER").ok();
@@ -2407,7 +2407,7 @@ impl LiveCli {
             ReviewerCmdGate::PureCodexStatus | ReviewerCmdGate::PureCodexRefuseExplicit => {
                 // Pure Codex: no HTTP reviewer exists to configure.
                 println!(
-                    "\x1b[1mReviewer\x1b[0m  Codex MCP · gpt-5.6-sol preferred \
+                    "\x1b[1mReviewer\x1b[0m  Codex MCP · gpt-6-astra preferred \
                      \x1b[2m(skill-pinned per call; deep audits ultra, floor xhigh)\x1b[0m"
                 );
                 if model.is_some() {
@@ -2429,7 +2429,7 @@ impl LiveCli {
                 println!(
                     "'{m}' does not look like a \x1b[1m{provider}\x1b[0m model — your \
                      HTTP fallback provider is {provider}, and `/reviewer` changes the \
-                     fallback MODEL only (primary stays Codex MCP · gpt-5.6-sol). To \
+                     fallback MODEL only (primary stays Codex MCP · gpt-6-astra). To \
                      switch the fallback provider, run /setup."
                 );
                 return Ok(false);
@@ -2449,7 +2449,7 @@ impl LiveCli {
             None => {
                 if let Some(provider) = restrict_to_provider.as_deref() {
                     println!(
-                        "\x1b[2mPrimary reviewer: Codex MCP · gpt-5.6-sol (skill-pinned). This \
+                        "\x1b[2mPrimary reviewer: Codex MCP · gpt-6-astra (skill-pinned). This \
                          picker controls the HTTP fallback ({provider}) only.\x1b[0m"
                     );
                 }
@@ -2584,7 +2584,7 @@ impl LiveCli {
                         println!(
                             "HTTP fallback provider \x1b[1m{provider}\x1b[0m is configured but \
                              its API key is not present in the environment. Run /setup to \
-                             re-enter it. (Primary reviewer stays Codex MCP · gpt-5.6-sol.)"
+                             re-enter it. (Primary reviewer stays Codex MCP · gpt-6-astra.)"
                         );
                         return Ok(false);
                     }
@@ -4472,7 +4472,7 @@ fn resolve_export_path(
 /// v0.4.22 (B1): rewritten for the GPT-5.6-Sol two-tier doctrine that the
 /// synced skills now carry (main 6142715 / reviewer-routing.md). The v0.4.17
 /// blanket "never pass a model" rule contradicted the skills' explicit
-/// `model: gpt-5.6-sol` pins — obeying it would silently strip deep audits
+/// `model: gpt-6-astra` pins — obeying it would silently strip deep audits
 /// down from ultra. The rules below mirror the canonical capability-only
 /// fallback chain and add the transport-safety rules (approval-policy /
 /// sandbox / `LlmReview` parameter stripping) from the v0.4.22 design.
@@ -4488,28 +4488,44 @@ fn resolve_export_path(
 /// unit-testable without the filesystem I/O that `build_system_prompt` performs.
 fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Vec<String> {
     // Shared Codex-MCP call discipline (both codex-mcp states).
-    const CODEX_RULES: &str = "ARIS's preferred reviewer is gpt-5.6-sol; skills pin the model and \
-         reasoning effort explicitly per fresh call — pass them through exactly as the skill \
-         specifies (per-call `config: {\"model_reasoning_effort\": ...}`; deep audits \"ultra\", \
-         regular reviews \"xhigh\"; never below xhigh for verdict-bearing review). If a skill uses \
-         the legacy `reasoning: ultra` shorthand, translate it to \
-         `config: {\"model_reasoning_effort\": \"ultra\"}` — never send an unknown `reasoning` \
-         field. Capability fallback (in order, capability errors ONLY): (1) run as pinned; \
-         (2) if the EFFORT is explicitly unsupported, retry the SAME model at \"xhigh\" — this \
-         applies only to deep-tier calls, a regular xhigh call is never retried with the same \
-         params; (3) if the MODEL is explicitly unknown/unavailable, retry as explicit gpt-5.5 + \
-         \"xhigh\"; (4) NEVER auto-degrade on timeouts, rate limits, auth, transport, sandbox, or \
-         parse errors. When THIS review call carries an explicit user-chosen reviewer-model \
-         override (an explicit model parameter on the call itself), the automatic capability \
-         chain is DISABLED for that call — surface the capability error instead of substituting \
-         a different model; the user owns an explicit choice. ARIS's /reviewer command is NOT \
-         such an override — it controls the HTTP fallback exclusively and never disables this \
-         chain. On every FRESH `mcp__codex__codex` call pass an explicit `sandbox` (default \
-         \"read-only\" for review; wider only when the skill needs writes). ARIS's codex bridge \
-         runs `codex exec`, which is non-interactive: an `approval-policy` argument is accepted \
-         and ignored, so never require it. `mcp__codex__codex-reply` takes ONLY the thread id \
-         (the `threadId:` line at the top of the previous result) and the prompt; the bridge \
-         re-applies the thread's model/effort/sandbox/cwd.";
+    const CODEX_RULES: &str = "An explicit `— reviewer:` directive in the current request (codex / \
+         oracle-pro / agy / manual / copilot) overrides the defaults below: `— reviewer: manual` with \
+         no manual channel means STOP with REVIEW_UNAVAILABLE, never a silent Codex fallback, while a \
+         missing oracle-pro/agy follows the skill's documented warned fallback to Codex. ARIS's \
+         preferred reviewer is gpt-6-astra; skills pin the model and reasoning effort explicitly per \
+         fresh call — pass them through exactly as the skill specifies (per-call \
+         `config: {\"model_reasoning_effort\": ...}`; deep audits \"ultra\", regular reviews \
+         \"xhigh\"; never below xhigh for verdict-bearing review). If a skill uses the legacy \
+         `reasoning: ultra` shorthand, translate it to `config: {\"model_reasoning_effort\": \
+         \"ultra\"}` — never send an unknown `reasoning` field. Capability fallback (in order, \
+         capability errors ONLY; resolve once per tier on its first fresh thread and reuse that \
+         pair): (1) run as pinned; (2) if the EFFORT is explicitly unsupported, retry the SAME \
+         model at \"xhigh\" — this applies only to deep-tier calls, a regular xhigh call is never \
+         retried with the same params; (3) if the MODEL is explicitly unknown/unavailable, retry as \
+         explicit gpt-5.6-sol + \"xhigh\", then explicit gpt-5.5 + \"xhigh\"; (4) NEVER \
+         auto-degrade on timeouts, rate limits, auth, transport, sandbox, context-length, or parse \
+         errors. A skill's mandatory model pin is NOT a user override and never disables this \
+         chain; only a reviewer model the USER explicitly chose for this call disables it — then \
+         surface the capability error instead of substituting a different model. ARIS's /reviewer \
+         command is NOT such an override — it controls the HTTP fallback exclusively and never \
+         disables this chain. On every FRESH `mcp__codex__codex` call pass an explicit `sandbox` \
+         (default \"read-only\" for review; wider only when the skill needs writes). ARIS's codex \
+         bridge runs `codex exec`, which is non-interactive: an `approval-policy` argument is \
+         accepted and ignored, so never require it. `mcp__codex__codex-reply` takes ONLY the thread \
+         id (the `threadId:` line at the top of the previous result) and the prompt; the bridge \
+         re-applies the thread's model/effort/sandbox/cwd. When a skill's stop condition runs \
+         `review_gate.py`, report the backend that actually ran this round: `--round-backend codex` \
+         with the pinned model as `--reviewer-model` and your own model id (stated above) as \
+         `--executor-model`.";
+
+    // Shared LlmReview (HTTP) discipline for every state that can reach it.
+    const LLMREVIEW_RULES: &str = "When using LlmReview, pass ONLY the full review `prompt` — never \
+         forward the skill's Codex `model`, `config`, `sandbox`, or `approval-policy` parameters; \
+         pass a `model` to LlmReview only when the user explicitly chose an HTTP reviewer model. \
+         Every LlmReview result starts with a `reviewer_model:` line — when a skill's stop \
+         condition runs `review_gate.py` for such a round, report `--round-backend llm-chat` with \
+         that model as `--reviewer-model` and your own model id (stated above) as \
+         `--executor-model` (an HTTP reviewer drives the loop but never acquits on its own).";
 
     if reviewer_provider == "codex-mcp" {
         match fallback.filter(|s| !s.trim().is_empty()) {
@@ -4519,10 +4535,8 @@ fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Ve
                  ONLY when the Codex MCP channel is already known absent BEFORE dispatch (the tool \
                  is missing from the catalog or discovery failed) may you use the `LlmReview` tool, \
                  which calls the configured HTTP fallback reviewer ({fallback}) directly. Once a \
-                 Codex call has been dispatched, never re-target it to HTTP on any error. When \
-                 using LlmReview, pass ONLY the review `prompt` — never forward the skill's Codex \
-                 `model`, `config`, `sandbox`, or `approval-policy` parameters; pass a `model` to \
-                 LlmReview only when the user explicitly chose an HTTP reviewer model."
+                 Codex call has been dispatched, never re-target it to HTTP on any error. \
+                 {LLMREVIEW_RULES}"
             )],
             None => vec![format!(
                 "IMPORTANT: Your external LLM reviewer is Codex MCP — use the `mcp__codex__codex` / \
@@ -4530,15 +4544,13 @@ fn reviewer_routing_nudge(reviewer_provider: &str, fallback: Option<&str>) -> Ve
             )],
         }
     } else {
-        vec![
+        vec![format!(
             "IMPORTANT: When a skill instructs you to use `mcp__codex__codex` or `mcp__codex__codex-reply` \
              for external LLM review, use the `LlmReview` tool instead. The LlmReview tool calls \
              Gemini or OpenAI directly (via GEMINI_API_KEY or OPENAI_API_KEY) without needing MCP. \
-             Pass ONLY the full review prompt as the `prompt` parameter — never forward the skill's \
-             Codex `model`, `config`, `sandbox`, or `approval-policy` parameters into LlmReview; \
-             pass a `model` only when the user explicitly chose an HTTP reviewer model."
-                .to_string(),
-        ]
+             An explicit `— reviewer: manual` in the request still means STOP with \
+             REVIEW_UNAVAILABLE when no manual channel exists. {LLMREVIEW_RULES}"
+        )]
     }
 }
 
@@ -7264,7 +7276,7 @@ fn codex_version_note(path: &Path) -> Option<String> {
 /// version" note (DECIDED: note, not silent). Never a Problem; the doctor
 /// prints these as NOTE and never flips all_ok.
 fn codex_version_support_note(raw: &str) -> Option<String> {
-    const UPGRADE_HINT: &str = "'ultra' reasoning effort and gpt-5.6-sol may be unavailable — \
+    const UPGRADE_HINT: &str = "'ultra' reasoning effort and gpt-6-astra may be unavailable — \
          deep-audit skills degrade to xhigh per the fallback chain. Upgrade codex-cli and \
          restart the session.";
     let Some(token) = raw
@@ -7567,16 +7579,16 @@ mod tests {
     fn reviewer_display_three_states() {
         assert_eq!(
             reviewer_display_for(Some("codex-mcp"), None, "gpt-5.5"),
-            "Codex MCP · gpt-5.6-sol preferred"
+            "Codex MCP · gpt-6-astra preferred"
         );
         assert_eq!(
             reviewer_display_for(Some("codex-mcp"), Some("gemini"), "gemini-2.5-pro"),
-            "Codex MCP · gpt-5.6-sol preferred (HTTP fallback: gemini · gemini-2.5-pro)"
+            "Codex MCP · gpt-6-astra preferred (HTTP fallback: gemini · gemini-2.5-pro)"
         );
         // Blank fallback provider counts as none.
         assert_eq!(
             reviewer_display_for(Some("codex-mcp"), Some("  "), "gpt-5.5"),
-            "Codex MCP · gpt-5.6-sol preferred"
+            "Codex MCP · gpt-6-astra preferred"
         );
         assert_eq!(reviewer_display_for(Some("openai"), None, "gpt-5.5"), "gpt-5.5");
         assert_eq!(reviewer_display_for(None, None, "gpt-5.5"), "gpt-5.5");
@@ -9556,8 +9568,24 @@ mod tests {
     /// codex-reply shape, and the Δ5-2 /reviewer scoping.
     fn assert_codex_rules_contract(line: &str) {
         assert!(
-            line.contains("gpt-5.6-sol"),
-            "must name the preferred reviewer gpt-5.6-sol, got: {line}"
+            line.contains("preferred reviewer is gpt-6-astra"),
+            "must name the preferred reviewer gpt-6-astra, got: {line}"
+        );
+        assert!(
+            line.contains("explicit gpt-5.6-sol + \"xhigh\", then explicit gpt-5.5"),
+            "model-unknown fallback must walk astra → sol → 5.5 explicitly, got: {line}"
+        );
+        assert!(
+            line.contains("mandatory model pin is NOT a user override"),
+            "a skill's pin must never disable the capability chain, got: {line}"
+        );
+        assert!(
+            line.contains("`— reviewer:` directive") && line.contains("REVIEW_UNAVAILABLE"),
+            "explicit reviewer directives must take precedence, got: {line}"
+        );
+        assert!(
+            line.contains("`--round-backend codex`"),
+            "must tell the model how to report the round backend, got: {line}"
         );
         assert!(
             line.contains("skills pin the model and") && line.contains("exactly as the skill"),
@@ -9606,7 +9634,7 @@ mod tests {
         // Gate round-2 BLOCKER: an explicit call-level model override must
         // DISABLE the automatic chain (explicit choice = contract)...
         assert!(
-            line.contains("chain is DISABLED for that call"),
+            line.contains("only a reviewer model the USER explicitly chose for this call disables it"),
             "explicit call-level override must disable the auto chain, got: {line}"
         );
         // ...while Δ5-2 keeps /reviewer OUT of that definition.

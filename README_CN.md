@@ -16,7 +16,7 @@
 
 ![ARIS-Code Screenshot](docs/screenshot.png)
 
-*截图来自较早版本 —— 当前默认 executor 为 Claude Opus 5，reviewer 为经由 Codex MCP 的 GPT-5.6-Sol。*
+*截图来自较早版本 —— 当前默认 executor 为 Claude Opus 5，reviewer 为经由 Codex MCP 的 GPT-6-Astra。*
 
 > **对抗·多智能体研究自动化 CLI**
 > Executor 执行 · Reviewer 审查 · 迭代精进

@@ -45,6 +45,7 @@ fn supports_reasoning_effort(model: &str) -> bool {
         || word_match(&m, "o4")
         || m.contains("gpt-5.5")
         || m.contains("gpt-5.6")
+        || m.contains("gpt-6")
         || m.contains("reasoner")
         || m.contains("thinking")
 }
@@ -2010,6 +2011,7 @@ mod tests {
         // gpt-5.5 → matched via the `contains("gpt-5.5")` branch (NOT
         // word_match — it's a plain substring check in the source).
         assert!(supports_reasoning_effort("gpt-5.5"));
+        assert!(supports_reasoning_effort("gpt-6-astra"));
 
         // Extra boundary pins to lock the full predicate shape:
         // o1 family.

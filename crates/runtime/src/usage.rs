@@ -159,6 +159,24 @@ pub fn pricing_for_model(model: &str) -> Option<ModelPricing> {
     // Like the gpt-5.5 arm below, `contains` would also match a
     // hypothetical "gpt-5.60" — inherent to this file's contains
     // style, accepted.
+    // GPT-6 family — verified against developers.openai.com/api/docs/pricing
+    // on 2026-09-16: gpt-6-astra Standard short-context is $10 input /
+    // $1 cached input / $12.50 cache write / $50 output per 1M tokens. Cache
+    // writes are billed ABOVE input (unlike the older families), so this is an
+    // explicit tier, not `openai_pricing()` (which assumes write == input).
+    // The long-context tier ($20/$2/$25/$75) is not modelled; the estimate is
+    // the short-context baseline. gpt-5.6-sol's promotional $4/$20 (through
+    // 2026-11-21) is deliberately not modelled either — same policy as the
+    // Sonnet 5 introductory price in v0.4.24: list price, no time-dependent
+    // tables.
+    if m.contains("gpt-6") {
+        return Some(ModelPricing {
+            input_cost_per_million: 10.0,
+            output_cost_per_million: 50.0,
+            cache_creation_cost_per_million: 12.5,
+            cache_read_cost_per_million: 1.0,
+        });
+    }
     if m.contains("gpt-5.6-terra") {
         return Some(openai_pricing(2.5, 15.0));
     }
@@ -527,6 +545,17 @@ mod tests {
     /// than ANY real pricing-tier gap (smallest is 0.005), so this still
     /// catches a wrong tier (off by 0.01+) while ignoring the last-ULP noise
     /// that is the code's actual output. (Code stays source of truth.)
+    /// v0.4.25 — gpt-6-astra: explicit four-rate tier (cache write above
+    /// input), provider-prefixed spelling included; bare `gpt-6` rides it.
+    #[test]
+    fn price_gpt_6_astra_explicit_tier() {
+        assert_pricing("gpt-6-astra", 10.0, 50.0, 12.5, 1.0);
+        assert_pricing("openai/gpt-6-astra", 10.0, 50.0, 12.5, 1.0);
+        assert_pricing("gpt-6", 10.0, 50.0, 12.5, 1.0);
+        // the older flagship is untouched by the new arm
+        assert_pricing("gpt-5.6-sol", 5.0, 30.0, 5.0, 0.5);
+    }
+
     fn assert_pricing(model: &str, input: f64, output: f64, cc: f64, cr: f64) {
         let p = pricing_for_model(model)
             .unwrap_or_else(|| panic!("expected `{model}` to resolve to a pricing tier"));

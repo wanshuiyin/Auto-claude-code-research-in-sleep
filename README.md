@@ -16,7 +16,7 @@
 
 ![ARIS-Code Screenshot](docs/screenshot.png)
 
-*Screenshot from an earlier build — current default executor is Claude Opus 5, reviewer GPT-5.6-Sol via Codex MCP.*
+*Screenshot from an earlier build — current default executor is Claude Opus 5, reviewer GPT-6-Astra via Codex MCP.*
 
 > **Adversarial · Multi-Agent Research Automation CLI**
 > Executor acts · Reviewer critiques · Iterate to excellence

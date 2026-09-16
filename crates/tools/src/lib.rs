@@ -3918,7 +3918,8 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         };
         let base = custom_base_url.unwrap_or_else(|| default_base.to_string());
         let endpoint = format!("{}/v1/messages", base.trim_end_matches('/'));
-        return call_anthropic_compat_reviewer(&key, &endpoint, model, &input.prompt);
+        return call_anthropic_compat_reviewer(&key, &endpoint, model, &input.prompt)
+            .map(|text| with_reviewer_model_line(model, &text));
     }
 
     // OpenAI-compat path: resolve model with fallback, then route to its endpoint.
@@ -3950,6 +3951,16 @@ fn run_llm_review(input: LlmReviewInput) -> Result<String, String> {
         })?;
 
     call_openai_compat_reviewer(&key, &base_url, model, &input.prompt)
+        .map(|text| with_reviewer_model_line(model, &text))
+}
+
+/// v0.4.25: every `LlmReview` result starts with the model that actually
+/// answered. The executing model needs it to report an HTTP round truthfully
+/// to `review_gate.py` (`--round-backend llm-chat --reviewer-model <model>`);
+/// the tool used to return the bare review text, so the round could only be
+/// mis-labelled or rejected by the gate.
+fn with_reviewer_model_line(model: &str, text: &str) -> String {
+    format!("reviewer_model: {model}\n\n{text}")
 }
 
 /// Returns true if this reqwest error is a transient network-level failure
@@ -4078,6 +4089,7 @@ fn reviewer_supports_reasoning_effort(model: &str) -> bool {
         || reviewer_word_match(&m, "o4")
         || m.contains("gpt-5.5")
         || m.contains("gpt-5.6")
+        || m.contains("gpt-6")
         || m.contains("reasoner")
         || m.contains("thinking")
 }
@@ -6768,6 +6780,8 @@ printf 'pwsh:%s' "$1"
         // contains branches (case-insensitive via to_ascii_lowercase).
         assert!(reviewer_supports_reasoning_effort("GPT-5.5"));
         assert!(reviewer_supports_reasoning_effort("gpt-5.6-pro"));
+        assert!(reviewer_supports_reasoning_effort("gpt-6-astra"));
+        assert!(reviewer_supports_reasoning_effort("openai/gpt-6-astra"));
         assert!(reviewer_supports_reasoning_effort("deepseek-reasoner"));
         assert!(reviewer_supports_reasoning_effort("glm-4.6-thinking"));
         // codex Phase-0 gap #2 (round 2): contains-vs-word_match discriminators
@@ -6778,6 +6792,15 @@ printf 'pwsh:%s' "$1"
         // branches (o1/o3/o4 use reviewer_word_match). If P7 ever converts
         // these to word_match, these flip to false and the assert fails.
         assert!(reviewer_supports_reasoning_effort("xxgpt-5.5yy"));
+    }
+
+    /// v0.4.25: the `LlmReview` result carries the answering model on its first
+    /// line, in the exact shape the reviewer nudge tells the executor to read.
+    #[test]
+    fn llm_review_result_starts_with_reviewer_model_line() {
+        let out = super::with_reviewer_model_line("gemini-2.5-pro", "VERDICT: GO");
+        assert_eq!(out, "reviewer_model: gemini-2.5-pro\n\nVERDICT: GO");
+        assert_eq!(out.lines().next(), Some("reviewer_model: gemini-2.5-pro"));
         assert!(reviewer_supports_reasoning_effort("xxgpt-5.6yy"));
         assert!(reviewer_supports_reasoning_effort("xxreasoneryy"));
         assert!(reviewer_supports_reasoning_effort("xxthinkingyy"));
