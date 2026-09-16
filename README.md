@@ -29,6 +29,8 @@
 
 ## 📰 What's New
 
+> **v0.4.26** (2026-09-16) — **Fable 5.1**: the `fable` alias now means `claude-fable-5-1` and `/model` lists Fable 5.1 first (Fable 5 stays selectable); the default executor remains `claude-opus-5`.
+
 > **v0.4.25** (2026-09-16) — **The reviewer-bridge release.** codex-cli 0.154 removed `codex mcp-server`, so every Codex review from ARIS-Code died on an updated codex. **🔴 Built-in `codex exec` bridge**: `mcp__codex__codex` runs over `codex exec` with nothing to register — no `mcpServers.codex` entry, an old `codex mcp-server` entry is migrated in memory (env, `-c` defaults, timeout, trust kept), thread records interoperate with ARIS's Python bridge, `aris doctor` shows the effective backend; `ARIS_CODEX_BRIDGE=0` restores the old path. Also fixed on the way: the model never saw a Codex result's `threadId`, so `codex-reply` could not continue a thread. **🆕 `/since`** replays your last input and everything after it (folded like the live display; `/since full` for complete payloads; also after `/resume`); a dim hint appears after turns with 8+ tool calls (`ARIS_TURN_SUMMARY=0`). **🐛 #430** (fix pending Windows confirmation) multi-line paste no longer submits line by line and Ctrl+C stops the cascade (`ARIS_PASTE_BURST=0`). **🐛 #439** `/resume` lists sessions with `[n]` indices, accepts an index / id prefix / path, and shows where you stopped. **#428** the Windows shim message carries the native installer one-liner. **📦 Skills 81 → 83** (+`/proof-orchestrator`, `/research-implement-feature`; doctrine and system prompt now name **GPT-6-Astra**, fallback gpt-5.6-sol → gpt-5.5; 32 helpers + repo-root templates bundled). Tests: api 35+6 / aris-cli 225 + 4 e2e / runtime 252 / tools 71 / commands 6, all green; live `codex exec` roundtrip on codex-cli 0.154.0. Codex MCP (gpt-6-astra): ultra design gate + xhigh implementation gate per step.
 
 > **v0.4.24** (2026-08-09) — **The Claude 5 model refresh** ([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)): first-class **Claude Opus 5** and **Claude Fable 5** (Mythos-class flagship) support. Explicit `--model claude-opus-5` / `claude-fable-5` already worked on every platform — this release makes them visible and priced right. **🆕 Default model → `claude-opus-5`** (same $5/$25 tier as Opus 4.8) for the main session, subagents, and `aris setup`; the availability fallback becomes an ordered **chain** — on the precise `404 not_found_error` a non-explicit session walks Opus 5 → Opus 4.8 → Opus 4.7, one step per failed request (explicit choices never silently change); the old single-hop latch would have stranded 4.7-only accounts and configs saved by v0.4.23's setup, a regression the cross-model review caught, now locked by an end-to-end mock-404 chain test. The `/model` picker adds Fable 5 / Opus 5 / Sonnet 5 (4.8 / 4.6 / Haiku stay selectable); aliases: `fable` → `claude-fable-5` (new), `opus` → `claude-opus-5`, `sonnet` → `claude-sonnet-5`. **💰 New Mythos-class pricing tier** (verified 2026-08): `fable`/`mythos` = $10/$50 (cache write $12.50, read $1) — previously `claude-fable-5` matched no family substring and fell to the conservative unknown-model fallback ($15/$75), a 1.5× `/cost` over-estimate; Opus 5 was already priced right by the current-Opus branch and is now test-pinned. Tests: api 41 / aris-cli 213 + 4 e2e / runtime 226 / tools 70 / commands 5, all green; live smoke on `claude-opus-5`, `claude-fable-5`, and the `fable` alias end-to-end. Codex MCP (gpt-5.6-sol xhigh): implementation gate NO-GO (caught the fallback-chain regression + a pricing-history error) → GO after fixes.
@@ -291,9 +293,12 @@ The system prompt explicitly informs the model of its exact identity (ARIS-Code)
 ❯ /model
   Current Executor: claude-opus-5
   Switch to:
-  > claude-fable-5
+    claude-fable-5-1
+    claude-fable-5
+  > claude-opus-5
     claude-sonnet-5
     claude-opus-4-8
+    claude-sonnet-4-6
     claude-haiku-4-5-20251001
 ```
 

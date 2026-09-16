@@ -29,6 +29,8 @@
 
 ## 📰 最新动态
 
+> **v0.4.26** (2026-09-16) — **Fable 5.1**:`fable` 别名现在指向 `claude-fable-5-1`,`/model` 菜单把 Fable 5.1 放在第一位(Fable 5 仍可选);默认 executor 仍是 `claude-opus-5`。
+
 > **v0.4.25** (2026-09-16) — **reviewer 桥接版。** codex-cli 0.154 删掉了 `codex mcp-server`,升级过 codex 的用户从 ARIS-Code 发起的每次 Codex 审稿都会失败。**🔴 内建 `codex exec` 桥接**:`mcp__codex__codex` 改走 `codex exec`,不需要任何注册 —— 不用 `mcpServers.codex` 条目,老的 `codex mcp-server` 条目在内存里自动迁移(env、`-c` 默认、超时、trust 保留),线程记录与 ARIS 的 Python 桥互通,`aris doctor` 显示实际后端;`ARIS_CODEX_BRIDGE=0` 回旧路径。顺带修掉一个老 bug:模型从来拿不到 Codex 结果里的 `threadId`,所以 `codex-reply` 一直续不上线程。**🆕 `/since`** 重放你上一次输入之后发生的一切(按现场显示折叠;`/since full` 看完整输出;`/resume` 之后也可用);工具调用 ≥8 次的回合结束时打一行提示(`ARIS_TURN_SUMMARY=0` 关闭)。**🐛 #430**(待 Windows 用户确认)多行粘贴不再逐行提交,Ctrl+C 能停住(`ARIS_PASTE_BURST=0`)。**🐛 #439** `/resume` 无参数列出会话并带 `[n]` 序号,接受序号 / id 前缀 / 路径,恢复后直接显示停在哪。**#428** Windows shim 的报错带上官方原生安装命令。**📦 skills 81 → 83**(+`/proof-orchestrator`、`/research-implement-feature`;教义与系统提示改为 **GPT-6-Astra**,回退 gpt-5.6-sol → gpt-5.5;32 个 helper + 仓库根 templates 一并打包)。测试:api 35+6 / aris-cli 225 + 4 e2e / runtime 252 / tools 71 / commands 6 全绿;codex-cli 0.154.0 上 `codex exec` 真机往返通过。Codex MCP(gpt-6-astra):ultra 设计 gate + 每步 xhigh 实现 gate。
 
 > **v0.4.24** (2026-08-09) — **Claude 5 模型刷新**([#392](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/392)):**Claude Opus 5** 与 **Claude Fable 5**(Mythos 级旗舰)一等公民支持。显式 `--model claude-opus-5` / `claude-fable-5` 本来在所有平台就能透传使用 —— 这一版让它们进菜单、算对钱。**🆕 默认模型 → `claude-opus-5`**(与 Opus 4.8 同为 $5/$25 档),覆盖主会话、子代理与 `aris setup`;可用性 fallback 升级为有序**链**:非显式会话在精确的 `404 not_found_error` 上沿 Opus 5 → Opus 4.8 → Opus 4.7 逐步前进、每步警告一次(显式选择的模型永不静默更换);旧的单跳 latch 在新默认下会把仅有 4.7 权限的账号卡死在 4.8、并让 v0.4.23 setup 存下的配置彻底失去回落 —— 该回归被跨模型审当场抓住,现由端到端 mock-404 链测试锁死。`/model` 选择器新增 Fable 5 / Opus 5 / Sonnet 5(4.8 / 4.6 / Haiku 仍可选);别名:`fable` → `claude-fable-5`(新增)、`opus` → `claude-opus-5`、`sonnet` → `claude-sonnet-5`。**💰 新增 Mythos 级计价档**(2026-08 联网核实):`fable`/`mythos` = $10/$50(cache write $12.50、read $1)—— 此前 `claude-fable-5` 不含任何家族子串,落到保守的未知模型兜底档($15/$75),`/cost` 全项高估 1.5×;Opus 5 本就被现行 Opus 档算对,现加测试钉死。测试:api 41 / aris-cli 213 + 4 e2e / runtime 226 / tools 70 / commands 5 全绿;`claude-opus-5`、`claude-fable-5`、`fable` 别名三发真机冒烟端到端通过。Codex MCP(gpt-5.6-sol xhigh):实现 gate NO-GO(抓到 fallback 链回归 + 定价史实错误)→ 修复后 GO。
@@ -291,9 +293,12 @@ sudo mv aris /usr/local/bin/aris
 ❯ /model
   当前 Executor: claude-opus-5
   切换为:
-  > claude-fable-5
+    claude-fable-5-1
+    claude-fable-5
+  > claude-opus-5
     claude-sonnet-5
     claude-opus-4-8
+    claude-sonnet-4-6
     claude-haiku-4-5-20251001
 ```
 

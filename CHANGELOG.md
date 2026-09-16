@@ -1,5 +1,17 @@
 # ARIS-Code Changelog
 
+## v0.4.26 (2026-09-16)
+
+Small follow-up: **Claude Fable 5.1** becomes the Fable the CLI points at.
+The default executor stays `claude-opus-5` (the Fable tier costs twice as
+much — a default change would raise everyone's bill).
+
+- `fable` alias → `claude-fable-5-1`; `/model` lists Fable 5.1 first and keeps
+  Fable 5 selectable; the system-prompt identity line names "Claude Fable
+  5.1". Explicit `--model claude-fable-5-1` already passed through before;
+  pricing was already right (the Mythos tier matches on `fable`).
+- Nothing else changes. Tests: aris-cli 225 + 4 e2e / runtime 252, all green.
+
 ## v0.4.25 (2026-09-16)
 
 The **reviewer-bridge release**. codex-cli 0.154 removed `codex mcp-server`,

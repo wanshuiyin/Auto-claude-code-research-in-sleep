@@ -768,6 +768,7 @@ mod tests {
     /// over-estimate.
     #[test]
     fn price_fable_mythos() {
+        assert_pricing("claude-fable-5-1", 10.0, 50.0, 12.5, 1.0);
         assert_pricing("claude-fable-5", 10.0, 50.0, 12.5, 1.0);
         assert_pricing("claude-mythos-5", 10.0, 50.0, 12.5, 1.0);
     }

@@ -778,7 +778,7 @@ fn resolve_model_alias(model: &str) -> &str {
         return model;
     }
     match model {
-        "fable" => "claude-fable-5",
+        "fable" => "claude-fable-5-1",
         "opus" => "claude-opus-5",
         "sonnet" => "claude-sonnet-5",
         "haiku" => "claude-haiku-4-5-20251001",
@@ -2427,9 +2427,10 @@ impl LiveCli {
                     // Anthropic mode
                     vec![
                         (
-                            "claude-fable-5",
-                            "Fable 5 · Frontier Mythos-class, most intelligent",
+                            "claude-fable-5-1",
+                            "Fable 5.1 · Frontier Mythos-class, most intelligent",
                         ),
+                        ("claude-fable-5", "Fable 5 · Previous Mythos-class"),
                         ("claude-opus-5", "Opus 5 · Most capable for complex work"),
                         ("claude-sonnet-5", "Sonnet 5 · Best for everyday tasks"),
                         (
@@ -5076,6 +5077,7 @@ fn build_system_prompt(model_id: Option<&str>) -> Result<Vec<String>, Box<dyn st
     // ARIS identity: tell the model exactly who it is to prevent hallucination.
     let model_name = model_id.unwrap_or("unknown");
     let friendly_name = match model_name {
+        "claude-fable-5-1" => "Claude Fable 5.1",
         "claude-fable-5" => "Claude Fable 5",
         "claude-opus-5" => "Claude Opus 5",
         "claude-sonnet-5" => "Claude Sonnet 5",
@@ -8383,7 +8385,7 @@ mod tests {
         // guard and pin the var, or a concurrent env-writing test flakes this.
         let _g = crate::env_test_guard();
         std::env::remove_var("EXECUTOR_PROVIDER");
-        assert_eq!(resolve_model_alias("fable"), "claude-fable-5");
+        assert_eq!(resolve_model_alias("fable"), "claude-fable-5-1");
         assert_eq!(resolve_model_alias("opus"), "claude-opus-5");
         assert_eq!(resolve_model_alias("sonnet"), "claude-sonnet-5");
         assert_eq!(resolve_model_alias("haiku"), "claude-haiku-4-5-20251001");
@@ -8406,6 +8408,7 @@ mod tests {
         );
         assert_eq!(next_default_fallback("claude-opus-4-7"), None);
         // Non-chain models (explicitly named or saved) never silently change.
+        assert_eq!(next_default_fallback("claude-fable-5-1"), None);
         assert_eq!(next_default_fallback("claude-fable-5"), None);
         assert_eq!(next_default_fallback("claude-sonnet-4-6"), None);
         assert_eq!(resolve_model_alias("claude-opus"), "claude-opus");
