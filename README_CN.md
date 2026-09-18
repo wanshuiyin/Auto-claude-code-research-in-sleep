@@ -29,6 +29,8 @@
 
 ## 📰 最新动态
 
+> **v0.4.27** (2026-09-19) — 启动 REPL 后直接退出不再留下空的 session 文件;`/resume` 只列出有消息的会话([#439](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/439) 后续)。
+
 > **v0.4.26** (2026-09-16) — **Fable 5.1**:`fable` 别名现在指向 `claude-fable-5-1`,`/model` 菜单把 Fable 5.1 放在第一位(Fable 5 仍可选);默认 executor 仍是 `claude-opus-5`。
 
 > **v0.4.25** (2026-09-16) — **reviewer 桥接版。** codex-cli 0.154 删掉了 `codex mcp-server`,升级过 codex 的用户从 ARIS-Code 发起的每次 Codex 审稿都会失败。**🔴 内建 `codex exec` 桥接**:`mcp__codex__codex` 改走 `codex exec`,不需要任何注册 —— 不用 `mcpServers.codex` 条目,老的 `codex mcp-server` 条目在内存里自动迁移(env、`-c` 默认、超时、trust 保留),线程记录与 ARIS 的 Python 桥互通,`aris doctor` 显示实际后端;`ARIS_CODEX_BRIDGE=0` 回旧路径。顺带修掉一个老 bug:模型从来拿不到 Codex 结果里的 `threadId`,所以 `codex-reply` 一直续不上线程。**🆕 `/since`** 重放你上一次输入之后发生的一切(按现场显示折叠;`/since full` 看完整输出;`/resume` 之后也可用);工具调用 ≥8 次的回合结束时打一行提示(`ARIS_TURN_SUMMARY=0` 关闭)。**🐛 #430**(待 Windows 用户确认)多行粘贴不再逐行提交,Ctrl+C 能停住(`ARIS_PASTE_BURST=0`)。**🐛 #439** `/resume` 无参数列出会话并带 `[n]` 序号,接受序号 / id 前缀 / 路径,恢复后直接显示停在哪。**#428** Windows shim 的报错带上官方原生安装命令。**📦 skills 81 → 83**(+`/proof-orchestrator`、`/research-implement-feature`;教义与系统提示改为 **GPT-6-Astra**,回退 gpt-5.6-sol → gpt-5.5;32 个 helper + 仓库根 templates 一并打包)。测试:api 35+6 / aris-cli 225 + 4 e2e / runtime 252 / tools 71 / commands 6 全绿;codex-cli 0.154.0 上 `codex exec` 真机往返通过。Codex MCP(gpt-6-astra):ultra 设计 gate + 每步 xhigh 实现 gate。

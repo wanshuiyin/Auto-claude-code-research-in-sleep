@@ -2323,7 +2323,7 @@ impl LiveCli {
     }
 
     fn persist_session(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.runtime.session().save_to_path(&self.session.path)?;
+        persist_session_to(self.runtime.session(), &self.session.path)?;
         Ok(())
     }
 
@@ -3779,9 +3779,36 @@ fn resolve_session_reference_in(
     }
 }
 
+/// A session file is worth writing (and listing) only once it holds a message.
+fn session_worth_saving(session: &Session) -> bool {
+    !session.messages.is_empty()
+}
+
+/// v0.4.27 (#439 follow-up): write the session file only once it holds a
+/// message — starting the REPL and quitting used to leave one empty
+/// `session-<millis>.json` per launch. Returns whether a file was written.
+fn persist_session_to(session: &Session, path: &Path) -> Result<bool, Box<dyn std::error::Error>> {
+    if !session_worth_saving(session) {
+        return Ok(false);
+    }
+    session.save_to_path(path)?;
+    Ok(true)
+}
+
 fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::error::Error>> {
+    Ok(list_managed_sessions_in(&sessions_dir()?)?.0)
+}
+
+/// v0.4.27: resumable sessions plus the paths of files that could not be
+/// read. Empty session files (left behind by pre-0.4.27 launches) carry
+/// nothing to resume and are not listed; unreadable ones are reported apart
+/// so they stay discoverable without taking a resume index.
+fn list_managed_sessions_in(
+    dir: &Path,
+) -> Result<(Vec<ManagedSessionSummary>, Vec<PathBuf>), Box<dyn std::error::Error>> {
     let mut sessions = Vec::new();
-    for entry in fs::read_dir(sessions_dir()?)? {
+    let mut unreadable = Vec::new();
+    for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
@@ -3794,9 +3821,14 @@ fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::er
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_secs())
             .unwrap_or_default();
-        let message_count = Session::load_from_path(&path)
-            .map(|session| session.messages.len())
-            .unwrap_or_default();
+        let Ok(loaded) = Session::load_from_path(&path) else {
+            unreadable.push(path);
+            continue;
+        };
+        let message_count = loaded.messages.len();
+        if message_count == 0 {
+            continue;
+        }
         let id = path
             .file_stem()
             .and_then(|value| value.to_str())
@@ -3817,7 +3849,7 @@ fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::er
             .cmp(&left.modified_epoch_secs)
             .then_with(|| right.id.cmp(&left.id))
     });
-    Ok(sessions)
+    Ok((sessions, unreadable))
 }
 
 /// v0.4.25 (#439): the list with a 1-based index per row and a relative age,
@@ -3825,7 +3857,7 @@ fn list_managed_sessions() -> Result<Vec<ManagedSessionSummary>, Box<dyn std::er
 fn render_session_list(
     active_session_id: &str,
 ) -> Result<(String, Vec<ManagedSessionSummary>), Box<dyn std::error::Error>> {
-    let sessions = list_managed_sessions()?;
+    let (sessions, unreadable) = list_managed_sessions_in(&sessions_dir()?)?;
     let now_secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -3834,6 +3866,9 @@ fn render_session_list(
         "Sessions".to_string(),
         format!("  Directory         {}", sessions_dir()?.display()),
     ];
+    for path in &unreadable {
+        lines.push(format!("  (unreadable session file, not resumable: {})", path.display()));
+    }
     if sessions.is_empty() {
         lines.push("  No managed sessions saved yet.".to_string());
         return Ok((lines.join("\n"), sessions));
@@ -9263,6 +9298,36 @@ mod tests {
         let err = resolve_session_reference_in("session-100", &dir, &snapshot, &listing).unwrap_err().to_string();
         assert!(err.contains("ambiguous") && err.contains("session-1000") && err.contains("session-1001"), "{err}");
         assert!(resolve_session_reference_in("nope", &dir, &snapshot, &listing).is_err());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn empty_sessions_are_neither_saved_nor_listed() {
+        assert!(!super::session_worth_saving(&Session::new()));
+        let mut with_message = Session::new();
+        with_message.messages.push(msg(MessageRole::User, vec![text("hi")]));
+        assert!(super::session_worth_saving(&with_message));
+
+        let dir = std::env::temp_dir().join(format!(
+            "aris-empty-sessions-test-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_nanos())
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        // the persistence guard itself: empty → no file, one message → file
+        let target = dir.join("session-0.json");
+        assert!(!super::persist_session_to(&Session::new(), &target).unwrap());
+        assert!(!target.exists());
+        assert!(super::persist_session_to(&with_message, &target).unwrap());
+        assert!(target.exists());
+
+        Session::new().save_to_path(dir.join("session-1.json")).unwrap();
+        with_message.save_to_path(dir.join("session-2.json")).unwrap();
+        fs::write(dir.join("session-3.json"), "{ not json").unwrap();
+        let (listed, unreadable) = super::list_managed_sessions_in(&dir).unwrap();
+        let ids: Vec<&str> = listed.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, vec!["session-2", "session-0"]);
+        assert_eq!(unreadable, vec![dir.join("session-3.json")]);
         let _ = fs::remove_dir_all(&dir);
     }
 

@@ -1,5 +1,17 @@
 # ARIS-Code Changelog
 
+## v0.4.27 (2026-09-19)
+
+Patch for the #439 follow-up: launching the REPL and quitting no longer leaves
+an empty `session-<millis>.json` behind.
+
+- A session file is written only once it holds a message (startup, `/exit`,
+  Ctrl+D and every other save path go through the same rule). Empty files
+  left by earlier versions are no longer listed by `/resume` / `/session
+  list`; an unreadable session file is shown as a note instead of taking a
+  resume index.
+- Tests: aris-cli 226 (+1: the guard and the listing).
+
 ## v0.4.26 (2026-09-16)
 
 Small follow-up: **Claude Fable 5.1** becomes the Fable the CLI points at.
