@@ -72,6 +72,87 @@ def allowed_tools(text: str) -> list[str]:
     return [tok.strip() for tok in match.group(1).split(",") if tok.strip()]
 
 
+# ---- Skill-grant hygiene (#284) -------------------------------------------
+# A body that tells the executor to invoke another skill ("Run `/novelty-check`")
+# while `allowed-tools` omits `Skill` leaves that step unperformable, so the
+# executor re-implements it inline instead — the failure mode diagnosed in #284
+# and fixed for /idea-creator in 07ca667. This keeps the rest of the class closed.
+#
+# Scope: mainline `skills/*/SKILL.md` only. The Codex mirrors (skills/skills-codex*)
+# carry no `Skill` grant by design — Codex-side fan-out is expressed through
+# `spawn_agent` — so scanning them would report dozens of false positives.
+_INVOKE_RE = re.compile(
+    r"(?i)(?<![`/\w-])\b(?:run|invoke|call|delegate to|re-?run)\b[^.|]{0,3}"
+    r"`/([a-z][a-z0-9-]*)`"
+)
+# Negation must sit immediately before the verb ("do not invoke `/x`"). A `never`
+# that modifies a neighbouring verb ("claims were never adjudicated, rerun `/x`")
+# does not cancel the instruction, so a wide window would hide real drift.
+_NEGATED_RE = re.compile(r"(?i)\b(?:do not|don't|never|no longer|avoid|not)\b\W{0,4}$")
+# Wording that addresses the human. A passing mention of the user ("so the user
+# has a readable view") is not user-directed and must not suppress the finding.
+_HUMAN_DIRECTED_RE = re.compile(
+    r"(?i)\b(?:ask the user|tell the user|"
+    r"the user (?:can|should|may|must|will|types|runs)|"
+    r"human[- ](?:action|invoked|gate))\b"
+)
+# Sections that state boundaries/relationships rather than steps; each alternative
+# below already protects a real line — "When NOT to use" (interview-cheatsheet
+# L224), "What This Skill Is — and Is NOT" (slides-polish L33), "Recommended
+# Follow-up" (paper-slides L590). Known non-goal: a genuine step written inside
+# one of these sections would be skipped.
+_SCOPE_SECTION_RE = re.compile(
+    r"(?i)^#{2,}\s*(?:when not to use|when to use|not for|what this skill is|"
+    r"scope|limitations|prior skill relationship|relationship to|comparison|"
+    r"recommended follow-up|next steps)"
+)
+# Fenced blocks hold text a skill EMITS (report templates), not steps it takes.
+_FENCE_RE = re.compile(r"^```.*?^```", flags=re.DOTALL | re.MULTILINE)
+
+
+def _scope_section_lines(body: str) -> set[int]:
+    """Line indexes that belong to a boundary/relationship section."""
+    inside, skip = False, set()
+    for index, line in enumerate(body.split("\n")):
+        if re.match(r"^#{1,6}\s", line):
+            inside = bool(_SCOPE_SECTION_RE.match(line))
+        if inside:
+            skip.add(index)
+    return skip
+
+
+def skill_invocation_permission_drift(root: Path) -> list[str]:
+    """Skills whose body instructs a sub-skill invocation they cannot perform."""
+    failures = []
+    for skill_file in sorted(root.glob("*/SKILL.md")):
+        text = read(skill_file)
+        if any(tok == "Skill" or tok.startswith("Skill(") for tok in allowed_tools(text)):
+            continue
+        body = _FENCE_RE.sub(lambda m: "\n" * m.group(0).count("\n"), text)
+        skip = _scope_section_lines(body)
+        lines = body.split("\n")
+        for match in _INVOKE_RE.finditer(body):
+            if match.group(1) == skill_file.parent.name:
+                continue                      # re-runs itself, not a sub-skill
+            line_no = body[:match.start()].count("\n")
+            if line_no in skip:
+                continue                      # boundary/relationship section
+            if _NEGATED_RE.search(body[max(0, match.start() - 20):match.start()]):
+                continue                      # "do not invoke `/x`"
+            if _HUMAN_DIRECTED_RE.search(lines[line_no]):
+                continue                      # instruction addressed to the human
+            try:
+                rel = skill_file.relative_to(REPO_ROOT)
+            except ValueError:
+                rel = skill_file
+            failures.append(
+                f"{rel}: body instructs `{match.group(0)}` but allowed-tools grants "
+                f"no `Skill` — the executor cannot perform the step it was told to "
+                f"perform (see #284)"
+            )
+    return failures
+
+
 def frontmatter_split(text: str) -> str:
     """Return the body after a leading YAML frontmatter block (whole text if
     no frontmatter). Anchors on the opening `---` fence and the first closing
@@ -209,6 +290,10 @@ def check_inventory() -> list[str]:
                 f"cite fan-out-pattern.md — vestigial grant or undocumented "
                 f"fan-out (see shared-references/fan-out-pattern.md)"
             )
+
+    # Skill-grant hygiene, the converse direction of the Agent rule above: there a
+    # grant must be justified by the body, here the body must be backed by a grant.
+    failures.extend(skill_invocation_permission_drift(SKILLS_ROOT))
 
     # Watchdog 'loop' task type ⇔ its documented trigger (A2). Mirrors the Agent-grant⇒cite
     # rule above: a feature with no documented trigger is dead weight, a documented trigger
