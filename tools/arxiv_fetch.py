@@ -21,6 +21,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 import urllib.error
@@ -30,7 +32,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 _ATOM_NS = "http://www.w3.org/2005/Atom"
-_API_BASE = "http://export.arxiv.org/api/query"
+_API_BASE = "https://export.arxiv.org/api/query"
 _MIN_PDF_BYTES = 10_240
 
 
@@ -100,24 +102,67 @@ def _api_url(query: str, max_results: int, start: int) -> str:
     return f"{_API_BASE}?{urllib.parse.urlencode(params)}"
 
 
+def _fallback_get(url: str, headers: dict, timeout: float) -> bytes | None:
+    """Re-issue a GET that urllib got HTTP 406 for, via ``requests`` or ``curl``.
+
+    export.arxiv.org has been observed answering 406 (empty body) to Python's
+    urllib from some networks while ``requests``/``curl`` succeed on the same
+    URL (interleaved A/B, uncached queries: urllib 0/10, requests 10/10,
+    curl 10/10; headers, User-Agent and proxies made no difference).
+    Returns the body on HTTP 200, else None (also when neither transport is
+    available).
+    """
+    try:
+        import requests  # optional dependency
+    except ImportError:
+        requests = None
+    if requests is not None:
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+        except requests.RequestException:
+            return None
+        return resp.content if resp.status_code == 200 else None
+    curl = shutil.which("curl")
+    if curl is None:
+        return None
+    cmd = [curl, "-sf", "--max-time", str(int(timeout))]
+    for key, value in headers.items():
+        cmd += ["-H", f"{key}: {value}"]
+    proc = subprocess.run(cmd + [url], capture_output=True)
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def _fetch_atom(url: str) -> ET.Element:
     """Fetch an arXiv Atom feed and return the parsed XML root.
 
     Sends a descriptive User-Agent (landing requests in arXiv's lenient pool)
     and retries up to 3 times on HTTP 429, transient network errors, and the
     plain-text ``Rate exceeded.`` body the API sometimes returns with 200 OK.
+    On HTTP 406 the request is re-issued via ``_fallback_get`` (requests/curl).
     Raises RuntimeError when all retries are exhausted.
     """
-    req = urllib.request.Request(url, headers={"User-Agent": _arxiv_user_agent()})
+    headers = {"User-Agent": _arxiv_user_agent()}
+    req = urllib.request.Request(url, headers=headers)
     for attempt in (1, 2, 3):
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < 3:
+            if e.code == 406:
+                body = _fallback_get(url, headers, 30)
+                if body is None:
+                    if attempt < 3:
+                        time.sleep(5 * attempt)
+                        continue
+                    raise RuntimeError(
+                        f"arXiv API fetch failed: {e} (fallback via requests/curl "
+                        "also failed or is unavailable)"
+                    )
+            elif e.code == 429 and attempt < 3:
                 time.sleep(5 * attempt)
                 continue
-            raise RuntimeError(f"arXiv API fetch failed: {e}")
+            else:
+                raise RuntimeError(f"arXiv API fetch failed: {e}")
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             if attempt < 3:
                 time.sleep(2 * attempt)

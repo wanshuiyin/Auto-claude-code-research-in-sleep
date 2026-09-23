@@ -48,6 +48,8 @@ import argparse
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 import unicodedata
@@ -481,6 +483,34 @@ def _yaml_quote(s: str) -> str:
     return f'"{s}"'
 
 
+def _arxiv_fallback_get(url: str, headers: dict, timeout: float) -> bytes | None:
+    """Re-issue a GET that urllib got HTTP 406 for, via ``requests`` or ``curl``.
+
+    export.arxiv.org has been observed answering 406 (empty body) to Python's
+    urllib from some networks while ``requests``/``curl`` succeed on the same
+    URL. Returns the body on HTTP 200, else None. Mirrors
+    ``tools/arxiv_fetch.py::_fallback_get``.
+    """
+    try:
+        import requests  # optional dependency
+    except ImportError:
+        requests = None
+    if requests is not None:
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+        except requests.RequestException:
+            return None
+        return resp.content if resp.status_code == 200 else None
+    curl = shutil.which("curl")
+    if curl is None:
+        return None
+    cmd = [curl, "-sf", "--max-time", str(int(timeout))]
+    for key, value in headers.items():
+        cmd += ["-H", f"{key}: {value}"]
+    proc = subprocess.run(cmd + [url], capture_output=True)
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def _arxiv_api_get(url: str, what: str, timeout: float = 15.0) -> bytes:
     """GET an arXiv API URL with a descriptive User-Agent + retry/backoff.
 
@@ -488,18 +518,31 @@ def _arxiv_api_get(url: str, what: str, timeout: float = 15.0) -> bytes:
     fetchers: sends ``_arxiv_user_agent()`` (lands in arXiv's lenient pool),
     retries up to 3 times on HTTP 429, transient network errors, and the
     plain-text "Rate exceeded." body the API sometimes returns with 200 OK.
+    On HTTP 406 the request is re-issued via ``_arxiv_fallback_get``.
     ``what`` is a label for error messages (e.g. the id or id-list).
     """
-    req = urllib.request.Request(url, headers={"User-Agent": _arxiv_user_agent()})
+    headers = {"User-Agent": _arxiv_user_agent()}
+    req = urllib.request.Request(url, headers=headers)
     for attempt in (1, 2, 3):
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 body = resp.read()
         except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < 3:
+            if e.code == 406:
+                body = _arxiv_fallback_get(url, headers, timeout)
+                if body is None:
+                    if attempt < 3:
+                        time.sleep(5 * attempt)
+                        continue
+                    raise RuntimeError(
+                        f"arXiv API fetch failed for {what}: {e} (fallback via "
+                        "requests/curl also failed or is unavailable)"
+                    )
+            elif e.code == 429 and attempt < 3:
                 time.sleep(5 * attempt)
                 continue
-            raise RuntimeError(f"arXiv API fetch failed for {what}: {e}")
+            else:
+                raise RuntimeError(f"arXiv API fetch failed for {what}: {e}")
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             if attempt < 3:
                 time.sleep(2 * attempt)

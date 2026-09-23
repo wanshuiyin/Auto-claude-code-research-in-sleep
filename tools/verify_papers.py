@@ -7,6 +7,12 @@ via 3-layer fallback (arXiv API → CrossRef DOI lookup → Semantic Scholar fuz
 title match). Designed to catch LLM hallucination at search time, before
 fabricated references propagate through downstream skills.
 
+When a service refuses to answer (HTTP 401/403/406) the layer falls back
+instead of reporting ``unverified``: arXiv ids → DataCite DOI
+``10.48550/arXiv.<id>``; titles → OpenAlex. A 406 from urllib is first retried
+via ``requests``/``curl`` (export.arxiv.org rejects urllib from some networks).
+Set ``SEMANTIC_SCHOLAR_API_KEY`` to send an S2 API key.
+
 Used by `/research-lit` (Step 1.5, mandatory), `/idea-creator`, `/novelty-check`.
 
 Helper resolution chain: `.aris/tools/verify_papers.py` →
@@ -89,6 +95,8 @@ import json
 import os
 import random
 import re
+import shutil
+import subprocess
 import sys
 import time
 import unicodedata
@@ -106,6 +114,8 @@ from typing import Any
 ARXIV_API = "https://export.arxiv.org/api/query"
 CROSSREF_API = "https://api.crossref.org/works"
 S2_API = "https://api.semanticscholar.org/graph/v1/paper/search"
+DATACITE_API = "https://api.datacite.org/dois"  # arXiv DOIs: 10.48550/arXiv.<id>
+OPENALEX_API = "https://api.openalex.org/works"
 
 DEFAULT_BATCH_SIZE = 40
 DEFAULT_FUZZY_THRESHOLD = 0.6
@@ -139,7 +149,7 @@ class PaperInput:
 class PaperResult:
     id: str
     status: str  # verified | unverified | verify_pending | error
-    method: str | None = None  # arxiv | crossref | s2 | None
+    method: str | None = None  # arxiv | datacite | crossref | s2 | openalex | *_fallback_from_doi
     confidence: str | None = None  # high | medium | low
     reason: str | None = None
     identifiers: dict[str, str] = field(default_factory=dict)
@@ -224,13 +234,48 @@ def save_cache(path: Path, cache: dict[str, dict[str, Any]]) -> None:
 # Retry helpers
 # ──────────────────────────────────────────────────────────────────────────
 
+def _fallback_get(url: str, headers: dict[str, str], timeout: int) -> bytes | None:
+    """Re-issue a GET that urllib got HTTP 406 for, via ``requests`` or ``curl``.
+
+    export.arxiv.org has been observed answering 406 (empty body) to Python's
+    urllib from some networks while ``requests``/``curl`` succeed on the same
+    URL. Returns the body on HTTP 200, else None. Mirrors
+    ``tools/arxiv_fetch.py::_fallback_get``.
+    """
+    try:
+        import requests  # optional dependency
+    except ImportError:
+        requests = None
+    if requests is not None:
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+        except requests.RequestException:
+            return None
+        return resp.content if resp.status_code == 200 else None
+    curl = shutil.which("curl")
+    if curl is None:
+        return None
+    cmd = [curl, "-sf", "--max-time", str(int(timeout))]
+    for key, value in headers.items():
+        cmd += ["-H", f"{key}: {value}"]
+    proc = subprocess.run(cmd + [url], capture_output=True)
+    return proc.stdout if proc.returncode == 0 else None
+
+
 def http_get(url: str, headers: dict[str, str] | None = None, timeout: int = 30) -> tuple[int, str | None]:
-    """Return (status_code, body) or (status_code, None) on error. Status -1 = network error."""
+    """Return (status_code, body) or (status_code, None) on error. Status -1 = network error.
+
+    On HTTP 406 the request is retried once via ``_fallback_get``.
+    """
     req = urllib.request.Request(url, headers=headers or {})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, resp.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as e:
+        if e.code == 406:
+            body = _fallback_get(url, headers or {}, timeout)
+            if body is not None:
+                return 200, body.decode("utf-8", errors="replace")
         return e.code, None
     except (urllib.error.URLError, TimeoutError, ConnectionError):
         return -1, None
@@ -240,6 +285,15 @@ def is_transient(status: int) -> bool:
     return status == -1 or status == 429 or 500 <= status < 600
 
 
+def is_refusal(status: int) -> bool:
+    """The service refused to answer (auth / access / content negotiation).
+
+    A refusal says nothing about whether the paper exists, so it must never be
+    turned into ``unverified`` (which feeds the hallucination rate).
+    """
+    return status in (401, 403, 406)
+
+
 def backoff(attempt: int) -> float:
     return min(2 ** attempt + random.uniform(0, 1), 30)
 
@@ -247,6 +301,35 @@ def backoff(attempt: int) -> float:
 # ──────────────────────────────────────────────────────────────────────────
 # Layer 1: arXiv batch verification
 # ──────────────────────────────────────────────────────────────────────────
+
+# arXiv ids verified through the DataCite fallback rather than the arXiv API
+# (read by the orchestrator to report the method honestly).
+_ARXIV_VIA_DATACITE: set[str] = set()
+
+
+def verify_arxiv_datacite(base_id: str) -> str:
+    """Return verified | unverified | verify_pending via the paper's arXiv DOI.
+
+    Every arXiv paper has a DataCite DOI ``10.48550/arXiv.<id>``, so a 404 here
+    means the id does not exist.
+    """
+    url = f"{DATACITE_API}/10.48550/arxiv.{urllib.parse.quote(base_id.lower(), safe='/')}"
+    for attempt in range(2):
+        status, _ = http_get(url, headers={"User-Agent": _arxiv_user_agent()}, timeout=15)
+        if status == 200:
+            _ARXIV_VIA_DATACITE.add(base_id)
+            return "verified"
+        if status == 404:
+            return "unverified"
+        if not is_transient(status):
+            return "verify_pending"
+        time.sleep(backoff(attempt))
+    return "verify_pending"
+
+
+def _datacite_for_batch(batch: list[str]) -> dict[str, str]:
+    return {orig: verify_arxiv_datacite(normalize_arxiv_id(orig)[0]) for orig in batch}
+
 
 def verify_arxiv_batch(ids: list[str], batch_size: int = DEFAULT_BATCH_SIZE) -> dict[str, str]:
     """Return {arxiv_id: status} where status in {verified, unverified, verify_pending}."""
@@ -274,8 +357,12 @@ def _verify_arxiv_batch_with_retry(batch: list[str]) -> dict[str, str]:
                 orig: "verified" if normalize_arxiv_id(orig)[0] in found else "unverified"
                 for orig in batch
             }
+        if is_refusal(status):
+            # arXiv refused to answer (e.g. HTTP 406): existence is unknown, so
+            # check each id through its DataCite DOI instead.
+            return _datacite_for_batch(batch)
         if not is_transient(status):
-            # 4xx (non-transient) — likely malformed query; mark whole batch unverified
+            # other 4xx — likely malformed query; mark whole batch unverified
             return {orig: "unverified" for orig in batch}
         time.sleep(backoff(attempt))
     # Persistent failure — split & retry
@@ -284,7 +371,7 @@ def _verify_arxiv_batch_with_retry(batch: list[str]) -> dict[str, str]:
         left = _verify_arxiv_batch_with_retry(batch[:mid])
         right = _verify_arxiv_batch_with_retry(batch[mid:])
         return {**left, **right}
-    return {batch[0]: "verify_pending"}
+    return _datacite_for_batch(batch)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -312,15 +399,67 @@ def verify_doi(doi: str, user_email: str) -> str:
 # Layer 3: Semantic Scholar fuzzy title match
 # ──────────────────────────────────────────────────────────────────────────
 
+def _title_overlap(user_title: str, candidate_title: str) -> float:
+    user_words = set(normalize_title(user_title).split())
+    cand_words = set(normalize_title(candidate_title).split())
+    if not user_words or not cand_words:
+        return 0.0
+    return len(user_words & cand_words) / max(len(user_words), len(cand_words))
+
+
+def verify_title_openalex(title: str, fuzzy_threshold: float) -> tuple[str, dict[str, str] | None]:
+    """Fallback title match against OpenAlex (no API key needed).
+
+    Used when Semantic Scholar refuses (e.g. HTTP 403 without an API key) or
+    keeps failing. Same overlap rule as the S2 layer.
+    """
+    normalized = normalize_title(title)
+    if not normalized:
+        return "unverified", None
+    q = urllib.parse.quote(normalized[:200])
+    url = f"{OPENALEX_API}?search={q}&per-page=5&select=title,publication_year,doi,ids"
+    for attempt in range(2):
+        status, body = http_get(url, headers={"User-Agent": _arxiv_user_agent()}, timeout=15)
+        if status == 200 and body is not None:
+            try:
+                data = json.loads(body)
+            except json.JSONDecodeError:
+                return "verify_pending", None
+            for work in data.get("results", []):
+                if _title_overlap(title, work.get("title") or "") >= fuzzy_threshold:
+                    doi = (work.get("doi") or "").replace("https://doi.org/", "")
+                    m = re.match(r"10\.48550/arxiv\.(.+)$", doi, re.IGNORECASE)
+                    return "verified", {
+                        "source": "openalex",
+                        "openalex_title": work.get("title") or "",
+                        "arxiv_id": m.group(1) if m else "",
+                        "doi": doi,
+                    }
+            return "unverified", None
+        if not is_transient(status):
+            return "verify_pending", None
+        time.sleep(backoff(attempt))
+    return "verify_pending", None
+
+
 def verify_title_s2(title: str, fuzzy_threshold: float) -> tuple[str, dict[str, str] | None]:
-    """Return (status, identifiers_dict_or_None)."""
+    """Return (status, identifiers_dict_or_None).
+
+    Sends ``x-api-key`` when ``SEMANTIC_SCHOLAR_API_KEY`` is set. If S2 refuses
+    (401/403/406) or stays unavailable, falls back to OpenAlex; the returned
+    identifiers carry ``source`` = ``openalex`` in that case.
+    """
     normalized = normalize_title(title)
     if not normalized:
         return "unverified", None
     q = urllib.parse.quote(normalized[:200])
     url = f"{S2_API}?query={q}&limit=3&fields=title,year,externalIds"
+    headers = {}
+    api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "").strip()
+    if api_key:
+        headers["x-api-key"] = api_key
     for attempt in range(2):
-        status, body = http_get(url, timeout=15)
+        status, body = http_get(url, headers=headers, timeout=15)
         if status == 200 and body is not None:
             try:
                 data = json.loads(body)
@@ -343,12 +482,14 @@ def verify_title_s2(title: str, fuzzy_threshold: float) -> tuple[str, dict[str, 
                         "doi": ext.get("DOI", ""),
                     }
             return "unverified", None
+        if is_refusal(status):
+            return verify_title_openalex(title, fuzzy_threshold)
         if status == 429:
-            return "verify_pending", None
+            return verify_title_openalex(title, fuzzy_threshold)
         if not is_transient(status):
             return "unverified", None
         time.sleep(backoff(attempt))
-    return "verify_pending", None
+    return verify_title_openalex(title, fuzzy_threshold)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -402,11 +543,12 @@ def verify_papers(
         arxiv_results = verify_arxiv_batch(list(to_verify_arxiv.keys()), arxiv_batch_size)
         for base_id, paper_ids in to_verify_arxiv.items():
             status = arxiv_results.get(base_id, "verify_pending")
+            arxiv_method = "datacite" if base_id in _ARXIV_VIA_DATACITE else "arxiv"
             for pid in paper_ids:
                 results[pid] = PaperResult(
                     id=pid,
                     status=status,
-                    method="arxiv" if status == "verified" else None,
+                    method=arxiv_method if status == "verified" else None,
                     confidence="high" if status == "verified" else None,
                     reason=None if status == "verified" else f"arxiv_{status}",
                     identifiers={"arxiv_id": base_id},
@@ -414,7 +556,7 @@ def verify_papers(
                 if cache is not None:
                     cache[f"arxiv:{base_id}"] = {
                         "status": status,
-                        "method": "arxiv" if status == "verified" else None,
+                        "method": arxiv_method if status == "verified" else None,
                         "confidence": "high" if status == "verified" else None,
                         "reason": None if status == "verified" else f"arxiv_{status}",
                         "identifiers": {"arxiv_id": base_id},
@@ -439,7 +581,7 @@ def verify_papers(
                 result = PaperResult(
                     id=p.id,
                     status="verified",
-                    method="s2_fallback_from_doi",
+                    method=f"{(s2_ids or {}).get('source', 's2')}_fallback_from_doi",
                     confidence="medium",
                     identifiers={"doi": normalize_doi(p.doi or ""), **(s2_ids or {})},
                 )
@@ -463,7 +605,7 @@ def verify_papers(
         result = PaperResult(
             id=p.id,
             status=s2_status,
-            method="s2" if s2_status == "verified" else None,
+            method=(s2_ids or {}).get("source", "s2") if s2_status == "verified" else None,
             confidence="medium" if s2_status == "verified" else None,
             reason=None if s2_status == "verified" else f"s2_{s2_status}",
             identifiers=s2_ids or {},
