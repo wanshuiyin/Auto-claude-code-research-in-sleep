@@ -32,6 +32,9 @@ Directory structure:
 """
 
 import argparse
+try:
+    import fcntl
+except ImportError: fcntl = None
 import json
 import os
 import signal
@@ -97,6 +100,7 @@ def register_task(base_dir, task_json):
         # Default session_type for session-backed tasks: fallback to screen
         task["session_type"] = "screen"
 
+    if fcntl: fcntl.flock(_lock := open(paths["base"] / ".tasks.lock", "w"), fcntl.LOCK_EX)
     tasks = []
     if paths["tasks"].exists():
         try:
@@ -120,6 +124,7 @@ def unregister_task(base_dir, name):
     if not paths["tasks"].exists():
         print(f"no tasks file found")
         return
+    if fcntl: fcntl.flock(_lock := open(paths["base"] / ".tasks.lock", "w"), fcntl.LOCK_EX)
     try:
         tasks = json.loads(paths["tasks"].read_text())
     except (json.JSONDecodeError, OSError):
