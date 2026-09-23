@@ -413,7 +413,7 @@ When loop ends (positive assessment or max rounds):
 
 - **Large file handling**: If the Write tool fails due to file size, immediately retry using Bash (`cat << 'EOF' > file`) to write in chunks. Do NOT ask the user for permission — just do it silently.
 
-- ALWAYS use `reasoning_effort: xhigh` for maximum reasoning depth
+- ALWAYS pin `model: gpt-6-astra` + `reasoning_effort: xhigh` on the **first call of every thread** — that is this skill's declared **regular tier** per [`reviewer-routing.md`](../shared-references/reviewer-routing.md). `xhigh` is NOT the maximum tier: it is the deliberate ceiling for multi-round loops and per-item fan-outs, because `ultra` adds automatic task delegation and would be slower and costlier per call without improving the verdict. The `ultra` / `max` tiers belong to the one-shot deep-audit skills (`/proof-checker`, `/kill-argument`, `/research-review`, `/experiment-audit`, `/paper-claim-audit`, `/result-to-claim`, `/meta-apply`) — do not raise this loop's tier, and note that changing a thread's tier requires a new thread. Follow the capability-fallback chain in `reviewer-routing.md` only for explicit capability errors. Subsequent rounds reuse the resolved pair through `send_input`.
 - Save agent id from first call, use `send_input` for subsequent rounds
 - Be honest — include negative results and failed experiments
 - Do NOT hide weaknesses to game a positive score
