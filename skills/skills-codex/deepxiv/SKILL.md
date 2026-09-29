@@ -16,7 +16,7 @@ DeepXiv is the progressive-reading literature source:
 | `/arxiv` | arXiv API | Batch search, PDF download, metadata |
 | **`/deepxiv`** | **DeepXiv SDK** | **Progressive section-level reading** |
 | `/semantic-scholar` | S2 API | Published venue metadata, citation counts |
-| `/alphaxiv` | alphaxiv.org | Instant LLM-optimized summary of one paper, with LaTeX source fallback |
+| `/alphaxiv` | www.alphaxiv.org | Instant LLM-optimized summary of one paper, with LaTeX source fallback |
 
 Use DeepXiv when you want to inspect papers incrementally instead of loading the full text immediately.
 

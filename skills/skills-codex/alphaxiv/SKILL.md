@@ -9,7 +9,7 @@ allowed-tools: Bash(*), Read, Write, Glob
 
 Lookup paper: $ARGUMENTS
 
-> Quick single-paper reader with tiered source fallback (overview → full markdown → LaTeX source). Powered by [AlphaXiv](https://alphaxiv.org).
+> Quick single-paper reader with tiered source fallback (overview → full markdown → LaTeX source). Powered by [AlphaXiv](https://www.alphaxiv.org).
 
 ## Role & Positioning
 
@@ -20,14 +20,14 @@ This skill is the **quick single-paper reader** that returns LLM-optimized summa
 | `/arxiv` | arXiv API | Batch search, PDF download, metadata |
 | `/deepxiv` | DeepXiv SDK | Progressive section-level reading |
 | `/semantic-scholar` | S2 API | Published venue metadata, citation counts |
-| **`/alphaxiv`** | **alphaxiv.org** | **Instant LLM-optimized summary of one paper, with LaTeX source fallback** |
+| **`/alphaxiv`** | **www.alphaxiv.org** | **Instant LLM-optimized summary of one paper, with LaTeX source fallback** |
 
 **Do NOT use this skill for** topic discovery, broad literature search, or multi-paper surveys — use `/research-lit` or `/arxiv` instead.
 
 ## Constants
 
-- **OVERVIEW_URL** = `https://alphaxiv.org/overview/{PAPER_ID}.md`
-- **ABS_URL** = `https://alphaxiv.org/abs/{PAPER_ID}.md`
+- **OVERVIEW_URL** = `https://www.alphaxiv.org/overview/{PAPER_ID}.md`
+- **ABS_URL** = `https://www.alphaxiv.org/abs/{PAPER_ID}.md`
 - **ARXIV_SRC_URL** = `https://arxiv.org/src/{PAPER_ID}`
 - **ALPHAXIV_UA** = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36` — any modern browser UA works; update the version numbers if AlphaXiv starts blocking this value again
 
@@ -45,8 +45,8 @@ Parse `$ARGUMENTS` to extract a bare arXiv paper ID. Accept these input formats:
 
 - `https://arxiv.org/abs/2401.12345` or `https://arxiv.org/abs/2401.12345v2`
 - `https://arxiv.org/pdf/2401.12345`
-- `https://alphaxiv.org/overview/2401.12345`
-- `https://alphaxiv.org/abs/2401.12345`
+- `https://alphaxiv.org/overview/2401.12345` or `https://www.alphaxiv.org/overview/2401.12345`
+- `https://alphaxiv.org/abs/2401.12345` or `https://www.alphaxiv.org/abs/2401.12345`
 - `2401.12345` or `2401.12345v2`
 
 Strip version suffixes (`v1`, `v2`, ...) for API calls. Store as `PAPER_ID`.
@@ -59,7 +59,7 @@ Parse optional directives:
 Use `curl` with `{ALPHAXIV_UA}` to fetch the AlphaXiv overview. AlphaXiv may return 403 for non-browser User-Agents; setting a standard browser UA reduces false positives from bot-detection:
 
 ```bash
-curl -sL --max-time 15 -A "{ALPHAXIV_UA}" "https://alphaxiv.org/overview/{PAPER_ID}.md"
+curl -sL --max-time 15 -A "{ALPHAXIV_UA}" "https://www.alphaxiv.org/overview/{PAPER_ID}.md"
 ```
 
 This returns a **structured, LLM-optimized report** designed for machine consumption. Use this as the default and preferred source.
@@ -73,7 +73,7 @@ If the request fails (HTTP 4xx — 403 bot-block or 404 not-yet-processed) or re
 Use `curl` with `{ALPHAXIV_UA}` to fetch the full paper markdown:
 
 ```bash
-curl -sL --max-time 15 -A "{ALPHAXIV_UA}" "https://alphaxiv.org/abs/{PAPER_ID}.md"
+curl -sL --max-time 15 -A "{ALPHAXIV_UA}" "https://www.alphaxiv.org/abs/{PAPER_ID}.md"
 ```
 
 This provides the full paper body as markdown. Use when the user needs:

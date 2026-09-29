@@ -129,8 +129,8 @@ The fetch chain runs **in order** until one returns usable content (>200 chars o
 
 | Order | Source | How |
 |-------|--------|-----|
-| 1 | **alphaxiv overview** (`auto` default; `--source alphaxiv` to pin) | `WebFetch https://alphaxiv.org/overview/<arxiv_id>.md` — LLM-optimized summary, often best for filling sections |
-| 2 | **alphaxiv abs** (fallback within alphaxiv) | `WebFetch https://alphaxiv.org/abs/<arxiv_id>.md` |
+| 1 | **alphaxiv overview** (`auto` default; `--source alphaxiv` to pin) | `WebFetch https://www.alphaxiv.org/overview/<arxiv_id>.md` — LLM-optimized summary, often best for filling sections |
+| 2 | **alphaxiv abs** (fallback within alphaxiv) | `WebFetch https://www.alphaxiv.org/abs/<arxiv_id>.md` |
 | 3 | **deepxiv brief** (`--source deepxiv` to pin) | `python3 "$DEEPXIV_FETCHER" paper-brief <arxiv_id>` if helper resolves |
 | 4 | **arXiv API abstract — fresh fetch** (`--source arxiv` to pin) | `curl http://export.arxiv.org/api/query?id_list=<arxiv_id>` — log label: `arxiv-api-abstract` |
 | 5 | **Page abstract — fallback** (last resort) | Reuse the existing `## Abstract (original)` blockquote already present in the page body from a prior `ingest_paper` run — log label: `page-abstract-fallback` |
