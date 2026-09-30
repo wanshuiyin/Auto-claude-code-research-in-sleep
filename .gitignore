@@ -13,6 +13,8 @@ Thumbs.db
 __pycache__/
 *.pyc
 *.pyo
+tools/uv-runtime/.venv/
+tools/uv-runtime/.uv-cache/
 
 # Environment
 .env
