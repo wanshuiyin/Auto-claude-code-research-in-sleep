@@ -624,7 +624,7 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**所列分数
 
 🎉 **社区 Skills（13 个）：** [research-refine](skills/research-refine/SKILL.md) · [experiment-plan](skills/experiment-plan/SKILL.md) · [research-refine-pipeline](skills/research-refine-pipeline/SKILL.md) · [grant-proposal](skills/grant-proposal/SKILL.md) · [paper-poster](skills/paper-poster/SKILL.md) (deprecated → [paper-poster-html](skills/paper-poster-html/SKILL.md)) · [paper-slides](skills/paper-slides/SKILL.md) · [mermaid-diagram](skills/mermaid-diagram/SKILL.md) · [proof-writer](skills/proof-writer/SKILL.md) · [comm-lit-review](skills/comm-lit-review/SKILL.md) · [dse-loop](skills/dse-loop/SKILL.md) · [idea-discovery-robot](skills/idea-discovery-robot/SKILL.md) · [paper-illustration](skills/paper-illustration/SKILL.md) · [skills-codex](skills/skills-codex/)
 
-🌐 **外部项目 & 文档（14 个）：** [rosetta](https://github.com/SyntaxSmith/rosetta) · [open-source-hardening-skills](https://github.com/zeyuzhangzyz/open-source-hardening-skills) · [CitationClaw](https://github.com/VisionXLab/CitationClaw) · [auto-hparam-tuning](https://github.com/zxh0916/auto-hparam-tuning) · [paper-to-course](https://github.com/KaguraTart/paper-to-course) · [deep-research-skills](https://github.com/Weizhena/deep-research-skills) · [Antigravity 适配指南](docs/ANTIGRAVITY_ADAPTATION_CN.md) · [OpenClaw 适配指南](docs/OPENCLAW_ADAPTATION.md) · [Cursor 适配指南](docs/CURSOR_ADAPTATION.md) · [Trae 适配指南](docs/TRAE_ARIS_RUNBOOK_CN.md) · [posterly](https://github.com/Chenruishuo/posterly) · [Claude Fleet](https://github.com/tianyilt/claude-fleet) · [anti-defensive-writing-Skill](https://github.com/Adkid-Zephyr/anti-defensive-writing-Skill) · [OrcaReplay](https://github.com/Continuum-AI-Corp/OrcaReplay)
+🌐 **外部项目 & 文档（15 个）：** [rosetta](https://github.com/SyntaxSmith/rosetta) · [open-source-hardening-skills](https://github.com/zeyuzhangzyz/open-source-hardening-skills) · [CitationClaw](https://github.com/VisionXLab/CitationClaw) · [auto-hparam-tuning](https://github.com/zxh0916/auto-hparam-tuning) · [paper-to-course](https://github.com/KaguraTart/paper-to-course) · [deep-research-skills](https://github.com/Weizhena/deep-research-skills) · [Antigravity 适配指南](docs/ANTIGRAVITY_ADAPTATION_CN.md) · [OpenClaw 适配指南](docs/OPENCLAW_ADAPTATION.md) · [Cursor 适配指南](docs/CURSOR_ADAPTATION.md) · [Trae 适配指南](docs/TRAE_ARIS_RUNBOOK_CN.md) · [posterly](https://github.com/Chenruishuo/posterly) · [Claude Fleet](https://github.com/tianyilt/claude-fleet) · [anti-defensive-writing-Skill](https://github.com/Adkid-Zephyr/anti-defensive-writing-Skill) · [OrcaReplay](https://github.com/Continuum-AI-Corp/OrcaReplay) · [OrcaPromptVault](https://github.com/Continuum-AI-Corp/OrcaPromptVault)
 
 > 🙌 感谢每一位贡献者！为了 README 的可读性，下方表格折叠展示——但每个 skill 和项目都同样珍贵。欢迎 PR！
 
@@ -650,7 +650,7 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**所列分数
 </details>
 
 <details>
-<summary><b>🌐 外部项目 & 文档（14 个）</b> — 点击展开</summary>
+<summary><b>🌐 外部项目 & 文档（15 个）</b> — 点击展开</summary>
 
 | 名称 | 领域 | 描述 |
 |------|------|------|
@@ -668,6 +668,7 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**所列分数
 | 🔎 [deep-research-skills](https://github.com/Weizhena/deep-research-skills) | 通用 / Web 搜索 | 模块化 web 搜索策略包——按源拆分独立模块：Stack Overflow / GitHub Issues 错误串调试 / 中文技术社区（CSDN / 掘金 / 知乎 / V2EX / 腾讯阿里云社区）/ 通用 Web（Reddit / HN / Dev.to / Medium）。补 ARIS [`/research-lit`](skills/research-lit/SKILL.md) 以学术源为主的栈，给**非学术**场景（调试、版本兼容追踪、中文技术检索）提供查询策略。by [@Weizhena](https://github.com/Weizhena) |
 | 🖼️ [posterly](https://github.com/Chenruishuo/posterly) | 通用 / 海报 | 把学术会议海报做成**单个 HTML/CSS 文件 → 可印刷 PDF**（headless Chromium，无需 LaTeX）。一个 Claude Code skill——其门控机制现已成为 ARIS 默认 `/paper-poster-html` 的核心。by [@Chenruishuo](https://github.com/Chenruishuo) |
 | 🛰️ [Claude Fleet](https://github.com/tianyilt/claude-fleet) | 看板 / DevEx | 本地**只读**看板，同时盯住一堆并行的 Claude Code / Codex 窗口——triage（干活 / 等你 / 跑完）、一键 Focus、~50ms 全文搜 transcript、skill/memory 用量分析。by [@tianyilt](https://github.com/tianyilt) |
+| 🗂️ [OrcaPromptVault](https://github.com/Continuum-AI-Corp/OrcaPromptVault) | Agent 内部 | 按产品分目录的系统提示词与工具 schema 归档——Claude Code、Codex、Cursor、OpenClaw、Gemini CLI 等真正发到线上的那段文字，每份标明是实抓还是厂商公布。当同一套 ARIS 工作流在不同执行器上表现不一致时有用：适配指南讲的是怎么迁，这里给的是每个执行器到底被交代了什么、声明了哪些工具。 |
 
 </details>
 
