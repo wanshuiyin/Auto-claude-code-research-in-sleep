@@ -92,11 +92,11 @@ Codex MUST verify the generated Mermaid code by running the Mermaid CLI (`mmdc`)
 
 ```bash
 if command -v mmdc >/dev/null 2>&1; then
-    mmdc -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent
-    echo "Syntax valid — PNG rendered to figures/<diagram-name>.png"
+    mmdc -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent \
+        && echo "Syntax valid — PNG rendered to figures/<diagram-name>.png"
 else
-    npx -y @mermaid-js/mermaid-cli@latest -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent
-    echo "Syntax valid — PNG rendered to figures/<diagram-name>.png"
+    npx -y @mermaid-js/mermaid-cli@latest -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent \
+        && echo "Syntax valid — PNG rendered to figures/<diagram-name>.png"
 fi
 ```
 

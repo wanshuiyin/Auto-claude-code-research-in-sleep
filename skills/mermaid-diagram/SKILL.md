@@ -28,7 +28,7 @@ mkdir -p figures
 Parse the input: **$ARGUMENTS**
 
 1. Analyze user description to determine the most suitable diagram type
-2. Read the corresponding syntax reference documentation (see Diagram Type Reference below)
+2. Read the corresponding syntax reference documentation (see Step 2 below)
 3. **If the diagram involves mathematical notation** (formulas, equations, Greek letters, subscripts, superscripts, fractions, matrices, etc.), apply the math syntax rules from the **Math Formulas in Diagrams** section below
 4. Identify all components, connections, and data flow
 5. Plan the diagram structure
@@ -115,12 +115,12 @@ flowchart TD
 # Check if mermaid-cli is available
 if command -v mmdc &> /dev/null; then
     # Render to PNG to verify syntax is correct
-    mmdc -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent
-    echo "✅ Syntax valid — PNG rendered to figures/<diagram-name>.png"
+    mmdc -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent \
+        && echo "✅ Syntax valid — PNG rendered to figures/<diagram-name>.png"
 else
     # Try npx as fallback
-    npx -y @mermaid-js/mermaid-cli@latest -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent
-    echo "✅ Syntax valid — PNG rendered to figures/<diagram-name>.png"
+    npx -y @mermaid-js/mermaid-cli@latest -i figures/<diagram-name>.mmd -o figures/<diagram-name>.png -b transparent \
+        && echo "✅ Syntax valid — PNG rendered to figures/<diagram-name>.png"
 fi
 ```
 
