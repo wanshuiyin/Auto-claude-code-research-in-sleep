@@ -24,7 +24,7 @@
 
 [![ARIS-Movie-Director](https://img.shields.io/github/stars/wanshuiyin/ARIS-Movie-Director?style=flat&logo=github&logoColor=white&label=ARIS-Movie-Director&color=6A1B9A)](https://github.com/wanshuiyin/ARIS-Movie-Director) —— **ARIS 走向多模态**:给一个粗略故事,产出一部逐格讲述的定格电影,每一幕都由另一个模型审过;同一套流程也画干净的方法图(`/method-figure`)。
 
-[![ARIS-Monitor](https://img.shields.io/badge/ARIS--Monitor-built--in-455A64?style=flat&logo=apple&logoColor=white)](aris-monitor/) —— 常驻置顶的 macOS 小窗,哪个会话在等你批准就亮 🔴,点一下跳过去;`cd aris-monitor && ./run.sh`。窗口多的话,[Claude Fleet](https://github.com/tianyilt/claude-fleet)(by [@tianyilt](https://github.com/tianyilt))是完整看板。
+[![ARIS-Monitor](https://img.shields.io/badge/ARIS--Monitor-built--in-455A64?style=flat&logo=apple&logoColor=white)](aris-monitor/) —— 常驻置顶的 macOS 小窗，支持 Claude Code 和本机 Codex 的运行／完成状态；Claude 等待批准时亮 🔴，Codex 授权提示暂不检测。点击行打开终端或对应 Codex 聊天；`cd aris-monitor && ./run.sh`。窗口多的话，[Claude Fleet](https://github.com/tianyilt/claude-fleet)(by [@tianyilt](https://github.com/tianyilt))是完整看板。
 
 🔥 [**ARIS-Code CLI — 独立安装版**](docs/ARIS-Code-README_CN.md) · [English](docs/ARIS-Code-README_EN.md) | [⬇️ 下载](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/releases/latest) — **v0.4.28**：`ARIS_REASONING_EFFORT` 在 Anthropic 通道生效；经 `{}` 占位符中转站的工具调用修复；系统代理直接生效。v0.4.27：启动 REPL 后直接退出不再留下空 session 文件。v0.4.26：`fable` 别名与 `/model` 现指向 Fable 5.1（默认仍是 Opus 5）。v0.4.25：codex-cli ≥ 0.154 上 Codex 审稿恢复可用（内建 `codex exec` 桥接，无需任何注册）；`/since` 回到你上一次输入的地方；`/resume` 按序号列出会话；Windows 多行粘贴修复（待确认）；内置 83 个 skill，reviewer 为 GPT-6-Astra。
 
