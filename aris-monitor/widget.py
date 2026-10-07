@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """ARIS-Monitor: a tiny, native, always-on-top FLOATING macOS widget.
 
-Pure Python stdlib Tkinter -- zero pip installs. It shows, at a glance, which
-of your running Claude Code sessions need your attention -- primarily
+Pure Python stdlib Tkinter -- zero pip installs. It shows Claude Code and local
+Codex turn status. Claude sessions can also show
 "needs approval / pending permission" -- plus a simple working / done status.
 
 No browser. No Chrome extension. No Electron.
 
-READ-ONLY MONITORING, with ONE explicit non-read action: clicking a session row
-raises (focuses) that session's terminal window. That focus path -- and only that
-path -- runs `ps` (to read the pid's tty) and the raise-only `focus-tty.sh`
+READ-ONLY MONITORING: Claude rows raise their terminal; Codex rows open the
+existing local chat via a validated UUID deep link. Only Claude focus
+runs `ps` (to read the pid's tty) and the raise-only `focus-tty.sh`
 (osascript activate/select), via the tightly-scoped focus.py module. It is
 user-initiated, best-effort, and NEVER kills, signals, writes, or otherwise
 modifies any session or process. Reading files via scanner.scan() and closing
@@ -20,17 +20,9 @@ Run it yourself:
 
 Quit: click the × in the header, or press 'q' / Esc while it is focused.
 
-Always-on-top floating behaviour (macOS):
-  * root.overrideredirect(True)        -> borderless (no title bar)
-  * root.attributes("-topmost", True)  -> floats above normal windows
-  * root.attributes("-alpha", 0.96)    -> slight transparency (overlay feel)
-  * the header strip is a manual drag handle (overrideredirect removes the OS
-    title bar, so dragging is implemented here with <Button-1>/<B1-Motion>)
-
-Known macOS caveats of overrideredirect windows (acceptable for an MVP glance):
-  * absent from Mission Control, not Cmd-Tab-able;
-  * can sit below a true-fullscreen app's Space;
-  * utilitarian look (no native rounded corners / vibrancy).
+The native title bar keeps the window accessible via Dock / Cmd-Tab.
+The panel stays above normal windows with -topmost and can be dragged by its
+title bar or dark header. True fullscreen apps use separate macOS Spaces.
 """
 from __future__ import annotations
 
@@ -46,7 +38,7 @@ import scanner
 # Tunables (top-of-file constants only -- no config UI by design).
 # ---------------------------------------------------------------------------
 REFRESH_MS = 2000          # re-scan files every 2s (pure stat()+tail read)
-WIDTH = 320
+WIDTH = 520
 MAX_VISIBLE = 5            # show at most this many rows; fold the rest behind "+N more"
                           # (needs-approval rows are NEVER folded -- the cap stretches)
 
@@ -67,29 +59,18 @@ STYLE = {
     scanner.WORKING:         (AMBER, "#f1e3bf", "◐", "working"),     # ◐ half
     scanner.IDLE_DONE:       (GREEN, "#bfe6c4", "○", "done"),        # ○ hollow
     scanner.STALE_HIDDEN:    (DIM,   DIM,       "·", "stale"),       # · dim (expanded)
+    scanner.UNKNOWN:        (AMBER, FG,        "?", "unknown"),
 }
 
 
 class FloatWidget:
-    def __init__(self):
-        self.root = tk.Tk()
+    def __init__(self, root=None):
+        self.root = root if root is not None else tk.Tk()
         self.root.title("ARIS-Monitor")
         self.root.configure(bg=BG)
 
-        # --- borderless + always-on-top floating panel ---
-        self.root.overrideredirect(True)
+        # Native title bar keeps the monitor discoverable in Dock / Cmd-Tab.
         self.root.attributes("-topmost", True)
-        # macOS: a plain overrideredirect window is NOT a floating-class window,
-        # so the WindowServer hides it the moment this app loses focus (you click
-        # another app and the panel vanishes). The "floating" + "noActivates"
-        # MacWindowStyle makes it a true HUD/utility panel that stays visible when
-        # the app is in the background and never steals focus on click. Best-effort
-        # (Tk-internal API; wrapped so a future Tk that drops it can't break us).
-        try:
-            self.root.tk.call("::tk::unsupported::MacWindowStyle", "style",
-                              self.root._w, "floating", "noActivates")
-        except tk.TclError:
-            pass
         try:
             self.root.attributes("-alpha", 0.96)
         except tk.TclError:
@@ -124,10 +105,13 @@ class FloatWidget:
         self._build_header()
         self.body = tk.Frame(self.root, bg=BG)
         self.body.pack(fill="both", expand=True, padx=8, pady=(2, 8))
+        tk.Label(self.root, text="Claude + local Codex · Codex approvals not monitored",
+                 bg=BG, fg=DIM, font=self._small).pack(padx=8, pady=(0, 6))
 
         # keyboard quit (only inert state change in the whole app)
         self.root.bind("<q>", lambda e: self._quit())
         self.root.bind("<Escape>", lambda e: self._quit())
+        self.root.protocol("WM_DELETE_WINDOW", self._quit)
 
         self._rows = []
         self.tick()
@@ -168,7 +152,7 @@ class FloatWidget:
                                   font=self._mono_b)
         self.count_lbl.pack(side="right", padx=(0, 6))
 
-        # whole header is a drag handle (overrideredirect removes the OS bar)
+        # The dark header is an additional drag handle.
         for w in (self.header, self.title_lbl):
             w.bind("<Button-1>", self._start_drag)
             w.bind("<B1-Motion>", self._on_drag)
@@ -253,23 +237,26 @@ class FloatWidget:
         self._clear_body()
 
         need = sum(1 for s in sessions if s.triage == scanner.NEEDS_APPROVAL)
+        counts = scanner.summary(sessions)
+        issues = counts["needs_attention"] + counts["unknown"]
 
         # header: count + color
         if need:
             self.count_lbl.config(text=f"{need} ●")
+            self.count_lbl.config(fg=RED)
             self.title_lbl.config(fg=RED, text="  ARIS-Monitor — ATTENTION")
             self.header.config(bg=HEADER_RED)
             self.title_lbl.config(bg=HEADER_RED)
             self.count_lbl.config(bg=HEADER_RED)
         else:
-            self.count_lbl.config(text="all clear  ○ 0")
-            self.count_lbl.config(fg=GREEN, bg=HEADER_BG)
+            text = f"{issues} attention" if issues else f"{counts['working']} working · {counts['idle_done']} done"
+            self.count_lbl.config(text=text, fg=AMBER if issues else GREEN, bg=HEADER_BG)
             self.title_lbl.config(fg=FG, text="  ARIS-Monitor", bg=HEADER_BG)
             self.header.config(bg=HEADER_BG)
 
         # calm empty state -- stay visible, never flash red on zero sessions
         if not sessions:
-            lbl = tk.Label(self.body, text="no active Claude sessions",
+            lbl = tk.Label(self.body, text="no recent Claude/Codex sessions",
                            bg=BG, fg=DIM, font=self._mono, anchor="w")
             lbl.pack(fill="x", pady=2)
             self._rows.append(lbl)
@@ -295,8 +282,8 @@ class FloatWidget:
                 for s in more:
                     self._row(s)
 
-    def _focus(self, pid):
-        """Raise the terminal that owns <pid>. The ONE non-read action.
+    def _focus(self, session):
+        """User-initiated terminal focus or navigation to an existing Codex chat.
 
         Runs on a daemon worker thread so the focus subprocess (10s worst-case
         timeout) never freezes the panel. Best-effort: a failure is reported to
@@ -304,16 +291,18 @@ class FloatWidget:
         """
         def work():
             try:
-                res = focus.focus(pid)
+                res = (focus.focus_codex(session.thread_id) if session.source == "Codex"
+                       else focus.focus(session.pid))
             except Exception as e:   # never let a focus attempt crash the panel
                 res = {"ok": False, "error": str(e)}
             if not res.get("ok"):
-                print(f"[ARIS-Monitor] focus pid={pid} failed: {res.get('error')}",
+                print(f"[ARIS-Monitor] focus {session.source} failed: {res.get('error')}",
                       file=sys.stderr)
         threading.Thread(target=work, daemon=True).start()
 
     def _row(self, s):
-        dot_c, txt_c, glyph, label = STYLE.get(s.triage, (DIM, FG, "·", s.triage))
+        dot_c, txt_c, glyph, _ = STYLE.get(s.triage, (DIM, FG, "·", s.triage))
+        label = scanner.display_label(s)
         row = tk.Frame(self.body, bg=BG, cursor="hand2")
         row.pack(fill="x", pady=1)
 
@@ -321,7 +310,7 @@ class FloatWidget:
                        width=2, cursor="hand2")
         dot.pack(side="left")
 
-        name = tk.Label(row, text=(s.name or "?")[:22], bg=BG, fg=txt_c,
+        name = tk.Label(row, text=f"[{s.source}] {(s.name or '?')[:22]}", bg=BG, fg=txt_c,
                         font=self._mono, anchor="w", cursor="hand2")
         name.pack(side="left")
 
@@ -342,7 +331,7 @@ class FloatWidget:
 
         # Click anywhere on the row -> raise that session's terminal (focus).
         for w in widgets:
-            w.bind("<Button-1>", lambda e, pid=s.pid: self._focus(pid))
+            w.bind("<Button-1>", lambda e, session=s: self._focus(session))
 
         self._rows.extend(widgets)
 
@@ -351,21 +340,16 @@ class FloatWidget:
 
 
 def main():
-    # Probe GENUINE Tk availability with a throwaway hidden root, separately
-    # from running the app. If the probe fails, Tk really is unavailable (no
-    # _tkinter / no display) -> fall back to the ticker. If the probe SUCCEEDS,
-    # run the widget and let any real bug surface as a traceback instead of
-    # being mislabeled "Tkinter unavailable" (which masked a geometry bug).
+    # Reuse the availability-check root: destroying a probe leaves pending
+    # ThemeChanged events targeting a destroyed application on macOS Tk 8.5.
     try:
-        _probe = tk.Tk()
-        _probe.withdraw()
-        _probe.destroy()
-    except Exception as ex:
+        root = tk.Tk()
+    except tk.TclError as ex:
         print("[ARIS-Monitor] Tkinter unavailable (%s)." % ex)
         print("[ARIS-Monitor] Falling back to the read-only terminal ticker.")
         print("[ARIS-Monitor] Run:  python3 ticker.py")
         raise SystemExit(1)
-    FloatWidget().run()
+    FloatWidget(root).run()
 
 
 if __name__ == "__main__":
