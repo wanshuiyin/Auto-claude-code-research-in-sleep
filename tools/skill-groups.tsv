@@ -85,6 +85,7 @@ skill	paper-figure	paper-core	-	从实验结果出论文图表
 skill	citation-audit	paper-core	render-html	引用真实性/正确性核查
 skill	paper-claim-audit	paper-core	render-html	论文数字与原始结果核对
 skill	integrity-forensics	paper-core	-	投稿前诚信取证扫描
+skill	paper-hygiene-audit	paper-core	-	投稿终稿定向检查(??引用/工程细节/匿名)
 skill	auto-paper-improvement-loop	paper-core	proof-checker,paper-claim-audit,kill-argument	论文 review→润色→重编译循环
 skill	writing-systems-papers	paper-core	-	系统方向论文写作要领
 skill	specification-writing	paper-core	embodiment-description,figure-description	技术规格文档撰写
