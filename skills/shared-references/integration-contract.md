@@ -99,6 +99,18 @@ real callers (`AUDIT_VERIFIER`, `TRACE_HELPER`, `WIKI_SCRIPT`,
 `IMAGE2_HELPER`, …) so a single SKILL that resolves multiple helpers
 does not clobber one with another.
 
+Python helpers must additionally resolve the isolated uv runner:
+
+```bash
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
+```
+
+Invoke Python helpers as `bash "$ARIS_PY_RUNNER" "$HELPER" ...`. The runner
+uses `tools/uv-runtime/pyproject.toml` and `uv.lock` with `--frozen`; direct
+system `python3` invocation is not an allowed fallback.
+
 If the SKILL is invoked from a subdirectory of a non-git project (no
 `.git/` anywhere up the tree), `git rev-parse --show-toplevel` fails
 and the `|| pwd` fallback keeps the resolver in the current directory.
@@ -135,7 +147,7 @@ gets produced, only the wiki side-effect is missed).
   echo "WARN: research_wiki.py not resolved; primary output unaffected, wiki side-effect skipped." >&2
   echo "      Fix: rerun bash tools/install_aris.sh or smart_update.sh (refreshes ~/.aris/repo), export ARIS_REPO, or copy the helper to tools/." >&2
 }
-[ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ --arxiv-id "$id"
+[ -n "$WIKI_SCRIPT" ] && [ -n "$ARIS_PY_RUNNER" ] && bash "$ARIS_PY_RUNNER" "$WIKI_SCRIPT" ingest_paper research-wiki/ --arxiv-id "$id"
 ```
 
 **C. Forensic helper — unresolved means write artifacts directly.**
@@ -169,7 +181,7 @@ explicit `source_used=""` init) so the same snippet works under
 ```bash
 source_used=""
 if [ -n "${S2_FETCHER:-}" ]; then
-  if python3 "$S2_FETCHER" --query "$Q" > results.jsonl; then
+  if bash "$ARIS_PY_RUNNER" "$S2_FETCHER" --query "$Q" > results.jsonl; then
     source_used="semantic_scholar"
   else
     echo "WARN: semantic_scholar_fetch.py invocation failed; trying arxiv." >&2
@@ -178,7 +190,7 @@ if [ -n "${S2_FETCHER:-}" ]; then
 fi
 if [ -z "$source_used" ] && [ -n "${ARXIV_FETCHER:-}" ]; then
   echo "WARN: semantic_scholar_fetch.py not resolved or failed; falling back to arxiv_fetch.py." >&2
-  if python3 "$ARXIV_FETCHER" --query "$Q" > results.jsonl; then
+  if bash "$ARIS_PY_RUNNER" "$ARXIV_FETCHER" --query "$Q" > results.jsonl; then
     source_used="arxiv_fallback"
   fi
 fi
@@ -211,14 +223,14 @@ append_source() {
 }
 
 if [ -n "${S2_FETCHER:-}" ]; then
-  if python3 "$S2_FETCHER" --query "$Q" >> results.jsonl 2>>fetch.log; then
+  if bash "$ARIS_PY_RUNNER" "$S2_FETCHER" --query "$Q" >> results.jsonl 2>>fetch.log; then
     append_source "semantic_scholar"
   else
     echo "WARN: semantic_scholar_fetch.py failed; see fetch.log" >&2
   fi
 fi
 if [ -n "${ARXIV_FETCHER:-}" ]; then
-  if python3 "$ARXIV_FETCHER" --query "$Q" >> results.jsonl 2>>fetch.log; then
+  if bash "$ARIS_PY_RUNNER" "$ARXIV_FETCHER" --query "$Q" >> results.jsonl 2>>fetch.log; then
     append_source "arxiv"
   else
     echo "WARN: arxiv_fetch.py failed; see fetch.log" >&2
@@ -348,9 +360,9 @@ this table is the cheapest place to catch policy drift.
 
 #### Examples
 
-- ✅ Resolved-via-chain invocation: `python3 "$WIKI_SCRIPT" ingest_paper <root> --arxiv-id <id>` (where `$WIKI_SCRIPT` was set by the chain above with `<helper>=research_wiki.py`)
+- ✅ Resolved-via-chain invocation: `bash "$ARIS_PY_RUNNER" "$WIKI_SCRIPT" ingest_paper <root> --arxiv-id <id>` (where both variables were resolved by the chains above)
 - ✅ Resolver block + policy A above for `verify_paper_audits.sh` (submission-gate verifier)
-- ❌ Hard-coded `python3 tools/research_wiki.py …` from a downstream skill that may run in a project without `tools/` on disk — it silently exits 2 and the caller proceeds with no side effect, which is exactly the failure mode that left a real user's `research-wiki/` empty for a week.
+- ❌ Hard-coded `python3 tools/research_wiki.py …` bypasses both helper resolution and the locked uv runtime, and can silently leave the integration empty.
 - ❌ N skills each paraphrasing the same 10-line bash snippet. When one drifts, they all drift.
 
 If the same 3+ lines of prose appear in more than two SKILL.md files,
