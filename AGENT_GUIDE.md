@@ -25,7 +25,7 @@ complete workflows but records `review_independence: same-family` and
 verifiers may record accepted; never describe base Codex self-review as
 cross-model acceptance.
 
-**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **84 skills**, grouped by role.
+**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **85 skills**, grouped by role.
 
 Use [`/lean-formalize`](skills/lean-formalize/SKILL.md) when the user requests Lean work or a substantial mathematical obligation benefits from formal verification. It preserves the original statement, connects the proof, and checks the final declaration and its axioms; ordinary mathematical drafting continues to use `/proof-writer`.
 
@@ -154,6 +154,7 @@ Skills communicate through plain-text files in known locations:
 | `CITATION_AUDIT.{md,json}` | `/citation-audit` | `/paper-writing` Phase 5.8 submission gate |
 | `KILL_ARGUMENT.{md,json}` | `/kill-argument` | `/paper-writing` Phase 5.6 + `/resubmit-pipeline` adversarial gate |
 | `RESUBMIT_REPORT.json` | `/resubmit-pipeline` | submission-gate verifier (7-state ledger) |
+| `PAPER_HYGIENE_AUDIT.{md,json}` | `/paper-hygiene-audit` | human (pre-upload re-check); not yet wired into `/paper-writing` |
 | `GAP_REPORT.md` | `/paper-plan` (when `--- style-ref:` set) | `/paper-write` (emits `<!-- DATA_NEEDED: ... -->` HTML comments for missing slots) |
 | `<artifact>.review.json` | `/render-html` review gate | manual triage |
 | `.aris/edit_whitelist.yaml` | human / `/resubmit-pipeline` | `/auto-paper-improvement-loop --edit-whitelist` |

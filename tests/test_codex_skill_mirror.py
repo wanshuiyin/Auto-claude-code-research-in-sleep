@@ -35,7 +35,7 @@ def has_send_input_block(text: str) -> bool:
 def test_codex_skill_set_matches_mainline() -> None:
     main_names = skill_names(MAIN_SKILLS)
     codex_names = skill_names(CODEX_SKILLS)
-    assert len(main_names) == 84
+    assert len(main_names) == 85
     assert main_names == codex_names
 
 
@@ -187,7 +187,7 @@ def test_codex_review_assurance_is_explicit_and_honest() -> None:
     provisional_skills = {
         "auto-review-loop", "research-review", "paper-writing", "render-html",
         "proof-checker", "paper-claim-audit", "citation-audit", "kill-argument",
-        "experiment-audit", "result-to-claim", "meta-apply",
+        "experiment-audit", "result-to-claim", "meta-apply", "paper-hygiene-audit",
     }
     for skill in provisional_skills:
         text = read(CODEX_SKILLS / skill / "SKILL.md")
