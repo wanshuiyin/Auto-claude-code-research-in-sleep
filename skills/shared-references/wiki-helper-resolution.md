@@ -45,8 +45,8 @@ The skill **is** the wiki tool. If the helper is missing, fail loudly.
 ## Variant B — warn + skip (for caller skills)
 
 Used by `/idea-creator`, `/result-to-claim`, `/research-lit`, `/arxiv`,
-`/alphaxiv`, `/deepxiv`, `/exa-search`, `/semantic-scholar`. The
-skill's primary output (idea ranking, claim verdict, paper summary)
+`/alphaxiv`, `/deepxiv`, `/exa-search`, `/firecrawl-search`,
+`/semantic-scholar`. The skill's primary output (idea ranking, claim verdict, paper summary)
 must still be delivered to the user; only the wiki side-effect is
 skipped.
 
