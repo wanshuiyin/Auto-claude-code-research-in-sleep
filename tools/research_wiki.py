@@ -3,7 +3,8 @@
 ARIS Research Wiki — Helper utilities.
 Canonical helper for the /research-wiki skill and integration hooks in other
 skills. The SKILL.md prose for paper-reading skills (research-lit, arxiv,
-alphaxiv, deepxiv, semantic-scholar, exa-search) delegates ingest to this
+alphaxiv, deepxiv, semantic-scholar, exa-search, firecrawl-search) delegates
+ingest to this
 script; no skill duplicates the page-creation schema.
 
 Usage:
