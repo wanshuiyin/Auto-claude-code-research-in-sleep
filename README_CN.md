@@ -668,7 +668,7 @@ ARIS 全流程完成并进入投稿/审稿阶段的真实项目。**所列分数
 | 🔎 [deep-research-skills](https://github.com/Weizhena/deep-research-skills) | 通用 / Web 搜索 | 模块化 web 搜索策略包——按源拆分独立模块：Stack Overflow / GitHub Issues 错误串调试 / 中文技术社区（CSDN / 掘金 / 知乎 / V2EX / 腾讯阿里云社区）/ 通用 Web（Reddit / HN / Dev.to / Medium）。补 ARIS [`/research-lit`](skills/research-lit/SKILL.md) 以学术源为主的栈，给**非学术**场景（调试、版本兼容追踪、中文技术检索）提供查询策略。by [@Weizhena](https://github.com/Weizhena) |
 | 🖼️ [posterly](https://github.com/Chenruishuo/posterly) | 通用 / 海报 | 把学术会议海报做成**单个 HTML/CSS 文件 → 可印刷 PDF**（headless Chromium，无需 LaTeX）。一个 Claude Code skill——其门控机制现已成为 ARIS 默认 `/paper-poster-html` 的核心。by [@Chenruishuo](https://github.com/Chenruishuo) |
 | 🛰️ [Claude Fleet](https://github.com/tianyilt/claude-fleet) | 看板 / DevEx | 本地**只读**看板，同时盯住一堆并行的 Claude Code / Codex 窗口——triage（干活 / 等你 / 跑完）、一键 Focus、~50ms 全文搜 transcript、skill/memory 用量分析。by [@tianyilt](https://github.com/tianyilt) |
-| 🗂️ [OrcaPromptVault](https://github.com/Continuum-AI-Corp/OrcaPromptVault) | Agent 内部 | 按产品分目录的系统提示词与工具 schema 归档——Claude Code、Codex、Cursor、OpenClaw、Gemini CLI 等真正发到线上的那段文字，每份标明是实抓还是厂商公布。当同一套 ARIS 工作流在不同执行器上表现不一致时有用：适配指南讲的是怎么迁，这里给的是每个执行器到底被交代了什么、声明了哪些工具。 |
+| 🗂️ [OrcaPromptVault](https://github.com/Continuum-AI-Corp/OrcaPromptVault) | Agent 内部 | 按产品分目录的系统提示词与工具 schema 归档——Claude Code、Codex、Cursor、OpenClaw、Gemini CLI 等真正发到线上的那段文字，每份标明是线上实抓还是模型自述。当同一套 ARIS 工作流在不同执行器上表现不一致时有用：适配指南讲的是怎么迁，这里给的是每个执行器到底被交代了什么、声明了哪些工具。 |
 
 </details>
 
