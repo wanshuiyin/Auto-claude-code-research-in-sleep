@@ -35,7 +35,7 @@ def has_send_input_block(text: str) -> bool:
 def test_codex_skill_set_matches_mainline() -> None:
     main_names = skill_names(MAIN_SKILLS)
     codex_names = skill_names(CODEX_SKILLS)
-    assert len(main_names) == 84
+    assert len(main_names) == 85
     assert main_names == codex_names
 
 
@@ -331,6 +331,7 @@ def test_codex_skill_helper_commands_use_installed_aris_repo() -> None:
         "research-lit",
         "research-wiki",
         "semantic-scholar",
+        "serply-search",
     }
 
     failures: list[str] = []

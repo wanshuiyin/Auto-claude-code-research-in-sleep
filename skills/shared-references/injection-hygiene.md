@@ -71,7 +71,7 @@ raw text is preserved depends on the store:
   inspection; the load path does not copy, quarantine, rebuild, or rescan a
   rejected pack.
 - **To extend** (same helper, same scopes): MEMORY.md write + load; fetched
-  abstracts (`research-lit` / `exa-search` / `deepxiv` / `alphaxiv`) at
+  abstracts (`research-lit` / `exa-search` / `serply-search` / `deepxiv` / `alphaxiv`) at
   `context` (warn); **community-PR `SKILL.md` / fixtures** at `strict` before a
   merge (the security-sensitive-PR class — see the security review memory).
   *SKILL.md scanning needs tuning first:* legit ARIS skill docs say things like

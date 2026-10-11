@@ -21,7 +21,7 @@ Two bugs in the same week, same pathology:
    "audit is optional."
 2. **Research wiki ingest no-op (2026-04-21).** `/research-wiki init`
    created `research-wiki/papers/` but no paper ever landed there:
-   `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`,
+   `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`, `/serply-search`,
    raw `Read`/`WebFetch` — none carried a wiki-ingest hook, and the two
    that did (`/research-lit`, `/idea-creator`) only had soft prose
    ("optional and automatic").
@@ -238,7 +238,7 @@ taxonomy here first if a future helper does not fit.
 | `research_wiki.py` (in `/research-wiki` itself) | A (gate) | The SKILL is the wiki tool; missing helper means no functionality |
 | `verify_wiki_coverage.sh` | E (diagnostic) | Reports coverage gaps; not load-bearing |
 | `verify_papers.py` | D1 (cascade) | Filters candidate papers; when unresolved **or** invocation fails, callers emit a degraded `verified_papers.json` tagging every candidate `status=unverified, method=none` with explicit WARN |
-| `arxiv_fetch.py`, `semantic_scholar_fetch.py`, `deepxiv_fetch.py`, `exa_search.py`, `openalex_fetch.py` | D2 (multi-source aggregate) when SKILL queries multiple sources; D1 (cascade) when a single source suffices | Each fetcher is one paper-discovery source; SKILLs aggregate or cascade across resolved sources |
+| `arxiv_fetch.py`, `semantic_scholar_fetch.py`, `deepxiv_fetch.py`, `exa_search.py`, `serply_search.py`, `openalex_fetch.py` | D2 (multi-source aggregate) when SKILL queries multiple sources; D1 (cascade) when a single source suffices | Each fetcher is one paper-discovery source; SKILLs aggregate or cascade across resolved sources |
 | `extract_paper_style.py` | A when activation predicate `literal "— style-ref:" or equivalent in $ARGUMENTS` is true; not invoked otherwise | If the user asked for style transfer, missing helper means SKILL cannot satisfy the request |
 | `paper_illustration_image2.py` (`preflight`, `finalize`, `verify`) | A (skill-local gate) | Image2 finalization cannot complete without these checks; verify exits 1 on missing artifacts and that is a skill-local gate (a parent paper-writing workflow may still continue with an alternate illustration path). **Phase 3.2 move**: canonical location is `skills/paper-illustration-image2/scripts/paper_illustration_image2.py`; `tools/paper_illustration_image2.py` retained as `os.execv` shim for legacy resolver layers. |
 | `figure_renderer.py` | A (skill-local gate, single-skill) | `figure-spec` cannot produce vector SVG output without the renderer. **Phase 3.1 move**: canonical location is `skills/figure-spec/scripts/figure_renderer.py`; `tools/figure_renderer.py` retained as `os.execv` shim for legacy resolver layers. |
