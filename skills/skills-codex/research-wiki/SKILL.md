@@ -138,7 +138,7 @@ WIKI_SCRIPT=""
 ```
 
 Other skills (`/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`,
-`/semantic-scholar`, `/exa-search`) call the same helper directly in
+`/semantic-scholar`, `/exa-search`, `/firecrawl-search`) call the same helper directly in
 their own last step — they don't re-route through `/research-wiki
 ingest` as a subcommand, so they don't need an LLM roundtrip.
 

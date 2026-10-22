@@ -112,7 +112,8 @@ WIKI_SCRIPT=".aris/tools/research_wiki.py"
 `/research-wiki` itself is the wiki tool — if the helper is missing the
 skill **hard-fails**. Caller skills that update the wiki as a side
 effect (`/idea-creator`, `/result-to-claim`, `/research-lit`, `/arxiv`,
-`/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) use the
+`/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`,
+`/firecrawl-search`) use the
 same chain but **warn-and-skip** instead of hard-failing — their
 primary output (idea list, claim verdict, paper summary) must still be
 delivered to the user.
@@ -174,7 +175,7 @@ python3 "$WIKI_SCRIPT" add_edge research-wiki/ \
 ```
 
 Other skills (`/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`,
-`/semantic-scholar`, `/exa-search`) call the same helper directly in
+`/semantic-scholar`, `/exa-search`, `/firecrawl-search`) call the same helper directly in
 their own last step — they don't re-route through `/research-wiki
 ingest` as a subcommand, so they don't need an LLM roundtrip.
 

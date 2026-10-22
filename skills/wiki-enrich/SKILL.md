@@ -11,7 +11,7 @@ Target: **$ARGUMENTS**
 
 ## Why this skill exists
 
-`ingest_paper` (called by `/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`) only renders the per-paper scaffold — frontmatter + abstract + **10 fillable** `_TODO._` placeholder sections (plus two protected sections: `## Connections` is graph-summary and `## Abstract (original)` is auto-populated when `--arxiv-id` is given). No downstream skill in ARIS fills those 10 sections; the wiki sits as TODO until someone reads each paper.
+`ingest_paper` (called by `/research-lit`, `/arxiv`, `/alphaxiv`, `/deepxiv`, `/semantic-scholar`, `/exa-search`, `/firecrawl-search`) only renders the per-paper scaffold — frontmatter + abstract + **10 fillable** `_TODO._` placeholder sections (plus two protected sections: `## Connections` is graph-summary and `## Abstract (original)` is auto-populated when `--arxiv-id` is given). No downstream skill in ARIS fills those 10 sections; the wiki sits as TODO until someone reads each paper.
 
 This contradicts the Karpathy LLM-wiki design (https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f):
 
