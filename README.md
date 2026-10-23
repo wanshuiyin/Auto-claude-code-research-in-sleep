@@ -454,7 +454,7 @@ Events are logged to **both** project-level (`.aris/meta/events.jsonl`) and glob
 </details>
 
 <details>
-<summary><b>📝 Templates + 🔎 DeepXiv + 🔎 Exa + 🗑️ Uninstall</b> — input templates, two extra literature sources, and the uninstall command</summary>
+<summary><b>📝 Templates + 🔎 DeepXiv + 🔎 Exa + 🔎 Serply + 🗑️ Uninstall</b> — input templates, two extra literature sources, and the uninstall command</summary>
 
 **📝 Templates available!** See [`templates/`](templates/) for ready-to-use input templates for every workflow — [research brief](templates/RESEARCH_BRIEF_TEMPLATE.md) (Workflow 1), [experiment plan](templates/EXPERIMENT_PLAN_TEMPLATE.md) (Workflow 1.5), [narrative report](templates/NARRATIVE_REPORT_TEMPLATE.md) (Workflow 3), [paper plan](templates/PAPER_PLAN_TEMPLATE.md) (Workflow 3).
 
@@ -470,6 +470,12 @@ pip install exa-py
 export EXA_API_KEY=your-key-here
 ```
 Then use [`/exa-search`](skills/exa-search/SKILL.md) directly or opt into it from `/research-lit` with `— sources: exa` or `— sources: all, exa`. Covers blogs, docs, news, and research papers with built-in content extraction.
+
+**🔎 Optional: Serply Google, News and Scholar search**
+```bash
+export SERPLY_API_KEY=your-key-here
+```
+Then use [`/serply-search`](skills/serply-search/SKILL.md) directly or opt into it from `/research-lit` with `— sources: serply` or `— sources: all, serply`. Covers Google Scholar papers (authors, citation counts, PDF links), Google web results and Google News. Standard library only, nothing to install. Get a key at [serply.io](https://serply.io); API docs at [serply.io/docs](https://serply.io/docs).
 
 **🗑️ Uninstall:** To remove ARIS skills without affecting your own personal skills:
 ```bash
@@ -487,7 +493,7 @@ All pipeline behaviors are configurable via inline overrides — append `— key
 |-----------|---------|-------------|
 | `AUTO_PROCEED` | `true` | At selection checkpoints, report the top idea and continue in the same turn. Set `false` to ask for explicit approval before committing GPU time |
 | `human checkpoint` | `false` | Pause after each review round so you can read the score, give custom modification instructions, skip specific fixes, or stop early |
-| `sources` | `all` | Which literature sources to search: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`, or `all`. Note: `semantic-scholar`, `deepxiv`, `exa`, `gemini`, and `openalex` must be explicitly listed — not included in `all` |
+| `sources` | `all` | Which literature sources to search: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `serply`, `gemini`, `openalex`, or `all`. Note: `semantic-scholar`, `deepxiv`, `exa`, `serply`, `gemini`, and `openalex` must be explicitly listed — not included in `all` |
 | `arxiv download` | `false` | Download top relevant arXiv PDFs during literature survey. When `false`, only fetches metadata (title, abstract, authors) |
 | `DBLP_BIBTEX` | `true` | Fetch real BibTeX from [DBLP](https://dblp.org)/[CrossRef](https://www.crossref.org) instead of LLM-generated entries. Eliminates hallucinated citations. Zero install |
 | `code review` | `true` | GPT-6-Astra xhigh reviews experiment code before GPU deployment. Set `false` to skip |

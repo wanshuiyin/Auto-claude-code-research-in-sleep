@@ -431,6 +431,12 @@ export EXA_API_KEY=your-key-here
 ```
 安装后可直接使用 [`/exa-search`](skills/exa-search/SKILL.md)，或在 `/research-lit` 中通过 `— sources: exa` / `— sources: all, exa` 显式启用。覆盖博客、文档、新闻和研究论文，并内置内容提取。
 
+**🔎 可选：Serply 谷歌网页 / 新闻 / Scholar 搜索**
+```bash
+export SERPLY_API_KEY=your-key-here
+```
+安装后可直接使用 [`/serply-search`](skills/serply-search/SKILL.md)，或在 `/research-lit` 中通过 `— sources: serply` / `— sources: all, serply` 显式启用。覆盖 Google Scholar 论文（作者、引用数、PDF 链接）、谷歌网页结果和谷歌新闻。仅用标准库，无需安装依赖。在 [serply.io](https://serply.io) 获取密钥，API 文档见 [serply.io/docs](https://serply.io/docs)。
+
 **🗑️ 卸载：** 仅删除 ARIS skills，不影响你自己的 skills：
 ```bash
 cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claude/skills/{}
@@ -447,7 +453,7 @@ cd Auto-claude-code-research-in-sleep && ls skills/ | xargs -I{} rm -rf ~/.claud
 |------|------|------|
 | `AUTO_PROCEED` | `true` | 在 idea 选择关卡自动继续。设为 `false` 可在花 GPU 前手动挑选 idea |
 | `human checkpoint` | `false` | 每轮 review 后暂停，让你查看分数、给出修改意见、跳过特定修复或提前终止 |
-| `sources` | `all` | 搜索哪些文献源：`zotero`、`obsidian`、`local`、`web`、`semantic-scholar`、`deepxiv`、`exa`、`gemini`、`openalex`、`all`。`semantic-scholar`、`deepxiv`、`exa`、`gemini` 和 `openalex` 都需显式指定 |
+| `sources` | `all` | 搜索哪些文献源：`zotero`、`obsidian`、`local`、`web`、`semantic-scholar`、`deepxiv`、`exa`、`serply`、`gemini`、`openalex`、`all`。`semantic-scholar`、`deepxiv`、`exa`、`serply`、`gemini` 和 `openalex` 都需显式指定 |
 | `arxiv download` | `false` | 文献调研时下载最相关的 arXiv PDF。为 `false` 时仅获取元数据（标题、摘要、作者） |
 | `DBLP_BIBTEX` | `true` | 从 [DBLP](https://dblp.org)/[CrossRef](https://www.crossref.org) 获取真实 BibTeX，替代 LLM 生成。杜绝幻觉引用。零安装 |
 | `code review` | `true` | GPT-6-Astra xhigh 部署前审查实验代码。设 `false` 跳过 |

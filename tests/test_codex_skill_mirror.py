@@ -331,6 +331,7 @@ def test_codex_skill_helper_commands_use_installed_aris_repo() -> None:
         "research-lit",
         "research-wiki",
         "semantic-scholar",
+        "serply-search",
     }
 
     failures: list[str] = []

@@ -47,11 +47,12 @@ Paper retrieval, summarization, novelty verification.
 
 | Skill | Role | Requires |
 |---|---|---|
-| [`/research-lit`](../skills/research-lit/SKILL.md) | Multi-source literature search — Zotero / Obsidian / local PDFs / web / arXiv / S2 / DeepXiv / Exa / Gemini / OpenAlex with cross-source dedup | None (sources gated by MCP / SDK availability) |
+| [`/research-lit`](../skills/research-lit/SKILL.md) | Multi-source literature search — Zotero / Obsidian / local PDFs / web / arXiv / S2 / DeepXiv / Exa / Serply / Gemini / OpenAlex with cross-source dedup | None (sources gated by MCP / SDK availability) |
 | [`/arxiv`](../skills/arxiv/SKILL.md) | Search, download, summarize arXiv papers; multi-result table + per-paper detail | None |
 | [`/semantic-scholar`](../skills/semantic-scholar/SKILL.md) | Published-venue paper search (IEEE / ACM / Springer) — citation counts, venue metadata, TLDR | None (rate-limited without S2 API key) |
 | [`/deepxiv`](../skills/deepxiv/SKILL.md) | Progressive paper reading — search → brief → head → section → trending → web search | `pip install deepxiv-sdk` |
 | [`/exa-search`](../skills/exa-search/SKILL.md) | AI-powered broad web search with content extraction — blogs, docs, news, papers | `pip install exa-py` + `EXA_API_KEY` |
+| [`/serply-search`](../skills/serply-search/SKILL.md) | Google web, Google News and Google Scholar search with `site:`/`filetype:` operators; Scholar rows carry authors, citation count and PDF link | `SERPLY_API_KEY` |
 | [`/web-debug-search`](../skills/web-debug-search/SKILL.md) | Multi-source debugging search across GitHub, Stack Exchange, Chinese technical communities, and general web — routing, compatibility, and discovery-only results | None |
 | [`/openalex`](../skills/openalex/SKILL.md) | OpenAlex API search — 250M+ open citation graph, institutional affiliations, funding data | `pip install requests` |
 | [`/gemini-search`](../skills/gemini-search/SKILL.md) | Gemini-driven literature discovery — decomposes topics into sub-problems, aliases, variants | `gemini-cli` v0.40+ |
