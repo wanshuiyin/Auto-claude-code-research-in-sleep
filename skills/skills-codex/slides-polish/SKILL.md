@@ -47,7 +47,7 @@ manually) — do not run `/slides-polish` for that.
 
 ## Constants
 
-- **REVIEWER_MODEL = `gpt-6-astra`** — Codex MCP model for per-page review. xhigh reasoning is non-negotiable (see `../shared-references/effort-contract.md`). If the account has no `gpt-6-astra` access, follow the capability fallback chain in `../shared-references/reviewer-routing.md` (`gpt-5.5`+`xhigh`; `gpt-5.4` only as an explicit user override).
+- **REVIEWER_MODEL = `gpt-6-astra`** — Codex MCP model for per-page review. xhigh reasoning is non-negotiable (see `../shared-references/effort-contract.md`). If the account has no `gpt-6-astra` access, follow the canonical capability fallback chain in `../shared-references/reviewer-routing.md` (the model fallbacks start with `gpt-6.1-sol`+`xhigh`; `gpt-5.4` only as an explicit user override).
 - **REVIEWER_REASONING = `xhigh`** — Hard invariant; the effort knob does **not** change this.
 - **CONTEXT_POLICY = `fresh`** — Each per-page review uses a **fresh** Codex reviewer call (`spawn_agent`, never `send_input`). See `../shared-references/reviewer-independence.md`. This prevents the reviewer from anchoring on prior fixes.
 - **REFERENCE_VISUAL** — Path to a PDF the user wants the polished deck to **align with** in visual weight (typography proportion, color discipline, callout density). Required input. If polishing PPTX only, the **Beamer compile of the same talk** is the ideal reference. If no reference exists yet, ask the user; do not silently default to "Why-RF" or any preset.

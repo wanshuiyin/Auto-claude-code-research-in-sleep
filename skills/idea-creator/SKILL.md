@@ -283,8 +283,10 @@ fail differently as generators, and the union keeps either model's taste from
 capping the pool:
 
 1. Once with the default reviewer model (`gpt-6-astra` today), as above.
-2. Once more with `model: "gpt-5.5"` — same `xhigh` effort, same bundle, a
-   fresh thread. Save both threadIds; Phase 4's triage follow-up goes to the
+2. Once more with `model: "gpt-6.1-sol"` — same `xhigh` effort, same bundle, a
+   fresh thread. This is another GPT model, not cross-family acceptance; if it
+   equals the chosen primary model, skip the duplicate second generation. Save
+   the IDs of sessions actually created; Phase 4's triage follow-up goes to the
    default-model thread.
 
 Tag each candidate with the model that produced it, then merge both sets the

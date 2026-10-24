@@ -396,11 +396,31 @@ class TestDefaultConfig(unittest.TestCase):
         )
 
     def test_default_model(self):
-        """Default model should be gpt-4o."""
-        self.assertEqual(
-            os.environ.get("LLM_MODEL", "gpt-4o"),
-            "gpt-4o"
+        """The real server should default to gpt-6.1-sol when LLM_MODEL is unset."""
+        import importlib.util
+        from pathlib import Path
+
+        server_path = (
+            Path(__file__).resolve().parents[1]
+            / "mcp-servers"
+            / "llm-chat"
+            / "server.py"
         )
+        clean_env = {
+            key: value
+            for key, value in os.environ.items()
+            if not key.startswith("LLM_")
+        }
+        with patch.dict(os.environ, clean_env, clear=True):
+            spec = importlib.util.spec_from_file_location(
+                "llm_chat_server_default_config", server_path
+            )
+            module = importlib.util.module_from_spec(spec)
+            self.assertIsNotNone(spec.loader)
+            spec.loader.exec_module(module)
+
+        self.assertEqual(module.DEFAULT_MODEL, "gpt-6.1-sol")
+        self.assertEqual(module.FALLBACK_MODEL, "gpt-6.1-sol")
 
     def test_default_server_name(self):
         """Default server name should be llm-chat."""

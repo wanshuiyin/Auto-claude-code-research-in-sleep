@@ -4,14 +4,17 @@
 Environment Variables:
     LLM_API_KEY         - API key (required)
     LLM_BASE_URL        - API base URL (default: https://api.openai.com/v1)
-    LLM_MODEL           - Model name (default: gpt-4o)
-    LLM_FALLBACK_MODEL  - Fallback model on 504 timeout (default: gpt-4o)
+    LLM_MODEL           - Model name (default: gpt-6.1-sol)
+    LLM_FALLBACK_MODEL  - Fallback model on 504 timeout (default: LLM_MODEL)
+    LLM_MAX_TOKENS_FIELD
+                        - Token-budget field: max_tokens or max_completion_tokens
+                          (default: auto by API hostname)
     LLM_SERVER_NAME     - Server name for MCP (default: llm-chat)
     LLM_REVIEW_FALLBACK_ENABLED
                         - Expose review/review_reply tools when true (default: false)
 
 Supported Providers (examples):
-    OpenAI:      LLM_BASE_URL=https://api.openai.com/v1 LLM_MODEL=gpt-4o
+    OpenAI:      LLM_BASE_URL=https://api.openai.com/v1 LLM_MODEL=gpt-6.1-sol
     DeepSeek:    LLM_BASE_URL=https://api.deepseek.com/v1 LLM_MODEL=deepseek-chat
     Kimi:        LLM_BASE_URL=https://api.moonshot.cn/v1 LLM_MODEL=moonshot-v1-32k
     MiniMax:     LLM_BASE_URL=https://api.minimax.io/v1 LLM_MODEL=MiniMax-M3
@@ -25,6 +28,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 import httpx
 
 _stdio_initialized = False
@@ -51,8 +55,9 @@ def _init_stdio():
 # Configuration from environment
 API_KEY = os.environ.get("LLM_API_KEY", "")
 BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.openai.com/v1")
-DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gpt-4o")
-FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", "gpt-4o")
+DEFAULT_MODEL = os.environ.get("LLM_MODEL", "gpt-6.1-sol")
+FALLBACK_MODEL = os.environ.get("LLM_FALLBACK_MODEL", DEFAULT_MODEL)
+MAX_TOKENS_FIELD = os.environ.get("LLM_MAX_TOKENS_FIELD", "").strip()
 SERVER_NAME = os.environ.get("LLM_SERVER_NAME", "llm-chat")
 REVIEW_FALLBACK_ENABLED = os.environ.get(
     "LLM_REVIEW_FALLBACK_ENABLED", "false"
@@ -100,6 +105,72 @@ def send_response(response):
     sys.stdout.write(output)
     sys.stdout.flush()
 
+_MAX_COMPLETION_TOKENS = 4096
+_VALID_MAX_TOKENS_FIELDS = {"max_tokens", "max_completion_tokens"}
+
+
+def _build_chat_payload(model, messages):
+    """Build the shared Chat Completions payload.
+
+    Official OpenAI reasoning-capable models accept `max_completion_tokens`;
+    `max_tokens` is deprecated there and rejected by reasoning models.
+    Third-party OpenAI-compatible endpoints generally still expect
+    `max_tokens`. The choice is based on the parsed hostname (never a
+    substring match) unless LLM_MAX_TOKENS_FIELD explicitly overrides it.
+    """
+    configured_field = (MAX_TOKENS_FIELD or "").strip()
+    if configured_field:
+        if configured_field not in _VALID_MAX_TOKENS_FIELDS:
+            raise ValueError(
+                f"Invalid LLM_MAX_TOKENS_FIELD value {configured_field!r}; "
+                "expected 'max_tokens' or 'max_completion_tokens'."
+            )
+        token_field = configured_field
+    else:
+        hostname = (urlparse(BASE_URL).hostname or "").lower()
+        token_field = (
+            "max_completion_tokens" if hostname == "api.openai.com" else "max_tokens"
+        )
+    return {"model": model, "messages": messages, token_field: _MAX_COMPLETION_TOKENS}
+
+
+def _extract_message_content(data):
+    """Return (content, finish_reason, error) from a Chat Completions body."""
+    try:
+        choice = data["choices"][0]
+        content = choice["message"]["content"]
+        finish_reason = choice.get("finish_reason")
+    except (KeyError, IndexError, TypeError, AttributeError) as exc:
+        return None, None, f"Unexpected API response structure: {exc}"
+    return content, finish_reason, None
+
+
+def _content_validation_error(content, finish_reason, strict_review):
+    """Reject blank/non-text output and truncated strict-review verdicts."""
+    finish_detail = f" (finish_reason={finish_reason})" if finish_reason else ""
+    if not isinstance(content, str):
+        return (
+            f"LLM returned non-text content ({type(content).__name__})"
+            f"{finish_detail}; no usable output. The {_MAX_COMPLETION_TOKENS}-token "
+            "completion budget, which includes reasoning, may have been exhausted "
+            "before any visible text."
+        )
+    if not content.strip():
+        return (
+            f"LLM returned empty text content{finish_detail}. The "
+            f"{_MAX_COMPLETION_TOKENS}-token completion budget, which includes "
+            "reasoning, may have been exhausted before any visible output; no "
+            "usable response."
+        )
+    if strict_review and finish_reason == "length":
+        return (
+            f"Strict review response was truncated (finish_reason=length) and may "
+            f"contain only a partial verdict. The {_MAX_COMPLETION_TOKENS}-token "
+            "completion/reasoning budget covers reasoning plus visible output; "
+            "refusing to accept a partial review verdict."
+        )
+    return None
+
 def _call_llm_detailed(messages, model=None):
     """Call LLM Chat Completions API and return content, error, actual model."""
     if not API_KEY:
@@ -118,11 +189,10 @@ def _call_llm_detailed(messages, model=None):
     # failures can never duplicate a paid review or produce conflicting verdicts.
     for attempt in range(3):
         current_model = use_model if attempt < 2 else FALLBACK_MODEL
-        payload = {
-            "model": current_model,
-            "messages": messages,
-            "max_tokens": 4096
-        }
+        try:
+            payload = _build_chat_payload(current_model, messages)
+        except ValueError as exc:
+            return None, str(exc), None
 
         debug_log(f"Calling LLM API (attempt {attempt + 1}): model={current_model}")
 
@@ -141,10 +211,15 @@ def _call_llm_detailed(messages, model=None):
                     return None, error_msg, None
 
                 data = response.json()
-                try:
-                    content = data["choices"][0]["message"]["content"]
-                except (KeyError, IndexError, TypeError) as e:
-                    return None, f"Unexpected API response structure: {e}", None
+                content, finish_reason, content_error = _extract_message_content(data)
+                if content_error:
+                    return None, content_error, None
+                content_error = _content_validation_error(
+                    content, finish_reason, strict_review=False
+                )
+                if content_error:
+                    debug_log(f"API content error: {content_error}")
+                    return None, content_error, None
 
                 # Prefer the model identity reported by the provider. If absent,
                 # use the exact model id sent in this successful request.
@@ -190,11 +265,10 @@ def _call_llm_review_once(messages, model=None):
         "Content-Type": "application/json",
         "Authorization": f"Bearer {API_KEY}"
     }
-    payload = {
-        "model": use_model,
-        "messages": messages,
-        "max_tokens": 4096
-    }
+    try:
+        payload = _build_chat_payload(use_model, messages)
+    except ValueError as exc:
+        return None, str(exc), None
 
     debug_log(f"Calling verdict-bearing LLM review once: model={use_model}")
     try:
@@ -212,12 +286,16 @@ def _call_llm_review_once(messages, model=None):
                 debug_log(f"Review API parse error (no retry): {error_msg}")
                 return None, error_msg, None
 
-            try:
-                content = data["choices"][0]["message"]["content"]
-            except (KeyError, IndexError, TypeError) as exc:
-                error_msg = f"Unexpected API response structure: {exc}"
-                debug_log(f"Review API structure error (no retry): {error_msg}")
-                return None, error_msg, None
+            content, finish_reason, content_error = _extract_message_content(data)
+            if content_error:
+                debug_log(f"Review API structure error (no retry): {content_error}")
+                return None, content_error, None
+            content_error = _content_validation_error(
+                content, finish_reason, strict_review=True
+            )
+            if content_error:
+                debug_log(f"Review API content error (no retry): {content_error}")
+                return None, content_error, None
 
             actual_model = str(data.get("model") or use_model).strip()
             debug_log(

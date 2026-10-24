@@ -43,7 +43,7 @@ Add to `~/.codex/settings.json`:
 
 | Provider | LLM_BASE_URL | LLM_MODEL |
 |----------|--------------|-----------|
-| **OpenAI** | `https://api.openai.com/v1` | `gpt-4o`, `o3` |
+| **OpenAI** | `https://api.openai.com/v1` | `gpt-6.1-sol`, `gpt-6-astra` |
 | **DeepSeek** | `https://api.deepseek.com/v1` | `deepseek-chat`, `deepseek-reasoner` |
 | **MiniMax** | `https://api.minimax.io/v1` | `MiniMax-M3` |
 | **Kimi (Moonshot)** | `https://api.moonshot.cn/v1` | `moonshot-v1-8k`, `moonshot-v1-32k` |
@@ -51,6 +51,13 @@ Add to `~/.codex/settings.json`:
 | **SiliconFlow** | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-72B-Instruct` |
 | **阿里云百炼** | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-max` |
 | **零一万物** | `https://api.lingyiwanwu.com/v1` | `yi-large` |
+
+The `llm-chat` server defaults to `gpt-6.1-sol`. When `LLM_FALLBACK_MODEL` is
+unset, the 504-timeout fallback inherits `LLM_MODEL` (so it is not a fixed,
+different model). Calls to `api.openai.com` automatically use
+`max_completion_tokens`; third-party OpenAI-compatible endpoints use
+`max_tokens`. Set `LLM_MAX_TOKENS_FIELD=max_tokens` or
+`LLM_MAX_TOKENS_FIELD=max_completion_tokens` to override that automatic choice.
 
 ## API Call Method
 
@@ -66,6 +73,8 @@ mcp__llm-chat__chat:
 
 **Fallback: curl**
 
+For third-party OpenAI-compatible endpoints, use `max_tokens`:
+
 ```bash
 curl -s "${LLM_BASE_URL}/chat/completions" \
   -H "Content-Type: application/json" \
@@ -77,6 +86,22 @@ curl -s "${LLM_BASE_URL}/chat/completions" \
       {"role": "user", "content": "[review prompt]"}
     ],
     "max_tokens": 4096
+  }'
+```
+
+For a direct OpenAI call, use `max_completion_tokens` instead:
+
+```bash
+curl -s "https://api.openai.com/v1/chat/completions" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ${LLM_API_KEY}" \
+  -d '{
+    "model": "gpt-6.1-sol",
+    "messages": [
+      {"role": "system", "content": "You are a senior ML reviewer..."},
+      {"role": "user", "content": "[review prompt]"}
+    ],
+    "max_completion_tokens": 4096
   }'
 ```
 
@@ -129,7 +154,8 @@ mcp__llm-chat__chat:
     Be brutally honest. If the work is ready, say so clearly.
 ```
 
-**If MCP NOT available:**
+**If MCP NOT available:** For third-party OpenAI-compatible endpoints use
+`max_tokens`; for direct OpenAI calls use `max_completion_tokens` instead.
 ```bash
 curl -s "${LLM_BASE_URL}/chat/completions" \
   -H "Content-Type: application/json" \

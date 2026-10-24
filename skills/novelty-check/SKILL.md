@@ -22,7 +22,7 @@ Check whether a proposed method/idea has already been done in the literature: **
 
 ## Constants
 
-- REVIEWER_MODEL = `gpt-6-astra` — Model used via Codex MCP. For `backend=codex`, use an OpenAI model (e.g., `gpt-6-astra`, `o3`, `gpt-4o`)
+- REVIEWER_MODEL = `gpt-6-astra` — Model used via Codex MCP. For `backend=codex`, use an OpenAI model (e.g., `gpt-6-astra`, `gpt-6.1-sol`)
 
 ## Instructions
 

@@ -32,7 +32,7 @@ not pass a selected MCP reviewer model into a native generation call.
 - **PILOT_TIMEOUT_HOURS = 3** — Hard timeout: kill pilots exceeding 3 hours. Collect partial results if available.
 - **MAX_PILOT_IDEAS = 3** — Pilot at most 3 ideas in parallel. Additional ideas are validated on paper only.
 - **MAX_TOTAL_GPU_HOURS = 8** — Total GPU budget for all pilots combined.
-- **REVIEWER_MODEL = `gpt-6-astra`** — Model used via a secondary Codex agent for brainstorming and review. For `backend=codex`, use an OpenAI model (e.g., `gpt-6-astra`, `o3`, `gpt-4o`).
+- **REVIEWER_MODEL = `gpt-6-astra`** — Model used via a secondary Codex agent for brainstorming and review. For `backend=codex`, use an OpenAI model (e.g., `gpt-6-astra`, `gpt-6.1-sol`).
 - **REVIEWER_BACKEND = `codex`** — Default: Codex xhigh reviewer through `spawn_agent` / `send_input`. Use `--reviewer: oracle-pro` only when explicitly requested; if Oracle is unavailable, warn and fall back to Codex xhigh.
 - **OUTPUT_DIR = `idea-stage/`** — All idea-stage outputs go here. Create the directory if it doesn't exist.
 
@@ -230,14 +230,17 @@ spawn_agent:
 
 Save the agent id for follow-up.
 
-Then spawn the **same bundle once more** with `model: gpt-5.5` (same xhigh
+Then spawn the **same bundle once more** with `model: gpt-6.1-sol` (same xhigh
 reasoning, a fresh agent) and take the union — the two models fail differently
 as generators, and the union keeps either model's taste from capping the pool.
-Save both agent ids; Phase 4's `send_input` follow-ups go to the default-model
-agent. Tag each candidate with the model that produced it; merge both sets by
-mechanical dedup only — never drop a candidate for being "weak" (that is the
-Phase-4 verdict). If the second spawn errors (model unavailable on this
-account), print one WARN line and continue single-model.
+This is another GPT model, not cross-family acceptance; if it equals the chosen
+primary model, skip the duplicate second spawn. Save the IDs of agents actually
+created; Phase 4's `send_input` follow-ups go to the default-model agent. Tag each
+candidate with
+the model that produced it; merge both sets by mechanical dedup only — never
+drop a candidate for being "weak" (that is the Phase-4 verdict). If the second
+spawn errors (model unavailable on this account), print one WARN line and
+continue single-model.
 
 Save a Review Tracing record for this `spawn_agent` call following `../shared-references/review-tracing.md`, including the landscape summary, prompt summary, raw idea list path, reviewer route, and saved agent id.
 
