@@ -37,6 +37,9 @@ Use OpenAlex when you want:
   [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2
   (Policy D1 — standalone `/openalex` has no documented inline fallback,
   so unresolved helper terminates with an explicit error).
+- **ARIS_PY_RUNNER** — `tools/uv_run_helper.sh`; it runs helpers in the locked
+  `tools/uv-runtime` environment. Do not install helper dependencies into the
+  research project's `code/` environment.
 
 > Overrides (append to arguments):
 > - `/openalex "topic" — max: 20` — return up to 20 results
@@ -53,10 +56,8 @@ Use OpenAlex when you want:
 
 ### Prerequisites
 
-1. **Python 3.7+** with `requests` library:
-   ```bash
-   pip install requests
-   ```
+1. **ARIS helper runtime** — `requests` is declared and locked in
+   `tools/uv-runtime/pyproject.toml` and `uv.lock`.
 
 2. **Optional: API keys** — Export them in your shell or project environment:
    ```bash
@@ -71,10 +72,10 @@ Use OpenAlex when you want:
 ### Verify Setup
 
 ```bash
-python3 "$OPENALEX_FETCHER" search "machine learning" --max 3
+bash "$ARIS_PY_RUNNER" "$OPENALEX_FETCHER" search "machine learning" --max 3
 ```
 
-(Resolve `$OPENALEX_FETCHER` via the canonical chain first — see Step 2 below.)
+(Resolve both paths via the canonical chain first — see Step 2 below.)
 
 ## Workflow
 
@@ -107,10 +108,13 @@ OPENALEX_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/openalex_fetch.py" ] && OPENALEX_FETCHER="$ARIS_REPO/tools/openalex_fetch.py"
 [ -z "$OPENALEX_FETCHER" ] && [ -f tools/openalex_fetch.py ] && OPENALEX_FETCHER="tools/openalex_fetch.py"
 [ -z "$OPENALEX_FETCHER" ] && [ -f ~/.codex/skills/openalex/openalex_fetch.py ] && OPENALEX_FETCHER="$HOME/.codex/skills/openalex/openalex_fetch.py"
-[ -f "$OPENALEX_FETCHER" ] || {
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
+[ -f "$OPENALEX_FETCHER" ] && [ -f "$ARIS_PY_RUNNER" ] || {
   echo "ERROR: openalex_fetch.py not resolved at \$ARIS_REPO/tools/, tools/, or ~/.codex/skills/openalex/." >&2
-  echo "       Fix: rerun install_aris_codex.sh, export ARIS_REPO, or copy the helper to ~/.codex/skills/openalex/." >&2
-  echo "       Also ensure 'requests' is installed: pip install requests" >&2
+  echo "       Or tools/uv_run_helper.sh is unavailable." >&2
+  echo "       Fix: rerun install_aris_codex.sh or export ARIS_REPO to the complete ARIS checkout." >&2
   exit 1
 }
 ```
@@ -119,12 +123,12 @@ OPENALEX_FETCHER=""
 
 **Basic search:**
 ```bash
-python3 "$OPENALEX_FETCHER" search "QUERY" --max 10
+bash "$ARIS_PY_RUNNER" "$OPENALEX_FETCHER" search "QUERY" --max 10
 ```
 
 **With filters:**
 ```bash
-python3 "$OPENALEX_FETCHER" search "QUERY" --max 10 \
+bash "$ARIS_PY_RUNNER" "$OPENALEX_FETCHER" search "QUERY" --max 10 \
   --year 2023- \
   --type article \
   --open-access \
@@ -134,12 +138,12 @@ python3 "$OPENALEX_FETCHER" search "QUERY" --max 10 \
 
 **Get specific work by DOI:**
 ```bash
-python3 "$OPENALEX_FETCHER" work "10.1109/TWC.2024.1234567"
+bash "$ARIS_PY_RUNNER" "$OPENALEX_FETCHER" work "10.1109/TWC.2024.1234567"
 ```
 
 **Get specific work by OpenAlex ID:**
 ```bash
-python3 "$OPENALEX_FETCHER" work "W2741809807"
+bash "$ARIS_PY_RUNNER" "$OPENALEX_FETCHER" work "W2741809807"
 ```
 
 ### Step 4: Parse Results

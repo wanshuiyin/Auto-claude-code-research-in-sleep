@@ -1,0 +1,13 @@
+[project]
+name = "aris-helper-runtime"
+version = "0.1.0"
+description = "Isolated uv runtime for ARIS Python helper scripts"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "deepxiv-sdk>=0.3.1",
+    "exa-py>=1.0.0",
+    "requests>=2.32.0",
+]
+
+[tool.uv]
+package = false
