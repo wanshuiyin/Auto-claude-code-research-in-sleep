@@ -29,15 +29,8 @@ _DOT = {
     scanner.NEEDS_ATTENTION: "\033[93m◐\033[0m",  # amber
     scanner.WORKING:         "\033[93m◐\033[0m",  # amber
     scanner.IDLE_DONE:       "\033[92m○\033[0m",  # green
+    scanner.UNKNOWN:        "\033[93m?\033[0m",
 }
-_LABEL = {
-    scanner.NEEDS_APPROVAL:  "NEEDS YOU",
-    scanner.NEEDS_ATTENTION: "stalled",
-    scanner.WORKING:         "working",
-    scanner.IDLE_DONE:       "done",
-}
-
-
 def _render_once() -> None:
     sessions = scanner.scan()
     s = scanner.summary(sessions)
@@ -46,22 +39,25 @@ def _render_once() -> None:
     sys.stdout.write("\033[2J\033[H")  # clear + home
     if s["needs_approval"]:
         head = f"\033[91mARIS-Monitor — ATTENTION  {s['needs_approval']} ●\033[0m"
+    elif s["needs_attention"] or s["unknown"]:
+        head = f"\033[93mARIS-Monitor — {s['needs_attention'] + s['unknown']} attention\033[0m"
     else:
-        head = f"\033[92mARIS-Monitor — all clear  ○ 0\033[0m"
+        head = f"\033[92mARIS-Monitor — {s['working']} working · {s['idle_done']} done\033[0m"
     print(head)
     print("-" * 40)
 
     if not visible:
-        print("  no active Claude sessions")
+        print("  no recent Claude/Codex sessions")
     for x in visible:
         dot = _DOT.get(x.triage, "?")
-        label = _LABEL.get(x.triage, x.triage)
+        label = scanner.display_label(x)
         reason = f"  {x.reason}" if (x.triage == scanner.NEEDS_APPROVAL and x.reason) else ""
-        print(f"  {dot} {x.name[:24]:<24} {label:<10} {scanner.fmt_age(x.idle_seconds):>5}{reason}")
+        print(f"  {dot} [{x.source}] {x.name[:24]:<24} {label:<10} {scanner.fmt_age(x.idle_seconds):>5}{reason}")
     if s["stale"]:
         print(f"  +{s['stale']} stale (hidden)")
     print()
     print("(read-only · refresh 2s · Ctrl-C to quit)")
+    print("Codex approval status is not monitored.")
     sys.stdout.flush()
 
 

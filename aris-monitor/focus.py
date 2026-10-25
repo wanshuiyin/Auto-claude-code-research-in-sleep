@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-"""ARIS-Monitor: the ONE non-read action -- raise the terminal that owns a session.
+"""ARIS-Monitor: user-initiated focus of a terminal or existing local Codex chat.
 
 Everything else in ARIS-Monitor is strictly read-only. This module is the single
 exception, and it is deliberately tiny and tightly scoped:
 
-  * It runs exactly TWO external commands and NOTHING else:
+  * Claude focus runs exactly two external commands:
       1. `ps -o tty= -p <pid>`  -- READ a pid's controlling tty (no mutation)
       2. `focus-tty.sh <tty>`   -- RAISE the owning Terminal.app / iTerm2 / tmux
                                    tab via osascript (activate / select only)
-  * It NEVER kills, signals, writes, or spawns anything else. It cannot end,
+  * Codex focus runs `open codex://threads/<validated UUID>`.
+  * It NEVER kills, signals, or writes session data. It cannot end,
     pause, resume, or modify a session -- it can only bring a window to the front.
   * focus-tty.sh is the bundled hardened raise-only shim. ARIS-Monitor ALWAYS
     runs the bundled script -- it does NOT honor a ~/.claude/focus-tty.sh
@@ -26,6 +27,7 @@ structured result and changes nothing.
 from __future__ import annotations
 
 import subprocess
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -33,6 +35,18 @@ from typing import Optional
 # ~/.claude/focus-tty.sh override, so the focus action's command surface is
 # provably bounded to this reviewed, raise-only shim.
 _FOCUS_SCRIPT = Path(__file__).resolve().parent / "focus-tty.sh"
+
+
+def focus_codex(thread_id: str) -> dict:
+    """User-initiated navigation to an existing local Codex chat."""
+    try:
+        thread_id = str(uuid.UUID(thread_id))
+        proc = subprocess.run(["open", "codex://threads/" + thread_id],
+                              capture_output=True, text=True, timeout=5)
+        return {"ok": proc.returncode == 0, "code": proc.returncode,
+                "error": proc.stderr.strip()}
+    except (ValueError, TypeError, AttributeError, OSError, subprocess.TimeoutExpired) as ex:
+        return {"ok": False, "code": None, "error": str(ex)}
 
 
 def _pid_tty(pid: int) -> Optional[str]:
