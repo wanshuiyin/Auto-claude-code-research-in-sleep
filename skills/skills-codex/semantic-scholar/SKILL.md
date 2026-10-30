@@ -26,7 +26,11 @@ This skill is the **published venue** counterpart to `/arxiv`:
 - **S2_FETCHER** — canonical name `semantic_scholar_fetch.py`, resolved per
   [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2
   (Codex-side chain: `$ARIS_REPO/tools/` → `tools/` → `~/.codex/skills/semantic-scholar/`).
-  Policy D1 — if unresolved (canonical chain exhausted), fall back to inline Python.
+  Policy D1 — if unresolved (canonical chain exhausted), fall back to the
+  available web search tool; do not run inline system Python.
+- **ARIS_PY_RUNNER** — canonical name `uv_run_helper.sh`. All Python helpers
+  run through the isolated `$ARIS_REPO/tools/uv-runtime` project; never invoke
+  the system `python3` directly.
 - **DEFAULT_FILTERS** — For general research queries, apply these by default to reduce noise:
   - `--fields-of-study "Computer Science,Engineering"`
   - `--publication-types JournalArticle,Conference`
@@ -74,12 +78,19 @@ S2_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/semantic_scholar_fetch.py" ] && S2_FETCHER="$ARIS_REPO/tools/semantic_scholar_fetch.py"
 [ -z "$S2_FETCHER" ] && [ -f tools/semantic_scholar_fetch.py ] && S2_FETCHER="tools/semantic_scholar_fetch.py"
 [ -z "$S2_FETCHER" ] && [ -f ~/.codex/skills/semantic-scholar/semantic_scholar_fetch.py ] && S2_FETCHER="$HOME/.codex/skills/semantic-scholar/semantic_scholar_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
+[ -n "$ARIS_PY_RUNNER" ] || {
+  echo "ERROR: uv_run_helper.sh unresolved; refusing bare python3 fallback." >&2
+  exit 1
+}
 ```
 
 **Standard search** (default — relevance-ranked):
 
 ```bash
-[ -n "$S2_FETCHER" ] && python3 "$S2_FETCHER" search "QUERY" --max MAX_RESULTS \
+[ -n "$S2_FETCHER" ] && bash "$ARIS_PY_RUNNER" "$S2_FETCHER" search "QUERY" --max MAX_RESULTS \
   --fields-of-study "Computer Science,Engineering" \
   --publication-types JournalArticle,Conference
 ```
@@ -87,13 +98,14 @@ S2_FETCHER=""
 **Bulk search** (when `- sort:` is specified, or MAX_RESULTS > 100):
 
 ```bash
-[ -n "$S2_FETCHER" ] && python3 "$S2_FETCHER" search-bulk "QUERY" --max MAX_RESULTS \
+[ -n "$S2_FETCHER" ] && bash "$ARIS_PY_RUNNER" "$S2_FETCHER" search-bulk "QUERY" --max MAX_RESULTS \
   --sort citationCount:desc \
   --fields-of-study "Computer Science" \
   --year "2020-"
 ```
 
-If `semantic_scholar_fetch.py` is not found, fall back to inline Python using `urllib` against `https://api.semanticscholar.org/graph/v1/paper/search`.
+If `semantic_scholar_fetch.py` is not found, fall back to the available web
+search tool. Do not execute inline Python outside the locked uv runtime.
 
 **Recommended filter combos** (from testing):
 
@@ -111,7 +123,7 @@ If `semantic_scholar_fetch.py` is not found, fall back to inline Python using `u
 When a single paper ID is requested:
 
 ```bash
-[ -n "$S2_FETCHER" ] && python3 "$S2_FETCHER" paper "PAPER_ID"
+[ -n "$S2_FETCHER" ] && bash "$ARIS_PY_RUNNER" "$S2_FETCHER" paper "PAPER_ID"
 ```
 
 Where PAPER_ID can be:
@@ -173,12 +185,15 @@ if [ -d research-wiki/ ]:
     [ -n "$ARIS_REPO" ] && [ -f "$ARIS_REPO/tools/research_wiki.py" ] && WIKI_SCRIPT="$ARIS_REPO/tools/research_wiki.py"
     [ -z "$WIKI_SCRIPT" ] && [ -f tools/research_wiki.py ] && WIKI_SCRIPT="tools/research_wiki.py"
     [ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
+    ARIS_PY_RUNNER=""
+    [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+    [ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
     for each paper in results:
         if paper.externalIds.ArXiv:
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
+            [ -n "$WIKI_SCRIPT" ] && [ -n "$ARIS_PY_RUNNER" ] && bash "$ARIS_PY_RUNNER" "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --arxiv-id "<ArXiv>"
         else:
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
+            [ -n "$WIKI_SCRIPT" ] && [ -n "$ARIS_PY_RUNNER" ] && bash "$ARIS_PY_RUNNER" "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --title "<title>" --authors "<authors joined by , >" \
                 --year <year> --venue "<venue>" \
                 [--external-id-doi "<externalIds.DOI>"]
