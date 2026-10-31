@@ -27,7 +27,7 @@ acceptance requires actual identities, completed scope, and the applicable gate.
 The two partial overlays are frozen; [migration](skills/skills-codex/README.md#migrate-frozen-partial-overlays)
 preserves existing links and customizations.
 
-**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **87 skills**, grouped by role.
+**Full catalog**: [`docs/SKILLS_CATALOG.md`](docs/SKILLS_CATALOG.md) — **88 skills**, grouped by role.
 
 Use [`/lean-formalize`](skills/lean-formalize/SKILL.md) when the user requests Lean work or a substantial mathematical obligation benefits from formal verification. It preserves the original statement, connects the proof, and checks the final declaration and its axioms; ordinary mathematical drafting continues to use `/proof-writer`.
 

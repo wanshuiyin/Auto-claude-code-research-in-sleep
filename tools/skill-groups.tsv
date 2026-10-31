@@ -93,6 +93,7 @@ skill	writing-systems-papers	paper-core	-	系统方向论文写作要领
 skill	specification-writing	paper-core	embodiment-description,figure-description	技术规格文档撰写
 skill	overleaf-sync	paper-core	-	本地↔Overleaf 双向同步
 skill	render-html	paper-core	-	MD/JSON 工件渲染成 HTML 报告
+skill	deed-page-publish	paper-core	-	HTML 工件发布为公开链接(deed.page,按需)
 skill	paper-illustration	paper-visuals	-	AI 生成论文插图(Gemini)
 skill	paper-illustration-image2	paper-visuals	-	AI 插图备选(Codex 原生画图)
 skill	figure-spec	paper-visuals	-	确定性矢量架构/流程图(SVG)
