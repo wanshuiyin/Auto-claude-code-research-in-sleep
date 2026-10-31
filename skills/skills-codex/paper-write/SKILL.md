@@ -13,7 +13,8 @@ description: "Draft LaTeX paper section by section from an outline. Use when use
 > own first-call/reply contract. Save the route and actual returned identity;
 > unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
 > families/completion/scope. Forward invocation reviewer/model/effort overrides
-> to reviewer-bearing children. Generation workers are unchanged.
+> to reviewer-bearing children. Writer selection is separate; follow the
+> writing-worker guidance below when drafting or revising prose.
 
 
 Draft a LaTeX paper based on: **$ARGUMENTS**
@@ -146,6 +147,8 @@ Create shared math macros based on the paper's notation:
 ```
 
 ### Step 3: Write Each Section
+
+Use the Launch Mindset and Optional Writing Worker guidance in `../shared-references/writing-principles.md` for every section. Root prepares the factual brief from the plan, original sources, results, figures, and verified bibliography; a configured writer drafts substantive prose and handles same-session revisions, otherwise the executor writes. Pass any supplied `writer`, `writer-model`, and `writer-effort` independently of reviewer settings. Root checks technical accuracy and compilation while preserving the writer's good phrasing; the existing section reviews and audits still apply.
 
 Process sections in order. For each section:
 

@@ -8,6 +8,8 @@ This is the expanded English counterpart to the detailed Chinese version. It is 
 
 - [When to Read](#when-to-read)
 - [The Narrative Principle](#the-narrative-principle)
+- [Launch Mindset](#launch-mindset)
+- [Optional Writing Worker](#optional-writing-worker)
 - [Time Allocation and Reviewer Reading Order](#time-allocation-and-reviewer-reading-order)
 - [How to Write the Abstract](#how-to-write-the-abstract)
 - [Introduction Structure](#introduction-structure)
@@ -62,6 +64,18 @@ If the one-sentence contribution is hard to write, the usual causes are:
 - the contribution is still too vague,
 - the evidence is not yet tightly coupled to the claims,
 - or the paper does not yet know what story it is telling.
+
+## Launch Mindset
+
+Apply HERO and the launch principle throughout planning, drafting, and revision, regardless of who writes. Lead with the strongest genuine contribution and its decisive evidence. Put claim-defining assumptions and scope at the point of use; consolidate broader limitations. Keep unfavorable results in the tables, explaining concrete tradeoffs when supported and otherwise stating them neutrally. Keep prompts, revision history, and defensive disclaimers out of manuscript prose. Avoid speculative edge-case machinery, unnecessary hashes, and mechanical rubrics. For surveys, build the story through connections among works rather than turning each paper into a long theorem lecture.
+
+## Optional Writing Worker
+
+Respect the user's or project's writer choice. When a configured external writer is available, delegate substantive drafting and prose revision; otherwise the executor writes directly. Accept natural-language choices or `— writer: antigravity, writer-model: gemini-4-argon-high, writer-effort: high`. Writer options are separate from reviewer options and never change review independence or audit gates.
+
+Use the `model-worker` MCP service: `worker` starts with `prompt`, absolute `cwd`, `backend` (`antigravity`, `grok`, or `claude-code`), `model`, and optional `effort` / `timeout_sec`; save its returned `threadId`. `worker_reply` takes only `threadId` and `prompt`, retaining the original settings. Examples when configured: Antigravity `gemini-4-argon-high` / `high`, Grok `grok-4.7` / `xhigh`, or Claude Code `deepseek/deepseek-flash[1m]` / `max`. These are examples, not universal defaults.
+
+Root first reads the source material and prepares a compact factual brief: narrative spine, supported claims, assumptions, formulas, complexity and counting units, notation, verified citation keys, and the questions each section must answer. Give the writer the actual workspace, relevant source and target files, and this writing guidance; a new writer session starts with fresh context and uses its own file tools. The writer organizes and drafts substantial prose. Root then checks new claims, assumptions, formulas, complexity, numbers, citations, notation, and compilation, preserving good phrasing and voice; send concrete corrections through the same writer session. This targeted check does not replace required reviews or audits. If a writer call fails, retain any produced draft, report the failure briefly, and continue as executor without an automatic paid retry.
 
 ## Time Allocation and Reviewer Reading Order
 
