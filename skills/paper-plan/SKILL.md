@@ -15,7 +15,8 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, Skil
 > own first-call/reply contract. Save the route and actual returned identity;
 > unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
 > families/completion/scope. Forward invocation reviewer/model/effort overrides
-> to reviewer-bearing children. Generation workers are unchanged.
+> to reviewer-bearing children. Writer selection is separate; follow the
+> writing-worker guidance below when drafting or revising prose.
 
 
 Generate a structured, section-by-section paper outline from: **$ARGUMENTS**
@@ -42,7 +43,7 @@ If none exist, ask the user to describe the paper's contribution in 3-5 sentence
 
 Keep the existing `insleep` workflow and outputs, but use the shared references below to improve the quality of the story and outline.
 
-- Read `../shared-references/writing-principles.md` when framing the one-sentence contribution, Abstract, Introduction, Related Work, or hero figure.
+- Read `../shared-references/writing-principles.md` when framing the one-sentence contribution, Abstract, Introduction, Related Work, or hero figure. Plan the claims-evidence matrix under its Launch Mindset: lead with the strongest supported contribution, give each experiment an argumentative role, and bind assumptions to claims rather than building a disclaimer list.
 - Read `../shared-references/venue-checklists.md` before freezing the outline for a specific venue.
 - Only load these references when needed; do not paste their full contents into the working draft.
 

@@ -47,6 +47,14 @@ still uses `gemini-review`; existing frozen Gemini overlay links retain their
 `review*` protocol. No installer change or global configuration write is needed
 to select a reviewer in the complete pack.
 
+**Optional writing workers.** [Model Worker MCP](mcp-servers/model-worker/README.md)
+lets a configured Antigravity, Grok, or Claude Code model read and write draft
+files, then revise them in the same session. Choose writer/model/effort separately
+from the reviewer. The executor establishes facts and integrates the writing;
+without an external writer it writes directly. Both complete skill packs apply
+[HERO and the launch principle](skills/shared-references/writing-principles.md#launch-mindset)
+through planning, drafting, and revision, whoever does the writing.
+
 ## Common Parameters
 
 ARIS has **two independent control axes** plus scoped flags.

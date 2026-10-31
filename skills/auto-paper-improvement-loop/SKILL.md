@@ -2,7 +2,7 @@
 name: auto-paper-improvement-loop
 description: "Autonomously improve a generated paper via GPT-6-Astra xhigh review → implement fixes → recompile, for 2 rounds. Use when user says \"改论文\", \"improve paper\", \"论文润色循环\", \"auto improve\", or wants to iteratively polish a generated paper."
 argument-hint: "[paper-directory] [— style-ref: <source>] [— edit-whitelist <path>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__codex__codex, mcp__codex__codex-reply, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status, mcp__model-worker__worker, mcp__model-worker__worker_reply
 ---
 
 # Auto Paper Improvement Loop: Review → Fix → Recompile
@@ -15,7 +15,8 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__codex__codex,
 > own first-call/reply contract. Save the route and actual returned identity;
 > unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
 > families/completion/scope. Forward invocation reviewer/model/effort overrides
-> to reviewer-bearing children. Generation workers are unchanged.
+> to reviewer-bearing children. Writer selection is separate; follow the
+> writing-worker guidance below when drafting or revising prose.
 
 
 > 🔒 **Do not wrap this skill in `/loop`, `/schedule`, or `CronCreate`.** It
@@ -335,6 +336,8 @@ Reply "go" to implement all fixes, give custom instructions, "skip 2" to skip sp
 Parse user response same as `/auto-review-loop`: approve / custom instructions / skip / stop.
 
 ### Step 3: Implement Round 1 Fixes
+
+Follow the Launch Mindset and Optional Writing Worker guidance in `../shared-references/writing-principles.md`. For prose fixes, continue the configured writer with `worker_reply` (or start it with `worker`) under any active edit-whitelist constraints; otherwise revise directly. Pass the accepted fixes, source facts, and target files. Root checks technical accuracy while preserving strong prose; existing reviews, audits, and recompilation still apply.
 
 Parse the review and implement fixes by severity:
 

@@ -2,7 +2,7 @@
 name: paper-writing
 description: "Workflow 3: Full paper writing pipeline that goes from a narrative report to a polished, submission-ready PDF. Use when user says \"写论文全流程\", \"write paper pipeline\", \"从报告到PDF\", \"paper writing\", or wants the complete paper generation workflow."
 argument-hint: "[narrative-report-path-or-topic]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status, mcp__model-worker__worker, mcp__model-worker__worker_reply
 ---
 
 # Workflow 3: Paper Writing Pipeline
@@ -15,7 +15,8 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Skill, mcp__antigravity__
 > own first-call/reply contract. Save the route and actual returned identity;
 > unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
 > families/completion/scope. Forward invocation reviewer/model/effort overrides
-> to reviewer-bearing children. Generation workers are unchanged.
+> to reviewer-bearing children. Writer selection is separate; follow the
+> writing-worker guidance below when drafting or revising prose.
 
 
 > **Review assurance:** same-family semantic audits remain provisional. The
@@ -40,6 +41,8 @@ Each phase builds on the previous one's output. The final deliverable is a polis
 In this hybrid pack, the pipeline itself is unchanged, but `paper-plan` and `paper-write` use Orchestra-adapted shared references for stronger story framing and prose guidance.
 
 ## Constants
+
+Writer choice is independent of reviewer routing. Accept user/project preferences in natural language or `— writer: antigravity, writer-model: gemini-4-argon-high, writer-effort: high`; follow `../shared-references/writing-principles.md` for configured-worker use and executor fallback. Carry these writer options and any active writer session to `/paper-write` and the fix-implementation phase of `/auto-paper-improvement-loop`, separately from reviewer/model/effort overrides. Apply its Launch Mindset from planning through final revision.
 
 - **VENUE = `ICLR`** — Target venue. Options: `ICLR`, `NeurIPS`, `ICML`, `CVPR`, `ACL`, `AAAI`, `ACM`, `IEEE_JOURNAL` (IEEE Transactions / Letters), `IEEE_CONF` (IEEE conferences). Affects style file, page limit, citation format.
 - **MAX_IMPROVEMENT_ROUNDS = 2** — Number of review→fix→recompile rounds in the improvement loop.
@@ -283,7 +286,7 @@ These are complementary, not mutually exclusive: you can run multiple generators
 
 ### Phase 3: LaTeX Writing
 
-Invoke `/paper-write` to generate section-by-section LaTeX:
+Invoke `/paper-write` to generate section-by-section LaTeX, forwarding any writer options:
 
 ```
 /paper-write "PAPER_PLAN.md"
@@ -384,7 +387,7 @@ else:
 
 ### Phase 5: Auto Improvement Loop
 
-Invoke `/auto-paper-improvement-loop` to polish the paper:
+Invoke `/auto-paper-improvement-loop` to polish the paper, forwarding the same writer options and available writer session for prose fixes:
 
 ```
 /auto-paper-improvement-loop "paper/"

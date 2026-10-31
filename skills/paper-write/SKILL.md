@@ -2,7 +2,7 @@
 name: paper-write
 description: "Draft LaTeX paper section by section from an outline. Use when user says \"写论文\", \"write paper\", \"draft LaTeX\", \"开始写\", or wants to generate LaTeX content from a paper plan."
 argument-hint: "[venue-or-section] [— style-ref: <source>]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status
+allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp__codex__codex, mcp__codex__codex-reply, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status, mcp__model-worker__worker, mcp__model-worker__worker_reply
 ---
 
 # Paper Write: Section-by-Section LaTeX Generation
@@ -15,7 +15,8 @@ allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, WebSearch, WebFetch, mcp_
 > own first-call/reply contract. Save the route and actual returned identity;
 > unavailable selections are `REVIEW_UNAVAILABLE`. Classify acceptance from actual
 > families/completion/scope. Forward invocation reviewer/model/effort overrides
-> to reviewer-bearing children. Generation workers are unchanged.
+> to reviewer-bearing children. Writer selection is separate; follow the
+> writing-worker guidance below when drafting or revising prose.
 
 
 Draft a LaTeX paper based on: **$ARGUMENTS**
@@ -213,6 +214,8 @@ Create shared math macros based on the paper's notation:
 ```
 
 ### Step 3: Write Each Section
+
+Use the Launch Mindset and Optional Writing Worker guidance in `../shared-references/writing-principles.md` for every section. Root prepares the factual brief from the plan, original sources, results, figures, and verified bibliography; a configured writer drafts substantive prose and handles same-session revisions, otherwise the executor writes. Pass any supplied `writer`, `writer-model`, and `writer-effort` independently of reviewer settings. Root checks technical accuracy and compilation while preserving the writer's good phrasing; the existing section reviews and audits still apply.
 
 Process sections in order. For each section:
 
