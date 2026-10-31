@@ -97,6 +97,62 @@ def frontmatter_split(text: str) -> str:
     return text[match.end():] if match else text
 
 
+# Sub-skill invocation ⇒ `Skill` grant (issue #284). A skill whose body
+# *instructs the executor to run another skill* must hold the `Skill` tool,
+# otherwise the instruction is unexecutable and the model silently substitutes
+# its own improvised version — exactly the "skips the pipeline and hallucinates
+# ideas" failure reported in #284. Keep the detection narrow: only imperative,
+# executor-addressed forms count. Descriptive mentions ("from `/paper-figure`"),
+# user/human-addressed ones ("ask the user to run `/paper-plan`"), negations
+# ("use `/x` instead"), and table rows (which describe ownership of artifacts,
+# not calls) are NOT invocations.
+INVOCATION_PATTERNS = (
+    re.compile(r"\btrigger\s+`?/([a-z][a-z0-9-]{2,40})`?", re.IGNORECASE),
+    re.compile(r"\bhand\s*off\s+to\s+`?/([a-z][a-z0-9-]{2,40})`?", re.IGNORECASE),
+    re.compile(r"\bthen\s+run\s+`?/([a-z][a-z0-9-]{2,40})`?", re.IGNORECASE),
+)
+INVOCATION_DELEGATED = re.compile(
+    r"\b(user|users|human|manually|instead|do not|don't|dont|never)\b", re.IGNORECASE
+)
+
+
+def _line_start(body: str, position: int) -> int:
+    index = body.rfind("\n", 0, position)
+    return 0 if index < 0 else index + 1
+
+
+def _clause_around(body: str, start: int, end: int) -> str:
+    """Text of the clause containing [start, end), so an address to the user
+    elsewhere in the same sentence disqualifies the match."""
+    line_start = _line_start(body, start)
+    period = body.rfind(". ", line_start, start)
+    left = period + 1 if period != -1 else line_start
+    candidates = [i for i in (body.find("\n", end), body.find(". ", end)) if i != -1]
+    right = min(candidates) if candidates else len(body)
+    return body[left:right]
+
+
+def declared_invocations(text: str) -> list[str]:
+    """Skills a body imperatively tells the executor to run, sorted.
+
+    Callers intersect this with the known skill inventory; unresolved names are
+    prose references rather than invocations.
+    """
+    body = frontmatter_split(text)
+    names: set[str] = set()
+    for pattern in INVOCATION_PATTERNS:
+        for hit in pattern.finditer(body):
+            line_start = _line_start(body, hit.start())
+            line_end = body.find("\n", line_start)
+            row = body[line_start: line_end if line_end != -1 else len(body)]
+            if row.lstrip().startswith("|"):
+                continue
+            if INVOCATION_DELEGATED.search(_clause_around(body, hit.start(), hit.end())):
+                continue
+            names.add(hit.group(1))
+    return sorted(names)
+
+
 def readme_anchors(text: str) -> set[str]:
     return set(re.findall(r'<a id="([^"]+)"></a>', text))
 
@@ -224,6 +280,25 @@ def check_inventory() -> list[str]:
                 f"{rel} grants `Agent` in allowed-tools but its body does not "
                 f"cite fan-out-pattern.md — vestigial grant or undocumented "
                 f"fan-out (see shared-references/fan-out-pattern.md)"
+            )
+
+    # Sub-skill invocation ⇒ `Skill` grant (issue #284). Mirrors the Agent-grant
+    # rule above: an instruction the executor cannot execute is worse than no
+    # instruction, because the model improvises a substitute instead of failing
+    # loudly. Every body that imperatively runs another skill must hold `Skill`.
+    for skill_file in sorted(SKILLS_ROOT.glob("*/SKILL.md")):
+        text = read(skill_file)
+        invoked = [name for name in declared_invocations(text) if name in main]
+        if not invoked:
+            continue
+        granted = {base_tool(rule) for rule in allowed_tools(text)}
+        if "Skill" not in granted:
+            rel = skill_file.relative_to(REPO_ROOT)
+            targets = ", ".join(f"/{name}" for name in invoked)
+            failures.append(
+                f"{rel} instructs the executor to run {targets} but does not grant "
+                f"`Skill` in allowed-tools — the executor cannot comply and will "
+                f"improvise instead (issue #284)"
             )
 
     # Watchdog 'loop' task type ⇔ its documented trigger (A2). Mirrors the Agent-grant⇒cite
