@@ -81,6 +81,7 @@ def test_goal_pulse_managed_doc_preserves_user_text_and_no_doc(tmp_path: Path) -
     assert generated.startswith(user_text)
     assert "by default, without another confirmation" in generated
     assert "HERO-Anti-OverDefense/tree/main/skills/goal-pulse" in generated
+    assert "`${CODEX_HOME:-~/.codex}/skills/goal-pulse/SKILL.md`" in generated
     run(command + ["--reconcile", "--no-doc"])
     assert agents.read_text() == generated
     assert sorted(path.name for path in (project / ".agents" / "skills").iterdir()) == [

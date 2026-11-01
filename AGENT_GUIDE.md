@@ -57,7 +57,8 @@ through planning, drafting, and revision, whoever does the writing.
 
 **Codex Goal Pulse.** When the user starts or resumes a Goal, or the main agent
 takes over an active Goal, read and enable [HERO Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse)
-for the current thread by default, without another confirmation. Follow the
+for the current thread by default, without another confirmation. Read the installed
+`${CODEX_HOME:-~/.codex}/skills/goal-pulse/SKILL.md` first; if missing, follow HERO's guide. Follow the
 [Codex setup and thread-binding instructions](skills/skills-codex/README.md#goal-pulse-for-codex-goals).
 This is a main-agent instruction; installing ARIS or ordinary chat does not start
 a timer. HERO owns the implementation; ARIS keeps its existing skill inventory,

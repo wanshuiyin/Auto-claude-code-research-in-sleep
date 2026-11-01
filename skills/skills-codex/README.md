@@ -52,7 +52,8 @@ bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --uninstall
 
 When the user starts or resumes a Goal, or the main agent takes over an active
 Goal, the main agent reads and enables [HERO Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse)
-for that thread by default, without a separate request or confirmation. Follow
+for that thread by default, without a separate request or confirmation. First read
+the installed `${CODEX_HOME:-~/.codex}/skills/goal-pulse/SKILL.md`; if missing, follow
 HERO's public installation guide to prepare the skill and dependencies if missing;
 report any setup blocker instead of claiming reminders are running. HERO maintains
 the single implementation, outside ARIS's 87-skill pack. Project-local installs
