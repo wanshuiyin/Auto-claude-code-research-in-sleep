@@ -207,6 +207,18 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 
 - **2026-11-01** — ⏱️ **Codex Goal 效率提醒 Goal Pulse**——复用 [HERO 的 Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse)，每 30 分钟以中英双语提醒主代理推进长任务。用户启动、恢复 Goal，或主代理接手 active Goal 时，默认读取并为当前线程启用，无需另外点名。支持兼容 Codex app-server 的 macOS/Linux 环境；[安装与行为说明](skills/skills-codex/README.md#goal-pulse-for-codex-goals)，唯一实现由 HERO 维护。
 
+  定时器发送的完整中文提示：
+
+  > 中文：以最快的有效速度持续推进当前 Goal，不允许磨洋工、偷懒、空转，或拿计划和汇报代替执行。
+  >
+  > worker/子代理一交付完整产物，立即读取、核验，并推进到下一项已授权的验收或交接步骤，不得搁置或等整批。
+  >
+  > 同一卡点连续两轮无实质进展，主代理立即接管具体缺口或重新拆分，同时推进其它独立任务。
+  >
+  > 复用已有成果与有效验证，砍掉重复检查、无收益的 corner case 和包装。
+  >
+  > 不得降低原目标、难度和验收标准，不得越过授权和预算；直接行动，无需专门回复本提醒。
+
 - **2026-11-01** — ✍️ **让 Gemini 等模型参与论文写作**——新增 [Model Worker MCP](mcp-servers/model-worker/README.md)，可通过 Antigravity、Grok 或 Claude Code 选择模型和思考强度，读取材料、直接写文件，并在同一会话中修订。Claude Code 与 Codex 两套完整技能包同步支持：主执行者定事实与主线，writer 写正文，reviewer 单独选择；未配置外部 writer 时由主执行者直接完成。[HERO 与发布会原则](skills/shared-references/writing-principles.md#launch-mindset)贯穿规划、起草和修订：贡献和证据先行，必要条件就地说明，表达自然、直接。（[#486](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/486)）
 - **2026-10-19** — 🔀 **在 Claude Code 和 Codex 两套完整技能包内选择审阅者**——通过 `— reviewer:` 或项目配置，使用已配置的审阅工具选择 Codex、Gemini/Antigravity、Grok 或 Claude Code。用法见[路由说明](skills/shared-references/reviewer-backends.md)与 [Codex 说明](skills/skills-codex/shared-references/reviewer-backends.md)。[Claude Code MCP 桥接](mcp-servers/claude-review/README.md)现已正确使用指定工作目录，并记录 CLI 返回的模型信息，也支持 DeepSeek 等已配置的提供方。同家族审阅仍标记为 provisional。（[#473](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/473)、[#472](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/472)）
 - **2026-10-19** — 📚 **新增 `/citation-crosscheck`，逐字段核对参考文献**——将本地 `.bib` 条目与从论文来源重新获取的书目信息比较，导出并排对照表，定位作者、年份、会议期刊、DOI 和 arXiv ID 的差异。支持 [Claude Code](skills/citation-crosscheck/SKILL.md) 与 [Codex](skills/skills-codex/citation-crosscheck/SKILL.md)，可配合现有引用审计使用。（[#371](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/371)，感谢 [@dty0606](https://github.com/dty0606)）
