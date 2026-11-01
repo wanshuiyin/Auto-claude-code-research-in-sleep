@@ -235,6 +235,18 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 
 - **2026-11-01** — ⏱️ **Goal Pulse for Codex Goals** — [HERO's Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse) keeps long Goals moving with bilingual reminders every 30 minutes. On Goal start, resume, or takeover of an active Goal, the main agent reads and enables it for the current thread by default; no separate request is needed. Supports compatible Codex app-server setups on macOS/Linux. [Setup and behavior](skills/skills-codex/README.md#goal-pulse-for-codex-goals); HERO maintains the single implementation.
 
+  Full Chinese reminder sent by the timer:
+
+  > 中文：以最快的有效速度持续推进当前 Goal，不允许磨洋工、偷懒、空转，或拿计划和汇报代替执行。
+  >
+  > worker/子代理一交付完整产物，立即读取、核验，并推进到下一项已授权的验收或交接步骤，不得搁置或等整批。
+  >
+  > 同一卡点连续两轮无实质进展，主代理立即接管具体缺口或重新拆分，同时推进其它独立任务。
+  >
+  > 复用已有成果与有效验证，砍掉重复检查、无收益的 corner case 和包装。
+  >
+  > 不得降低原目标、难度和验收标准，不得越过授权和预算；直接行动，无需专门回复本提醒。
+
 - **2026-11-01** — ✍️ **Let Gemini or another configured model draft your paper** — the new [Model Worker MCP](mcp-servers/model-worker/README.md) supports model and reasoning-effort selection through Antigravity, Grok, or Claude Code, with file reading, writing, and same-session revision. Both complete Claude Code and Codex skill packs support the split: the main agent grounds the facts and narrative, the writer drafts the prose, and the reviewer is selected separately. Without an external writer, the main agent writes directly. [HERO and the launch principle](skills/shared-references/writing-principles.md#launch-mindset) guide planning, drafting, and revision: lead with contributions and evidence, state necessary conditions where they apply, and keep the prose clear and direct. ([#486](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/486))
 - **2026-10-19** — 🔀 **Choose reviewers inside the complete Claude Code and Codex skill packs** — use `— reviewer:` or project configuration to select Codex, Gemini/Antigravity, Grok, or Claude Code through your configured reviewer tools. See the [routing guide](skills/shared-references/reviewer-backends.md) and [Codex guide](skills/skills-codex/shared-references/reviewer-backends.md). The [Claude Code MCP bridge](mcp-servers/claude-review/README.md) now respects the requested working directory and records the CLI-reported model, including configured providers such as DeepSeek. Same-family reviews remain provisional. ([#473](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/473), [#472](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/472))
 - **2026-10-19** — 📚 **Catch bibliography field errors with `/citation-crosscheck`** — compare local `.bib` entries with records freshly fetched from paper sources, then export a side-by-side spreadsheet of author, year, venue, DOI, and arXiv ID discrepancies. Available for [Claude Code](skills/citation-crosscheck/SKILL.md) and [Codex](skills/skills-codex/citation-crosscheck/SKILL.md), alongside the existing citation audit. ([#371](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/371); thanks [@dty0606](https://github.com/dty0606))
