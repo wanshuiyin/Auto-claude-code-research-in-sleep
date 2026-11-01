@@ -48,6 +48,33 @@ Uninstall only managed Codex entries:
 bash ~/aris_repo/tools/install_aris_codex.sh ~/your-project --uninstall
 ```
 
+## Goal Pulse for Codex Goals
+
+When the user starts or resumes a Goal, or the main agent takes over an active
+Goal, the main agent reads and enables [HERO Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse)
+for that thread by default, without a separate request or confirmation. First read
+the installed `${CODEX_HOME:-~/.codex}/skills/goal-pulse/SKILL.md`; if missing, follow
+HERO's public installation guide to prepare the skill and dependencies if missing;
+report any setup blocker instead of claiming reminders are running. HERO maintains
+the single implementation, outside ARIS's 87-skill pack. Project-local installs
+receive the activation instructions through ARIS's managed `AGENTS.md` block.
+For a global copied installation, follow HERO's guide once to add its persistent
+`AGENTS.md` activation block; Goals then trigger it by default.
+
+Use `CODEX_THREAD_ID` or an explicit thread ID supplied by the host; never infer
+the current thread from the most recent session. Follow the installed skill's
+start/status/stop commands. Defaults are bilingual reminders every 30 minutes and
+read-only local-state polling every 60 seconds, on compatible Codex app-server
+setups on macOS/Linux. Reminders stay within the bound thread, remain silent while
+the Goal is paused, waiting for user input/approval, blocked, or budget-limited,
+and exit when it is completed, deleted, or replaced. Preserve an explicit user
+disable or pause; the timer never resumes a Goal or starts a new turn.
+
+The managed `AGENTS.md` block instructs the main agent to do this; it is not a
+native Codex lifecycle hook. Installing ARIS and ordinary chat do not start the
+timer. The ARIS installer only writes its managed block; it does not download HERO
+or restart Codex. Reviewer and writing-worker selection are unchanged.
+
 ## Select a Reviewer
 
 Use the complete pack with [selectable reviewers](shared-references/reviewer-backends.md).

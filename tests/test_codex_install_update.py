@@ -65,6 +65,30 @@ def test_install_aris_codex_avoids_bash4_associative_arrays() -> None:
     assert "declare -A" not in text
 
 
+def test_goal_pulse_managed_doc_preserves_user_text_and_no_doc(tmp_path: Path) -> None:
+    repo = make_minimal_aris_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    agents = project / "AGENTS.md"
+    user_text = "# My project\nKeep my instructions.\n"
+    agents.write_text(user_text)
+    command = ["bash", str(INSTALL_SCRIPT), str(project), "--aris-repo", str(repo), "--quiet"]
+
+    run(command + ["--no-doc"])
+    assert agents.read_text() == user_text
+    run(command + ["--reconcile"])
+    generated = agents.read_text()
+    assert generated.startswith(user_text)
+    assert "by default, without another confirmation" in generated
+    assert "HERO-Anti-OverDefense/tree/main/skills/goal-pulse" in generated
+    assert "`${CODEX_HOME:-~/.codex}/skills/goal-pulse/SKILL.md`" in generated
+    run(command + ["--reconcile", "--no-doc"])
+    assert agents.read_text() == generated
+    assert sorted(path.name for path in (project / ".agents" / "skills").iterdir()) == [
+        "alpha", "beta", "shared-references"
+    ]
+
+
 def test_install_aris_codex_reconcile_and_uninstall(tmp_path: Path) -> None:
     repo = make_minimal_aris_repo(tmp_path)
     project = tmp_path / "project"

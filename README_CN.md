@@ -203,7 +203,9 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 
 ## 2. 📢 最近更新
 
-> ⚠️ 凡涉及 skill 变更的条目:跑 `bash tools/smart_update.sh --apply` 拉取。
+> ⚠️ ARIS 内置 skills 更新：运行 `bash tools/smart_update.sh --apply`（Codex 用 `smart_update_codex.sh`）；外部组件按对应条目的安装说明准备。
+
+- **2026-11-01** — ⏱️ **Codex Goal 效率提醒 Goal Pulse**——复用 [HERO 的 Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse)，每 30 分钟以中英双语提醒主代理推进长任务。用户启动、恢复 Goal，或主代理接手 active Goal 时，默认读取并为当前线程启用，无需另外点名。支持兼容 Codex app-server 的 macOS/Linux 环境；[安装与行为说明](skills/skills-codex/README.md#goal-pulse-for-codex-goals)，唯一实现由 HERO 维护。
 
 - **2026-11-01** — ✍️ **让 Gemini 等模型参与论文写作**——新增 [Model Worker MCP](mcp-servers/model-worker/README.md)，可通过 Antigravity、Grok 或 Claude Code 选择模型和思考强度，读取材料、直接写文件，并在同一会话中修订。Claude Code 与 Codex 两套完整技能包同步支持：主执行者定事实与主线，writer 写正文，reviewer 单独选择；未配置外部 writer 时由主执行者直接完成。[HERO 与发布会原则](skills/shared-references/writing-principles.md#launch-mindset)贯穿规划、起草和修订：贡献和证据先行，必要条件就地说明，表达自然、直接。（[#486](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/486)）
 - **2026-10-19** — 🔀 **在 Claude Code 和 Codex 两套完整技能包内选择审阅者**——通过 `— reviewer:` 或项目配置，使用已配置的审阅工具选择 Codex、Gemini/Antigravity、Grok 或 Claude Code。用法见[路由说明](skills/shared-references/reviewer-backends.md)与 [Codex 说明](skills/skills-codex/shared-references/reviewer-backends.md)。[Claude Code MCP 桥接](mcp-servers/claude-review/README.md)现已正确使用指定工作目录，并记录 CLI 返回的模型信息，也支持 DeepSeek 等已配置的提供方。同家族审阅仍标记为 provisional。（[#473](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/473)、[#472](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/pull/472)）
