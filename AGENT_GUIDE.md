@@ -64,6 +64,18 @@ This is a main-agent instruction; installing ARIS or ordinary chat does not star
 a timer. HERO owns the implementation; ARIS keeps its existing skill inventory,
 reviewer selection, and writing-worker selection.
 
+**Claude Code Goal Pulse.** For `/goal` start/resume or an explicitly authorized
+long autonomous task, read the installed `~/.claude/skills/goal-pulse/SKILL.md`
+and its `references/claude-code.md`, then enable the current session's 30-minute
+reminder by default. If missing, use [HERO's Claude Code installation](https://github.com/wanshuiyin/HERO-Anti-OverDefense/blob/main/skills/goal-pulse/README.md#claude-code)
+to install the Markdown skill and persistent `CLAUDE.md` instruction. This route
+uses native `CronList` / `CronCreate` / `CronDelete` (or `/loop`); no Codex Python
+watcher is involved. Reuse a matching task reminder, honor user opt-out, and cancel
+it on completion, pause, replacement, or an input/approval/budget stop. Scheduled
+prompts run between turns; the agent applies these task checks. Installing the
+skill or ordinary chat does not create a cron. HERO remains the single source;
+ARIS does not add another skill copy or change either reviewer/worker route.
+
 **Session handoff.** For a fresh context, use the shared [HERO Session Handoff
 skill](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/session-handoff)
 (`$session-handoff prepare` in Codex, `/session-handoff prepare` in Claude Code).
