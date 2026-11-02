@@ -4,7 +4,7 @@ Codex-native mirror and adaptation layer for the main ARIS `skills/` package.
 
 ## Scope
 
-- Base mirror coverage: all `87` mainline skills under `skills/`
+- Base mirror coverage: all `88` mainline skills under `skills/`
 - Support directory: `shared-references/`, with all `30/30` mainline reference names mirrored
 - Default reviewer contract for reviewer-heavy skills:
   - round 1: `spawn_agent`
@@ -56,7 +56,7 @@ for that thread by default, without a separate request or confirmation. First re
 the installed `${CODEX_HOME:-~/.codex}/skills/goal-pulse/SKILL.md`; if missing, follow
 HERO's public installation guide to prepare the skill and dependencies if missing;
 report any setup blocker instead of claiming reminders are running. HERO maintains
-the single implementation, outside ARIS's 87-skill pack. Project-local installs
+the single implementation, outside ARIS's 88-skill pack. Project-local installs
 receive the activation instructions through ARIS's managed `AGENTS.md` block.
 For a global copied installation, follow HERO's guide once to add its persistent
 `AGENTS.md` activation block; Goals then trigger it by default.
