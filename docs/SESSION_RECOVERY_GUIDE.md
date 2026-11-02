@@ -9,7 +9,7 @@
 ARIS workflows can run for hours (idea discovery, auto-review loops, overnight training). Two things regularly break state continuity:
 
 1. **Context compaction** — when the context window fills up, Claude Code auto-compresses prior messages. After compaction, the LLM only has a compressed summary and may forget which stage you're in, what experiments are running, or what to do next.
-2. **Proactive new sessions** — LLM capability degrades noticeably when context usage exceeds ~50%. Experienced users proactively start fresh sessions to restore full model capability, rather than waiting for auto-compaction. This means the LLM must reconstruct project state from disk.
+2. **Proactive new sessions** — Repeated summaries and accumulated conversation can obscure task details, decisions, and evidence. When this affects the work, a fresh session can rebuild focused context from project files instead of carrying the entire conversation forward.
 
 ARIS already persists some state to files (`review-stage/REVIEW_STATE.json`, `review-stage/AUTO_REVIEW.md`), but **there is no systematic mechanism to ensure the LLM reads those files on recovery**. After compaction, it often doesn't.
 
@@ -104,6 +104,52 @@ On new session or post-compaction recovery:
 4. If active_tasks is non-empty → check remote status, rebuild monitoring
 5. Resume work without asking the user
 ```
+
+## Prepare a Fresh Session with HERO
+
+[HERO Session Handoff](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/session-handoff)
+turns the persistence conventions above into an executable agent workflow. HERO
+maintains one Markdown skill for Codex and Claude Code, with installation
+instructions alongside it. It is an optional external skill, not another entry
+in ARIS's skill inventory or a component installed by ARIS's installers.
+
+Use `prepare` to save a grounded handoff before switching context:
+
+```text
+Codex: $session-handoff prepare for a fresh session; reuse NEXT_SESSION.md.
+Claude Code: /session-handoff prepare for a fresh session; reuse NEXT_SESSION.md.
+```
+
+Replace `NEXT_SESSION.md` with your existing recovery entrypoint, or omit that
+part if the project has none.
+
+The skill reuses the actual recovery entrypoint, Pipeline Status, active research
+contract, and existing workflow checkpoints such as `REFINE_STATE.json` or
+`REVIEW_STATE.json`. It checks current files, relevant Git changes, completed
+evidence, and active tasks, then preserves the full target, latest corrections,
+useful failed routes, ownership, and a concrete next action. If there is no
+existing recovery entrypoint, it creates `HANDOFF.md`. Keep only a short pointer
+in `AGENTS.md` or `CLAUDE.md`, rather than adding the full handoff to those files.
+
+Prepare returns a copy-ready starting prompt. Manually open a fresh session in
+the intended workspace and paste it. For an existing entrypoint, you can also say:
+
+```text
+Codex: $session-handoff continue from NEXT_SESSION.md.
+Claude Code: /session-handoff continue from NEXT_SESSION.md.
+```
+
+The new session reads the entrypoint and its source documents, checks what has
+changed and which jobs are still running, then continues authorized work using
+the evidence already collected. It preserves live workers' write ownership.
+This is a fresh context reading disk state, distinct from resuming an old chat.
+Host-managed Goal bindings and budgets do not move with a handoff, and a paused
+Goal stays paused until the user resumes it. Preparing a handoff during ongoing
+work does not itself stop that work.
+
+ARIS's `/auto-review-loop` option `compact: true` selects concise recovery files
+such as `findings.md` and `EXPERIMENT_LOG.md`; it is not a host context-compression
+command. The detailed prepare/continue workflow lives in HERO's skill.
 
 ## Optional: Claude Code Hooks for Automation
 
@@ -419,7 +465,7 @@ The Pipeline Status convention works everywhere. Only the automation layer diffe
 | **Claude Code** | Hooks (this guide) |
 | **Cursor** | `.cursor/rules/session-recovery.mdc` — rule that triggers on `CLAUDE.md` and instructs agent to read Pipeline Status first |
 | **Trae** | `.trae/rules/` — add session recovery instructions |
-| **Codex CLI** | Prepend state-reading instructions to system prompt or `codex.md` |
+| **Codex CLI** | Put state-reading instructions and a pointer to the recovery entrypoint in `AGENTS.md` |
 | **OpenClaw** | Include recovery steps in initial agent prompt |
 
 The key insight: **Pipeline Status is the protocol. Hooks are one implementation. The protocol works without the hooks — the hooks just make it reliable.**
