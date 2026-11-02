@@ -75,6 +75,28 @@ native Codex lifecycle hook. Installing ARIS and ordinary chat do not start the
 timer. The ARIS installer only writes its managed block; it does not download HERO
 or restart Codex. Reviewer and writing-worker selection are unchanged.
 
+## Session handoff for a fresh context
+
+Use [HERO Session Handoff](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/session-handoff)
+when you want to carry current work into a fresh session. Follow HERO's
+installation instructions; the same Markdown skill serves Codex and Claude Code
+and stays outside ARIS's skill inventory and installer.
+
+In Codex, ask `$session-handoff prepare for a fresh session; reuse NEXT_SESSION.md`.
+The skill checks current artifacts and active work, updates the existing recovery
+entrypoint, and returns a starting prompt. Manually open a fresh session in the
+intended workspace and paste that prompt, or ask `$session-handoff continue from
+NEXT_SESSION.md`. In Claude Code, use `/session-handoff` with the same natural
+parameters. Replace `NEXT_SESSION.md` with your actual recovery entrypoint;
+omit the path when preparing a project’s first handoff.
+
+The new session reuses completed evidence, checks live jobs and ownership, and
+continues authorized work. Goal binding and budgets remain with the host; a
+handoff does not transfer them or resume a paused Goal. Existing Pipeline Status,
+research contracts, and workflow checkpoints remain the sources of state. Keep
+`AGENTS.md` limited to a short pointer to the recovery entrypoint. Detailed usage
+is in the [recovery guide](../../docs/SESSION_RECOVERY_GUIDE.md#prepare-a-fresh-session-with-hero).
+
 ## Select a Reviewer
 
 Use the complete pack with [selectable reviewers](shared-references/reviewer-backends.md).

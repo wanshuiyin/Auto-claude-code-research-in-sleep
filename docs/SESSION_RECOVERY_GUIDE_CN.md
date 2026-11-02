@@ -9,7 +9,7 @@
 ARIS 工作流可能持续数小时（idea discovery、auto-review loop、overnight training）。两件事会打断状态连续性：
 
 1. **上下文压缩（Context Compaction）** — 当上下文窗口满了，Claude Code 自动压缩之前的消息。压缩后 LLM 只有压缩摘要，可能忘记当前在哪个 stage、哪些实验在跑、下一步该做什么。
-2. **主动开新会话** — 当上下文使用超过约 50% 时，LLM 能力会明显下降。有经验的用户会主动开新 session 以恢复模型满状态能力，而不是等自动压缩。这意味着 LLM 必须从磁盘文件重建项目状态。
+2. **主动开新会话** — 反复摘要和不断累积的对话可能掩盖任务细节、决策与证据。当它影响实际工作时，可以开新会话，从项目文件重建聚焦的上下文。
 
 ARIS 已经将部分状态持久化到文件（`review-stage/REVIEW_STATE.json`、`review-stage/AUTO_REVIEW.md`），但**没有系统性机制确保 LLM 在恢复时去读这些文件**。压缩后，它经常忘记。
 
@@ -104,6 +104,33 @@ Pipeline Status 更新时机：
 4. 如有 active_tasks → 检查远程状态，重建监控
 5. 继续工作，不问用户
 ```
+
+## 用 HERO 准备新会话
+
+[HERO Session Handoff](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/session-handoff)
+将上面的状态持久化约定变成 agent 可执行的工作流。HERO 维护一份供 Codex 和 Claude Code 共用的 Markdown 技能，同目录提供安装说明。它是可选的外部技能，不加入 ARIS 技能目录，也不由 ARIS 安装器安装。
+
+切换上下文前，用 `prepare` 保存有证据支撑的交接：
+
+```text
+Codex：$session-handoff prepare，准备新会话，复用 NEXT_SESSION.md。
+Claude Code：/session-handoff prepare，准备新会话，复用 NEXT_SESSION.md。
+```
+
+`NEXT_SESSION.md` 请替换为项目实际恢复入口；没有现成入口时可省略这一要求。
+
+技能复用项目已有恢复入口、Pipeline Status、当前 research contract，以及 `REFINE_STATE.json`、`REVIEW_STATE.json` 等工作流检查点。它核对当前文件、相关 Git 变动、已有验证和后台任务，保存完整目标、最新纠正、有价值的失败路线、写入归属及具体下一步。没有现成入口时才创建 `HANDOFF.md`；`AGENTS.md` 或 `CLAUDE.md` 只保留简短指针，不灌入完整交接。
+
+`prepare` 返回可直接复制的启动提示。用户在目标工作区手动打开 fresh session，再粘贴提示。已有恢复入口也可以直接这样接续：
+
+```text
+Codex：$session-handoff continue，从 NEXT_SESSION.md 接续。
+Claude Code：/session-handoff continue，从 NEXT_SESSION.md 接续。
+```
+
+新会话读取入口及原始材料，核对文件变化和任务实时状态，复用已完成的证据，继续已授权工作，并保留在途 worker 的写域归属。这是新上下文读取磁盘状态，与恢复旧聊天不同。宿主管理的 Goal 绑定和预算不会随交接迁移；暂停的 Goal 仍需用户恢复。在进行中的任务里准备交接，也不自动终止该任务。
+
+ARIS 的 `/auto-review-loop` 参数 `compact: true` 是优先读取 `findings.md`、`EXPERIMENT_LOG.md` 等精简恢复材料，不是宿主压缩上下文的命令。完整的 prepare/continue 机制见 HERO 技能。
 
 ## 可选：Claude Code Hooks 自动化
 
@@ -411,7 +438,7 @@ Pipeline Status 约定在任何平台都适用。只有自动化层不同：
 | **Claude Code** | Hooks（本指南） |
 | **Cursor** | `.cursor/rules/session-recovery.mdc` — 匹配 `CLAUDE.md` 时指示 agent 先读 Pipeline Status |
 | **Trae** | `.trae/rules/` — 添加会话恢复指令 |
-| **Codex CLI** | 将状态读取指令放入 system prompt 或 `codex.md` |
+| **Codex CLI** | 在 `AGENTS.md` 中放入状态读取指令及恢复入口的简短指针 |
 | **OpenClaw** | 在初始 agent prompt 中包含恢复步骤 |
 
 核心洞察：**Pipeline Status 是协议，Hook 是一种实现。协议不依赖 hook 就能工作——hook 只是让它更可靠。**

@@ -64,6 +64,17 @@ This is a main-agent instruction; installing ARIS or ordinary chat does not star
 a timer. HERO owns the implementation; ARIS keeps its existing skill inventory,
 reviewer selection, and writing-worker selection.
 
+**Session handoff.** For a fresh context, use the shared [HERO Session Handoff
+skill](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/session-handoff)
+(`$session-handoff prepare` in Codex, `/session-handoff prepare` in Claude Code).
+It updates the project's existing recovery entrypoint from current artifacts and
+provides a prompt for a manually opened fresh session. Use `continue` there to
+read that entrypoint, check live work, and continue authorized tasks. It reuses
+Pipeline Status, research contracts, and workflow checkpoints; it does not move
+Goal state or budgets between sessions. HERO maintains the single Markdown skill
+and installation instructions; ARIS does not bundle another copy. See the
+[session recovery guide](docs/SESSION_RECOVERY_GUIDE.md#prepare-a-fresh-session-with-hero).
+
 ## Common Parameters
 
 ARIS has **two independent control axes** plus scoped flags.
