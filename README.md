@@ -233,6 +233,8 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 
 > ⚠️ For updates to ARIS bundled skills, run `bash tools/smart_update.sh --apply` (Codex: `smart_update_codex.sh`). For external components, follow the setup linked in their entry.
 
+- **2026-11-04** — 🔎 **Community spotlight: Absent Author** — an evidence catalog and two skills for author self-checks and reviewer screening of AI-assisted papers. [Meet the project →](#absent-author)
+
 - **2026-11-01** — ⏱️ **Goal Pulse for Codex Goals** — [HERO's Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse) keeps long Goals moving with bilingual reminders every 30 minutes. On Goal start, resume, or takeover of an active Goal, the main agent reads and enables it for the current thread by default; no separate request is needed. Supports compatible Codex app-server setups on macOS/Linux. [Setup and behavior](skills/skills-codex/README.md#goal-pulse-for-codex-goals); HERO maintains the single implementation.
 
   Full Chinese reminder sent by the timer:
@@ -709,7 +711,7 @@ Domain-specific skills and external projects contributed by the community. PRs w
 
 🎉 **Community Skills (15):** [research-refine](skills/research-refine/SKILL.md) · [experiment-plan](skills/experiment-plan/SKILL.md) · [research-refine-pipeline](skills/research-refine-pipeline/SKILL.md) · [grant-proposal](skills/grant-proposal/SKILL.md) · [paper-poster](skills/paper-poster/SKILL.md) (deprecated → [paper-poster-html](skills/paper-poster-html/SKILL.md)) · [paper-slides](skills/paper-slides/SKILL.md) · [mermaid-diagram](skills/mermaid-diagram/SKILL.md) · [proof-writer](skills/proof-writer/SKILL.md) · [comm-lit-review](skills/comm-lit-review/SKILL.md) · [dse-loop](skills/dse-loop/SKILL.md) · [idea-discovery-robot](skills/idea-discovery-robot/SKILL.md) · [formula-derivation](skills/formula-derivation/SKILL.md) · [paper-illustration](skills/paper-illustration/SKILL.md) · [writing-systems-papers](skills/writing-systems-papers/SKILL.md) · [skills-codex](skills/skills-codex/)
 
-🌐 **External Projects & Docs (16):** [rosetta](https://github.com/SyntaxSmith/rosetta) · [open-source-hardening-skills](https://github.com/zeyuzhangzyz/open-source-hardening-skills) · [CitationClaw](https://github.com/VisionXLab/CitationClaw) · [auto-hparam-tuning](https://github.com/zxh0916/auto-hparam-tuning) · [paper-to-course](https://github.com/KaguraTart/paper-to-course) · [deep-research-skills](https://github.com/Weizhena/deep-research-skills) · [Antigravity Adaptation Guide](docs/ANTIGRAVITY_ADAPTATION.md) · [OpenClaw Adaptation Guide](docs/OPENCLAW_ADAPTATION.md) · [Cursor Adaptation Guide](docs/CURSOR_ADAPTATION.md) · [Codex+Claude Review Bridge](docs/CODEX_CLAUDE_REVIEW_GUIDE.md) · [Trae Adaptation Guide](docs/TRAE_ARIS_RUNBOOK_EN.md) · [MiniMax-AI/cli](https://github.com/MiniMax-AI/cli) · [posterly](https://github.com/Chenruishuo/posterly) · [Claude Fleet](https://github.com/tianyilt/claude-fleet) · [anti-defensive-writing-Skill](https://github.com/Adkid-Zephyr/anti-defensive-writing-Skill) · [OrcaReplay](https://github.com/Continuum-AI-Corp/OrcaReplay)
+🌐 **External Projects & Docs (17):** [Absent Author](#absent-author) · [rosetta](https://github.com/SyntaxSmith/rosetta) · [open-source-hardening-skills](https://github.com/zeyuzhangzyz/open-source-hardening-skills) · [CitationClaw](https://github.com/VisionXLab/CitationClaw) · [auto-hparam-tuning](https://github.com/zxh0916/auto-hparam-tuning) · [paper-to-course](https://github.com/KaguraTart/paper-to-course) · [deep-research-skills](https://github.com/Weizhena/deep-research-skills) · [Antigravity Adaptation Guide](docs/ANTIGRAVITY_ADAPTATION.md) · [OpenClaw Adaptation Guide](docs/OPENCLAW_ADAPTATION.md) · [Cursor Adaptation Guide](docs/CURSOR_ADAPTATION.md) · [Codex+Claude Review Bridge](docs/CODEX_CLAUDE_REVIEW_GUIDE.md) · [Trae Adaptation Guide](docs/TRAE_ARIS_RUNBOOK_EN.md) · [MiniMax-AI/cli](https://github.com/MiniMax-AI/cli) · [posterly](https://github.com/Chenruishuo/posterly) · [Claude Fleet](https://github.com/tianyilt/claude-fleet) · [anti-defensive-writing-Skill](https://github.com/Adkid-Zephyr/anti-defensive-writing-Skill) · [OrcaReplay](https://github.com/Continuum-AI-Corp/OrcaReplay)
 
 > 🙌 Thanks to every contributor! We fold the tables below to keep the README readable — but every skill and project here is equally valued. PRs always welcome!
 
@@ -737,10 +739,11 @@ Domain-specific skills and external projects contributed by the community. PRs w
 </details>
 
 <details>
-<summary><b>🌐 External Projects & Docs (16)</b> — click to expand</summary>
+<summary><b>🌐 External Projects & Docs (17)</b> — click to expand</summary>
 
 | Name | Domain | Description |
 |------|--------|-------------|
+| 🔎 [Absent Author](https://github.com/THUROI0787/absent-author) | Paper review / Author accountability | Sourced evidence catalog plus author self-check and reviewer screening skills, covering research steering, result verification, and writing quality. [Full introduction →](#absent-author) |
 | 🪨 [rosetta](https://github.com/SyntaxSmith/rosetta) | Pro-tier ChatGPT MCP | Programmatic access to **ChatGPT Pro / `gpt-5.5-pro` / DeepResearch** from Node, via Chrome CDP Fetch interception + WebSocket second-leg streaming. Ships an MCP server for Claude Code / Codex / Cline — alternative implementation path to Oracle MCP for `— reviewer: oracle-pro` style high-tier review. Supports multi-turn, parallel concurrency, live token deltas, 15-min idle-timeout watchdog (long Pro thinks survive). MIT, by [@SyntaxSmith](https://github.com/SyntaxSmith) |
 | 📣 [anti-defensive-writing-Skill](https://github.com/Adkid-Zephyr/anti-defensive-writing-Skill) | Press-release writing principle | "A paper is a launch, not a progress report": twelve rules against defensive writing — organize around the strongest advantage, pick the contest you win, every experiment has an argumentative duty, no self-weakening language. Skill (CN/EN) + copy-paste prompt. Four of its rules are folded into ARIS's writing contract. MIT, by [@Adkid-Zephyr](https://github.com/Adkid-Zephyr) |
 | 🛡️ [open-source-hardening-skills](https://github.com/zeyuzhangzyz/open-source-hardening-skills) | DevOps / OSS | 10-skill pipeline to harden research code into production-ready open-source projects — audit, refactor, test, CI, docs, review |
@@ -759,6 +762,17 @@ Domain-specific skills and external projects contributed by the community. PRs w
 | 🛰️ [Claude Fleet](https://github.com/tianyilt/claude-fleet) | Dashboard / DevEx | Local **read-only** dashboard for many concurrent Claude Code / Codex windows — triage (working / waiting-on-you / done), one-click Focus, ~50ms full-text search across transcripts, skill/memory analytics. By [@tianyilt](https://github.com/tianyilt) |
 
 </details>
+
+<a id="absent-author"></a>
+
+### 🔎 Absent Author — evidence, verification, and author accountability
+
+[Absent Author](https://github.com/THUROI0787/absent-author), created by Ruoyu Zhao (City University of Hong Kong) and collaborators, is an open-source evidence catalog with two skills for Claude Code, Codex, and other agents that read `SKILL.md`. The catalog brings together sources, false-positive notes, counter-evidence, and guidance for different paper types, helping authors and reviewers examine AI-assisted research.
+
+- **[`paper-author-pass`](https://github.com/THUROI0787/absent-author/tree/main/skills/paper-author-pass)** helps authors check a paper before submission: clarify the research question and argument, map claims to evidence, verify references and numbers, then improve the prose. Decisions that require the author's judgment become questions for the author; the final checkpoint asks whether they understand the work, can defend it, and will stand behind it.
+- **[`paper-slop-screen`](https://github.com/THUROI0787/absent-author/tree/main/skills/paper-slop-screen)** helps reviewers and collaborators examine writing, research steering, and substantive quality separately. Findings include locations and quoted passages, with follow-up questions and consideration of counter-evidence and paper-type exceptions.
+
+The team draws on and explicitly credits **ARIS, HERO, and Anti-Autoresearch**, including our published workflows and subsequent improvements. Thank you for building on this work and extending it into tools for both authors and reviewers. Try the project and contribute real cases or false-positive reports through its [repository](https://github.com/THUROI0787/absent-author).
 
 <a id="workflows"></a>
 <a id="-workflows"></a>
