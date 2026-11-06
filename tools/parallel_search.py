@@ -57,7 +57,7 @@ def _read_sse_result(response: Any, request_id: int) -> dict[str, Any]:
 
 def _decode_response(response: Any, request_id: int) -> dict[str, Any]:
     """Read JSON or SSE, splitting protocol lines on CR/LF only."""
-    content_type = response.headers.get("Content-Type", "").split(";")[0].strip()
+    content_type = response.headers.get("Content-Type", "").split(";")[0].strip().lower()
     if content_type == "application/json":
         message = json.load(response)
     elif content_type == "text/event-stream":

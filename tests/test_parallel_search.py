@@ -235,3 +235,63 @@ def test_cleanup_http_warning_retained(module, monkeypatch, capsys):
     client.opener = Opener()
     client.close()
     assert 'cleanup HTTP 500' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('content_type', ['Application/JSON', 'APPLICATION/JSON; charset=utf-8'])
+def test_json_media_type_is_case_insensitive(module, content_type):
+    body = json.dumps({'id': 1, 'result': {'tools': []}}).encode()
+    assert module._decode_response(Response(body, content_type), 1) == {'tools': []}
+
+
+@pytest.mark.parametrize('content_type', ['text/event-stream', 'Text/Event-Stream; charset=UTF-8'])
+def test_sse_returns_while_http_stream_remains_open(module, monkeypatch, content_type):
+    # Synthetic HTTP response deliberately has no Content-Length and stays open.
+    release_stream = threading.Event()
+    stream_closed = threading.Event()
+    received = threading.Event()
+    outcome = []
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = 'HTTP/1.1'
+
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Connection', 'close')
+            self.end_headers()
+            message = {'id': body['id'], 'result': {'tools': []}}
+            self.wfile.write(('data: ' + json.dumps(message) + '\r\n\r\n').encode())
+            self.wfile.flush()
+            release_stream.wait(10)
+            stream_closed.set()
+
+    server = HTTPServer(('127.0.0.1', 0), Handler)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    monkeypatch.setenv('no_proxy', '127.0.0.1')
+    monkeypatch.setattr(module, 'ENDPOINT', f'http://127.0.0.1:{server.server_port}/mcp')
+
+    def request():
+        try:
+            outcome.append(module._Client().request('tools/list'))
+        except Exception as exc:
+            outcome.append(exc)
+        finally:
+            received.set()
+
+    client_thread = threading.Thread(target=request, daemon=True)
+    try:
+        client_thread.start()
+        assert received.wait(3), 'MCP client waited for stream closure'
+        assert not stream_closed.is_set(), 'server must still hold the stream open'
+        assert outcome == [{'tools': []}]
+    finally:
+        release_stream.set()
+        server.shutdown()
+        server.server_close()
+        server_thread.join()
+        client_thread.join(timeout=3)
