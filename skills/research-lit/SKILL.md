@@ -17,7 +17,7 @@ Research topic: $ARGUMENTS
   2. `literature/` in the current project directory
   3. Custom path specified by user in `CLAUDE.md` under `## Paper Library`
 - **MAX_LOCAL_PAPERS = 20** — Maximum number of local PDFs to scan (read first 3 pages each). If more are found, prioritize by filename relevance to the topic.
-- **SOURCES = `all`** — Which literature sources to search. Options: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`, `all`. Full source table and selection rules: see `## Data Sources` below.
+- **SOURCES = `all`** — Which literature sources to search. Options: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `parallel`, `gemini`, `openalex`, `all`. Full source table and selection rules: see `## Data Sources` below.
 - **ARXIV_DOWNLOAD = false** — When `true`, download top 3-5 most relevant arXiv PDFs to PAPER_LIBRARY after search. When `false` (default), only fetch metadata (title, abstract, authors) via arXiv API — no files are downloaded.
 - **ARXIV_MAX_DOWNLOAD = 5** — Maximum number of PDFs to download when `ARXIV_DOWNLOAD = true`.
 
@@ -37,8 +37,13 @@ This skill checks multiple sources **in priority order**. All are optional — i
 ### Source Selection
 
 Parse `$ARGUMENTS` for a `— sources:` directive:
-- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`, `all`.
-- **If not specified**: Default to `all` — search every available source in priority order (`semantic-scholar`, `deepxiv`, `exa`, `gemini`, and `openalex` are **excluded** from `all`; they must be explicitly listed).
+- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `parallel`, `gemini`, `openalex`, `all`.
+- **If not specified**: Default to `all` — search every available source in priority order (`semantic-scholar`, `deepxiv`, `exa`, `parallel`, `gemini`, and `openalex` are **excluded** from `all`; they must be explicitly listed).
+
+Honor source choices saved in project instructions unless the user overrides them.
+Never add Parallel because another provider has a missing key or fails. For offline,
+disabled search, or denied network permission, skip external searches, including
+Parallel. Do not bypass these states by changing providers.
 
 Examples:
 ```
@@ -52,6 +57,7 @@ Examples:
 /research-lit "topic" — sources: deepxiv                            → DeepXiv only
 /research-lit "topic" — sources: all, deepxiv                       → default sources + DeepXiv
 /research-lit "topic" — sources: all, semantic-scholar              → all + S2 API
+/research-lit "topic" — sources: parallel              → Parallel only (anonymous URLs + excerpts)
 /research-lit "topic" — sources: exa                               → Exa only (broad web + content extraction)
 /research-lit "topic" — sources: all, exa                          → default sources + Exa web search
 /research-lit "topic" — sources: gemini                            → Gemini only (AI-powered broad discovery)
@@ -72,6 +78,7 @@ Examples:
 | 5 | **Semantic Scholar API** | `semantic-scholar` | `$S2_FETCHER` resolves (canonical name `semantic_scholar_fetch.py`, per integration-contract §2) | Published venue papers (IEEE, ACM, Springer) with structured metadata: citation counts, venue info, TLDR. **Only runs when explicitly requested** via `— sources: semantic-scholar` or `— sources: web, semantic-scholar` |
 | 6 | **DeepXiv CLI** | `deepxiv` | `$DEEPXIV_FETCHER` resolves (canonical name `deepxiv_fetch.py`, per integration-contract §2) **and** `deepxiv` CLI present (`command -v deepxiv`) | Progressive paper retrieval: search, brief, head, section, trending, web search. **Only runs when explicitly requested** via `— sources: deepxiv` or `— sources: all, deepxiv` |
 | 7 | **Exa Search** | `exa` | `$EXA_FETCHER` resolves (canonical name `exa_search.py`, per integration-contract §2); fetcher handles `exa-py` SDK + API key internally | AI-powered broad web search with content extraction (highlights, text, summaries). Covers blogs, docs, news, companies, and research papers beyond arXiv/S2. **Only runs when explicitly requested** via `— sources: exa` or `— sources: all, exa` |
+| 7a | **Parallel Search** | `parallel` | `$PARALLEL_FETCHER` resolves (canonical helper `parallel_search.py`); Python stdlib only | Broad web search with source URLs and excerpts via anonymous Unified MCP. **Only runs when explicitly requested**, excluded from `all` |
 | 8 | **Gemini** (MCP / CLI) | `gemini` | `mcp__gemini-cli__ask-gemini` tool available, or `gemini` CLI installed | AI-powered broad literature discovery — decomposes topics into sub-problems, aliases, and variants for wider retrieval. Prefers MCP, falls back to CLI. **Only runs when explicitly requested** via `— sources: gemini` or `— sources: all, gemini` |
 | 9 | **OpenAlex** | `openalex` | `$OPENALEX_FETCHER` resolves (canonical name `openalex_fetch.py`, per integration-contract §2) **and** Python `requests` module importable | Open citation graph with institutional affiliations, funding data, and comprehensive metadata across 250M+ works. Fully open API. **Only runs when explicitly requested** via `— sources: openalex` or `— sources: all, openalex` |
 
@@ -154,7 +161,7 @@ Before searching online, check if the user already has relevant papers locally:
 **Policy D2 tracking discipline (orchestrator-managed)**: the
 executor (you, the LLM) maintains an in-context list of contributing
 sources. For **helper-backed bash sources** (arxiv, semantic-scholar,
-deepxiv, exa, openalex), a source contributes iff its bash block
+deepxiv, exa, parallel, openalex), a source contributes iff its bash block
 ran its helper successfully (helper resolved AND invocation exited 0;
 note: the helper exiting 0 with an empty result list still counts as
 "ran" — downstream relevance ranking is what decides whether the user
@@ -347,6 +354,46 @@ If `$EXA_FETCHER` is empty or the `exa-py` SDK is unavailable, skip this source 
 - If Exa returns an arXiv paper already found by arXiv/S2, prefer the structured metadata from those sources
 - Exa results from non-academic domains (blogs, docs, news) are unique value not covered by other sources
 
+**Parallel search** (only when `parallel` is explicitly in sources):
+
+Use the maintained CLI for broad web evidence without installing an SDK or
+configuring a key. The Unified MCP server defaults to Fast search. Keep the
+user's selected providers; this is not an error-triggered fallback from Exa.
+Resolve the helper using the installation chain (Policy D2):
+
+```bash
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
+PARALLEL_FETCHER=".aris/tools/parallel_search.py"
+[ -f "$PARALLEL_FETCHER" ] || PARALLEL_FETCHER="tools/parallel_search.py"
+[ -f "$PARALLEL_FETCHER" ] || { [ -n "${ARIS_REPO:-}" ] && PARALLEL_FETCHER="$ARIS_REPO/tools/parallel_search.py"; }
+[ -f "$PARALLEL_FETCHER" ] || PARALLEL_FETCHER=""
+if [ -z "$PARALLEL_FETCHER" ]; then
+    echo "WARN: parallel_search.py not resolved; D2 aggregate continues." >&2
+elif python3 "$PARALLEL_FETCHER" search "QUERY" --max 10 --max-chars 4000; then
+    echo "D2 contribution: parallel (invocation exit 0)" >&2
+else
+    echo "WARN: Parallel failed or search is disabled/offline; D2 aggregate continues without switching providers." >&2
+fi
+```
+
+Use JSON `data[].url` and `data[].excerpts` as evidence. Match URL first, then
+normalized title to de-duplicate against other sources; prefer structured
+academic metadata from arXiv/S2. Record Parallel's warnings and failures.
+An exit-zero helper invocation contributes under D2, including an empty result
+list; if no requested source contributes, report the D2 empty-aggregate error.
+`--max` and `--max-chars` cap displayed output locally. The CLI has no Exa
+category, find-similar, or full-page fetch semantics. `PARALLEL_API_KEY`, if
+set, is sent explicitly, and an empty or invalid key fails without anonymous
+retry. `--offline`, `--disabled`, `ARIS_SEARCH_OFFLINE=1`, or
+`ARIS_SEARCH_DISABLED=1` block network access. Propagate any project offline
+or disabled state to these flags/environment variables before invoking it.
+
 **Gemini search** (only when `gemini` is in sources):
 
 When the user explicitly requests `— sources: gemini` (or includes `gemini` in a combined source list), use Gemini for AI-powered broad literature discovery.
@@ -457,7 +504,7 @@ lines emitted by each source's bash block above, plus:
   filter, or the list contains `web` or `all`) AND was actually invoked.
   Note: `— sources: all` covers the default-on tier (zotero, obsidian,
   local, web) — it does **NOT** include the opt-in fetchers
-  (semantic-scholar, deepxiv, exa, gemini, openalex). To enable those,
+  (semantic-scholar, deepxiv, exa, parallel, gemini, openalex). To enable those,
   add them explicitly (e.g. `— sources: all, semantic-scholar, openalex`),
   matching the existing convention at L42-43 / L51-63 of this SKILL.
 - `gemini` if Gemini MCP / CLI returned at least one paper.
