@@ -1,6 +1,6 @@
 # ARIS Skills Catalog
 
-Every skill that ships with ARIS, grouped by role. **87 skills** as of the
+Every skill that ships with ARIS, grouped by role. **88 skills** as of the
 latest update; new skills land via PR and get added to the table below.
 
 - Each `Skill` link goes to the canonical `SKILL.md` (the LLM-readable spec).
@@ -177,6 +177,7 @@ Cross-cutting infrastructure used by other skills or run on demand.
 | [`/research-wiki`](../skills/research-wiki/SKILL.md) | Persistent research knowledge base — papers / ideas / experiments / claims with typed relationships. Workflow hooks auto-ingest across the research lifecycle | None (pure Python stdlib) |
 | [`/wiki-enrich`](../skills/wiki-enrich/SKILL.md) | Fill the per-paper TODO sections that `ingest_paper` leaves as scaffolds (Karpathy LLM-wiki principle). Fetch chain alphaxiv → deepxiv → arXiv → page abstract; idempotent by default, `--force` to rewrite | Python stdlib + WebFetch |
 | [`/render-html`](../skills/render-html/SKILL.md) | Render ARIS Markdown / JSON artifacts into reviewed single-file HTML views for human reading | Python stdlib; Codex MCP for review gate |
+| [`/deed-page-publish`](../skills/deed-page-publish/SKILL.md) | Opt-in: publish a `/render-html` report or other HTML artifact (single file or folder) to a public deed.page URL for collaborators. Never auto-invoked | `curl`; no account or key for the first publish |
 | [`/overleaf-sync`](../skills/overleaf-sync/SKILL.md) | Two-way sync between local paper directory and Overleaf project via Overleaf Git bridge (Premium) — `setup` / `pull` (diff protocol) / `push` (confirmation gate) / `status` | Overleaf Premium + macOS Keychain |
 | [`/feishu-notify`](../skills/feishu-notify/SKILL.md) | Send notifications to Feishu / Lark — push-only (webhook) or interactive (bidirectional) modes. Off by default | Feishu webhook URL |
 | [`/interview-cheatsheet`](../skills/interview-cheatsheet/SKILL.md) | Generate long-form Chinese ML / LLM interview-prep cheat sheets with formulas, code, Q&A, review, and HTML output | Codex MCP, Python |
