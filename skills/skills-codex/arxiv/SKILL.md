@@ -14,7 +14,10 @@ Search topic or arXiv paper ID: $ARGUMENTS
 - **ARXIV_FETCHER** — canonical name `arxiv_fetch.py`, resolved per
   [`shared-references/integration-contract.md`](../shared-references/integration-contract.md) §2
   (Codex-side chain: `$ARIS_REPO/tools/` → `tools/` → `~/.codex/skills/arxiv/`).
-  Policy D1 — if unresolved (canonical chain exhausted), fall back to inline Python.
+- **ARIS_PY_RUNNER** — `tools/uv_run_helper.sh`; it executes the helper with the
+  locked `tools/uv-runtime` project. Never invoke the system `python3`.
+  Policy D1 — if either helper is unresolved, use the web retrieval fallback or
+  stop with explicit remediation; do not run inline Python.
 
 > Overrides (append to arguments):
 > - `/arxiv "attention mechanism" - max: 20` - return up to 20 results
@@ -49,51 +52,19 @@ ARXIV_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/arxiv_fetch.py" ] && ARXIV_FETCHER="$ARIS_REPO/tools/arxiv_fetch.py"
 [ -z "$ARXIV_FETCHER" ] && [ -f tools/arxiv_fetch.py ] && ARXIV_FETCHER="tools/arxiv_fetch.py"
 [ -z "$ARXIV_FETCHER" ] && [ -f ~/.codex/skills/arxiv/arxiv_fetch.py ] && ARXIV_FETCHER="$HOME/.codex/skills/arxiv/arxiv_fetch.py"
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
 ```
 
-**If `$ARXIV_FETCHER` is non-empty**, run:
+**If both paths are non-empty**, run:
 
 ```bash
-python3 "$ARXIV_FETCHER" search "QUERY" --max MAX_RESULTS
+bash "$ARIS_PY_RUNNER" "$ARXIV_FETCHER" search "QUERY" --max MAX_RESULTS
 ```
 
-**If `$ARXIV_FETCHER` is empty** (Policy D1 cascade), fall back to inline Python:
-
-```bash
-python3 - <<'PYEOF'
-import json
-import urllib.parse
-import urllib.request
-import xml.etree.ElementTree as ET
-
-NS = "http://www.w3.org/2005/Atom"
-query = urllib.parse.quote("QUERY")
-url = (f"http://export.arxiv.org/api/query"
-       f"?search_query={query}&start=0&max_results=MAX_RESULTS"
-       f"&sortBy=relevance&sortOrder=descending")
-with urllib.request.urlopen(url, timeout=30) as r:
-    root = ET.fromstring(r.read())
-papers = []
-for entry in root.findall(f"{{{NS}}}entry"):
-    aid = entry.findtext(f"{{{NS}}}id", "").split("/abs/")[-1].split("v")[0]
-    title = (entry.findtext(f"{{{NS}}}title", "") or "").strip().replace("\n", " ")
-    abstract = (entry.findtext(f"{{{NS}}}summary", "") or "").strip().replace("\n", " ")
-    authors = [a.findtext(f"{{{NS}}}name", "") for a in entry.findall(f"{{{NS}}}author")]
-    published = entry.findtext(f"{{{NS}}}published", "")[:10]
-    cats = [c.get("term", "") for c in entry.findall(f"{{{NS}}}category")]
-    papers.append({
-        "id": aid,
-        "title": title,
-        "authors": authors,
-        "abstract": abstract,
-        "published": published,
-        "categories": cats,
-        "pdf_url": f"https://arxiv.org/pdf/{aid}.pdf",
-        "abs_url": f"https://arxiv.org/abs/{aid}",
-    })
-print(json.dumps(papers, ensure_ascii=False, indent=2))
-PYEOF
-```
+If either path is unresolved, report it and use the available web retrieval tool
+for discovery. Do not silently switch to an ambient Python environment.
 
 Present results as a table:
 
@@ -108,16 +79,8 @@ Present results as a table:
 When a single paper ID is requested (either directly or from Step 2):
 
 ```bash
-[ -n "$ARXIV_FETCHER" ] && python3 "$ARXIV_FETCHER" search "id:ARXIV_ID" --max 1
-# or fallback:
-python3 -c "
-import urllib.request, xml.etree.ElementTree as ET
-NS = 'http://www.w3.org/2005/Atom'
-url = 'http://export.arxiv.org/api/query?id_list=ARXIV_ID'
-with urllib.request.urlopen(url, timeout=30) as r:
-    root = ET.fromstring(r.read())
-# print full details ...
-"
+[ -n "$ARXIV_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ] && \
+  bash "$ARIS_PY_RUNNER" "$ARXIV_FETCHER" search "id:ARXIV_ID" --max 1
 ```
 
 Display: title, all authors, categories, full abstract, published date, PDF URL, abstract URL.
@@ -127,27 +90,8 @@ Display: title, all authors, categories, full abstract, published date, PDF URL,
 When download is requested, for each paper ID to download:
 
 ```bash
-# Using fetch script:
-[ -n "$ARXIV_FETCHER" ] && python3 "$ARXIV_FETCHER" download ARXIV_ID --dir PAPER_DIR
-
-# Fallback:
-mkdir -p PAPER_DIR && python3 -c "
-import pathlib
-import sys
-import urllib.request
-
-out = pathlib.Path('PAPER_DIR/ARXIV_ID.pdf')
-if out.exists():
-    print(f'Already exists: {out}')
-    sys.exit(0)
-req = urllib.request.Request(
-    'https://arxiv.org/pdf/ARXIV_ID.pdf',
-    headers={'User-Agent': 'arxiv-skill/1.0'},
-)
-with urllib.request.urlopen(req, timeout=60) as r:
-    out.write_bytes(r.read())
-print(f'Downloaded: {out} ({out.stat().st_size // 1024} KB)')
-"
+[ -n "$ARXIV_FETCHER" ] && [ -n "$ARIS_PY_RUNNER" ] && \
+  bash "$ARIS_PY_RUNNER" "$ARXIV_FETCHER" download ARXIV_ID --dir PAPER_DIR
 ```
 
 After each download:
