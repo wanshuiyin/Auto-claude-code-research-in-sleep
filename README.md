@@ -14,6 +14,16 @@
 
 📦 *Those are the skills installed directly. Want it in one command? ARIS also ships as a standalone CLI and as plugins:* [![ARIS-Code CLI downloads](https://img.shields.io/github/downloads/wanshuiyin/Auto-claude-code-research-in-sleep/total?style=flat&logo=rust&logoColor=white&label=ARIS-Code%20standalone%20CLI&color=2E7D32)](docs/ARIS-Code-README_EN.md) · [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?style=flat&logo=anthropic&logoColor=white)](#plugins) · [![Codex CLI plugin](https://img.shields.io/badge/Codex_CLI-plugin-000000?style=flat&logo=openai&logoColor=white)](#plugins) · [![DeepSeek Harness plugin](https://img.shields.io/badge/DeepSeek_Harness-dsh--aris-4D6BFE?style=flat)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/tree/dsh-aris#readme)
 
+**🤝 SuperARIS — Your personal research agent with ARIS, powered by a team of agents.**
+
+Put ARIS workflows in the hands of a persistent team: your main agent coordinates, while engineering and writing run in parallel. Every member can read ARIS skills and project context on demand. Work directly with Codex on experiments and Gemini on ideas and writing, or choose an all-Codex team. The main agent follows up on deliverables; project files carry memory across sessions. Your existing MCP workers and independent reviewers stay in the loop.
+
+**[Homepage](https://wanshuiyin.github.io/SuperARIS/) · [GitHub](https://github.com/wanshuiyin/SuperARIS)**
+
+[![SuperARIS demo: a personal research agent and its persistent team](https://raw.githubusercontent.com/wanshuiyin/SuperARIS/main/assets/demo-en.gif)](https://wanshuiyin.github.io/SuperARIS/media/demo-en.mp4)
+
+*Demo preview · click to watch the full 1080p video (~21 seconds).*
+
 ❗ ![IMPORTANT](https://img.shields.io/badge/IMPORTANT-red?style=flat-square) **codex-cli 0.154.0 removed `codex mcp-server` — the entry point every ARIS reviewer call used. No impact on ARIS:** the `codex` MCP server is now ARIS's own bridge over `codex exec` (`mcp-servers/codex-exec/`), same tools, same results, all 82 skills unchanged, `ultra` and per-thread resume intact. One re-registration is all it takes — **[already installed? → Quick Start step 2b](#quick-start)** · **[new install → step 2](#quick-start)** · [what changed](#whats-new).
 
 **🧩 The ARIS family** — same method, other jobs. One line each; the details live in their own repos.
