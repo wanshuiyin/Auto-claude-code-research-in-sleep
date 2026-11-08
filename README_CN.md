@@ -14,6 +14,16 @@
 
 📦 *上面是直接安装 skills 的用法。想一条命令装好?ARIS 也提供独立 CLI 和插件:* [![ARIS-Code CLI 下载量](https://img.shields.io/github/downloads/wanshuiyin/Auto-claude-code-research-in-sleep/total?style=flat&logo=rust&logoColor=white&label=ARIS-Code%20%E7%8B%AC%E7%AB%8B%20CLI&color=2E7D32)](docs/ARIS-Code-README_CN.md) · [![Claude Code plugin](https://img.shields.io/badge/Claude_Code-plugin-D97757?style=flat&logo=anthropic&logoColor=white)](#plugins) · [![Codex CLI plugin](https://img.shields.io/badge/Codex_CLI-plugin-000000?style=flat&logo=openai&logoColor=white)](#plugins) · [![DeepSeek Harness plugin](https://img.shields.io/badge/DeepSeek_Harness-dsh--aris-4D6BFE?style=flat)](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/dsh-aris/README_CN.md)
 
+**🤝 SuperARIS：你的个人科研 Agent，背后有一支持续协作的团队。**
+
+把 ARIS 工作流交给一支常驻团队：主 Agent 统筹，工程与写作并行，每位成员都能按需读取 ARIS 技能与项目上下文。直接与 Codex 推进实验、与 Gemini 讨论和写作，也可以使用全 Codex 团队。主 Agent 主动跟进交付，项目文件承载跨会话记忆；现有的临时 MCP worker 和独立 reviewer 继续参与协作。
+
+**[项目主页](https://wanshuiyin.github.io/SuperARIS/) · [GitHub](https://github.com/wanshuiyin/SuperARIS)**
+
+[![SuperARIS 演示：个人科研 Agent 与常驻协作团队](https://raw.githubusercontent.com/wanshuiyin/SuperARIS/main/assets/demo-zh.gif)](https://wanshuiyin.github.io/SuperARIS/media/demo-zh.mp4)
+
+*演示预览 · 点击观看 1080p 高清视频（约 21 秒）。*
+
 ❗ ![IMPORTANT](https://img.shields.io/badge/IMPORTANT-red?style=flat-square) **codex-cli 0.154.0 删掉了 `codex mcp-server`——ARIS 所有审稿调用原来都走这个入口。对 ARIS 没有任何影响：** `codex` MCP 现在是 ARIS 自己用 `codex exec` 复写的桥接（`mcp-servers/codex-exec/`），工具名、返回形状一模一样，82 个 skill 零改动，`ultra` 档和按线程续聊都在。只需重新注册一次——**[已经装了？→ 快速开始 2b 步](#quick-start)** · **[新装 → 第 2 步](#quick-start)** · [更新说明](#whats-new)。
 
 **🧩 ARIS 家族** —— 同一套方法,干别的活。每个一行,细节在各自仓库。
