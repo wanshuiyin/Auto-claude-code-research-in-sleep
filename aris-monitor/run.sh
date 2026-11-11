@@ -2,7 +2,7 @@
 # ARIS-Monitor launcher.
 #
 # READ-ONLY MONITOR. This launcher starts a Python program that only READS
-# files under ~/.claude. It never writes to / kills / signals / spawns against
+# Claude registry files and Codex status stores. It never writes to / kills / signals / spawns against
 # any of your sessions or processes, and makes no network calls.
 #
 # ARIS-Monitor has ZERO third-party dependencies -- it uses only the Python 3
@@ -39,10 +39,10 @@ if [ "$mode" = "--ticker" ]; then
 fi
 
 # Default: try the GUI; fall back to the ticker if Tk is missing.
-if "$PY" -c "import tkinter" >/dev/null 2>&1; then
+if "$PY" -c "import tkinter; assert tkinter.TkVersion >= 8.6" >/dev/null 2>&1; then
   exec "$PY" "$DIR/widget.py"
 else
-  echo "ARIS-Monitor: Tkinter not available for $PY." >&2
+  echo "ARIS-Monitor: Tk 8.6 or newer is not available for $PY." >&2
   echo "ARIS-Monitor: falling back to the headless terminal ticker." >&2
   echo "ARIS-Monitor: (to get the GUI, install Tk for this python, e.g. 'brew install python-tk')" >&2
   exec "$PY" "$DIR/ticker.py"

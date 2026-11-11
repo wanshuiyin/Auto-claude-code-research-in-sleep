@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ARIS-Monitor: STRICTLY READ-ONLY session scanner / triage classifier.
 
-This module READS files under ~/.claude only. It NEVER writes, kills, signals,
+This module READS files under ~/.claude and Codex's local SQLite stores. It NEVER writes, kills, signals,
 spawns, runs subprocess/tmux/ps, polls processes, or touches the network.
 
 Authoritative needs-approval signal
@@ -31,11 +31,9 @@ registry file untouched within LIVE_WINDOW is treated as stale and hidden.
 
 Codex
 -----
-Codex is OUT OF SCOPE for needs_approval: there is no on-disk live-status file
-equivalent to ~/.claude/sessions/*.json, and Codex approval prompts are never
-written to the rollout JSONL. This scanner does NOT scan Codex at all. (If a
-future version shows Codex it must be display-only history and must NEVER claim
-needs_approval.)
+Codex's state/history SQLite stores provide thread names and turn outcomes.
+An inProgress turn with recent activity is working; a quiet one is UNKNOWN,
+never an inferred permission prompt. Codex approval detection is unavailable.
 
 Public API
 ----------
@@ -51,7 +49,9 @@ from __future__ import annotations
 import glob
 import json
 import os
+import sqlite3
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -64,6 +64,7 @@ LIVE_WINDOW = 1800            # seconds (30 min); updatedAt older than this => s
                               # folded into the dim "+N stale" line (click to expand)
 TRANSCRIPT_TAIL_BYTES = 262144  # 256 KiB read-only tail of the transcript
 TAIL_LINES = 40               # how many trailing JSONL lines we inspect
+CODEX_WINDOW = 86400          # completed threads retained for the last 24 hours
 
 # ---------------------------------------------------------------------------
 # Paths. CLAUDE_FLOAT_HOME lets tests/demos point at a fixture tree; defaults
@@ -90,13 +91,15 @@ NEEDS_ATTENTION = "needs_attention"  # amber -- stalled mid-tool, may need a nud
 WORKING = "working"                  # amber -- actively running
 IDLE_DONE = "idle_done"              # green -- finished / awaiting your review
 STALE_HIDDEN = "stale_hidden"        # folded into a dim "+N stale" count
+UNKNOWN = "unknown"                 # no reliable current status
 
 # Sort priority (lower = more urgent / higher in the list).
 SORT_PRIORITY = {
     NEEDS_APPROVAL: 0,
     NEEDS_ATTENTION: 1,
-    IDLE_DONE: 2,
-    WORKING: 3,
+    UNKNOWN: 1,
+    WORKING: 2,
+    IDLE_DONE: 3,
     STALE_HIDDEN: 9,
 }
 
@@ -113,11 +116,82 @@ class Session:
     pid: int
     name: str
     cwd: str
-    status: str            # raw status from the live JSON (busy|idle|waiting|...)
+    status: str            # raw status from the source registry or turn store
     triage: str            # one of the bucket constants above
     reason: str            # human-readable detail
     idle_seconds: int
-    updated_at: int        # ms epoch from the live JSON
+    updated_at: int        # last observed activity, ms epoch
+    source: str = "Claude"
+    thread_id: str = ""
+
+
+def display_label(session: Session) -> str:
+    if session.source == "Codex":
+        return {"failed": "failed", "interrupted": "stopped"}.get(
+            session.status, {WORKING: "working", IDLE_DONE: "done",
+                             UNKNOWN: "unknown", STALE_HIDDEN: "stale"}.get(session.triage, "unknown"))
+    return {NEEDS_APPROVAL: "NEEDS YOU", NEEDS_ATTENTION: "stalled",
+            WORKING: "working", IDLE_DONE: "done", STALE_HIDDEN: "stale"}.get(session.triage, "unknown")
+
+
+def _codex_store(home: Path, prefix: str) -> Path:
+    stores = [p for p in home.glob(prefix + "_*.sqlite")
+              if p.stem[len(prefix) + 1:].isdigit()]
+    if not stores:
+        raise FileNotFoundError(prefix)
+    return max(stores, key=lambda p: int(p.stem[len(prefix) + 1:]))
+
+
+def _scan_codex() -> List[Session]:
+    home = Path(os.environ.get("CODEX_HOME", str(HOME_BASE / ".codex"))).expanduser().resolve()
+    if not home.exists():
+        return []
+    now = time.time()
+    out = []
+    try:
+        # Read-only URI connections include live WAL data; immutable=1 would miss it.
+        with closing(sqlite3.connect(_codex_store(home, "state").as_uri() + "?mode=ro", uri=True, timeout=0.2)) as state, \
+             closing(sqlite3.connect(_codex_store(home, "thread_history").as_uri() + "?mode=ro", uri=True, timeout=0.2)) as history:
+            state.execute("PRAGMA query_only=ON")
+            history.execute("PRAGMA query_only=ON")
+            # Keep unresolved turns even when their metadata is old, so a long
+            # silent run is shown as unknown rather than disappearing.
+            unfinished = {row[0] for row in history.execute("""
+                SELECT t.thread_id FROM thread_turns t WHERE t.status='inProgress'
+                AND NOT EXISTS (SELECT 1 FROM thread_turns newer
+                    WHERE newer.thread_id=t.thread_id AND newer.rollout_ordinal>t.rollout_ordinal)
+            """)}
+            for tid, name, title, cwd, updated, source in state.execute("""
+                SELECT id, name, title, cwd, updated_at, source FROM threads
+                WHERE archived=0 AND source IN ('cli', 'vscode', 'exec')
+            """):
+                if updated < now - CODEX_WINDOW and tid not in unfinished:
+                    continue
+                turn = history.execute("""SELECT turn_id, status, started_at, completed_at
+                    FROM thread_turns WHERE thread_id=? ORDER BY rollout_ordinal DESC LIMIT 1""", (tid,)).fetchone()
+                status = turn[1] if turn else "unknown"
+                activity = (turn[3] or turn[2] or updated) if turn else updated
+                if turn and status == "inProgress":
+                    last_item = history.execute("""SELECT MAX(COALESCE(completed_at_ms, started_at_ms, created_at_ms))
+                        FROM thread_items WHERE thread_id=? AND turn_id=?""", (tid, turn[0])).fetchone()[0]
+                    activity = max(activity, (last_item or 0) / 1000)
+                age = max(0, int(now - activity))
+                if status == "inProgress":
+                    triage = (WORKING if age < IDLE_THRESHOLD else
+                              UNKNOWN if age <= LIVE_WINDOW else STALE_HIDDEN)
+                    reason = "turn in progress" if triage == WORKING else "in-progress turn; no recent activity"
+                elif status == "completed":
+                    triage, reason = (IDLE_DONE if age <= LIVE_WINDOW else STALE_HIDDEN), "turn completed"
+                elif status in ("failed", "interrupted"):
+                    triage, reason = (NEEDS_ATTENTION if age <= LIVE_WINDOW else STALE_HIDDEN), status
+                else:
+                    triage, reason = UNKNOWN, "no recognized turn status"
+                out.append(Session(0, str(name or title or tid), str(cwd), status, triage,
+                                   reason, age, int(activity * 1000), "Codex", str(tid)))
+    except (sqlite3.Error, OSError, TypeError, ValueError):
+        out.append(Session(0, "Codex status unavailable", "", "unknown", UNKNOWN,
+                           "local status store unavailable or incompatible", 0, int(now * 1000), "Codex"))
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +394,7 @@ def _status_for(data: dict, transcript: Optional[Path], now: float) -> Tuple[str
 # ---------------------------------------------------------------------------
 # Public API.
 # ---------------------------------------------------------------------------
-def scan() -> List[Session]:
+def _scan_claude() -> List[Session]:
     """Read ~/.claude/sessions/*.json, classify each, sort.
 
     Returns [] on ANY failure (also the natural value when there are zero
@@ -386,6 +460,12 @@ def scan() -> List[Session]:
         return []
 
 
+def scan() -> List[Session]:
+    sessions = _scan_claude() + _scan_codex()
+    sessions.sort(key=lambda s: (SORT_PRIORITY.get(s.triage, 5), -s.updated_at, s.thread_id, s.pid))
+    return sessions
+
+
 def summary(sessions: Optional[List[Session]] = None) -> dict:
     """Header counts for the widget. needs_approval is the headline number."""
     if sessions is None:
@@ -399,6 +479,7 @@ def summary(sessions: Optional[List[Session]] = None) -> dict:
         "idle_done": sum(1 for s in visible if s.triage == IDLE_DONE),
         "visible": len(visible),
         "stale": len(stale),
+        "unknown": sum(1 for s in visible if s.triage == UNKNOWN),
     }
 
 
@@ -424,11 +505,11 @@ def _main() -> None:
         "ARIS-Monitor scanner -- "
         f"needs_approval={s['needs_approval']} "
         f"working={s['working']} idle_done={s['idle_done']} "
-        f"attention={s['needs_attention']} stale={s['stale']}"
+        f"attention={s['needs_attention']} unknown={s['unknown']} stale={s['stale']}"
     )
     visible = [x for x in sessions if x.triage != STALE_HIDDEN]
     if not visible:
-        print("  (all clear -- no active Claude sessions)")
+        print("  (no recent Claude/Codex sessions)")
     for x in visible:
         dot = {
             NEEDS_APPROVAL: "[!]",
@@ -436,9 +517,10 @@ def _main() -> None:
             WORKING: "[*]",
             IDLE_DONE: "[ ]",
         }.get(x.triage, "[?]")
-        print(f"  {dot} {x.name:<28} {x.triage:<15} {x.reason}  ({fmt_age(x.idle_seconds)})")
+        print(f"  {dot} [{x.source}] {x.name:<28} {display_label(x):<15} {x.reason}  ({fmt_age(x.idle_seconds)})")
     if s["stale"]:
         print(f"  +{s['stale']} stale (hidden)")
+    print("  Codex approval status is not monitored.")
 
 
 if __name__ == "__main__":
