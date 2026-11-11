@@ -23,20 +23,20 @@ Filter flags (shared by search and search-bulk)
 Examples
 --------
 # Search for journal articles with >= 10 citations (best combo for quality filtering)
-python3 tools/semantic_scholar_fetch.py search "semantic communication" --max 10 \
+bash tools/uv_run_helper.sh tools/semantic_scholar_fetch.py search "semantic communication" --max 10 \
   --publication-types JournalArticle --min-citations 10
 
 # CS/Engineering papers from 2022 onward
-python3 tools/semantic_scholar_fetch.py search "semantic communication" --max 10 \
+bash tools/uv_run_helper.sh tools/semantic_scholar_fetch.py search "semantic communication" --max 10 \
   --fields-of-study "Computer Science,Engineering" --year "2022-"
 
 # Bulk search sorted by citation count, CS only
-python3 tools/semantic_scholar_fetch.py search-bulk "semantic communication" --max 50 \
+bash tools/uv_run_helper.sh tools/semantic_scholar_fetch.py search-bulk "semantic communication" --max 50 \
   --sort citationCount:desc --fields-of-study "Computer Science" --year "2020-"
 
 # Fetch a single paper by DOI or arXiv ID
-python3 tools/semantic_scholar_fetch.py paper "10.1109/JSAC.2021.3126077"
-python3 tools/semantic_scholar_fetch.py paper "ARXIV:2006.10685"
+bash tools/uv_run_helper.sh tools/semantic_scholar_fetch.py paper "10.1109/JSAC.2021.3126077"
+bash tools/uv_run_helper.sh tools/semantic_scholar_fetch.py paper "ARXIV:2006.10685"
 
 # NOTE: --venue requires exact venue name (e.g. "IEEE Transactions on Signal Processing"),
 # not partial match like "IEEE". Prefer --publication-types + --fields-of-study instead.

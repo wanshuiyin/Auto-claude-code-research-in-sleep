@@ -29,6 +29,8 @@ Use Exa when you need results beyond academic databases, or when you want conten
   (Codex-side chain: `$ARIS_REPO/tools/` → `tools/` → `~/.codex/skills/exa-search/`).
   Policy D1 — standalone `/exa-search` has no documented fallback,
   so unresolved helper terminates with an explicit error.
+- **ARIS_PY_RUNNER** — `tools/uv_run_helper.sh`; it executes helpers with the
+  locked `tools/uv-runtime` environment.
 - **MAX_RESULTS = 10** — Default number of results to return.
 
 > Overrides (append to arguments):
@@ -42,11 +44,8 @@ Use Exa when you need results beyond academic databases, or when you want conten
 
 ## Setup
 
-Exa requires the `exa-py` SDK and an API key:
-
-```bash
-pip install exa-py
-```
+Exa requires an API key. The `exa-py` SDK is declared and locked in the
+isolated `tools/uv-runtime` project.
 
 Set your API key:
 ```bash
@@ -86,30 +85,32 @@ EXA_FETCHER=""
 [ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/exa_search.py" ] && EXA_FETCHER="$ARIS_REPO/tools/exa_search.py"
 [ -z "$EXA_FETCHER" ] && [ -f tools/exa_search.py ] && EXA_FETCHER="tools/exa_search.py"
 [ -z "$EXA_FETCHER" ] && [ -f ~/.codex/skills/exa-search/exa_search.py ] && EXA_FETCHER="$HOME/.codex/skills/exa-search/exa_search.py"
-[ -z "$EXA_FETCHER" ] && {
+ARIS_PY_RUNNER=""
+[ -n "${ARIS_REPO:-}" ] && [ -f "$ARIS_REPO/tools/uv_run_helper.sh" ] && ARIS_PY_RUNNER="$ARIS_REPO/tools/uv_run_helper.sh"
+[ -z "$ARIS_PY_RUNNER" ] && [ -f tools/uv_run_helper.sh ] && ARIS_PY_RUNNER="tools/uv_run_helper.sh"
+{ [ -z "$EXA_FETCHER" ] || [ -z "$ARIS_PY_RUNNER" ]; } && {
   echo "ERROR: exa_search.py not resolved at \$ARIS_REPO/tools/, tools/, or ~/.codex/skills/exa-search/." >&2
-  echo "       Fix: rerun tools/install_aris_codex.sh, export ARIS_REPO, or copy the helper to ~/.codex/skills/exa-search/." >&2
-  echo "       Also ensure 'exa-py' is installed: pip install exa-py" >&2
+  echo "       Or tools/uv_run_helper.sh is unavailable." >&2
+  echo "       Fix: rerun tools/install_aris_codex.sh or export ARIS_REPO to the complete ARIS checkout." >&2
   exit 1
 }
 ```
 
 If not found, tell the user:
 ```
-exa_search.py not found. Run install_aris_codex.sh, set ARIS_REPO to your ARIS repo root, or install/copy the helper into the project/global Codex skill path; then install exa-py:
-pip install exa-py
+The Exa helper or locked uv runner was not found. Run install_aris_codex.sh or set ARIS_REPO to the complete ARIS repository root.
 ```
 
 ### Step 3: Execute Search
 
 **Standard search:**
 ```bash
-python3 "$EXA_FETCHER" search "QUERY" --max 10 --content highlights
+bash "$ARIS_PY_RUNNER" "$EXA_FETCHER" search "QUERY" --max 10 --content highlights
 ```
 
 **With filters:**
 ```bash
-python3 "$EXA_FETCHER" search "QUERY" --max 10 \
+bash "$ARIS_PY_RUNNER" "$EXA_FETCHER" search "QUERY" --max 10 \
   --category "research paper" \
   --start-date 2025-01-01 \
   --content text --max-chars 8000
@@ -117,12 +118,12 @@ python3 "$EXA_FETCHER" search "QUERY" --max 10 \
 
 **Find similar pages:**
 ```bash
-python3 "$EXA_FETCHER" find-similar "URL" --max 5 --content highlights
+bash "$ARIS_PY_RUNNER" "$EXA_FETCHER" find-similar "URL" --max 5 --content highlights
 ```
 
 **Get content for known URLs:**
 ```bash
-python3 "$EXA_FETCHER" get-contents "URL1" "URL2" --content text
+bash "$ARIS_PY_RUNNER" "$EXA_FETCHER" get-contents "URL1" "URL2" --content text
 ```
 
 ### Step 4: Present Results
@@ -172,10 +173,10 @@ if [ -d research-wiki/ ] and query category was "research paper":
     [ -z "$WIKI_SCRIPT" ] && [ -f ~/.codex/skills/research-wiki/research_wiki.py ] && WIKI_SCRIPT="$HOME/.codex/skills/research-wiki/research_wiki.py"
     for each research-paper hit in results:
         if URL matches arxiv.org/abs/<id>:
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
+            [ -n "$WIKI_SCRIPT" ] && bash "$ARIS_PY_RUNNER" "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --arxiv-id "<id>"
         else:
-            [ -n "$WIKI_SCRIPT" ] && python3 "$WIKI_SCRIPT" ingest_paper research-wiki/ \
+            [ -n "$WIKI_SCRIPT" ] && bash "$ARIS_PY_RUNNER" "$WIKI_SCRIPT" ingest_paper research-wiki/ \
                 --title "<title>" --authors "<authors joined by , >" \
                 --year <year> --venue "<venue or publisher>"
 ```
