@@ -195,6 +195,12 @@ Wait for completion. Verify:
 - GPU memory usage is within bounds
 - Output format matches expectations
 
+For environment/preparation failures, apply the inherited stop condition in
+[`compute-env-contract.md`](../shared-references/compute-env-contract.md) §5
+before the code-repair loop below. Preserve attempts across `/run-experiment`
+calls; missing access, authentication, networking or driver support is not fixed
+by rewriting the training script. The following budget remains for code fixes.
+
 If sanity fails → READ the traceback/stderr/logs first, then fix the code and
 re-run — never re-run unchanged hoping for a different outcome. (The same
 read-the-primary-artifact discipline applies to surprising REVIEWER verdicts:

@@ -28,6 +28,19 @@ already is. The shape determines what "build", "register", and "resolve" mean.
 | **Scheduler cluster** (Slurm/PBS; Qizhi-like platforms) | `/qzcli` targets | `module load` or a container image built OFF-cluster and pulled (compute nodes often have **no internet** — pre-stage everything) | scheduler directives + container path in shared scratch (mind purge windows) |
 | **Managed API** (serverless) | `/serverless-modal`, Vast.ai templates | the provider's image definition (Modal `Image`, Vast template) — render the same spec into it | the provider's opaque image ref, recorded in the ledger |
 
+### Reuse an existing environment first
+
+Read the project's existing server notes and use the user's confirmed conda/venv,
+remote code directory and working invocation. A missing ARIS ledger is missing
+bookkeeping, not evidence of a broken environment or a requirement to rebuild it.
+Reuse a relevant recorded validation; otherwise run one small real task in that
+environment, exercising the needed imports/kernel, input paths and output writing.
+Record its command, environment and observed result in the existing notes or
+ledger. This adopts the environment for that execution path; it does not certify
+the scientific result. Write a new build spec when a build is actually needed,
+not as a prerequisite to using a working user environment. Direct SSH does not
+require a new container or separate OS isolation for each collaborating agent.
+
 ## 2. The declarative spec (write WHAT once; render per provider)
 
 ```yaml
@@ -91,11 +104,14 @@ validated: 2026-07-02 (witness + agent-follows-doc clean)
 gotcha: <any diagnosis-table row hit on THIS provider>
 ```
 
-Spec changed → hash changes → **cache miss**: the ledger entry no longer
-matches and the env must be rebuilt (or a new block added). Spec unchanged →
-warm-reuse without rebuilding or re-validating tier 1–2. This turns "I think
-the env is the same as last week" into a string comparison. Note `.aris/` is
-gitignored by convention — the ledger is **project-local and uncommitted** by
+A changed spec hash calls for inspecting the change, not an automatic rebuild.
+Rebuild only for changes that require a different installed environment; a smoke
+command or expected-output change calls for the affected check instead. Reuse
+previous tier-1/2/3 evidence when the environment, relevant hardware and execution
+path are unchanged. A known change or new failure overrides reuse even if the
+spec hash matches. Plain prose and log edits do not invalidate execution evidence.
+Record substantive changes and their validation in the same ledger. Note `.aris/`
+is gitignored by convention — the ledger is **project-local and uncommitted** by
 default (like `.aris/traces/`). If you want committed, git-blameable history,
 keep the ledger blocks in the project's tracked server-notes file instead;
 the block format is the contract, not the path.
@@ -111,8 +127,8 @@ the block format is the contract, not the path.
    read-only cache". Keep the witness command in the spec's `smoke.gpu_tests`
    with an `expect:` regex so the SAME probe runs on every backend. Cheap —
    run on every build.
-3. **Agent-follows-doc** — the validation that actually matters and the one
-   that's easy to skip. Spawn a FRESH subagent that gets ONLY: the compute
+3. **Agent-follows-doc** — independent verification of a new or changed setup
+   handoff. Spawn a FRESH subagent that gets ONLY: the compute
    skill's doc, the provider's ledger entry, and the documented invocation.
    It must run the invocation **verbatim** — no improvisation, no fixing —
    and report every point where the doc's claim and reality diverge. This is
@@ -121,9 +137,14 @@ the block format is the contract, not the path.
    marker the tool checks. The author agent cannot self-certify its own doc
    (it walks through on hidden knowledge the doc never wrote down — same
    principle as `acceptance-gate.md`: the writer never acquits its own
-   artifact); the fresh agent's stuck-point IS the doc's lie. Expensive —
-   reserve for the two moments doc and env can drift: **after any env rebuild
-   or doc edit, and before declaring an env ready**.
+   artifact); the fresh agent's stuck-point exposes an incomplete instruction.
+   Run this once setup is stable, before handing off a newly built/rebuilt
+   environment or substantively changed installation/invocation instructions.
+   During repair, run the affected small check; do not spawn a fresh verifier
+   after every intermediate patch. Reuse a passed handoff when those conditions
+   are unchanged; prose/log edits and ordinary reentry do not repeat this tier.
+   Adopting a working user environment follows §1, not a new-environment handoff.
+   Research quality and cross-family acceptance gates remain unchanged.
 
 ## 5. Diagnosis table (symptom → layer → fix)
 
@@ -146,16 +167,28 @@ rows apply only to container shapes):
 Hit a row on a specific provider → append symptom + fix to that provider's
 ledger `gotcha:` line, so the next agent doesn't rediscover it.
 
+Carry the failed command, error, targeted repairs and remaining authorized budget
+in the existing run notes/tracker across child-skill calls and handoffs. Two
+targeted repairs to the same environment problem with no new progress end that
+preparation loop: the main owner takes over the specific gap, chooses an already
+authorized effective path, or reports the missing external prerequisite. Continue
+independent authorized work where possible. Permission, authentication, network
+or driver failures do not trigger clean reimplementation of training code.
+Do not reset the attempt count on reentry, restart unchanged commands or add a
+paid reviewer merely to repeat an established diagnosis. The original code-sanity
+retry/reimplementation limits, required reviews and user budget still apply.
+
 ## How compute skills use this
 
-- **Before building**: read the provider's ledger. The env — or a near-match
-  to extend — may already exist; an unchanged hash means skip the rebuild.
+- **Before building**: read existing server notes/the provider's ledger and
+  adopt or reuse a working environment (§1). Inspect actual changes before
+  deciding to rebuild; lack of a ledger alone is not a build trigger.
 - **When building**: write the spec first (§2), render it for the shape (§1),
   run tier-1/2 validation (§4), append the ledger block (§3).
-- **Before declaring ready** (and after any rebuild/doc edit): run the
-  agent-follows-doc pass (§4.3).
-- **On failure**: diagnosis table (§5) before patching; record provider-true
-  gotchas in the ledger.
+- **Before handing off new/changed setup**: once stable, run the required
+  agent-follows-doc pass (§4.3); reuse prior evidence for unchanged setup.
+- **On failure**: diagnosis table and preparation stop condition (§5) before
+  another patch; preserve the failure record and provider-true gotchas.
 
 Attribution: the spec/ledger/three-tier-validation design is adapted from
 Anthropic's Claude Science `compute-env-setup` skill (Apache-2.0, re-hosted by

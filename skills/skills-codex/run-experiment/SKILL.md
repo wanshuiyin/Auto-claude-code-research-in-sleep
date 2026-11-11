@@ -20,14 +20,24 @@ Read the project's `AGENTS.md` to determine the experiment environment:
 
 If no server info is found in `AGENTS.md`, ask the user.
 
-**Environment contract** (`../shared-references/compute-env-contract.md`): before
-building or trusting any environment, read the provider's env ledger
-(`.aris/compute/<provider>.md`) — an unchanged spec hash means warm-reuse, a
-changed one means rebuild. New env → write the declarative spec first, render it
-for this provider's shape, and never declare it ready on import-success alone:
-run the seeded kernel witness, and after any rebuild/doc edit run the
-agent-follows-doc pass (a fresh subagent executes the documented invocation
-verbatim and reports doc-vs-reality divergence).
+**Environment contract** (`../shared-references/compute-env-contract.md`): read
+existing server notes or the provider's ledger before preparing the environment.
+Reuse the user's confirmed conda/venv and working command; a missing ARIS ledger
+does not require rebuilding. If no relevant validation exists, run one small,
+task-relevant smoke in that environment and record the command and actual output.
+Reuse prior validation when the environment and execution path have not changed.
+New or rebuilt environments need the spec, import/kernel checks and a fresh
+agent-follows-doc pass once setup is stable; substantive installation or invocation
+changes need the affected checks. Plain prose/log edits do not trigger a rebuild
+or fresh recheck. This execution evidence does not replace research acceptance.
+
+**Preparation failures:** carry the same failure, attempted fixes and remaining
+budget across child skills in the existing run notes/tracker. After two targeted
+repairs to the same environment problem make no new progress, stop repeating
+preparation and return the exact command/error to the main owner for takeover or
+an authorized alternative. Missing permissions, authentication, network access or
+a compatible driver are environment prerequisites, not reasons to rewrite the
+training script. Keep the original code-sanity retry budget and reviewer gates.
 
 ### Step 2: Pre-flight Check
 
@@ -53,10 +63,27 @@ Check the project's `AGENTS.md` for a `code_sync` setting. If not specified, def
 
 #### Option A: rsync (default)
 
-Only sync necessary files — NOT data, checkpoints, or large files:
+Prefer the project's existing deployment command or explicit file list. Otherwise,
+allow directory traversal and include the configuration/small resources read by
+the actual experiment command, alongside Python sources. For example:
+
 ```bash
-rsync -avz --include='*.py' --exclude='*' <local_src>/ <server>:<remote_dst>/
+rsync -avz --prune-empty-dirs \
+  --exclude='.*' --exclude='__pycache__/' --exclude='/venv/' --exclude='/env/' \
+  --exclude='data/' --exclude='datasets/' --exclude='weights/' \
+  --exclude='checkpoints/' --exclude='outputs/' --exclude='wandb/' \
+  --include='*/' --include='*.py' \
+  --include='/configs/sanity.json' --include='/assets/vocab.json' \
+  --exclude='*' "<local_src>/" "<server>:<remote_dst>/"
 ```
+
+Replace the two explicit config/resource paths with those your command needs;
+add other required small files explicitly. Keep exclusions before directory/file
+includes, and add project-specific private paths there. Hidden agent/config files,
+data, weights and outputs stay out of this example. Use the project source root,
+not the user's home directory; do not replace these rules with an unfiltered copy.
+A successful sync exit is not a launch check: run the smallest actual experiment
+from the configured remote code directory and inspect its log and result file.
 
 #### Option B: git (when `code_sync: git` is set in AGENTS.md)
 
