@@ -986,7 +986,7 @@ fi
 
 N_CHANGES="$(awk -F'|' '$1=="CREATE"||$1=="UPDATE_TARGET"||$1=="REMOVE"{n++} END{print n+0}' "$PLAN_FILE")"
 if (( N_CHANGES > 0 )); then
-    prompt "Apply these $N_CHANGES changes?" || { log "aborted"; exit 0; }
+    prompt "Apply these $N_CHANGES changes? [Y/n]" || { log "aborted"; exit 0; }
 fi
 
 MANIFEST_TMP="$MANIFEST_PATH.tmp.$$"
