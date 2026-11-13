@@ -1007,11 +1007,23 @@ update_agents_doc "$INSTALLED_NAMES"
 
 if ! $DRY_RUN; then
     local_bad=0
+    windows_copy=0
+    windows_bash=false
+    # OSTYPE is lowercase (msys); uname -s is MINGW64_NT-... / CYGWIN_NT-...
+    platform="$(printf '%s' "$(uname -s 2>/dev/null):${OSTYPE:-}" | tr '[:lower:]' '[:upper:]')"
+    case "$platform" in
+        *MINGW*|*MSYS*|*CYGWIN*) windows_bash=true ;;
+    esac
     while IFS=$'\t' read -r kind name source_rel target_rel mode; do
         [[ -z "$name" ]] && continue
         target_path="$PROJECT_PATH/$target_rel"
         expected_target="$ARIS_REPO/$source_rel"
         if [[ ! -L "$target_path" ]]; then
+            # Git Bash ln -s copies the skill directory when it cannot create a symlink.
+            if $windows_bash && [[ -d "$target_path" ]]; then
+                windows_copy=$((windows_copy + 1))
+                continue
+            fi
             warn "verify: missing symlink $target_path"
             local_bad=$((local_bad + 1))
             continue
@@ -1027,6 +1039,9 @@ if ! $DRY_RUN; then
         /^kind\tname\tsource_rel\ttarget_rel\tmode$/ { in_body=1; next }
         in_body && NF==5 { print }
     ' "$MANIFEST_PATH")
+    if (( windows_copy > 0 )); then
+        log "note: on Windows bash, skill directories were copied instead of symlinked; this is normal."
+    fi
     (( local_bad == 0 )) && log "" && log "✓ Codex install complete. $N_CHANGES changes applied."
 fi
 
