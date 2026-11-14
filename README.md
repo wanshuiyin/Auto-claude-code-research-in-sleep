@@ -1674,6 +1674,7 @@ bash tools/smart_update.sh --apply  # apply: updates safe ones; NEW upstream ski
 > /research-lit "topic"                              # just literature survey (all sources)
 > /research-lit "topic" — sources: zotero, web        # mix and match sources
 > /research-lit "topic" — sources: deepxiv            # DeepXiv-only progressive retrieval
+> /research-lit "topic" — sources: parallel           # Opt-in anonymous web URLs and excerpts
 > /research-lit "topic" — sources: exa                # Exa AI-powered web search with content extraction
 > /research-lit "topic" — arxiv download: true         # also download top arXiv PDFs
 > /arxiv "discrete diffusion" — download               # standalone arXiv search + download
@@ -1696,6 +1697,24 @@ bash tools/smart_update.sh --apply  # apply: updates safe ones; NEW upstream ski
 > /analyze-results figures/*.json
 > /monitor-experiment server5
 ```
+
+For opt-in broad web evidence without an API key, run the maintained stdlib helper
+from the ARIS checkout (or use `— sources: parallel` in `/research-lit`):
+
+```bash
+python3 tools/parallel_search.py search "transformer attention mechanisms" --max 5
+```
+
+It returns JSON source URLs and excerpts through [Parallel Unified MCP](https://docs.parallel.ai/integrations/mcp),
+whose search defaults to Fast mode. `--max` and `--max-chars` are local output
+caps. Parallel is excluded from `sources: all`; existing provider choices and
+Exa-specific commands stay unchanged. Set `PARALLEL_API_KEY` only to explicitly
+use an account (billed by Parallel); blank or bad credentials fail without
+anonymous retry. Anonymous use has lower rate limits, and failures are reported
+without switching providers. `--offline`, `--disabled`, `ARIS_SEARCH_OFFLINE=1`,
+or `ARIS_SEARCH_DISABLED=1` prevent network access. Honor project network
+permissions and offline settings before invoking external search.
+
 
 <a id="105--auto-allow-for-overnight-runs-optional"></a>
 
