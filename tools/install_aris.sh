@@ -1699,7 +1699,7 @@ fi
 # Confirm if any mutations
 N_CHANGES=$(awk -F'|' '$1=="CREATE"||$1=="UPDATE_TARGET"||$1=="REMOVE"' "$PLAN_FILE" | wc -l | tr -d ' ')
 if (( N_CHANGES > 0 )) && ! $QUIET; then
-    prompt "Apply these $N_CHANGES changes?" || { log "aborted"; exit 0; }
+    prompt "Apply these $N_CHANGES changes? [y/N]" || { log "aborted"; exit 0; }
 fi
 
 [[ "$LEGACY_KIND" == "none" ]] || migrate_legacy

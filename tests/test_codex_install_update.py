@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +67,42 @@ def test_install_aris_codex_dry_run_has_no_project_writes(tmp_path: Path) -> Non
 def test_install_aris_codex_avoids_bash4_associative_arrays() -> None:
     text = INSTALL_SCRIPT.read_text()
     assert "declare -A" not in text
+
+
+@pytest.mark.parametrize("quiet", [False, True])
+def test_install_aris_codex_warns_on_windows_copy_fallback(tmp_path: Path, quiet: bool) -> None:
+    repo = make_minimal_aris_repo(tmp_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    shim = tmp_path / "bin"
+    shim.mkdir()
+    (shim / "uname").write_text('#!/bin/sh\nprintf "MINGW64_NT-10.0\\n"\n')
+    # Simulate Git Bash's copy fallback; this is not a native Windows test.
+    (shim / "ln").write_text(
+        f"#!{sys.executable}\n"
+        "import shutil, sys\n"
+        "assert len(sys.argv) == 4 and sys.argv[1] == '-s'\n"
+        "shutil.copytree(sys.argv[2], sys.argv[3])\n"
+    )
+    for command in shim.iterdir():
+        command.chmod(0o755)
+    command = [
+        "bash", str(INSTALL_SCRIPT), str(project), "--aris-repo", str(repo), "--all", "--no-doc"
+    ]
+    if quiet:
+        command.append("--quiet")
+    result = subprocess.run(
+        command, input="y\n", text=True, capture_output=True, check=True,
+        env={**os.environ, "PATH": f"{shim}{os.pathsep}{os.environ['PATH']}"},
+    )
+
+    installed = project / ".agents" / "skills" / "alpha"
+    assert installed.is_dir() and not installed.is_symlink()
+    assert result.stderr.count("Windows bash copied") == 1
+    assert "do not track upstream changes" in result.stderr
+    assert "reconcile will report conflicts" in result.stderr
+    assert "uninstall will leave them in place" in result.stderr
+    assert "Codex install complete" not in result.stdout
 
 
 def test_goal_pulse_managed_doc_preserves_user_text_and_no_doc(tmp_path: Path) -> None:

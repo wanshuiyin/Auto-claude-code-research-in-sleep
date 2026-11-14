@@ -986,7 +986,7 @@ fi
 
 N_CHANGES="$(awk -F'|' '$1=="CREATE"||$1=="UPDATE_TARGET"||$1=="REMOVE"{n++} END{print n+0}' "$PLAN_FILE")"
 if (( N_CHANGES > 0 )); then
-    prompt "Apply these $N_CHANGES changes?" || { log "aborted"; exit 0; }
+    prompt "Apply these $N_CHANGES changes? [y/N]" || { log "aborted"; exit 0; }
 fi
 
 MANIFEST_TMP="$MANIFEST_PATH.tmp.$$"
@@ -1007,11 +1007,24 @@ update_agents_doc "$INSTALLED_NAMES"
 
 if ! $DRY_RUN; then
     local_bad=0
+    windows_copy=0
+    windows_bash=false
+    # OSTYPE is lowercase (msys); uname -s is MINGW64_NT-... / CYGWIN_NT-...
+    platform="$(printf '%s' "$(uname -s 2>/dev/null):${OSTYPE:-}" | tr '[:lower:]' '[:upper:]')"
+    case "$platform" in
+        *MINGW*|*MSYS*|*CYGWIN*) windows_bash=true ;;
+    esac
     while IFS=$'\t' read -r kind name source_rel target_rel mode; do
         [[ -z "$name" ]] && continue
         target_path="$PROJECT_PATH/$target_rel"
         expected_target="$ARIS_REPO/$source_rel"
         if [[ ! -L "$target_path" ]]; then
+            # Git Bash ln -s copies the skill directory when it cannot create a symlink.
+            if $windows_bash && [[ -d "$target_path" ]]; then
+                windows_copy=$((windows_copy + 1))
+                local_bad=$((local_bad + 1))
+                continue
+            fi
             warn "verify: missing symlink $target_path"
             local_bad=$((local_bad + 1))
             continue
@@ -1027,6 +1040,9 @@ if ! $DRY_RUN; then
         /^kind\tname\tsource_rel\ttarget_rel\tmode$/ { in_body=1; next }
         in_body && NF==5 { print }
     ' "$MANIFEST_PATH")
+    if (( windows_copy > 0 )); then
+        warn "Windows bash copied $windows_copy skill/support directories instead of creating symlinks. These copies do not track upstream changes; reconcile will report conflicts and uninstall will leave them in place. For a managed Windows install, use tools/install_aris.ps1 -Platform codex in a fresh target directory."
+    fi
     (( local_bad == 0 )) && log "" && log "✓ Codex install complete. $N_CHANGES changes applied."
 fi
 
