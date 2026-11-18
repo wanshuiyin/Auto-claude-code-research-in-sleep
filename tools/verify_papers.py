@@ -315,7 +315,9 @@ def _verify_arxiv_batch_with_retry(batch: list[str]) -> dict[str, str]:
         if status == 200 and body is not None:
             found = set()
             for bid in base_ids:
-                if f"<id>http://arxiv.org/abs/{bid}" in body:
+                # Anchor the match: a bare substring test lets the 4-digit id
+                # `2501.1234` match the feed entry of the real `2501.12345`.
+                if re.search(rf"<id>http://arxiv\.org/abs/{re.escape(bid)}(v\d+)?</id>", body):
                     found.add(bid)
             return {
                 orig: "verified" if normalize_arxiv_id(orig)[0] in found else "unverified"
