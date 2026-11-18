@@ -207,6 +207,51 @@ class TestSessionAlive(unittest.TestCase):
         self.assertIn("screen", args)
 
 
+class TestSessionAliveTimeout(unittest.TestCase):
+    """A wedged tmux server or screen must not freeze the monitoring loop."""
+
+    def test_session_checks_are_bounded(self):
+        for session_type in ("tmux", "screen"):
+            with patch('watchdog.subprocess.run') as mock_run:
+                mock_run.return_value = MagicMock(returncode=0, stdout="")
+                watchdog.session_alive("exp01", session_type)
+                self.assertIsNotNone(
+                    mock_run.call_args.kwargs.get("timeout"),
+                    f"{session_type} liveness check has no timeout",
+                )
+
+    def test_hung_session_check_is_reported_as_error(self):
+        """One loop iteration: a timed-out check becomes an ERROR status and
+        an alerts.log line instead of blocking the daemon."""
+        import subprocess
+        base = tempfile.mkdtemp()
+        paths = watchdog.get_paths(base)
+        paths["base"].mkdir(parents=True, exist_ok=True)
+        paths["tasks"].write_text(json.dumps([
+            {"name": "exp01", "type": "training", "session": "exp01", "session_type": "tmux"},
+        ]))
+
+        def run(cmd, **kwargs):
+            if "timeout" not in kwargs:
+                # Unbounded call on a wedged tmux server: would block forever.
+                raise AssertionError("session check would hang: no timeout")
+            raise subprocess.TimeoutExpired(cmd, kwargs["timeout"])
+
+        class StopLoop(Exception):
+            pass
+
+        with patch('watchdog.subprocess.run', side_effect=run), \
+             patch('watchdog.time.sleep', side_effect=StopLoop), \
+             patch('watchdog.signal.signal'):
+            with self.assertRaises(StopLoop):
+                watchdog.run_watchdog(base, 60)
+
+        status = json.loads((paths["status"] / "exp01.json").read_text())
+        self.assertEqual(status["status"], "ERROR")
+        self.assertIn("timed out", status["msg"])
+        self.assertIn("exp01: ERROR", paths["alerts"].read_text())
+
+
 class TestGetGpuUtil(unittest.TestCase):
     """Test get_gpu_util() parsing."""
 
