@@ -178,3 +178,33 @@ def test_cached_pending_is_asked_again(monkeypatch):
     assert calls["n"] == 1
     assert result.status == "verified"
     assert cache["arxiv:1706.03762"]["status"] == "verified"
+
+
+# ── matching returned entries to requested IDs ──────────────────────────
+
+def test_truncated_id_is_not_verified_by_its_longer_sibling(monkeypatch):
+    """`2501.1234` is a strict prefix of `2501.12345`; the feed entry for the
+    real 5-digit paper must not vouch for the (nonexistent) 4-digit one."""
+    mod = load_module()
+    feed = "<feed><entry><id>http://arxiv.org/abs/2501.12345v1</id></entry></feed>"
+    _patch_http_get(monkeypatch, mod, [(200, feed)])
+
+    result = mod._verify_arxiv_batch_with_retry(["2501.1234", "2501.12345"])
+
+    assert result == {"2501.1234": "unverified", "2501.12345": "verified"}
+
+
+def test_returned_entry_matches_versioned_and_legacy_ids(monkeypatch):
+    mod = load_module()
+    feed = (
+        "<feed>"
+        "<entry><id>http://arxiv.org/abs/1706.03762v7</id></entry>"
+        "<entry><id>http://arxiv.org/abs/cs/0601001v1</id></entry>"
+        "<entry><id>http://arxiv.org/abs/2501.12345</id></entry>"
+        "</feed>"
+    )
+    _patch_http_get(monkeypatch, mod, [(200, feed)])
+
+    result = mod._verify_arxiv_batch_with_retry(["1706.03762v5", "cs/0601001", "2501.12345"])
+
+    assert result == {"1706.03762v5": "verified", "cs/0601001": "verified", "2501.12345": "verified"}
