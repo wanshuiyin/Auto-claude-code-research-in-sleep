@@ -154,16 +154,22 @@ def unregister_task(base_dir, name):
 
 
 def session_alive(session_name, session_type="screen"):
-    """Check if a tmux or screen session is alive."""
+    """Check if a tmux or screen session is alive.
+
+    Both calls are bounded: a wedged tmux server or screen would otherwise block
+    the monitoring loop forever while summary.txt keeps its last status. On
+    timeout, subprocess.TimeoutExpired propagates to run_watchdog's per-task
+    handler, which records ERROR and appends an alerts.log line.
+    """
     if session_type == "tmux":
         r = subprocess.run(
             ["tmux", "has-session", "-t", session_name],
-            capture_output=True,
+            capture_output=True, timeout=10,
         )
         return r.returncode == 0
     else:  # screen
         r = subprocess.run(
-            ["screen", "-list"], capture_output=True, text=True,
+            ["screen", "-list"], capture_output=True, text=True, timeout=10,
         )
         return session_name in r.stdout
 
