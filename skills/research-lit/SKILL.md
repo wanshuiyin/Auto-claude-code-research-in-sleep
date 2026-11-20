@@ -17,7 +17,7 @@ Research topic: $ARGUMENTS
   2. `literature/` in the current project directory
   3. Custom path specified by user in `CLAUDE.md` under `## Paper Library`
 - **MAX_LOCAL_PAPERS = 20** — Maximum number of local PDFs to scan (read first 3 pages each). If more are found, prioritize by filename relevance to the topic.
-- **SOURCES = `all`** — Which literature sources to search. Options: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`, `all`. Full source table and selection rules: see `## Data Sources` below.
+- **SOURCES = `all`** — Which literature sources to search. Options: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `serply`, `gemini`, `openalex`, `all`. Full source table and selection rules: see `## Data Sources` below.
 - **ARXIV_DOWNLOAD = false** — When `true`, download top 3-5 most relevant arXiv PDFs to PAPER_LIBRARY after search. When `false` (default), only fetch metadata (title, abstract, authors) via arXiv API — no files are downloaded.
 - **ARXIV_MAX_DOWNLOAD = 5** — Maximum number of PDFs to download when `ARXIV_DOWNLOAD = true`.
 
@@ -37,8 +37,8 @@ This skill checks multiple sources **in priority order**. All are optional — i
 ### Source Selection
 
 Parse `$ARGUMENTS` for a `— sources:` directive:
-- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `gemini`, `openalex`, `all`.
-- **If not specified**: Default to `all` — search every available source in priority order (`semantic-scholar`, `deepxiv`, `exa`, `gemini`, and `openalex` are **excluded** from `all`; they must be explicitly listed).
+- **If `— sources:` is specified**: Only search the listed sources (comma-separated). Valid values: `zotero`, `obsidian`, `local`, `web`, `semantic-scholar`, `deepxiv`, `exa`, `serply`, `gemini`, `openalex`, `all`.
+- **If not specified**: Default to `all` — search every available source in priority order (`semantic-scholar`, `deepxiv`, `exa`, `serply`, `gemini`, and `openalex` are **excluded** from `all`; they must be explicitly listed).
 
 Examples:
 ```
@@ -54,6 +54,8 @@ Examples:
 /research-lit "topic" — sources: all, semantic-scholar              → all + S2 API
 /research-lit "topic" — sources: exa                               → Exa only (broad web + content extraction)
 /research-lit "topic" — sources: all, exa                          → default sources + Exa web search
+/research-lit "topic" — sources: serply                            → Serply only (Google Scholar + Google web)
+/research-lit "topic" — sources: all, serply                       → default sources + Serply Google results
 /research-lit "topic" — sources: gemini                            → Gemini only (AI-powered broad discovery)
 /research-lit "topic" — sources: all, gemini                       → default sources + Gemini discovery
 /research-lit "topic" — sources: gemini, semantic-scholar           → Gemini + S2 (broad discovery + venue metadata)
@@ -74,6 +76,7 @@ Examples:
 | 7 | **Exa Search** | `exa` | `$EXA_FETCHER` resolves (canonical name `exa_search.py`, per integration-contract §2); fetcher handles `exa-py` SDK + API key internally | AI-powered broad web search with content extraction (highlights, text, summaries). Covers blogs, docs, news, companies, and research papers beyond arXiv/S2. **Only runs when explicitly requested** via `— sources: exa` or `— sources: all, exa` |
 | 8 | **Gemini** (MCP / CLI) | `gemini` | `mcp__gemini-cli__ask-gemini` tool available, or `gemini` CLI installed | AI-powered broad literature discovery — decomposes topics into sub-problems, aliases, and variants for wider retrieval. Prefers MCP, falls back to CLI. **Only runs when explicitly requested** via `— sources: gemini` or `— sources: all, gemini` |
 | 9 | **OpenAlex** | `openalex` | `$OPENALEX_FETCHER` resolves (canonical name `openalex_fetch.py`, per integration-contract §2) **and** Python `requests` module importable | Open citation graph with institutional affiliations, funding data, and comprehensive metadata across 250M+ works. Fully open API. **Only runs when explicitly requested** via `— sources: openalex` or `— sources: all, openalex` |
+| 10 | **Serply** | `serply` | `$SERPLY_FETCHER` resolves (canonical name `serply_search.py`, per integration-contract §2); fetcher needs only `SERPLY_API_KEY` | Google Scholar papers (authors, citation counts, PDF links) plus regular Google web results. **Only runs when explicitly requested** via `— sources: serply` or `— sources: all, serply` |
 
 > **Graceful degradation**: If no MCP servers are configured, the skill works exactly as before (local PDFs + web search). Zotero and Obsidian are pure additions.
 
@@ -346,6 +349,53 @@ If `$EXA_FETCHER` is empty or the `exa-py` SDK is unavailable, skip this source 
 - Match by URL first, then normalized title
 - If Exa returns an arXiv paper already found by arXiv/S2, prefer the structured metadata from those sources
 - Exa results from non-academic domains (blogs, docs, news) are unique value not covered by other sources
+
+**Serply search** (only when `serply` is in sources):
+
+When the user explicitly requests `— sources: serply` (or includes `serply` in a combined source list), use the Serply tool for Google Scholar papers and Google web results:
+
+```bash
+# Re-resolve $ARIS_REPO (SKILL bash blocks may run in separate shells).
+cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" || exit 1
+if [ -z "${ARIS_REPO:-}" ] && [ -f .aris/installed-skills.txt ]; then
+    ARIS_REPO=$(awk -F'\t' '$1=="repo_root"{print $2; exit}' .aris/installed-skills.txt 2>/dev/null) || true
+fi
+if [ -z "${ARIS_REPO:-}" ] && [ -f "$HOME/.aris/repo" ]; then
+    ARIS_REPO=$(cat "$HOME/.aris/repo" 2>/dev/null) || true
+fi
+# Resolve $SERPLY_FETCHER (Policy D2 — warn-and-skip on missing).
+SERPLY_FETCHER=".aris/tools/serply_search.py"
+[ -f "$SERPLY_FETCHER" ] || SERPLY_FETCHER="tools/serply_search.py"
+[ -f "$SERPLY_FETCHER" ] || { [ -n "${ARIS_REPO:-}" ] && SERPLY_FETCHER="$ARIS_REPO/tools/serply_search.py"; }
+[ -f "$SERPLY_FETCHER" ] || SERPLY_FETCHER=""
+
+if [ -n "$SERPLY_FETCHER" ]; then
+  # Google Scholar papers.
+  # Wrap with if/then/else so set -e doesn't abort the SKILL.
+  serply_contributed=false
+  if python3 "$SERPLY_FETCHER" scholar "QUERY" --max 10; then
+    serply_contributed=true
+  else
+    echo "WARN: serply_search.py scholar invocation failed; D2 aggregate continues." >&2
+  fi
+  # Regular Google results (blogs, docs, project pages)
+  if python3 "$SERPLY_FETCHER" search "QUERY" --max 10; then
+    serply_contributed=true
+  else
+    echo "WARN: serply_search.py web invocation failed; D2 aggregate continues." >&2
+  fi
+  [ "$serply_contributed" = "true" ] && echo "D2 contribution: serply (at least one invocation exit 0)" >&2
+fi
+```
+
+If `$SERPLY_FETCHER` is empty is unavailable, skip this source gracefully and continue with the remaining requested sources (Policy D2 graceful degradation).
+
+**Why use Serply?** Serply returns Google Scholar results (any publisher, with citation counts and PDF links) and regular Google results, which covers papers and project pages that arXiv and Semantic Scholar do not index.
+
+**De-duplication against arXiv, S2, and DeepXiv**:
+- Match by URL first, then normalized title
+- If Serply returns a paper already found by arXiv/S2, prefer the structured metadata from those sources
+- Scholar rows add citation counts and PDF links; web rows from non-academic domains are unique value
 
 **Gemini search** (only when `gemini` is in sources):
 
