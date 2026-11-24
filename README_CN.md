@@ -215,6 +215,8 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 
 > ⚠️ ARIS 内置 skills 更新：运行 `bash tools/smart_update.sh --apply`（Codex 用 `smart_update_codex.sh`）；外部组件按对应条目的安装说明准备。
 
+- **2026-11-24** — **写作与评审更新**：论文和推导按实际结果交代局限，汇报问答由听众关心的问题决定。方案评审没有实质问题即可收尾；已有结果回答不了评审问题时，再补相应指标。 ([#499](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/499), [#503](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/503))
+
 - **2026-11-04** — 🔎 **社区项目推荐：Absent Author**——面向 AI 辅助论文的证据目录与作者自查、审稿检查技能，帮助研究者在投稿前核对主张与证据，也为审稿人提供可核查的问题线索。[详细介绍 →](#absent-author)
 
 - **2026-11-01** — ⏱️ **Codex Goal 效率提醒 Goal Pulse**——复用 [HERO 的 Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse)，每 30 分钟以中英双语提醒主代理推进长任务。用户启动、恢复 Goal，或主代理接手 active Goal 时，默认读取并为当前线程启用，无需另外点名。支持兼容 Codex app-server 的 macOS/Linux 环境；[安装与行为说明](skills/skills-codex/README.md#goal-pulse-for-codex-goals)，唯一实现由 HERO 维护。

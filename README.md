@@ -243,6 +243,8 @@ Two outputs: `PASTE_READY.txt` (exact char count, paste to venue) + `REBUTTAL_DR
 
 > ⚠️ For updates to ARIS bundled skills, run `bash tools/smart_update.sh --apply` (Codex: `smart_update_codex.sh`). For external components, follow the setup linked in their entry.
 
+- **2026-11-24** — **Writing and review updates** — Papers and derivations state limitations where they affect the result. Talk Q&A follows the audience’s questions. Method refinement can finish when the reviewer finds no substantive issue, and experiment reviews request extra metrics only to resolve an open question. ([#499](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/499), [#503](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/503))
+
 - **2026-11-04** — 🔎 **Community spotlight: Absent Author** — an evidence catalog and two skills for author self-checks and reviewer screening of AI-assisted papers. [Meet the project →](#absent-author)
 
 - **2026-11-01** — ⏱️ **Goal Pulse for Codex Goals** — [HERO's Goal Pulse](https://github.com/wanshuiyin/HERO-Anti-OverDefense/tree/main/skills/goal-pulse) keeps long Goals moving with bilingual reminders every 30 minutes. On Goal start, resume, or takeover of an active Goal, the main agent reads and enables it for the current thread by default; no separate request is needed. Supports compatible Codex app-server setups on macOS/Linux. [Setup and behavior](skills/skills-codex/README.md#goal-pulse-for-codex-goals); HERO maintains the single implementation.
