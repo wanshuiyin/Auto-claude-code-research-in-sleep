@@ -132,10 +132,10 @@ Stop when the concrete blockers are resolved; a cosmetic WARN does not require a
 
 ### Step 5 — Render via /render-html
 
-Call directly (do not invoke `/render-html` as a sub-skill; call its python script — gives clear control):
+Resolve `RENDER_HTML` using [the renderer’s Tool Location instructions](../render-html/SKILL.md#tool-location), then run it from the project root:
 
 ```bash
-python3 skills/render-html/scripts/render_html.py docs/tutorials/<slug>_tutorial.md \
+python3 "$RENDER_HTML" docs/tutorials/<slug>_tutorial.md \
   --template academic \
   --out docs/tutorials/<slug>_tutorial.html \
   --title "<Topic> 面试 Cheat Sheet" \
