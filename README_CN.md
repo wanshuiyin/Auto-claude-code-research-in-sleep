@@ -215,7 +215,7 @@ ARIS 读论文 → 找弱点 → 克隆代码 → 针对*那些*弱点用*那套
 
 > ⚠️ ARIS 内置 skills 更新：运行 `bash tools/smart_update.sh --apply`（Codex 用 `smart_update_codex.sh`）；外部组件按对应条目的安装说明准备。
 
-- **2026-11-24** — **写作与评审更新**：论文和推导按实际结果交代局限，汇报问答由听众关心的问题决定。方案评审没有实质问题即可收尾；已有结果回答不了评审问题时，再补相应指标。 ([#499](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/499), [#503](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/503))
+- **2026-11-24** — **写作与评审更新**：论文和推导按实际结果交代局限，汇报问答由听众关心的问题决定。方案评审没有实质问题即可收尾；已有结果回答不了评审问题时，再补相应指标。 流程图按实际渲染效果检查；教程按主题展开，去掉固定行数和题数。 ([#499](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/499), [#503](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/issues/503))
 
 - **2026-11-04** — 🔎 **社区项目推荐：Absent Author**——面向 AI 辅助论文的证据目录与作者自查、审稿检查技能，帮助研究者在投稿前核对主张与证据，也为审稿人提供可核查的问题线索。[详细介绍 →](#absent-author)
 

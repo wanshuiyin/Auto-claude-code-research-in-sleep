@@ -12,7 +12,6 @@ Generate high-quality Mermaid diagram code based on user requirements, with file
 ## Constants
 
 - **OUTPUT_DIR = `figures/`** — Output directory for all generated files
-- **MAX_ITERATIONS = 3** — Maximum refinement rounds for syntax errors
 
 ## Workflow: MUST EXECUTE ALL STEPS
 
@@ -128,79 +127,13 @@ fi
 1. Read the error message carefully
 2. Fix the syntax issue in both `.mmd` and `.md` files
 3. Re-run verification
-4. Repeat up to MAX_ITERATIONS (3) times
+4. Continue only while a concrete error remains and the next correction addresses it; respect any user-set round or budget limit.
 
-### Step 5: Claude STRICT Visual Review & Scoring (MANDATORY)
+### Step 5: Review the Rendered Diagram (MANDATORY)
 
-After successful rendering, Claude MUST read the generated PNG and perform a STRICT review:
+After successful rendering, Claude MUST inspect the generated PNG against the request. Check that required components and labels are present, each arrow has the intended source, target, and direction, and the layout, text, and data flow are readable at the intended viewing size. Confirm that `.mmd` contains raw Mermaid and `.md` wraps the same code in a Mermaid fence.
 
-```markdown
-## Claude's STRICT Review of <diagram-name>
-
-### What I See
-[Describe the rendered diagram in DETAIL - every block, every arrow, every label]
-
-### Files Generated
-- `figures/<diagram-name>.mmd` — Raw Mermaid source
-- `figures/<diagram-name>.md` — Markdown with embedded diagram
-- `figures/<diagram-name>.png` — Rendered PNG (if mmdc available)
-
-### ═══════════════════════════════════════════════════════════════
-### STRICT VERIFICATION CHECKLIST (ALL must pass for score ≥ 9)
-### ═══════════════════════════════════════════════════════════════
-
-#### A. File Correctness
-- [ ] `.mmd` file contains valid Mermaid syntax (no markdown fences)
-- [ ] `.md` file has the mermaid code wrapped in ```mermaid``` fences
-- [ ] `.mmd` and `.md` contain IDENTICAL Mermaid code
-- [ ] Diagram renders without errors (via mmdc)
-
-#### B. Arrow Correctness Verification (CRITICAL - any failure = score ≤ 6)
-Check EACH arrow:
-- [ ] Arrow 1: [Source] → [Target] — Does it point to the CORRECT target?
-- [ ] Arrow 2: [Source] → [Target] — Does it point to the CORRECT target?
-- [ ] ... (check ALL arrows)
-
-#### C. Block Content Verification (any failure = score ≤ 7)
-Check EACH block/node:
-- [ ] Block 1 "[Name]": Has correct label? Content correct?
-- [ ] Block 2 "[Name]": Has correct label? Content correct?
-- [ ] ... (check ALL blocks)
-
-#### D. Completeness
-- [ ] All components from user requirements are present
-- [ ] All connections/arrows are correct
-- [ ] Node labels are meaningful and match requirements
-
-#### E. Visual Quality
-- [ ] Layout is clean and readable
-- [ ] Color scheme is professional (not rainbow)
-- [ ] Text is readable at normal zoom
-- [ ] Proper spacing (not cramped, not sparse)
-- [ ] Data flow is traceable in 5 seconds
-
-### ═══════════════════════════════════════════════════════════════
-
-### Issues Found (BE SPECIFIC)
-1. [Issue 1]: [EXACTLY what is wrong] → [How to fix]
-2. [Issue 2]: [EXACTLY what is wrong] → [How to fix]
-
-### Score: X/10
-
-### Score Breakdown Guide:
-- **10**: Perfect. No issues. Publication-ready.
-- **9**: Excellent. Minor issues that don't affect understanding.
-- **8**: Good but has noticeable issues (layout, styling).
-- **7**: Usable but has clear problems (wrong arrows, missing labels).
-- **6**: Has arrow direction errors or missing major components.
-- **1-5**: Major issues. Unacceptable.
-
-### Verdict
-[ ] ACCEPT (score ≥ 9 AND all critical checks pass)
-[ ] FIX (score < 9 OR any critical check fails — list EXACT fixes needed)
-```
-
-**If FIX: apply corrections to both `.mmd` and `.md` files, re-render, and re-verify. Loop until ACCEPT or MAX_ITERATIONS reached.**
+Fix concrete semantic or readability problems in both source files, then re-render and inspect the affected areas. Stop when the diagram meets the request and no material issue remains; do not repeat review for a numerical score or cosmetic preference. Respect any user-set round or budget limit. If rendering is unavailable or a material issue remains at that limit, report it clearly instead of claiming verification succeeded.
 
 ### Step 6: Final Output Summary
 
@@ -402,17 +335,10 @@ figures/
 
 ## Key Rules (MUST FOLLOW)
 
-1. **ALWAYS save files to `figures/` directory** — Never just output code in chat
-2. **ALWAYS generate BOTH `.mmd` and `.md` files** — They must contain identical Mermaid code
-3. **ALWAYS read the reference documentation** before generating code for a diagram type
-4. **ALWAYS verify syntax** — Run mmdc or manually validate before accepting
-5. **ALWAYS review the rendered PNG** — Read the image and perform STRICT scoring
-6. **NEVER accept score < 9** — Keep refining until excellence
-7. **VERIFY EVERY ARROW DIRECTION** — Wrong direction = automatic fail (score ≤ 6)
-8. **VERIFY EVERY BLOCK CONTENT** — Wrong content = automatic fail (score ≤ 7)
-9. **BE SPECIFIC in feedback** — "Arrow from A to B points wrong" not "arrow is wrong"
-10. **FIX errors before accepting** — Do not deliver broken diagrams
-11. **Use descriptive file names** — kebab-case derived from the diagram content
+1. Save `.mmd` and `.md` files to `figures/` with descriptive kebab-case names and identical Mermaid code.
+2. Read the relevant syntax guidance, render with `mmdc`, and inspect the generated PNG before claiming verification.
+3. Verify components, block contents, labels, and every arrow's direction against the request.
+4. Fix concrete errors and report any unresolved issue or unavailable verification clearly.
 
 ---
 
