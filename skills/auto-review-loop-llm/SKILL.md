@@ -193,7 +193,7 @@ curl -s "${LLM_BASE_URL}/chat/completions" \
 
 #### Phase C: Implement Fixes
 
-Priority: metric additions > reframing > new experiments
+Add a metric when it resolves a specific review concern that the existing results cannot settle. Use existing measurements when they already answer it.
 
 #### Phase D: Wait for Results
 

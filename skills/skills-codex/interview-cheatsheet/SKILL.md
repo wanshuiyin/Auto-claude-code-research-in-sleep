@@ -1,6 +1,6 @@
 ---
 name: interview-cheatsheet
-description: "Generate a long-form Chinese interview-prep cheat sheet on a specific ML/LLM topic — formulas with derivations, from-scratch PyTorch code, comparison tables, and 25 高频面试题 (L1 必会 / L2 进阶 / L3 顶级 lab). Use when the user says '写面试 cheat sheet', '写一份 X 教程', '帮我准备 Y 面试题', '出一份 X 速查', or wants a 600-1000 line Chinese tutorial on a specific ML topic."
+description: "Generate a long-form Chinese interview-prep cheat sheet on a specific ML/LLM topic — formulas with derivations, from-scratch PyTorch code, comparison tables, and 高频面试题 (L1 必会 / L2 进阶 / L3 顶级 lab). Use when the user says '写面试 cheat sheet', '写一份 X 教程', '帮我准备 Y 面试题', '出一份 X 速查', or wants a detailed Chinese tutorial on a specific ML topic."
 argument-hint: '<topic> [--effort balanced|max] [--byline "Name (姓名), Affiliation"] [--commit false]'
 allowed-tools: Bash(*), Read, Write, Edit, spawn_agent, mcp__antigravity__antigravity, mcp__antigravity__antigravity-reply, mcp__grok__grok, mcp__grok__grok-reply, mcp__claude-review__review, mcp__claude-review__review_reply, mcp__claude-review__review_start, mcp__claude-review__review_reply_start, mcp__claude-review__review_status
 ---
@@ -18,30 +18,32 @@ allowed-tools: Bash(*), Read, Write, Edit, spawn_agent, mcp__antigravity__antigr
 > to reviewer-bearing children. Generation workers are unchanged.
 
 
-Generate one comprehensive Chinese cheat sheet per invocation: formulas + derivations + from-scratch code + 25 高频题. Output receives a fresh selected math/code review before rendering; same-family positives remain provisional. **Detect-only by default: never auto-commits.**
+Generate one comprehensive Chinese cheat sheet per invocation: formulas + derivations + from-scratch code + 分层面试题. Output receives a fresh selected math/code review before rendering; same-family positives remain provisional. **Detect-only by default: never auto-commits.**
 
 ## Inputs
 
-- **`<topic>`** (required) — narrow enough for one 600-1000 line tutorial. Good: "RLHF / DPO / PPO", "MoE", "KV Cache + Speculative Decoding". Bad (too broad): "all of LLM training", "diffusion" (split into Forward Process / Sampling / CFG separately).
-- **`--effort`** (default `balanced`) — `balanced` ≈ 600 lines, `max` ≈ 1000 lines with deeper proofs and more L3 questions.
+- **`<topic>`** (required) — focused enough for one coherent tutorial. Good: "RLHF / DPO / PPO", "MoE", "KV Cache + Speculative Decoding". Bad (too broad): "all of LLM training", "diffusion" (split into Forward Process / Sampling / CFG separately).
+- **`--effort`** (default `balanced`) — `balanced` covers the core intuition, derivations, working implementation and representative questions; `max` adds deeper proofs, engineering tradeoffs and advanced questions where they improve understanding. Neither setting imposes a line or question count.
 - **`--byline`** (default `"<Your Name>, <Affiliation>"`) — passed to `/render-html --author`.
 - **`--commit`** (default `false`) — if `false` (default), stop after rendering; user reviews and commits. Never push without explicit user approval.
 
 ## Style guide — STRICT (read `docs/tutorials/attention_tutorial.md` as canonical reference)
 
-### Section skeleton (12-14 sections)
+### Section skeleton (adapt to the topic)
 
 ```
-## §0 TL;DR — callout intro line + numbered list of 5-7 takeaways
+## §0 TL;DR — callout intro line + a short list of key takeaways
 ## §1 直觉 — why this matters; analogy; one-paragraph mental model
 ## §2 核心公式 — main formula + derivation (variance / scaling / boundary)
-## §3 实现细节 — 50-80 line from-scratch PyTorch
+## §3 实现细节 — a focused, runnable from-scratch PyTorch example
 ## §4-7 变体 / 工程实践 / 常见 bug — variants, comparison tables, footguns
 ## §8 复杂度 / 资源 — time + memory complexity
 ## §9 与相关方法对比 — placement in the ecosystem
-## §10 25 高频面试题 — L1 (10 必会) + L2 (10 进阶) + L3 (5 顶级 lab), all with <details><summary> collapsible answers
+## §10 高频面试题 — L1 必会 / L2 进阶 / L3 顶级 lab as relevant, with <details><summary> collapsible answers
 ## §A 附录 (optional) — sanity-check output, reference list
 ```
+
+Use this as a coverage guide, not a required section count: combine or omit sections that do not serve the topic, and add sections for substantive gaps. Select questions that test distinct concepts; do not pad any difficulty tier.
 
 ### Conventions — bake the established lessons in
 
@@ -61,7 +63,7 @@ Generate one comprehensive Chinese cheat sheet per invocation: formulas + deriva
 | Field | Pattern |
 |---|---|
 | `--eyebrow` | `Interview Prep · <Topic>` |
-| `--subtitle` | one Chinese sentence describing scope (e.g. `公式推导 + From-Scratch 代码 + 25 高频题（L1 必会 · L2 进阶 · L3 顶级 lab）`) |
+| `--subtitle` | one Chinese sentence describing scope (e.g. `公式推导 + From-Scratch 代码 + 分层面试题（L1 必会 · L2 进阶 · L3 顶级 lab）`) |
 | `--title` | `<Topic> 面试 Cheat Sheet` or `<Topic> Quick Reference` |
 | `--lang` | `zh-CN` |
 
@@ -73,17 +75,17 @@ Generate one comprehensive Chinese cheat sheet per invocation: formulas + deriva
 ### Step 1 — Plan structure (no files written)
 
 Internally sketch:
-- 12-14 section titles
+- Section titles covering the topic’s learning path
 - List of major formulas (with derivation outline for each)
 - List of code blocks (skeleton + what it demonstrates)
-- 25 interview questions sorted by L1 / L2 / L3 difficulty (each with one-line expected answer)
+- Representative interview questions sorted by L1 / L2 / L3 difficulty (each with one-line expected answer)
 - Comparison table topics (e.g., "RLHF vs DPO vs IPO vs SimPO")
 
 If the topic is too broad to fit in one cheat sheet, **stop and ask the user to scope** before drafting.
 
 ### Step 2 — Draft MD
 
-Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide. Length target: 600 lines (balanced) or 1000 lines (max), ±20%.
+Write directly to `docs/tutorials/<slug>_tutorial.md`. Follow the style guide and requested depth. Finish when the core concepts, derivations, runnable examples and distinct interview questions are explained clearly; remove repetition rather than filling a length target.
 
 ### Step 3 — Fresh selected math/code review (Codex default xhigh; same-family stays provisional)
 
@@ -99,7 +101,7 @@ You are reviewing a long-form Chinese interview-prep tutorial on <TOPIC> for mat
 - Style reference: docs/tutorials/attention_tutorial.md
   (Read this only for STYLE — do NOT score the draft against the reference's content topic.)
 
-## Return JSON with these 10 checks
+## Return JSON with these checks
 
 1. formula_correctness — Independently re-derive each $$ display formula. Flag any error with file:line.
 2. code_correctness — For each python block: would it run? Does it implement the stated math? Imports / shapes / device handling consistent?
@@ -108,9 +110,8 @@ You are reviewing a long-form Chinese interview-prep tutorial on <TOPIC> for mat
 5. table_pipe_escape — Any markdown table cell containing `|x|` math (not `\lvert x \rvert`)? Cite line.
 6. callout_list_collision — Any line matching the pattern `^> (?:💡|⚠️|✅|❌) \*\*[^*]+\*\* — (?:- |\d+\. )`? That swallows the list.
 7. heading_consistency — All `## §N` and `### N.M` follow style guide (space after §N, no glued chars).
-8. section_completeness — Sections §0..§10 (and §A if effort=max) present and non-trivial.
-9. length_target — Within ±20% of target (600 for balanced, 1000 for max).
-10. personal_info_leak — None of: the owner's institution / lab / center names, degree-program affiliations, private server aliases, job-search or recruitment context, absolute `/Users/...` paths. (Keep the concrete string banlist in local untracked notes — the public SKILL defines only the CATEGORIES; listing the real values here would itself be the leak.)
+8. topic_coverage — Does the tutorial explain the promised scope at the requested depth? Identify specific missing concepts or unanswered learning questions; do not require fixed sections, lines or question counts.
+9. personal_info_leak — None of: the owner's institution / lab / center names, degree-program affiliations, private server aliases, job-search or recruitment context, absolute `/Users/...` paths. (Keep the concrete string banlist in local untracked notes — the public SKILL defines only the CATEGORIES; listing the real values here would itself be the leak.)
 
 Return JSON:
 {
@@ -120,26 +121,21 @@ Return JSON:
   "warnings": ["..."]
 }
 
-Verdict: PASS = all pass, WARN = at most cosmetic issues (length slight off / cosmetic style), FAIL = any math/code/factual error OR personal-info leak OR table-pipe / callout-list bug.
+Verdict: PASS = all pass, WARN = only nonblocking issues, FAIL = any math/code/factual error OR personal-info leak OR table-pipe / callout-list bug.
 ```
 
-### Step 4 — Fix and loop (no hard cap — judge by trajectory)
+### Step 4 — Resolve concrete review findings
 
-For each FAIL issue, edit the MD. Then re-invoke Codex with a **fresh `spawn_agent` call** (never continue with `send_input`). Stop when verdict = PASS or WARN with no FAIL items.
+Fix substantiated math, code, factual and rendering defects. Run the relevant code or calculation checks, then request a focused fresh review of the fixes and any affected claims. Preserve the selected reviewer route and fresh-context contract from Step 3.
 
-**No hard round cap.** Use these heuristics instead:
-
-- ✅ **Keep going** if each round's FAIL items are *shrinking, concrete, enumerable* (e.g., citation year fixes, off-by-one, single-line code bugs). The reviewer is doing useful work — let it converge.
-- ⛔ **Stop and report** if the same issue keeps coming back (loop detected), or if the FAIL items shift to architectural / scope concerns that need user input, or if the round count exceeds ~6 without convergence.
-
-Most tutorials converge in 3-5 rounds. Going to 5-6 rounds is fine if substantive bugs are still being caught — the Video Generation tutorial (May 2026) went to 5 rounds and the final 2 rounds caught real citation errors and an over-attribution to Sora's patch size that would have shipped otherwise.
+Stop when the concrete blockers are resolved; a cosmetic WARN does not require another round. Do not seek a higher verdict by repeatedly reviewing unchanged content. If an issue repeats without new evidence, or requires a scope decision, report the unresolved issue and the work needed to resolve it. Do not present the tutorial as accepted while a blocker remains.
 
 ### Step 5 — Render via /render-html
 
-Call directly (do not invoke `/render-html` as a sub-skill; call its python script — gives clear control):
+Resolve `RENDER_HTML` using [the renderer’s Tool Location instructions](../render-html/SKILL.md#tool-location), then run it from the project root:
 
 ```bash
-python3 skills/render-html/scripts/render_html.py docs/tutorials/<slug>_tutorial.md \
+python3 "$RENDER_HTML" docs/tutorials/<slug>_tutorial.md \
   --template academic \
   --out docs/tutorials/<slug>_tutorial.html \
   --title "<Topic> 面试 Cheat Sheet" \
@@ -149,11 +145,11 @@ python3 skills/render-html/scripts/render_html.py docs/tutorials/<slug>_tutorial
   --lang zh-CN
 ```
 
-`render_html.py` runs its own 13-check codex review automatically. If that FAILs, fix the MD (often a table-pipe or callout-list issue the math/code reviewer missed) and re-render. Note that `render_html.py` itself writes `<slug>_tutorial.review.json` for the render-stage audit.
+`render_html.py` renders the HTML; it does not invoke a reviewer or write a review audit. Inspect the rendered output for broken math, code, tables, callouts and navigation. Record the actual checks and results. If a defect appears, fix its source, re-render and verify the affected output. Use a fresh selected reviewer when a remaining visual question needs independent inspection; apply Step 4’s stopping rule.
 
 ### Step 6 — Combine audit trail
 
-After both reviews pass, merge math/code review history + render review history into one `docs/tutorials/<slug>_tutorial.review.json`:
+After concrete blockers are resolved, save the math/code review and actual render checks in one `docs/tutorials/<slug>_tutorial.review.json`:
 
 ```json
 {
@@ -165,17 +161,17 @@ After both reviews pass, merge math/code review history + render review history 
   "effort": "balanced | max",
   "byline": "<author string>",
   "math_code_review": {
-    "verdict": "PASS",
+    "verdict": "<actual verdict>",
     "rounds": [
       {"run": 1, "verdict": "...", "thread_id": "...", "issue": "...", "fix": "..."},
       ...
     ]
   },
   "render_review": {
-    "verdict": "PASS",
+    "verdict": "<actual verdict>",
     "rounds": [...]
   },
-  "summary": "<one-line: N-round math/code review + M-round render review settled at PASS>",
+  "summary": "<actual acceptance status, checks performed and unresolved nonblocking notes>",
   "rendered_at": "<YYYY-MM-DD>"
 }
 ```
@@ -192,9 +188,9 @@ Do **NOT** `git add` / `git commit` / `git push`. Report:
     docs/tutorials/<slug>_tutorial.html        (<bytes> bytes, <TOC> TOC entries)
     docs/tutorials/<slug>_tutorial.review.json
 
-  Math/code review:  PASS after <N> rounds (<thread IDs>)
-  Render review:     PASS after <M> rounds
-  Length:            <actual> lines (target <effort>)
+  Math/code review:  <actual verdict and acceptance status> (<thread IDs>)
+  Render checks:     <checks performed and actual results>
+  Depth:             <effort>; <brief scope covered>
 
   Issues caught + fixed during review:
     - <one line per non-trivial fix>
@@ -221,11 +217,11 @@ Suggest the row to the user but let them edit it in themselves if they want to c
 | Invariant | How it's enforced |
 |---|---|
 | Executor/reviewer family | Record actual executor/reviewer identities at both stages; same-family positives remain provisional |
-| Fresh agent per reviewer call | Step 3 + render's own gate both use fresh `spawn_agent` calls, not `send_input` |
+| Fresh agent per reviewer call | Step 3 and any independent render review use fresh `spawn_agent` calls |
 | Codex reasoning = xhigh | Hardcoded in Step 3 reviewer config |
-| Personal info redaction | Both math/code reviewer and render reviewer check; banlist in style guide |
+| Personal info redaction | Math/code review and render inspection check; banlist in style guide |
 | Lessons-learned encoded | Table-pipe + callout-list collision rules in style guide AND review checks 5+6 |
-| No silent failure | If review FAILs and the FAIL set is no longer shrinking (loop) or hits ~6 rounds without convergence, stop and report — don't push |
+| No silent failure | Stop when concrete blockers are resolved; report unresolved repeated or scope-dependent issues rather than restarting the same review |
 
 ## When NOT to use
 

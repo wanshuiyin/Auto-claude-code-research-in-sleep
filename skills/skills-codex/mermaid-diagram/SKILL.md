@@ -10,7 +10,6 @@ Generate high-quality Mermaid diagram code based on user requirements, with file
 ## Constants
 
 - **OUTPUT_DIR = `figures/`** — Output directory for generated files
-- **MAX_ITERATIONS = 3** — Maximum refinement rounds for syntax or layout issues
 
 ## Workflow: MUST EXECUTE ALL STEPS
 
@@ -105,77 +104,13 @@ If verification fails:
 1. Read the error carefully
 2. Fix the syntax issue in both `.mmd` and `.md`
 3. Re-run verification
-4. Repeat up to `MAX_ITERATIONS`
+4. Continue only while a concrete error remains and the next correction addresses it; respect any user-set round or budget limit.
 
-### Step 5: Codex STRICT Visual Review & Scoring (MANDATORY)
+### Step 5: Review the Rendered Diagram (MANDATORY)
 
-After successful rendering, Codex MUST read the generated PNG and perform a strict review:
+After successful rendering, Codex MUST inspect the generated PNG against the request. Check that required components and labels are present, each arrow has the intended source, target, and direction, and the layout, text, and data flow are readable at the intended viewing size. Confirm that `.mmd` contains raw Mermaid and `.md` wraps the same code in a Mermaid fence.
 
-```markdown
-## Codex's STRICT Review of <diagram-name>
-
-### What I See
-[Describe the rendered diagram in detail]
-
-### Files Generated
-- `figures/<diagram-name>.mmd`
-- `figures/<diagram-name>.md`
-- `figures/<diagram-name>.png`
-
-### ═══════════════════════════════════════════════════════════════
-### STRICT VERIFICATION CHECKLIST (ALL must pass for score ≥ 9)
-### ═══════════════════════════════════════════════════════════════
-
-#### A. File Correctness
-- [ ] `.mmd` contains valid Mermaid syntax
-- [ ] `.md` wraps the Mermaid code in ```mermaid fences
-- [ ] `.mmd` and `.md` contain identical Mermaid code
-- [ ] Diagram renders without errors
-
-ASCII alias for automated checks: score >= 9.
-
-#### B. Arrow Correctness Verification (CRITICAL - any failure = score ≤ 6)
-ASCII alias for automated checks: CRITICAL - any failure = score <= 6.
-
-- [ ] Every arrow points to the correct target
-
-#### C. Block Content Verification (any failure = score ≤ 7)
-ASCII alias for automated checks: any failure = score <= 7.
-
-- [ ] Every block label is correct
-- [ ] Every block contains the intended content
-
-#### D. Completeness
-- [ ] All required components are present
-- [ ] All required connections are present
-- [ ] Labels are meaningful and match the request
-
-#### E. Visual Quality
-- [ ] Layout is clean and readable
-- [ ] Colors are professional
-- [ ] Text is readable at normal zoom
-- [ ] Spacing is balanced
-- [ ] Data flow is understandable within 5 seconds
-
-### ═══════════════════════════════════════════════════════════════
-### Issues Found (BE SPECIFIC)
-1. [issue] -> [fix]
-
-### Score: X/10
-
-### Score Breakdown Guide:
-- 10: correct, readable, publication-ready
-- 9: minor polish only
-- 8: usable but one visual/layout weakness remains
-- 7: one content or block-label weakness remains
-- 6 or below: arrow direction, missing component, syntax, or semantic error
-
-### Verdict
-- [ ] ACCEPT
-- [ ] FIX
-```
-
-If the verdict is `FIX`, apply corrections to both `.mmd` and `.md`, re-render, and re-review until `ACCEPT` or `MAX_ITERATIONS` is reached.
+Fix concrete semantic or readability problems in both source files, then re-render and inspect the affected areas. Stop when the diagram meets the request and no material issue remains; do not repeat review for a numerical score or cosmetic preference. Respect any user-set round or budget limit. If rendering is unavailable or a material issue remains at that limit, report it clearly instead of claiming verification succeeded.
 
 ### Step 6: Final Output Summary
 
@@ -362,17 +297,10 @@ figures/
 
 ## Key Rules (MUST FOLLOW)
 
-1. Always save files to `figures/`
-2. Always generate both `.mmd` and `.md`
-3. Always read the relevant syntax guidance before generating code
-4. Always verify syntax before accepting
-5. Always review the rendered PNG
-6. Never accept score < 9
-7. Verify every arrow direction
-8. Verify every block content
-9. Be specific in feedback
-10. Fix errors before accepting
-11. Use descriptive kebab-case file names
+1. Save `.mmd` and `.md` files to `figures/` with descriptive kebab-case names and identical Mermaid code.
+2. Read the relevant syntax guidance, render with `mmdc`, and inspect the generated PNG before claiming verification.
+3. Verify components, block contents, labels, and every arrow's direction against the request.
+4. Fix concrete errors and report any unresolved issue or unavailable verification clearly.
 
 ---
 

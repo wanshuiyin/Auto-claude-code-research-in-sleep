@@ -430,7 +430,7 @@ cd slides && python3 generate_pptx.py
 
 ### Phase 8: Full Talk Script
 
-Generate `slides/TALK_SCRIPT.md` — a complete, word-for-word script for the talk.
+Generate `slides/TALK_SCRIPT.md` — a complete, word-for-word script for the talk. Build the narrative around the paper’s results and what this audience needs to understand. Choose Q&A topics accordingly. A theory seminar might ask which step needs an assumption, while a systems group might ask what limits throughput.
 
 This is different from speaker notes (brief reminders). The talk script is a **full manuscript** that can be read aloud or used for practice.
 
@@ -501,29 +501,8 @@ The paper and code are available at the QR code on screen. I'm happy to take que
 
 ## Anticipated Q&A
 
-### Q1: How does this compare to [strongest baseline]?
-**A**: "[Specific comparison with numbers]. Our advantage is particularly clear in [specific scenario], where we see [X%] improvement."
-
-### Q2: What are the main limitations?
-**A**: "[Honest answer]. We see this as [future work direction]."
-
-### Q3: How computationally expensive is this?
-**A**: "[Training/inference cost]. Compared to [baseline], our method requires [comparison]."
-
-### Q4: Does this generalize to [related domain]?
-**A**: "[Answer based on paper's discussion section]."
-
-### Q5: What's the most surprising finding?
-**A**: "[Interesting insight from the experiments]."
-
-### Q6: How sensitive is the method to [hyperparameter/design choice]?
-**A**: "[Reference ablation study if available]."
-
-### Q7: What's the next step for this research?
-**A**: "[Future work from conclusion]."
-
-### Q8: [Domain-specific question]
-**A**: "[Answer]."
+### [A question this audience is likely to ask about the main result]
+**A**: [Answer from the paper. Cite the relevant comparison, figure, or assumption.]
 ```
 
 ### Final Output Summary

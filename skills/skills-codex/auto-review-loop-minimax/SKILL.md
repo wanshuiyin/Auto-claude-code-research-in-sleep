@@ -156,7 +156,7 @@ Prioritization rules:
 - Skip fixes requiring excessive compute (flag for manual follow-up)
 - Skip fixes requiring external data/models not available
 - Prefer reframing/analysis over new experiments when both address the concern
-- Always implement metric additions (cheap, high impact)
+- Add a metric when it resolves a specific review concern that the existing results cannot settle. Use existing measurements when they already answer it.
 
 #### Phase D: Wait for Results
 

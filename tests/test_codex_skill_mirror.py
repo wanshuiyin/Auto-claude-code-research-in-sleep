@@ -467,9 +467,9 @@ def test_codex_medium_risk_skills_preserve_claude_semantics() -> None:
             "ACM Digital Library",
         ],
         "mermaid-diagram": [
-            "Score Breakdown Guide",
-            "CRITICAL - any failure = score <= 6",
-            "any failure = score <= 7",
+            "inspect the generated PNG",
+            "each arrow has the intended source, target, and direction",
+            "re-render and inspect the affected areas",
         ],
     }
 
