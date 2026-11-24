@@ -203,7 +203,7 @@ Before drafting the front matter, re-read the one-sentence contribution from `PA
 
 **§5 Conclusion:**
 - Summarize contributions (NOT copy-paste from intro — rephrase)
-- Limitations (2-4 material, specific limits — dataset scale, compute regime, assumption X; real ones only, never invented to fill a count. This section is the ONLY home for generic caveats)
+- Limitations (material constraints on interpreting the result, in the format required by the venue)
 - Future work (1-2 concrete directions)
 - Ethics statement and reproducibility statement (if venue requires)
 - Target: 0.5 pages
@@ -408,9 +408,8 @@ Before declaring done:
    is needed", "may not generalize", and "should be interpreted with caution".
    Claim-defining scope, assumptions, and statistical qualifications stay
    attached to the claims they make true.
-4. Aim for 2-4 material, specific limitations (dataset scale, compute regime,
-   assumption X). Real ones only — never invent one to meet a count, never
-   apologize generically, never repeat the same limitation through the paper.
+4. State a limitation when it affects how readers should interpret the result.
+   For example, identify the hardware tested when discussing measured latency.
 5. Writing instructions are not manuscript content. "Do not mention X" means
    omit X, not write "we do not address/claim/discuss X". Never expose
    drafting instructions, requested omissions, reviewer feedback, or revision

@@ -201,8 +201,8 @@ contract is what gets graded.)
    every headline claim has a named evidence source (file/table); every
    number in the abstract traces to a results file; scope qualifiers the title
    /abstract must carry; figures that must exist and what each must show;
-   section-level completeness (e.g. "limitations names ≥2 real limitations,
-   not hedges"); venue constraints (page limit, anonymization). Each assertion
+   section-level completeness (e.g. the latency claim identifies the hardware
+   tested); venue constraints (page limit, anonymization). Each assertion
    must be CHECKABLE by reading the final PDF + results files — no vibes
    ("writing is clear" is not an assertion; "every acronym is defined at first
    use" is). Fewer than ~10 assertions and the gate rubber-stamps; beyond ~20

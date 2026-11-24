@@ -57,12 +57,12 @@ Do not plan a large experiment suite on top of an unstable method. First stabili
 - Extract the problem, rough approach, constraints, resources, and target venue.
 - Check whether `refine-logs/FINAL_PROPOSAL.md` already exists and still matches the current request.
 - If the proposal is missing, stale, or materially different from the current request, run the full `research-refine` stage.
-- If the proposal is already strong and aligned, reuse it and jump to experiment planning.
+- If the proposal is already strong and aligned, reuse it for planning when it also satisfies any threshold explicitly requested for this run.
 - If in doubt, prefer re-running `research-refine` rather than planning experiments for the wrong method.
 
 ### Phase 1: Method Refinement Stage
 
-Run the `research-refine` workflow and keep its V3 philosophy intact:
+Run `research-refine` with any `threshold` and `max rounds` the user supplied:
 
 - preserve the Problem Anchor
 - prefer the smallest adequate mechanism
@@ -77,7 +77,7 @@ Exit this stage only when these are explicit:
 - the key claims and must-run ablations
 - the remaining risks, if any
 
-If the verdict is still `REVISE`, continue into experiment planning only if the remaining weaknesses are clearly documented.
+If a user-requested score threshold is unmet, report the result and stop before planning. With a `REVISE` verdict, continue into planning only if the remaining weaknesses are documented and can be addressed by the planned experiments.
 
 ### Phase 2: Planning Gate
 

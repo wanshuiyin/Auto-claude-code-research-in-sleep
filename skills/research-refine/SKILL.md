@@ -37,7 +37,7 @@ User input (PROBLEM + vague APPROACH)
   -> Phase 2 (Codex/GPT-6-Astra): Review for fidelity, specificity, contribution quality, and frontier leverage
   -> Phase 3 (Claude): Anchor check + simplicity check -> revise method -> rewrite full proposal
   -> Phase 4 (Codex, same thread): Re-evaluate revised proposal
-  -> Repeat Phase 3-4 until OVERALL SCORE >= 9 or MAX_ROUNDS reached
+  -> Repeat Phase 3-4 while a substantive revision remains, up to MAX_ROUNDS
   -> Phase 5: Save full history to refine-logs/
   -> Optional handoff: /experiment-plan for a detailed execution-ready experiment roadmap
 ```
@@ -46,7 +46,7 @@ User input (PROBLEM + vague APPROACH)
 
 - **REVIEWER_MODEL = `gpt-6-astra`** — Reviewer model used via Codex MCP.
 - **MAX_ROUNDS = 5** — Maximum review-revise rounds.
-- **SCORE_THRESHOLD = 9** — Minimum overall score to stop.
+- **SCORE_THRESHOLD** — Set only when the user requests `threshold: N`. Record scores in every round. Carry an explicit threshold in `REFINE_STATE.json` when saving or resuming the run.
 - **OUTPUT_DIR = `refine-logs/`** — Directory for round files and final report.
 - **MAX_LOCAL_PAPERS = 15** — Maximum local papers/notes to scan for grounding.
 - **MAX_CORE_EXPERIMENTS = 3** — Default cap for core validation blocks inside this skill.
@@ -408,8 +408,8 @@ Bundle contents:
     - **Verdict**: READY / REVISE / RETHINK
 
     Verdict rule:
-    - READY: overall score >= 9, no meaningful drift, one focused dominant contribution, and no obvious complexity bloat remains
-    - REVISE: the direction is promising but not yet at READY bar
+    - READY: the proposal preserves the Problem Anchor, has one focused dominant contribution, and has no outstanding issue that would change the method, its feasibility, or the validation plan
+    - REVISE: name the specific issue and the decision or revision it calls for
     - RETHINK: the core mechanism or framing is still fundamentally off
 ```
 
@@ -451,7 +451,7 @@ Update `refine-logs/score-history.md`:
 | 1     | X                | X                  | X                    | X                 | X           | X                | X               | X       | REVISE  |
 ```
 
-**STOP CONDITION**: If overall score >= SCORE_THRESHOLD, verdict is READY, and there is no unresolved drift warning, skip to Phase 5.
+**When to finish:** On a READY review with no unresolved drift or substantive issue, go directly to Phase 5. If the user requested a score threshold and the score is below it, record the actual score and the unmet target in the final report; leave the target unmet without requesting another score on the same proposal. While a substantive issue remains, revise even if the score is high. At MAX_ROUNDS, report the latest verdict and outstanding issues.
 
 #### Step 3.2: Revise With an Anchor Check and a Simplicity Check
 
@@ -567,7 +567,7 @@ Bundle contents:
     - State whether the method is simpler or still overbuilt
     - State whether the frontier leverage is now appropriate or still old-school / forced
     - Focus new critiques on missing mechanism, weak training signal, weak integration point, pseudo-novelty, or unnecessary complexity
-    - Use the same verdict rule: READY only if overall score >= 9 and no blocking issue remains
+    - Apply the first review’s verdict rule. For each remaining issue, identify what would change in the method or validation.
 
     Same output format: 7 scores, overall score, verdict, drift warning, simplification opportunities, modernization opportunities, remaining action items.
 ```
@@ -576,10 +576,7 @@ Save review to `refine-logs/round-N-review.md`.
 
 **Checkpoint:** Update `refine-logs/REFINE_STATE.json` with `{"phase": "review", "round": N, "threadId": "<saved>", "last_score": <parsed>, "last_verdict": "<parsed>", ...}`.
 
-Then return to Phase 3 until:
-
-- **Overall score >= SCORE_THRESHOLD** and verdict is READY and no unresolved drift
-- or **MAX_ROUNDS reached**
+Apply the same stopping decision in Step 3.1 after each review.
 
 ### Phase 5: Final Report and Logs
 
@@ -695,7 +692,7 @@ If the final verdict is not READY, still write the best current final version he
 ...
 
 ## Next Steps
-- If READY: proceed to `/experiment-plan` for a full experiment roadmap, then `/run-experiment`
+- If READY and any user-requested threshold was met: proceed to `/experiment-plan`, then `/run-experiment`. If the threshold alone was missed, report it and leave the handoff pending.
 - If REVISE: manually address the remaining mechanism weaknesses, then re-run `/research-refine`
 - If RETHINK: revisit the core mechanism, possibly with `/idea-creator`
 ```
