@@ -98,18 +98,7 @@ replace unreadable evidence with the executor's conclusions. The prompt may
 include the original problem and author claims, clearly marked as claims.
 For an existing prompt-only step, preserve its full source material.
 
-**Exception — outbound-publication pipelines.** When the reviewed artifact is
-content that is about to leave the local machine for an external service
-(publishing, community posting, external-audience triage), the
-artifact-grounded convention above is deliberately inverted: the reviewer
-receives the text inline, and `cwd` is pinned to a neutral directory (`/tmp`)
-rather than to the inputs directory. Antigravity can read any file under its
-working directory and writes that directory's absolute path into its context,
-so a business directory would leak the local account name and business paths to
-an external model. The full contract — including why this is a deviation and
-the explicit prohibition on "fixing" it back to the general convention —
-lives in `mcp-servers/antigravity-exec/aris-antigravity-review-protocol.md`.
-Do not treat this exception as a bug to be corrected.
+For an optional wording check before publication, see the [Antigravity example using redacted inline text](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/mcp-servers/antigravity-exec/README.md#outbound-text-review).
 
 Image/PDF visual review is a separate capability: preserve the skill's actual
 image inputs and verify that the selected tool can consume them. A text-only

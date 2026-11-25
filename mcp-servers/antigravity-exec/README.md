@@ -4,21 +4,6 @@
 
 默认模型 `gemini-3.8-flash-high`，effort `high`。提供 `antigravity` 和 `antigravity-reply`，作为独立工具使用，不修改 ARIS skills 的 reviewer 路由。
 
-## 复核协议（定时任务通用契约）
-
-本桥接在**外发未发表内容**的定时管线里的调用契约，写在同目录的
-[`aris-antigravity-review-protocol.md`](aris-antigravity-review-protocol.md)：
-工具/model/effort 钉死、`cwd` 恒为 `/tmp`、内存脱敏后内联送审、五段输出结构、
-`must_fix` 回改与「改后不复审」、降级放行、每轮 ≤ 2 次预算。
-
-该协议同时是对 `skills/shared-references/reviewer-backends.md` 通用约定的**显式偏离**
-（通用约定要求给审阅者文件路径并把 `cwd` 指向 review inputs 目录；本场景会把本机用户名
-与业务路径递给外部模型，故必须相反）。偏离说明见协议 §0，ARIS 侧登记见
-`reviewer-backends.md` 的 "Exception — outbound-publication pipelines" 段。
-
-改协议请改本目录下的 `aris-antigravity-review-protocol.md`（仓库内权威副本），
-不要改 `~/.claude/aris-antigravity-review-protocol.md`——后者是指向前者的符号链接。
-
 现有 [`gemini-review`](../gemini-review/README.md) 已有 API、Gemini CLI 和 `agy` 后端，提供 `review*` 工具供正式评审流程使用。本桥接提供显式 model/effort 与 CLI 原生 conversation 续接；工具名和会话契约不同。`— reviewer: agy` 和 Codex 的 Gemini overlay 仍走现有 `gemini-review`，不会因安装本桥接而切换。
 
 ## 安装
@@ -58,6 +43,23 @@ claude mcp add antigravity -s user -- python3 /absolute/path/to/aris/mcp-servers
 续接只接受这两个字段，沿用首轮 model、effort、cwd 和审阅 agent。桥接重启后仍可恢复自己创建的会话；不用 `--continue`，避免串到其他交互会话。`threadId` 同时放在文本和 `structuredContent` 中。
 
 返回的 `model` 来自 CLI 的 init 事件，`selectedModelLabel` 来自本轮 CLI 解析模型的日志；`effort` 从该实际选择的变体标签解析，注明 `effortSource=cli_selected_model_variant`。缺少记录时返回 null，不把请求值冒充实测值；这也不是独立的服务端型号证明。不支持的模型或 effort 交由 CLI 明确报错，不自动降级。
+
+<a id="outbound-text-review"></a>
+
+### 可选示例：发布前检查一段文字
+
+例如，准备发布更新公告时，可以请 Gemini 找出读者容易误解的地方。先在调用方删去内部路径、账号等私有信息，只送允许发给外部模型并保存在会话记录里的片段。用新会话，把文案直接放进 `prompt`。为这次调用新建一个仅自己可访问的空目录作为 `cwd`（macOS/Linux 可运行 `mktemp -d /tmp/aris-review.XXXXXXXX`），将返回的路径填入下面的示例：
+
+```json
+{
+  "cwd": "<刚创建的空目录的绝对路径>",
+  "prompt": "请只检查下面这段文字，指出具体哪句话容易让读者误解，并给出改法。公告：新版从周五开始分批开放。周五起所有用户都可以使用。"
+}
+```
+
+空目录让这次文字复核无需打开项目文件；文件访问权限仍由 CLI 控制。桥接会将完整提示写入临时文件 `prompt.jsonl`，正常结束时清理；CLI 自身可保留会话记录。结束会话后可用 `rmdir` 移除空目录。
+
+这次复核只判断文案是否清楚。若需核实公告中的数字，仍按原任务读取证据。调用失败时记为 `REVIEW_UNAVAILABLE`；是否发布取决于原任务的授权和必需检查。
 
 ## 权限与执行
 
