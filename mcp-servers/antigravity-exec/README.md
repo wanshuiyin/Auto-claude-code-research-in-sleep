@@ -4,6 +4,21 @@
 
 默认模型 `gemini-3.8-flash-high`，effort `high`。提供 `antigravity` 和 `antigravity-reply`，作为独立工具使用，不修改 ARIS skills 的 reviewer 路由。
 
+## 复核协议（定时任务通用契约）
+
+本桥接在**外发未发表内容**的定时管线里的调用契约，写在同目录的
+[`aris-antigravity-review-protocol.md`](aris-antigravity-review-protocol.md)：
+工具/model/effort 钉死、`cwd` 恒为 `/tmp`、内存脱敏后内联送审、五段输出结构、
+`must_fix` 回改与「改后不复审」、降级放行、每轮 ≤ 2 次预算。
+
+该协议同时是对 `skills/shared-references/reviewer-backends.md` 通用约定的**显式偏离**
+（通用约定要求给审阅者文件路径并把 `cwd` 指向 review inputs 目录；本场景会把本机用户名
+与业务路径递给外部模型，故必须相反）。偏离说明见协议 §0，ARIS 侧登记见
+`reviewer-backends.md` 的 "Exception — outbound-publication pipelines" 段。
+
+改协议请改本目录下的 `aris-antigravity-review-protocol.md`（仓库内权威副本），
+不要改 `~/.claude/aris-antigravity-review-protocol.md`——后者是指向前者的符号链接。
+
 现有 [`gemini-review`](../gemini-review/README.md) 已有 API、Gemini CLI 和 `agy` 后端，提供 `review*` 工具供正式评审流程使用。本桥接提供显式 model/effort 与 CLI 原生 conversation 续接；工具名和会话契约不同。`— reviewer: agy` 和 Codex 的 Gemini overlay 仍走现有 `gemini-review`，不会因安装本桥接而切换。
 
 ## 安装
