@@ -3,7 +3,8 @@
 > **本文件是唯一契约。** 各定时任务 SKILL.md 只写三件事：**审查对象 / 审查标准 / 处理方式**；
 > 工具调用方式、隐私红线、降级策略、模型档位一律以本文件为准，SKILL.md 不重复、也不得与之冲突。
 >
-> **权威副本（本文件）**：`/Users/yihanglv/Developer/aris_repo/mcp-servers/antigravity-exec/aris-antigravity-review-protocol.md`
+> **权威副本（本文件）**：ARIS 仓库的 `mcp-servers/antigravity-exec/aris-antigravity-review-protocol.md`；
+> 本部署通过 `~/.claude/aris-antigravity-review-protocol.md` 符号链接引用它。
 > **本机路径**：`~/.claude/aris-antigravity-review-protocol.md` —— 指向权威副本的**符号链接**。
 > **改协议请改仓库内本文件**，改完由 `bash <aris_repo>/tools/install_aris.sh "$HOME" --all` 同步；
 > 不要直接编辑 `~/.claude/aris-antigravity-review-protocol.md`（它是链接，改它等于改仓库源）。
@@ -208,8 +209,8 @@ HELPER=".aris/tools/<helper>"
 [ -f "$HELPER" ] || HELPER=""
 ```
 
-> 定时任务**没有**项目内 `.aris/`，实际命中的是第 4 层（`$HOME/.aris/repo` → `/Users/yihanglv/Developer/aris_repo`）。
-> 本机 `~/.aris/tools` 是个**失效的旧链接**（指向不存在的 `/Users/yihanglv/aris_repo/tools`），解析链会自然跳过它。
+> 定时任务**没有**项目内 `.aris/`，实际命中的是第 4 层（`$HOME/.aris/repo` → ARIS 仓库根）。
+> 若 `~/.aris/tools` 是个指向旧路径的失效链接，解析链会自然跳过它（`[ -f ]` 判定失败即落到下一层）。
 
 ### A.2 本管线可用的 ARIS 文献/元数据技能
 
