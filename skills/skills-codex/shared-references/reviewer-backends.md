@@ -98,6 +98,8 @@ replace unreadable evidence with the executor's conclusions. The prompt may
 include the original problem and author claims, clearly marked as claims.
 For an existing prompt-only step, preserve its full source material.
 
+For an optional wording check before publication, see the [Antigravity example using redacted inline text](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/mcp-servers/antigravity-exec/README.md#outbound-text-review).
+
 Image/PDF visual review is a separate capability: preserve the skill's actual
 image inputs and verify that the selected tool can consume them. A text-only
 bridge or a reviewer that never opened the images cannot complete a visual

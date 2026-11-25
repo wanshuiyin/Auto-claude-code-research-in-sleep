@@ -44,6 +44,23 @@ claude mcp add antigravity -s user -- python3 /absolute/path/to/aris/mcp-servers
 
 返回的 `model` 来自 CLI 的 init 事件，`selectedModelLabel` 来自本轮 CLI 解析模型的日志；`effort` 从该实际选择的变体标签解析，注明 `effortSource=cli_selected_model_variant`。缺少记录时返回 null，不把请求值冒充实测值；这也不是独立的服务端型号证明。不支持的模型或 effort 交由 CLI 明确报错，不自动降级。
 
+<a id="outbound-text-review"></a>
+
+### 可选示例：发布前检查一段文字
+
+例如，准备发布更新公告时，可以请 Gemini 找出读者容易误解的地方。先在调用方删去内部路径、账号等私有信息，只送允许发给外部模型并保存在会话记录里的片段。用新会话，把文案直接放进 `prompt`。为这次调用新建一个仅自己可访问的空目录作为 `cwd`（macOS/Linux 可运行 `mktemp -d /tmp/aris-review.XXXXXXXX`），将返回的路径填入下面的示例：
+
+```json
+{
+  "cwd": "<刚创建的空目录的绝对路径>",
+  "prompt": "请只检查下面这段文字，指出具体哪句话容易让读者误解，并给出改法。公告：新版从周五开始分批开放。周五起所有用户都可以使用。"
+}
+```
+
+空目录让这次文字复核无需打开项目文件；文件访问权限仍由 CLI 控制。桥接会将完整提示写入临时文件 `prompt.jsonl`，正常结束时清理；CLI 自身可保留会话记录。结束会话后可用 `rmdir` 移除空目录。
+
+这次复核只判断文案是否清楚。若需核实公告中的数字，仍按原任务读取证据。调用失败时记为 `REVIEW_UNAVAILABLE`；是否发布取决于原任务的授权和必需检查。
+
 ## 权限与执行
 
 - 选择专用审阅 agent，其提示和工具声明限定文件读取与搜索；保留 CLI 原生权限检查，启用 `--sandbox`，不传跳过权限参数。CLI 1.2.17 的 init 仍列出完整工具目录，因此这里不宣称已验证所有写入被硬隔离。使用者应按现有 CLI 权限管理敏感工作区。
