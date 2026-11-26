@@ -1305,10 +1305,11 @@ def run_gemini_api_review(
     model_family_error = require_gemini_model(selected_model, "Gemini API")
     if model_family_error:
         return None, model_family_error
-    request_payload: dict[str, Any] = {
-        "contents": [],
-        "generationConfig": {"temperature": 0.2},
-    }
+    model_path = gemini_api_model_path(selected_model)
+    request_payload: dict[str, Any] = {"contents": []}
+    # Gemini 3.8 Flash deprecates explicit sampling parameters.
+    if not model_path.rsplit("/", 1)[-1].startswith("gemini-3.8-flash"):
+        request_payload["generationConfig"] = {"temperature": 0.2}
     selected_system = (system or DEFAULT_SYSTEM).strip()
     if selected_system:
         request_payload["systemInstruction"] = {"parts": [{"text": selected_system}]}
@@ -1326,7 +1327,6 @@ def run_gemini_api_review(
     user_parts.extend(inline_parts)
     request_payload["contents"].append({"role": "user", "parts": user_parts})
 
-    model_path = gemini_api_model_path(selected_model)
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_path}:generateContent"
     request = urllib.request.Request(
         url,
