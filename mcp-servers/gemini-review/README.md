@@ -50,7 +50,7 @@ is enough for API mode without exporting the variable in every shell.
 - `GEMINI_BIN`: Gemini CLI path, defaults to `gemini`
 - `AGY_BIN`: Antigravity CLI path, defaults to `agy`
 - `GEMINI_REVIEW_MODEL`: optional reviewer model override used by API/Gemini CLI backends; `agy` model selection is controlled by Antigravity settings, so the bridge reports the actual model recovered from the current log/transcript and records any requested model as provenance only
-- `GEMINI_REVIEW_API_MODEL`: API-only default when `GEMINI_REVIEW_MODEL` is unset, defaults to `gemini-2.5-flash`
+- `GEMINI_REVIEW_API_MODEL`: API-only default when `GEMINI_REVIEW_MODEL` is unset, defaults to `gemini-3.8-flash`
 - `GEMINI_REVIEW_SYSTEM`: optional default system prompt
 - `GEMINI_REVIEW_BACKEND`: reviewer backend override, one of `api`, `auto`, `cli`, or `agy`; defaults to `api`
 - `GEMINI_REVIEW_TIMEOUT_SEC`: HTTP / subprocess timeout, defaults to `600`
