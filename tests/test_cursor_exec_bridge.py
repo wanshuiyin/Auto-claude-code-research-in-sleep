@@ -3,10 +3,12 @@
 import json
 import os
 import queue
+import signal
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import uuid
 from pathlib import Path
@@ -27,6 +29,20 @@ def emit(o):print(json.dumps(o),flush=True)
 if model=='bad-model':
  sys.stderr.write('Cannot use this model: bad-model. Available models: '+'auto, '*500+'\n')
  sys.exit(1)
+if prompt.startswith('ORPHAN_'):
+ pid=os.fork()
+ if pid==0:
+  if prompt=='ORPHAN_STDERR':os.close(1)
+  if prompt=='ORPHAN_IGNORE':signal.signal(signal.SIGTERM,signal.SIG_IGN)
+  Path(os.environ['FAKE_CURSOR_LOG']+'.pid').write_text(str(os.getpid()))
+  time.sleep(8) # finite fallback even when the bridge fails cleanup
+  os._exit(0)
+ while not Path(os.environ['FAKE_CURSOR_LOG']+'.pid').exists():time.sleep(0.01)
+ sys.exit(0)
+if prompt in ['NOID','NOID_FAIL']:
+ emit({'type':'system','subtype':'init','model':'Fake Model'})
+ emit({'type':'result','subtype':'error' if prompt=='NOID_FAIL' else 'success','is_error':prompt=='NOID_FAIL','result':'provider unavailable' if prompt=='NOID_FAIL' else 'echo:NOID'})
+ sys.exit(1 if prompt=='NOID_FAIL' else 0)
 if prompt=='OTHERID':tid=str(uuid.uuid4())
 emit({'type':'system','subtype':'init','apiKeySource':'login','cwd':os.getcwd(),'session_id':tid,'model':'Fake Model','permissionMode':'default'})
 emit({'type':'user','message':{'role':'user','content':[{'type':'text','text':prompt[:20]}]},'session_id':tid})
@@ -84,6 +100,9 @@ class Client:
         self.stdin.flush()
 
     def recv(self, rid):
+        for i, msg in enumerate(self.notifications):
+            if msg.get("id") == rid:
+                return self.notifications.pop(i)
         while True:
             msg = self.queue.get(timeout=5)
             if msg.get("id") == rid:
@@ -330,6 +349,109 @@ class BridgeTests(unittest.TestCase):
         r = self.client.recv(10)["result"]
         self.assertTrue(r["isError"])
         self.assertIn("cancelled", r["content"][0]["text"])
+
+    def test_cancel_queued_request_never_launches(self):
+        def start(rid, prompt):
+            self.client.send(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rid,
+                    "method": "tools/call",
+                    "params": {"name": "cursor", "arguments": {"prompt": prompt}},
+                }
+            )
+
+        start(10, "SLOW")
+        deadline = time.monotonic() + 3
+        while not self.log.exists():
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
+        start(20, "QUEUED")
+        self.client.send(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": {"requestId": 20},
+            }
+        )
+        # A ping proves B and its cancellation were consumed while A still runs.
+        self.client.send({"jsonrpc": "2.0", "id": 30, "method": "ping"})
+        self.assertEqual(self.client.recv(30)["result"], {})
+        self.assertEqual([c["prompt"] for c in self.calls()], ["SLOW"])
+        self.client.send(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": {"requestId": 10},
+            }
+        )
+        self.assertTrue(self.client.recv(10)["result"]["isError"])
+        cancelled = self.client.recv(20)["result"]
+        self.assertTrue(cancelled.get("isError"), cancelled)
+        self.assertIn("cancel", cancelled["content"][0]["text"].lower())
+        self.client.send({"jsonrpc": "2.0", "id": 31, "method": "ping"})
+        self.assertEqual(self.client.recv(31)["result"], {})
+        self.assertNotIn(
+            "isError", self.client.call(32, "cursor", {"prompt": "after"})["result"]
+        )
+        self.assertEqual([c["prompt"] for c in self.calls()], ["SLOW", "after"])
+
+    @unittest.skipUnless(os.name == "posix", "requires POSIX process groups")
+    def test_exited_launcher_descendants_are_cleaned_up(self):
+        for prompt in ["ORPHAN_STDERR", "ORPHAN_STDOUT", "ORPHAN_IGNORE"]:
+            with self.subTest(prompt=prompt):
+                self.client.close()
+                pidfile = Path(str(self.log) + ".pid")
+                pidfile.unlink(missing_ok=True)
+                self.env["CURSOR_EXEC_TIMEOUT_SEC"] = "0.5"
+                self.client = Client(self.env, self.root)
+                pid = None
+                cleaned = False
+                try:
+                    started = time.monotonic()
+                    result = self.client.call(1, "cursor", {"prompt": prompt})["result"]
+                    self.assertLess(time.monotonic() - started, 4)
+                    self.assertTrue(result.get("isError"), result)
+                    pid = int(pidfile.read_text())
+                    deadline = time.monotonic() + 1
+                    while True:
+                        state = subprocess.run(
+                            ["ps", "-o", "stat=", "-p", str(pid)],
+                            check=False,
+                            capture_output=True,
+                            text=True,
+                        ).stdout.strip()
+                        if not state or state.startswith("Z"):
+                            cleaned = True
+                            break
+                        self.assertLess(
+                            time.monotonic(), deadline, "descendant remains alive"
+                        )
+                        time.sleep(0.02)
+                finally:
+                    if pid is None and pidfile.exists():
+                        pid = int(pidfile.read_text())
+                    if pid is not None and not cleaned:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+
+    def test_reply_requires_a_session_id_observed_in_this_turn(self):
+        tid = self.client.call(1, "cursor", {"prompt": "first"})["result"][
+            "structuredContent"
+        ]["threadId"]
+        result = self.client.call(
+            2, "cursor-reply", {"threadId": tid, "prompt": "NOID"}
+        )["result"]
+        self.assertTrue(result.get("isError"), result)
+        self.assertIn("session", result["content"][0]["text"].lower())
+        failed = self.client.call(
+            3, "cursor-reply", {"threadId": tid, "prompt": "NOID_FAIL"}
+        )["result"]
+        self.assertTrue(failed["isError"])
+        self.assertIn("provider unavailable", failed["content"][0]["text"])
+        self.assertEqual(failed["structuredContent"]["threadId"], tid)
 
     def test_timeout_and_host_disconnect_stop_child(self):
         self.client.close()

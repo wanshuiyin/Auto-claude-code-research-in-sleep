@@ -252,8 +252,6 @@ def run_cursor(
     threading.Thread(target=feed_stdin, daemon=True).start()
 
     def terminate_child(force: bool = False) -> None:
-        if proc.poll() is not None:
-            return
         try:
             if os.name == "posix":
                 os.killpg(proc.pid, signal.SIGKILL if force else signal.SIGTERM)
@@ -309,7 +307,7 @@ def run_cursor(
             else:
                 deferred.append(msg)
 
-    stop_ticker = threading.Event()
+    streams_drained = threading.Event()
 
     def ticker() -> None:
         # pings and cancellations are answered within a second; progress goes
@@ -317,7 +315,7 @@ def run_cursor(
         # looks alive to the host
         last_progress = time.monotonic()
         stopped_at = None
-        while not stop_ticker.wait(min(1.0, PROGRESS_INTERVAL_SEC)):
+        while True:
             service_inbox()
             if time.monotonic() - started >= TIMEOUT_SEC and not outcome.cancelled:
                 outcome.cancelled = True
@@ -330,17 +328,32 @@ def run_cursor(
                     stopped_at = time.monotonic()
                 elif time.monotonic() - stopped_at >= 2:
                     terminate_child(force=True)
-            if time.monotonic() - last_progress >= PROGRESS_INTERVAL_SEC:
+            if (
+                not outcome.cancelled
+                and time.monotonic() - last_progress >= PROGRESS_INTERVAL_SEC
+            ):
                 progress("working")
                 last_progress = time.monotonic()
+
+            # Keep the group leader unreaped until both output pipes reach EOF.
+            # Its PID then still identifies our group if a launcher exits first.
+            if streams_drained.is_set():
+                if outcome.cancelled:
+                    terminate_child(force=True)
+                try:
+                    proc.wait(timeout=0.05)
+                    return
+                except subprocess.TimeoutExpired:
+                    continue
+            delay = min(1.0, PROGRESS_INTERVAL_SEC)
+            if not outcome.cancelled:
+                delay = min(delay, max(0.0, TIMEOUT_SEC - (time.monotonic() - started)))
+            streams_drained.wait(delay)
 
     ticker_thread = threading.Thread(target=ticker, daemon=True)
     ticker_thread.start()
 
-    if proc.stdout is None:
-        terminate_child(force=True)
-        proc.wait()
-        raise RuntimeError("cursor-agent stdout pipe was not created")
+    assert proc.stdout is not None  # Popen was given stdout=PIPE.
     try:
         for raw in iter(proc.stdout.readline, b""):
             line = raw.decode("utf-8", errors="replace").strip()
@@ -370,7 +383,6 @@ def run_cursor(
                     outcome.last_message = event.get("result")
             if etype == "thinking" and event.get("subtype") == "delta":
                 # 逐 token 的思考增量不转发；心跳由 ticker 负责
-                service_inbox()
                 continue
             send_message(
                 {
@@ -386,12 +398,10 @@ def run_cursor(
                 }
             )
             progress(etype)
-            service_inbox()
     finally:
-        proc.wait()
-        stop_ticker.set()
-        ticker_thread.join()  # nothing may touch the inbox after we hand control back
         stderr_thread.join()
+        streams_drained.set()
+        ticker_thread.join()
 
     if outcome.cancelled:
         outcome.error = outcome.cancel_reason
@@ -525,7 +535,9 @@ def handle_call(
         cwd=str(GUARD_DIR),
     )
     if resume_id and not outcome.thread_id:
-        outcome.thread_id = resume_id
+        if not outcome.error:
+            outcome.error = "cursor did not return a session id"
+        outcome.thread_id = resume_id  # Correlate the error with the requested thread.
     elif outcome.thread_id and resume_id and outcome.thread_id != resume_id:
         outcome.error = "cursor returned a different session id"
     elif outcome.thread_id and not resume_id:
@@ -578,13 +590,23 @@ def main() -> None:
         debug_log(f"{CURSOR_BIN} not on PATH")
     inbox: queue.Queue[dict[str, Any]] = queue.Queue()
     deferred: list[dict[str, Any]] = []
+    # Track calls from receipt to dispatch so cancellation can withdraw a queued
+    # call even while a different Cursor process owns the execution slot.
+    pending_calls: set[Any] = set()
+    pending_lock = threading.Lock()
 
     def reader() -> None:
         while True:
             msg = read_message()
-            if msg is None:
-                inbox.put({"__eof__": True})
-                return
+            with pending_lock:
+                if msg is None:
+                    pending_calls.clear()
+                    inbox.put({"__eof__": True})
+                    return
+                if msg.get("method") == "tools/call":
+                    pending_calls.add(msg.get("id"))
+                elif msg.get("method") == "notifications/cancelled":
+                    pending_calls.discard(msg.get("params", {}).get("requestId"))
             if msg:
                 inbox.put(msg)
 
@@ -594,6 +616,16 @@ def main() -> None:
         request = deferred.pop(0) if deferred else inbox.get()
         if request.get("__eof__"):
             break
+        if request.get("method") == "tools/call":
+            rid = request.get("id")
+            with pending_lock:
+                queued = rid in pending_calls
+                pending_calls.discard(rid)
+            if not queued:
+                cancelled = CallOutcome()
+                cancelled.error = "cancelled before Cursor started"
+                send_message(tool_result(rid, cancelled))
+                continue
         try:
             response = handle_request(request, inbox, deferred)
         except Exception:  # noqa: BLE001
