@@ -45,6 +45,7 @@ python3 tools/semantic_scholar_fetch.py paper "ARXIV:2006.10685"
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import sys
@@ -108,7 +109,8 @@ def _request_json(url: str, *, retries: int = 2, timeout: int = _DEFAULT_TIMEOUT
             if body:
                 message += f": {body}"
             raise RuntimeError(message) from exc
-        except urllib.error.URLError as exc:
+        except (OSError, http.client.HTTPException) as exc:
+            # URLError, and also read timeouts and dropped connections, which urllib does not wrap.
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 last_err = exc

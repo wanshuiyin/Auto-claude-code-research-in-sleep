@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import http.client
 import json
 import os
 import re
@@ -138,7 +139,8 @@ def _request_json(
             if exc.code == 429 and not _api_key():
                 message += " (keyless rate limit; set KEENABLE_API_KEY for higher limits)"
             raise RuntimeError(message) from exc
-        except urllib.error.URLError as exc:
+        except (OSError, http.client.HTTPException) as exc:
+            # URLError, and also read timeouts and dropped connections, which urllib does not wrap.
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 last_err = exc
