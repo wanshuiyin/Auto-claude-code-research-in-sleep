@@ -404,6 +404,8 @@ claude
 
 > **可选 Grok CLI 桥接：** [`grok-exec`](mcp-servers/grok-exec/README.md) 复用已有 CLI 登录，提供 `grok` / `grok-reply`，默认 `grok-4.7` + `xhigh`，支持会话续接、进度与取消。
 
+> **可选 Cursor CLI 桥接：** [`cursor-exec`](mcp-servers/cursor-exec/README.md) 复用已有 `cursor-agent` 登录，提供 `cursor` / `cursor-reply`，支持会话续接、进度与取消；只读由桥接写入的私有权限策略保证，而不是 `--mode ask`。它是独立 MCP，不是新的 `— reviewer:` 值。
+
 > **可选 CLI reviewer：** 完整包可通过 `— reviewer: antigravity` / `grok` 使用 [Antigravity](mcp-servers/antigravity-exec/README.md) 和 [Grok](mcp-servers/grok-exec/README.md)，详见 [backend 契约](skills/shared-references/reviewer-backends.md)。旧 `— reviewer: agy` 仍使用 `gemini-review`。
 
 > 不需要全部 87 个 skill？见下方[选择性安装](#install-skills)按组/按 skill 挑选。

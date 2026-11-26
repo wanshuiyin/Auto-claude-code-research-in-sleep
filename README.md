@@ -446,6 +446,8 @@ claude
 
 > **Optional Grok CLI bridge:** [`grok-exec`](mcp-servers/grok-exec/README.md) exposes `grok` / `grok-reply` using your existing Grok CLI login, with `grok-4.7` + `xhigh` defaults, persistent sessions, progress and cancellation. It is a separate MCP service; installing it does not change the reviewer routing of existing skills.
 
+> **Optional Cursor CLI bridge:** [`cursor-exec`](mcp-servers/cursor-exec/README.md) exposes `cursor` / `cursor-reply` using your existing `cursor-agent` login, with persistent sessions, progress and cancellation. Read-only is enforced by a private permission policy, not by `--mode ask`. It is a separate MCP service, not a `— reviewer:` value; installing it does not change the reviewer routing of existing skills.
+
 > **Selectable CLI reviewers:** [`antigravity-exec`](mcp-servers/antigravity-exec/README.md) and [`grok-exec`](mcp-servers/grok-exec/README.md) support the complete packs through `— reviewer: antigravity` / `grok`; see the [backend contract](skills/shared-references/reviewer-backends.md). The legacy `— reviewer: agy` still uses `gemini-review`.
 
 <details>
