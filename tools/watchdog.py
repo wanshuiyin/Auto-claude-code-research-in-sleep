@@ -39,6 +39,7 @@ except ImportError:  # Windows: keep the previous best-effort behaviour
     fcntl = None
 import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -160,10 +161,14 @@ def session_alive(session_name, session_type="screen"):
     the monitoring loop forever while summary.txt keeps its last status. On
     timeout, subprocess.TimeoutExpired propagates to run_watchdog's per-task
     handler, which records ERROR and appends an alerts.log line.
+
+    The name must match exactly: tmux resolves "-t exp1" to "exp10" by
+    prefix unless the target starts with "=", and screen lists sessions as
+    "<pid>.<name>".
     """
     if session_type == "tmux":
         r = subprocess.run(
-            ["tmux", "has-session", "-t", session_name],
+            ["tmux", "has-session", "-t", f"={session_name}"],
             capture_output=True, timeout=10,
         )
         return r.returncode == 0
@@ -171,7 +176,8 @@ def session_alive(session_name, session_type="screen"):
         r = subprocess.run(
             ["screen", "-list"], capture_output=True, text=True, timeout=10,
         )
-        return session_name in r.stdout
+        pattern = rf"^\s*\d+\.{re.escape(session_name)}\s"
+        return re.search(pattern, r.stdout, re.MULTILINE) is not None
 
 
 # ── GPU checks ───────────────────────────────────────────────────
