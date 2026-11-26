@@ -301,6 +301,35 @@ class BridgeTests(unittest.TestCase):
         self.assertTrue(r["result"]["isError"])
         self.assertIn("cancelled", r["result"]["content"][0]["text"])
 
+    def test_cancel_queued_request_never_launches(self):
+        self.env["FAKE_CODEX_SLEEP"] = "20"
+        self.bridge.close()
+        self.bridge = BridgeProcess(self.env, cwd=str(self.tmp))
+        self.bridge.send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                          "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}})
+        self.bridge.recv(1)
+        self.bridge.send({"jsonrpc": "2.0", "id": 11, "method": "tools/call",
+                          "params": {"name": "codex", "arguments": {"prompt": "SLOW"}}})
+        deadline = time.monotonic() + 5
+        while not self.log.exists():
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
+        self.bridge.send({"jsonrpc": "2.0", "id": 12, "method": "tools/call",
+                          "params": {"name": "codex", "arguments": {"prompt": "QUEUED"}}})
+        self.bridge.send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 12}})
+        # A ping proves the queued call and its cancellation were read while 11 still runs.
+        self.bridge.send({"jsonrpc": "2.0", "id": 13, "method": "ping"})
+        self.assertEqual(self.bridge.recv(13, timeout=5)["result"], {})
+        self.assertEqual([c["prompt"] for c in self.fake_calls()], ["SLOW"])
+        self.bridge.send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 11}})
+        self.assertTrue(self.bridge.recv(11, timeout=10)["result"]["isError"])
+        early = [n for n in self.bridge.notifications if n.get("id") == 12 and "result" in n]
+        queued = early[0] if early else self.bridge.recv(12, timeout=10)
+        self.assertTrue(queued["result"].get("isError"), queued)
+        self.assertIn("cancel", queued["result"]["content"][0]["text"].lower())
+        self.assertNotIn("isError", self.bridge.call(14, "codex", {"prompt": "after"})["result"])
+        self.assertEqual([c["prompt"] for c in self.fake_calls()], ["SLOW", "after"])
+
 
 if __name__ == "__main__":
     unittest.main()

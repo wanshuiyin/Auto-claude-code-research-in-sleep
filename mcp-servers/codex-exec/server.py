@@ -34,7 +34,7 @@ import threading
 import time
 import traceback
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 SERVER_NAME = "codex-exec"
 SERVER_VERSION = "1.0.0"
@@ -452,12 +452,23 @@ def main() -> None:
     inbox: "queue.Queue[Dict[str, Any]]" = queue.Queue()
     deferred: List[Dict[str, Any]] = []
 
+    # Track calls from receipt to dispatch so cancellation can withdraw a queued
+    # call even while a different Codex process owns the execution slot.
+    pending_calls: Set[Any] = set()
+    pending_lock = threading.Lock()
+
     def reader() -> None:
         while True:
             msg = read_message()
-            if msg is None:
-                inbox.put({"__eof__": True})
-                return
+            with pending_lock:
+                if msg is None:
+                    pending_calls.clear()
+                    inbox.put({"__eof__": True})
+                    return
+                if msg.get("method") == "tools/call":
+                    pending_calls.add(msg.get("id"))
+                elif msg.get("method") == "notifications/cancelled":
+                    pending_calls.discard(msg.get("params", {}).get("requestId"))
             if msg:
                 inbox.put(msg)
 
@@ -467,6 +478,16 @@ def main() -> None:
         request = deferred.pop(0) if deferred else inbox.get()
         if request.get("__eof__"):
             break
+        if request.get("method") == "tools/call":
+            rid = request.get("id")
+            with pending_lock:
+                queued = rid in pending_calls
+                pending_calls.discard(rid)
+            if not queued:
+                cancelled = CallOutcome()
+                cancelled.error = "cancelled before Codex started"
+                send_message(tool_result(rid, cancelled))
+                continue
         try:
             response = handle_request(request, inbox, deferred)
         except Exception:

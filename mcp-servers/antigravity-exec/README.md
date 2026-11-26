@@ -67,7 +67,7 @@ claude mcp add antigravity -s user -- python3 /absolute/path/to/aris/mcp-servers
 - 用一条 NDJSON stdin 传提示，避免长提示进入命令行；关闭 stdin 后 CLI 完成本轮并退出。临时输入与本轮日志留在私有目录，调用结束清除；CLI 自己的会话仍按原生方式保存。
 - 接受完整 `SUCCESS`、非空回答和进程退出码0；ERROR、WAITING、取消、非零退出或缺失终态都返回 `isError`。
 - 等待模型时响应 ping、进度与取消；超时或宿主断开会回收本次 CLI 进程组。桥接不自动重试模型调用。
-- 每个服务进程顺序执行。CLI 的 `num_turns` 是累计用户回合，不是 Grok/Claude 的工具轮次上限；本桥接没有编造同名限制参数。
+- 每个服务进程顺序执行。排队期间收到取消通知的请求不会启动 Antigravity。CLI 的 `num_turns` 是累计用户回合，不是 Grok/Claude 的工具轮次上限；本桥接没有编造同名限制参数。
 
 | 环境变量 | 默认值 |
 |---|---|

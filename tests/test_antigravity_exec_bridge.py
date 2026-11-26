@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -274,6 +275,52 @@ class BridgeTests(unittest.TestCase):
         r = self.client.recv(10)["result"]
         self.assertTrue(r["isError"])
         self.assertIn("cancelled", r["content"][0]["text"])
+
+    def test_cancel_queued_request_never_launches(self):
+        def start(rid, prompt):
+            self.client.send(
+                {
+                    "jsonrpc": "2.0",
+                    "id": rid,
+                    "method": "tools/call",
+                    "params": {"name": "antigravity", "arguments": {"prompt": prompt}},
+                }
+            )
+
+        start(10, "SLOW")
+        deadline = time.monotonic() + 3
+        while not self.log.exists():
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.01)
+        start(20, "QUEUED")
+        self.client.send(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": {"requestId": 20},
+            }
+        )
+        # A ping proves B and its cancellation were consumed while A still runs.
+        self.client.send({"jsonrpc": "2.0", "id": 30, "method": "ping"})
+        self.assertEqual(self.client.recv(30)["result"], {})
+        self.assertEqual([c["prompt"] for c in self.calls()], ["SLOW"])
+        self.client.send(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": {"requestId": 10},
+            }
+        )
+        self.assertTrue(self.client.recv(10)["result"]["isError"])
+        cancelled = self.client.recv(20)["result"]
+        self.assertTrue(cancelled.get("isError"), cancelled)
+        self.assertIn("cancel", cancelled["content"][0]["text"].lower())
+        self.client.send({"jsonrpc": "2.0", "id": 31, "method": "ping"})
+        self.assertEqual(self.client.recv(31)["result"], {})
+        self.assertNotIn(
+            "isError", self.client.call(32, "antigravity", {"prompt": "after"})["result"]
+        )
+        self.assertEqual([c["prompt"] for c in self.calls()], ["SLOW", "after"])
 
     def test_timeout_and_host_disconnect_stop_child(self):
         self.client.close()
