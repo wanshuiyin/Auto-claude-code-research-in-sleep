@@ -680,6 +680,12 @@ def _find_existing_page_by_arxiv(wiki_root: Path, arxiv_id: str) -> Path | None:
         return None
     for p in papers.glob("*.md"):
         text = _read_wiki_text(p)
+        # A page with frontmatter is identified by its frontmatter only: its
+        # body can link other papers. Pages without one (hand-written notes)
+        # are still matched by a URL anywhere in the text.
+        frontmatter = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+        if frontmatter:
+            text = frontmatter.group(1)
         # Match either the frontmatter line or a URL reference. (?!\d) stops
         # the truncated `2307.0317` from matching the page of `2307.03172`.
         if re.search(r'arxiv:\s*["\']?' + re.escape(arxiv_id) + r'(?!\d)', text):
