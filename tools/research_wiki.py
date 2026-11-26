@@ -680,10 +680,11 @@ def _find_existing_page_by_arxiv(wiki_root: Path, arxiv_id: str) -> Path | None:
         return None
     for p in papers.glob("*.md"):
         text = _read_wiki_text(p)
-        # Match either the frontmatter line or a URL reference
-        if re.search(r'arxiv:\s*["\']?' + re.escape(arxiv_id) + r'["\']?', text):
+        # Match either the frontmatter line or a URL reference. (?!\d) stops
+        # the truncated `2307.0317` from matching the page of `2307.03172`.
+        if re.search(r'arxiv:\s*["\']?' + re.escape(arxiv_id) + r'(?!\d)', text):
             return p
-        if re.search(r"arxiv\.org/abs/" + re.escape(arxiv_id), text):
+        if re.search(r"arxiv\.org/abs/" + re.escape(arxiv_id) + r"(?!\d)", text):
             return p
     return None
 
