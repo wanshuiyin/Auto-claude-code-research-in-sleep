@@ -81,6 +81,10 @@ def build(config):
         "oom_retry": config.get("oom_retry", {"delay": 120, "max_attempts": 3}),
         "phases": [],
     }
+    # Optional settings queue_manager reads; absent means its own default.
+    for key in ("conda_hook", "gpu_free_threshold_mib"):
+        if key in config:
+            out[key] = config[key]
     for phase in config.get("phases", []):
         phase_out = {
             "name": phase["name"],
