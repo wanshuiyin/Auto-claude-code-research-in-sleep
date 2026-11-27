@@ -1,3 +1,4 @@
+import http.client
 import importlib.util
 import io
 import json
@@ -264,6 +265,36 @@ def test_fetch_reports_failed_urls_and_keeps_going(monkeypatch):
     assert result["returned"] == 1
     assert result["data"][0]["title"] == "Good"
     assert result["errors"] == [{"url": "https://example.com/bad", "error": "HTTP 422: could not fetch"}]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError("timed out"),
+        http.client.RemoteDisconnected("Remote end closed connection without response"),
+        ConnectionResetError(104, "Connection reset by peer"),
+    ],
+    ids=["read-timeout", "remote-disconnected", "connection-reset"],
+)
+def test_fetch_retries_and_reports_a_network_error_urllib_does_not_wrap(monkeypatch, error):
+    keenable_search = load_module()
+    monkeypatch.setattr(keenable_search.time, "sleep", lambda seconds: None)
+    attempts = []
+
+    def fake_urlopen(req, timeout=None):
+        if "slow" in req.full_url:
+            attempts.append(req.full_url)
+            raise error
+        return FakeResponse({"url": "https://example.com/good", "title": "Good", "content": "ok"})
+
+    monkeypatch.setattr(keenable_search.urllib.request, "urlopen", fake_urlopen)
+
+    result = keenable_search.fetch(["https://example.com/good", "https://example.com/slow"])
+
+    assert len(attempts) == 3
+    assert result["returned"] == 1
+    assert result["data"][0]["title"] == "Good"
+    assert result["errors"] == [{"url": "https://example.com/slow", "error": f"Network error: {error}"}]
 
 
 def test_rate_limit_error_points_to_api_key(monkeypatch):
