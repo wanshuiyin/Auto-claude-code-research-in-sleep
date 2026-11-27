@@ -101,3 +101,27 @@ def test_update_on_exist_leaves_the_page_that_links_the_paper_alone(tmp_path: Pa
 
     assert new != page
     assert page.read_text(encoding="utf-8") == before
+
+
+def test_update_on_exist_ignores_citation_in_title(tmp_path: Path) -> None:
+    root = tmp_path / "research-wiki"
+    rw.init_wiki(str(root))
+    comment = dict(LOST_IN_THE_MIDDLE, title="Comment on https://arxiv.org/abs/1706.03762")
+    page = rw.ingest_paper(str(root), arxiv_id=comment["arxiv_id"], prefetched_meta=comment)
+    before = page.read_bytes()
+
+    new = rw.ingest_paper(
+        str(root), arxiv_id=ATTENTION["arxiv_id"], prefetched_meta=ATTENTION, update_on_exist=True,
+    )
+
+    assert new != page
+    assert page.read_bytes() == before
+
+
+def test_versioned_frontmatter_id_identifies_the_paper(tmp_path: Path) -> None:
+    root, page = _wiki_with_one_paper(tmp_path)
+    page.write_text(
+        page.read_text(encoding="utf-8").replace('arxiv: "2307.03172"', 'arxiv: "2307.03172v2"'),
+        encoding="utf-8",
+    )
+    assert rw._find_existing_page_by_arxiv(root, "2307.03172") == page
