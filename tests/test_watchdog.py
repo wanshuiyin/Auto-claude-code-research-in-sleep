@@ -168,6 +168,12 @@ class TestUnregisterTask(unittest.TestCase):
         watchdog.unregister_task(self.tmpdir, "anything")  # should not raise
 
 
+def screen_list(*names):
+    """`screen -list` output with one detached session per name."""
+    rows = "".join(f"\t{100 + i}.{n}\t(11/27/26 07:46:22)\t(Detached)\n" for i, n in enumerate(names))
+    return f"There is a screen on:\n{rows}{len(names)} Socket in /run/screen/S-user.\n"
+
+
 class TestSessionAlive(unittest.TestCase):
     """Test session_alive() for tmux and screen."""
 
@@ -187,7 +193,7 @@ class TestSessionAlive(unittest.TestCase):
 
     @patch('watchdog.subprocess.run')
     def test_screen_alive(self, mock_run):
-        mock_run.return_value = MagicMock(stdout="my-screen\t(Detached)\n", returncode=0)
+        mock_run.return_value = MagicMock(stdout=screen_list("my-screen"), returncode=0)
         self.assertTrue(watchdog.session_alive("my-screen", "screen"))
         args = mock_run.call_args[0][0]
         self.assertIn("screen", args)
@@ -199,12 +205,26 @@ class TestSessionAlive(unittest.TestCase):
 
     @patch('watchdog.subprocess.run')
     def test_default_session_type_is_screen(self, mock_run):
-        mock_run.return_value = MagicMock(stdout="exp01\t(Detached)\n", returncode=0)
+        mock_run.return_value = MagicMock(stdout=screen_list("exp01"), returncode=0)
         result = watchdog.session_alive("exp01")
         self.assertTrue(result)
         # screen -list should have been called
         args = mock_run.call_args[0][0]
         self.assertIn("screen", args)
+
+    @patch('watchdog.subprocess.run')
+    def test_tmux_target_is_the_exact_session_name(self, mock_run):
+        # Without the "=" prefix tmux resolves "exp1" to a live "exp10".
+        mock_run.return_value = MagicMock(returncode=0)
+        watchdog.session_alive("exp1", "tmux")
+        self.assertEqual(mock_run.call_args[0][0][-2:], ["-t", "=exp1"])
+
+    @patch('watchdog.subprocess.run')
+    def test_screen_name_must_match_the_whole_session_name(self, mock_run):
+        mock_run.return_value = MagicMock(stdout=screen_list("exp10"), returncode=0)
+        self.assertFalse(watchdog.session_alive("exp1", "screen"))
+        self.assertFalse(watchdog.session_alive("exp", "screen"))
+        self.assertTrue(watchdog.session_alive("exp10", "screen"))
 
 
 class TestSessionAliveTimeout(unittest.TestCase):
