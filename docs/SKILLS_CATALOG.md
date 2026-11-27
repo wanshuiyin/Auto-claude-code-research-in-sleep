@@ -1,6 +1,6 @@
 # ARIS Skills Catalog
 
-Every skill that ships with ARIS, grouped by role. **87 skills** as of the
+Every skill that ships with ARIS, grouped by role. **88 skills** as of the
 latest update; new skills land via PR and get added to the table below.
 
 - Each `Skill` link goes to the canonical `SKILL.md` (the LLM-readable spec).
@@ -54,6 +54,7 @@ Paper retrieval, summarization, novelty verification.
 | [`/exa-search`](../skills/exa-search/SKILL.md) | AI-powered broad web search with content extraction — blogs, docs, news, papers | `pip install exa-py` + `EXA_API_KEY` |
 | [`/keenable-search`](../skills/keenable-search/SKILL.md) | Keyless broad web search with page-text snippets, plus fetching a known URL as markdown (blogs, docs, project pages, news) | None (optional `KEENABLE_API_KEY` raises rate limits) |
 | [`/firecrawl-search`](../skills/firecrawl-search/SKILL.md) | Broad web search with full-page markdown, plus scraping a known URL (HTML or PDF) to markdown — blogs, docs, project pages, technical reports | `FIRECRAWL_API_KEY` |
+| [`/outcrawl-search`](../skills/outcrawl-search/SKILL.md) | Broad web search with a snippet per result, plus scraping a known URL to markdown in a real browser (blogs, docs, project pages, JavaScript-rendered pages) | `OUTCRAWL_API_KEY` |
 | [`/web-debug-search`](../skills/web-debug-search/SKILL.md) | Multi-source debugging search across GitHub, Stack Exchange, Chinese technical communities, and general web — routing, compatibility, and discovery-only results | None |
 | [`/openalex`](../skills/openalex/SKILL.md) | OpenAlex API search — 250M+ open citation graph, institutional affiliations, funding data | `pip install requests` |
 | [`/gemini-search`](../skills/gemini-search/SKILL.md) | Gemini-driven literature discovery — decomposes topics into sub-problems, aliases, variants | `gemini-cli` v0.40+ |
