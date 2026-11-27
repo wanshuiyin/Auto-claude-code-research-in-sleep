@@ -123,13 +123,21 @@ def free_gpus(allowed, threshold_mib=DEFAULT_GPU_FREE_THRESHOLD_MIB):
     return [i for i in allowed if i < len(used) and used[i] < threshold_mib]
 
 
-def screen_exists(name):
+def screen_sessions(name):
+    """`PID.name` of every screen session named exactly `name`."""
     out, _ = run("screen -ls")
-    return re.search(rf"^\s*\d+\.{re.escape(name)}\s", out, re.MULTILINE) is not None
+    return re.findall(rf"^\s*(\d+\.{re.escape(name)})\s", out, re.MULTILINE)
+
+
+def screen_exists(name):
+    return bool(screen_sessions(name))
 
 
 def kill_screen(name):
-    run(f"screen -S {name} -X quit", check=False)
+    # `screen -S <name>` matches by prefix: once EQ_s1 has exited it would quit a
+    # running EQ_s10. PID.name names one session.
+    for session in screen_sessions(name):
+        run(f"screen -S {session} -X quit", check=False)
 
 
 def detect_oom_in_log(log_path):
