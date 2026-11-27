@@ -80,7 +80,7 @@ raw text is preserved depends on the store:
   rejected pack.
 - **To extend** (same helper, same scopes): MEMORY.md write + load; fetched
   abstracts and pages (`research-lit` / `exa-search` / `firecrawl-search` /
-  `deepxiv` / `alphaxiv`) at
+  `serply-search` / `deepxiv` / `alphaxiv`) at
   `context` (warn); **community-PR `SKILL.md` / fixtures** at `strict` before a
   merge (the security-sensitive-PR class — see the security review memory).
   *SKILL.md scanning needs tuning first:* legit ARIS skill docs say things like
