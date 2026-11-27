@@ -339,6 +339,55 @@ class ModelWorkerTests(unittest.TestCase):
         with self.assertRaises(ProcessLookupError):
             os.kill(pid, 0)
 
+    def test_cancel_queued_call_never_launches(self):
+        bridge = self.bridge()
+        bridge.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 9,
+                "method": "tools/call",
+                "params": {"name": "worker", "arguments": self.args(prompt="SLOW")},
+            }
+        )
+        deadline = time.monotonic() + 5
+        while not (self.work / "started").exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue((self.work / "started").exists())
+        bridge.send(
+            {
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": "tools/call",
+                "params": {"name": "worker", "arguments": self.args()},
+            }
+        )
+        bridge.send(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": {"requestId": 11},
+            }
+        )
+        # The ping is answered by the running call's loop, so 11 and its
+        # cancellation have been read before 9 is cancelled.
+        bridge.send({"jsonrpc": "2.0", "id": 12, "method": "ping"})
+        self.assertEqual(bridge.receive(12)["result"], {})
+        bridge.send(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/cancelled",
+                "params": {"requestId": 9},
+            }
+        )
+        self.assertTrue(bridge.receive(9)["result"]["isError"])
+        queued = bridge.receive(11)["result"]
+        self.assertTrue(queued["isError"])
+        self.assertIn("cancelled", queued["content"][0]["text"])
+        self.assertFalse((self.work / "answer.txt").exists())
+        after = bridge.call("worker", self.args(), request_id=13)["result"]
+        self.assertNotIn("isError", after)
+        self.assertTrue((self.work / "answer.txt").exists())
+
     def test_default_effort_is_frozen_and_secret_settings_not_persisted(self):
         settings = Path(self.env["MODEL_WORKER_CLAUDE_SETTINGS"])
         settings.write_text(
