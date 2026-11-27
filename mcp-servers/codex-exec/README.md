@@ -46,7 +46,8 @@ with codex's own error text, so the capability fallback in
 While a review runs the bridge streams `codex/event` notifications and, when the
 host passes a `progressToken`, a `notifications/progress` heartbeat every 15 s
 (`CODEX_EXEC_PROGRESS_INTERVAL_SEC`), answers `ping`, and honours
-`notifications/cancelled`. Notifications cannot override a host's hard tool
+`notifications/cancelled`, also for a call still queued behind another one,
+which then never starts codex. Notifications cannot override a host's hard tool
 timeout — deep-audit reviews at `ultra` can run 30+ minutes.
 
 Not offered, because `codex exec` cannot honour them: `approval-policy`,
