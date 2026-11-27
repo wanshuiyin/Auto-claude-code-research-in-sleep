@@ -661,10 +661,13 @@ def _load_paper_frontmatter(path: Path) -> dict:
     """Parse the YAML-ish frontmatter of a wiki paper page. Returns {} on failure."""
     if not path.exists():
         return {}
-    text = _read_wiki_text(path)
-    m = re.match(r"^---\n(.*?)\n---", text, re.DOTALL)
+    return _parse_paper_frontmatter(_read_wiki_text(path)) or {}
+
+
+def _parse_paper_frontmatter(text: str) -> dict | None:
+    m = re.match(r"^---\n(.*?)^---[ \t]*$", text, re.DOTALL | re.MULTILINE)
     if not m:
-        return {}
+        return None
     meta = {}
     for line in m.group(1).split("\n"):
         if ":" not in line:
@@ -680,8 +683,13 @@ def _find_existing_page_by_arxiv(wiki_root: Path, arxiv_id: str) -> Path | None:
         return None
     for p in papers.glob("*.md"):
         text = _read_wiki_text(p)
-        # Match either the frontmatter line or a URL reference. (?!\d) stops
-        # the truncated `2307.0317` from matching the page of `2307.03172`.
+        meta = _parse_paper_frontmatter(text)
+        if meta is not None:
+            stored_id = meta.get("arxiv")
+            if stored_id and stored_id != "null" and _normalize_arxiv_id(stored_id) == arxiv_id:
+                return p
+            continue
+        # Hand-written pages without frontmatter may identify the paper in the body.
         if re.search(r'arxiv:\s*["\']?' + re.escape(arxiv_id) + r'(?!\d)', text):
             return p
         if re.search(r"arxiv\.org/abs/" + re.escape(arxiv_id) + r"(?!\d)", text):
