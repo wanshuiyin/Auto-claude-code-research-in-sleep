@@ -87,8 +87,9 @@ after a bridge restart. To change those settings, start a new worker. Returned
 `requestedEffort` record the request. Missing observed values stay null.
 
 The service serializes calls in each server process. For a longer task, set
-`timeout_sec` and the host tool timeout together. Progress, ping, cancellation,
-and CLI process cleanup are supported. A completed turn means the CLI finished;
+`timeout_sec` and the host tool timeout together. Progress, ping, cancellation
+(also of a call still queued behind another one, which then never starts), and
+CLI process cleanup are supported. A completed turn means the CLI finished;
 read the resulting files as part of normal integration.
 
 ### Use before the host reloads its tools

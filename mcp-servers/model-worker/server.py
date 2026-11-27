@@ -690,15 +690,25 @@ def handle_request(
 def main() -> None:
     inbox: queue.Queue = queue.Queue()
     deferred: list = []
+    # Calls from receipt to dispatch, so a cancellation can withdraw a call that
+    # is still queued behind the running one.
+    pending_calls: set = set()
+    pending_lock = threading.Lock()
 
     def read() -> None:
         for line in sys.stdin:
             try:
                 message = json.loads(line)
-                if isinstance(message, dict):
-                    inbox.put(message)
             except ValueError:
-                pass
+                continue
+            if not isinstance(message, dict):
+                continue
+            with pending_lock:
+                if message.get("method") == "tools/call":
+                    pending_calls.add(message.get("id"))
+                elif message.get("method") == "notifications/cancelled":
+                    pending_calls.discard((message.get("params") or {}).get("requestId"))
+            inbox.put(message)
         inbox.put({"__eof__": True})
 
     threading.Thread(target=read, daemon=True).start()
@@ -706,6 +716,23 @@ def main() -> None:
         request = deferred.pop(0) if deferred else inbox.get()
         if request.get("__eof__"):
             return
+        if request.get("method") == "tools/call" and request.get("id") is not None:
+            with pending_lock:
+                queued = request["id"] in pending_calls
+                pending_calls.discard(request["id"])
+            if not queued:
+                text = "cancelled by client before the worker CLI started"
+                send_message(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request["id"],
+                        "result": {
+                            "content": [{"type": "text", "text": text}],
+                            "isError": True,
+                        },
+                    }
+                )
+                continue
         try:
             response = handle_request(request, inbox, deferred)
         except Exception:  # noqa: BLE001 - isolate requests at the JSON-RPC protocol boundary
